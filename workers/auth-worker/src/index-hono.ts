@@ -1707,6 +1707,7 @@ api.get('/user/preferences', async (c) => {
     defaultBaseball: preferences.defaultBaseball,
     defaultBasketball: preferences.defaultBasketball,
     defaultHockey: preferences.defaultHockey,
+    hideLeagueWidget: preferences.hideLeagueWidget,
   });
 });
 
@@ -1725,6 +1726,7 @@ api.get('/internal/user/preferences', async (c) => {
     defaultBaseball: preferences.defaultBaseball,
     defaultBasketball: preferences.defaultBasketball,
     defaultHockey: preferences.defaultHockey,
+    hideLeagueWidget: preferences.hideLeagueWidget,
   });
 });
 
@@ -1793,6 +1795,45 @@ api.post('/user/preferences/default-sport', async (c) => {
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
   await storage.setDefaultSport(userId, body.sport as 'football' | 'baseball' | 'basketball' | 'hockey' | null);
+
+  const preferences = await storage.getUserPreferences(userId);
+  return c.json(preferences);
+});
+
+// Exported for unit tests — pure validation, no side effects. Accepts
+// `unknown` so a non-object JSON body (null, an array, a bare string) is
+// rejected as a documented 400 instead of throwing before validation runs.
+export function parseHideLeagueWidgetBody(body: unknown):
+  | { ok: true; hideLeagueWidget: boolean }
+  | { ok: false; error: string } {
+  if (body === null || typeof body !== 'object') {
+    return { ok: false, error: 'hideLeagueWidget must be a boolean' };
+  }
+  const hideLeagueWidget = (body as { hideLeagueWidget?: unknown }).hideLeagueWidget;
+  if (typeof hideLeagueWidget !== 'boolean') {
+    return { ok: false, error: 'hideLeagueWidget must be a boolean' };
+  }
+  return { ok: true, hideLeagueWidget };
+}
+
+// Set whether the get_user_session league widget renders (FLA-277)
+api.post('/user/preferences/hide-league-widget', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) {
+    return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  }
+
+  const body: unknown = await c.req.json();
+  const parsed = parseHideLeagueWidgetBody(body);
+  if (!parsed.ok) {
+    return c.json({ error: 'invalid_hide_league_widget', error_description: parsed.error }, 400);
+  }
+
+  const storage = EspnSupabaseStorage.fromEnvironment(c.env);
+  const result = await storage.setHideLeagueWidget(userId, parsed.hideLeagueWidget);
+  if (!result.success) {
+    return c.json({ error: 'preference_write_failed', error_description: result.error || 'Failed to save preference' }, 500);
+  }
 
   const preferences = await storage.getUserPreferences(userId);
   return c.json(preferences);
@@ -2203,6 +2244,7 @@ api.post('/leagues/default', async (c) => {
       defaultBaseball: preferences.defaultBaseball,
       defaultBasketball: preferences.defaultBasketball,
       defaultHockey: preferences.defaultHockey,
+      hideLeagueWidget: preferences.hideLeagueWidget,
     }
   });
 });
@@ -2389,9 +2431,10 @@ api.notFound((c) => {
       '/internal/connect/yahoo/credentials': 'GET - Get Yahoo access token for internal workers',
       '/connect/yahoo/status': 'GET - Check Yahoo connection status',
       '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
-      '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
+      '/user/preferences': 'GET - Get user preferences (default sport, per-sport defaults, hideLeagueWidget)',
       '/internal/user/preferences': 'GET - Get user preferences for internal workers',
       '/user/preferences/default-sport': 'POST - Set user default sport',
+      '/user/preferences/hide-league-widget': 'POST - Set whether the get_user_session league widget renders',
     },
     storage: 'supabase',
     oauth: 'enabled',

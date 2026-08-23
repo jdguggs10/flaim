@@ -163,6 +163,7 @@ The internal (AI-facing) league reads fail closed: if the archive lookup errors,
 | `GET /user/preferences` | Clerk JWT | Get user preferences |
 | `GET /internal/user/preferences` | Internal + Clerk JWT / OAuth / Eval key | Get user preferences for internal workers |
 | `POST /user/preferences/default-sport` | Clerk JWT | Set default sport |
+| `POST /user/preferences/hide-league-widget` | Clerk JWT | Set whether the get_user_session league widget renders (`{ hideLeagueWidget: boolean }`, strict boolean, 400 otherwise) |
 
 ## Authentication
 

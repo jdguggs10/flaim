@@ -868,6 +868,62 @@ const REFRESH_STATUS_MARKER =
   '<div id="refresh-status" class="refresh-status" aria-live="polite"></div>';
 
 /**
+ * Hidden-widget support (v3 only, FLA-277): when get_user_session's
+ * structuredContent carries widget.hidden === true (the user's
+ * hide_league_widget preference), the widget must render nothing and report
+ * a zero size instead of the 353px fallback, rather than merely leaving the
+ * content area blank. sendZeroSize() posts an explicit { width: 0, height: 0
+ * } size-changed notification so hosts collapse the card instead of
+ * reserving space for it. The frozen legacy body has no notion of this, so
+ * this is injected only into the v3-derived script, immediately ahead of the
+ * render(data) function it guards. render() tracks the outcome in the
+ * widgetHidden flag (flipped each call, not just set once) so a later
+ * refresh that un-hides the widget clears it again.
+ */
+const HIDDEN_WIDGET_RENDER_JS = `  var widgetHidden = false;
+
+  function sendZeroSize() {
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: {
+        width: 0,
+        height: 0,
+      },
+    });
+  }
+
+  function render(data) {
+    widgetHidden = !!(data && data.widget && data.widget.hidden === true);
+    if (widgetHidden) {
+      var widgetEl = document.querySelector('.widget');
+      if (widgetEl) widgetEl.style.display = 'none';
+      hasRendered = true;
+      sendZeroSize();
+      return;
+    }
+    var visibleWidgetEl = document.querySelector('.widget');
+    if (visibleWidgetEl) visibleWidgetEl.style.display = '';`;
+
+/**
+ * The refresh flow (refreshLeagues()) calls render(data) directly, then
+ * setRefreshStatus() -> queueSizeChanged() -> sendSizeChanged() runs
+ * regardless of outcome. While hidden, .widget's own getBoundingClientRect()
+ * reports a zero-width/height rect (not null), and the original fallback
+ * `rect && rect.width ? ... : WIDGET_WIDTH` treats that falsy 0 width as "no
+ * rect" and posts the 353px fallback anyway -- silently re-expanding a
+ * collapsed widget after every refresh. This guard short-circuits
+ * sendSizeChanged() to the same explicit zero-size notification while
+ * widgetHidden is true, injected only into the v3 script ahead of the
+ * sendSizeChanged() definition it guards.
+ */
+const HIDDEN_WIDGET_SIZE_GUARD_JS = `  function sendSizeChanged() {
+    if (widgetHidden) {
+      sendZeroSize();
+      return;
+    }`;
+
+/**
  * Replace a marker that must appear exactly once. Throwing (at module init,
  * so tests and deploys fail loudly) beats silently shipping a v2 widget
  * without the required attribution.
@@ -880,9 +936,20 @@ function injectOnce(html: string, marker: string, replacement: string): string {
   return html.replace(marker, replacement);
 }
 
-/** Current (v3) widget body: the frozen v1/v2 body plus the attribution footer. */
+/**
+ * Current (v3) widget body: the frozen v1/v2 body plus the attribution
+ * footer and the hidden-widget render + size-report guards (FLA-277).
+ */
 export const USER_SESSION_WIDGET_HTML = injectOnce(
-  injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
-  REFRESH_STATUS_MARKER,
-  `${REFRESH_STATUS_MARKER}\n  ${PROVIDER_ATTRIBUTION_HTML}`,
+  injectOnce(
+    injectOnce(
+      injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
+      REFRESH_STATUS_MARKER,
+      `${REFRESH_STATUS_MARKER}\n  ${PROVIDER_ATTRIBUTION_HTML}`,
+    ),
+    '  function sendSizeChanged() {',
+    HIDDEN_WIDGET_SIZE_GUARD_JS,
+  ),
+  '  function render(data) {',
+  HIDDEN_WIDGET_RENDER_JS,
 );
