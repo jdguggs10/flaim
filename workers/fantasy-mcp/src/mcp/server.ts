@@ -99,46 +99,56 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
       {
         mimeType: 'text/html;profile=mcp-app',
       },
-      async () => ({
-        contents: [{
-          uri,
-          mimeType: 'text/html;profile=mcp-app',
-          text: widgetHtml,
-          // The v1 and v2 URIs are frozen published contracts: their
-          // read-result _meta must stay byte-identical to the snapshots
-          // OpenAI scanned (v1: original submission; v2: v2.1 submission
-          // incl. the FLA-177 descriptor additions). New additions go on
-          // the v3 URI only.
-          _meta: {
-            ui: {
-              csp: {
-                connectDomains: [],
-                resourceDomains: [],
+      async () => {
+        // Structured log on every widget resource read so v1's share of
+        // reads is computable (v1-retirement tracking, FLA-258) — log all
+        // three URIs, not just v1, so the denominator is available too.
+        console.log(JSON.stringify({
+          schema_version: 1, service: 'fantasy-mcp', component: 'widget-resources',
+          event: 'widget_resource_read', uri, resource_name: name,
+          correlation_id: ctx.correlationId ?? null, client_name: ctx.clientName ?? null,
+        }));
+        return {
+          contents: [{
+            uri,
+            mimeType: 'text/html;profile=mcp-app',
+            text: widgetHtml,
+            // The v1 and v2 URIs are frozen published contracts: their
+            // read-result _meta must stay byte-identical to the snapshots
+            // OpenAI scanned (v1: original submission; v2: v2.1 submission
+            // incl. the FLA-177 descriptor additions). New additions go on
+            // the v3 URI only.
+            _meta: {
+              ui: {
+                csp: {
+                  connectDomains: [],
+                  resourceDomains: [],
+                },
+              },
+              ...(uri !== LEGACY_USER_SESSION_WIDGET_URI && {
+                // Plain-language widget summary for directory/host surfaces.
+                // Part of v2's frozen _meta (FLA-177); carried forward on v3.
+                'openai/widgetDescription':
+                  'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+              }),
+              'openai/widgetCSP': {
+                connect_domains: [],
+                resource_domains: [],
+                // Keep external-link allowlisting without reintroducing a stable
+                // widget domain — the widget is fully self-contained (empty
+                // connect/resource CSP), so a dedicated domain adds no capability;
+                // revisit only if a portal scan explicitly requires _meta.ui.domain.
+                // v3 additionally allowlists the Yahoo Fantasy attribution link
+                // target; the published v1/v2 _meta stays byte-identical.
+                redirect_domains:
+                  uri === USER_SESSION_WIDGET_URI
+                    ? ['https://flaim.app', 'https://sports.yahoo.com']
+                    : ['https://flaim.app'],
               },
             },
-            ...(uri !== LEGACY_USER_SESSION_WIDGET_URI && {
-              // Plain-language widget summary for directory/host surfaces.
-              // Part of v2's frozen _meta (FLA-177); carried forward on v3.
-              'openai/widgetDescription':
-                'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
-            }),
-            'openai/widgetCSP': {
-              connect_domains: [],
-              resource_domains: [],
-              // Keep external-link allowlisting without reintroducing a stable
-              // widget domain — the widget is fully self-contained (empty
-              // connect/resource CSP), so a dedicated domain adds no capability;
-              // revisit only if a portal scan explicitly requires _meta.ui.domain.
-              // v3 additionally allowlists the Yahoo Fantasy attribution link
-              // target; the published v1/v2 _meta stays byte-identical.
-              redirect_domains:
-                uri === USER_SESSION_WIDGET_URI
-                  ? ['https://flaim.app', 'https://sports.yahoo.com']
-                  : ['https://flaim.app'],
-            },
-          },
-        }],
-      })
+          }],
+        };
+      }
     );
   }
 
