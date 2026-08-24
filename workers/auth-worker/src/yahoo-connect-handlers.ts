@@ -2578,6 +2578,7 @@ export async function fetchYahooLeaguesReadOnly(
     const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues;out=teams?format=json`;
     const apiResponse = await fetch(apiUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!apiResponse.ok) {
@@ -2599,7 +2600,8 @@ export async function fetchYahooLeaguesReadOnly(
     return { status: 'ok', leagues: parseYahooLeaguesResponse(rawData) };
   } catch (error) {
     console.error('[yahoo-connect] Read-only discovery error:', error instanceof Error ? error.message : error);
-    return { status: 'error', errorCode: 'server_error', retryable: true };
+    const errorCode = error instanceof Error && error.name === 'TimeoutError' ? 'yahoo_timeout' : 'server_error';
+    return { status: 'error', errorCode, retryable: true };
   }
 }
 

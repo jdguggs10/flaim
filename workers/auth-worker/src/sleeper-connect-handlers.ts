@@ -79,6 +79,7 @@ function mapSport(sleeperSport: string): string {
 async function sleeperGet<T>(path: string): Promise<T> {
   const res = await fetch(`${SLEEPER_API}${path}`, {
     headers: { Accept: 'application/json', 'User-Agent': 'flaim-auth-worker/1.0' },
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`Sleeper API ${res.status}: ${path}`);
   return res.json() as Promise<T>;
@@ -582,7 +583,13 @@ export async function fetchSleeperLeaguesReadOnly(
     const firstRejection = results.find(
       (result): result is PromiseRejectedResult => result.status === 'rejected'
     );
-    const message = firstRejection?.reason instanceof Error ? firstRejection.reason.message : '';
+    const reason = firstRejection?.reason;
+    if (reason instanceof Error && reason.name === 'TimeoutError') {
+      // AbortSignal.timeout() rejection — no HTTP status to report, and
+      // reconciliation's `.endsWith('_timeout')` backoff check keys off this.
+      return { status: 'error', errorCode: 'sleeper_timeout' };
+    }
+    const message = reason instanceof Error ? reason.message : '';
     const statusMatch = /Sleeper API (\d{3})/.exec(message);
     return {
       status: 'error',

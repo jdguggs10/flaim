@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  fetchYahooLeaguesReadOnly,
   handleYahooAuthorize,
   handleYahooCallback,
   handleYahooCredentials,
@@ -3263,6 +3264,37 @@ describe('yahoo-connect-handlers', () => {
           teamName: 'Gerry Team',
         })
       );
+    });
+  });
+
+  describe('fetchYahooLeaguesReadOnly', () => {
+    it('classifies a timed-out leagues fetch as yahoo_timeout after a successful token refresh (FLA-188)', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000), // within the refresh buffer
+        needsRefresh: true,
+      });
+
+      // First fetch: Yahoo token refresh succeeds.
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      );
+      // Second fetch: the leagues lookup times out.
+      mockFetch.mockRejectedValueOnce(new DOMException('The operation timed out.', 'TimeoutError'));
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toEqual({ status: 'error', errorCode: 'yahoo_timeout', retryable: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
 });
