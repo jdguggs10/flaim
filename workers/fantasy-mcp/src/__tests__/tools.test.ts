@@ -685,7 +685,7 @@ describe('fantasy-mcp tools', () => {
         fetch: async () => {
           return new Response(JSON.stringify({
             error: 'insufficient_scope',
-            error_description: 'mcp:write scope is required to refresh leagues',
+            error_description: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
           }), {
             status: 403,
             headers: { 'Content-Type': 'application/json' },
@@ -706,16 +706,16 @@ describe('fantasy-mcp tools', () => {
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues');
+    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.');
     expect(result.structuredContent).toEqual({
       success: false,
       code: 'INSUFFICIENT_SCOPE',
-      error: 'mcp:write scope is required to refresh leagues',
+      error: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
     });
     expect(challenge).toContain('scope="mcp:write"');
     // ChatGPT requires BOTH error and error_description present to trigger consent UI.
     expect(challenge).toContain('error="insufficient_scope"');
-    expect(challenge).toContain('error_description="mcp:write scope is required to refresh leagues"');
+    expect(challenge).toContain('error_description="mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission."');
     expect(challenge).toContain('resource_metadata="https://fantasy-mcp-preview.gerrygugger.workers.dev/.well-known/oauth-protected-resource"');
     expect(challenge).not.toContain('invalid_token');
   });
@@ -2360,16 +2360,30 @@ describe('mcpInsufficientScopeError', () => {
     const result = mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues');
+    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.');
     expect(result.structuredContent).toEqual({
       success: false,
       code: 'INSUFFICIENT_SCOPE',
-      error: 'mcp:write scope is required to refresh leagues',
+      error: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
     });
 
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
     expect(challenge).toBe(
-      'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource", scope="mcp:write", error="insufficient_scope", error_description="mcp:write scope is required to refresh leagues"'
+      'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource", scope="mcp:write", error="insufficient_scope", error_description="mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission."'
+    );
+  });
+
+  /**
+   * The re-grant instruction text never reaches classifyRefreshResult: the
+   * widget's refreshLeagues() handler (user-session-widget.ts:763-765) throws
+   * on isError before classification runs, so this copy only ever surfaces
+   * via the raw error message shown to the user.
+   */
+  it('pins the mcp:write re-grant instruction copy', () => {
+    const result = mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
+
+    expect(result.content[0]?.text).toBe(
+      'INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.'
     );
   });
 

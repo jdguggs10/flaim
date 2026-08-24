@@ -990,7 +990,7 @@ export function mcpInsufficientScopeError(
 ): McpToolResponse {
   const resourceMetadata = deriveResourceMetadataUrl(resource);
   const description = requiredScope === 'mcp:write'
-    ? 'mcp:write scope is required to refresh leagues'
+    ? 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.'
     : `${requiredScope} scope is required for this tool`;
   return {
     content: [{ type: 'text', text: `INSUFFICIENT_SCOPE: ${description}` }],
