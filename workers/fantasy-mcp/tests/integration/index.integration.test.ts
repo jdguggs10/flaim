@@ -4,6 +4,7 @@ import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
 import { FLAIM_MCP_INSTRUCTIONS } from '../../src/mcp/instructions';
+import { WIDGET_READ_LOG_SAMPLE_RATE } from '../../src/mcp/server';
 import {
   LEGACY_USER_SESSION_WIDGET_HTML,
   LEGACY_USER_SESSION_WIDGET_URI,
@@ -11,7 +12,7 @@ import {
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
 } from '../../src/widgets/user-session-widget';
-import { INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
+import { CORRELATION_ID_HEADER, INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
 
 // Mock the tools module so a single test can inject a custom tool (e.g. a
 // throwing handler) via mockReturnValueOnce, while every other test/request
@@ -32,7 +33,8 @@ function buildMcpJsonRpcRequest(
   pathname: '/mcp' | '/fantasy/mcp',
   method: string,
   params: Record<string, unknown> = {},
-  id = 'wire-test-1'
+  id = 'wire-test-1',
+  extraHeaders: Record<string, string> = {}
 ): Request {
   return new Request(`https://api.flaim.app${pathname}`, {
     method: 'POST',
@@ -40,6 +42,7 @@ function buildMcpJsonRpcRequest(
       Authorization: 'Bearer test-token',
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
+      ...extraHeaders,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -683,6 +686,94 @@ describe('fantasy-mcp gateway integration', () => {
     expect(widgetBodies[1]).toBe(widgetBodies[0]);
     expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('logs widget_resource_read with the documented fields when sampled in', async () => {
+    // FLA-258: a structured, sampled log line on every widget resource read.
+    // Force sampling on (Math.random() * WIDGET_READ_LOG_SAMPLE_RATE < 1 is
+    // guaranteed when Math.random() returns 0) and assert the exact schema.
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const widgetUris = [
+      { uri: LEGACY_USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget' },
+      { uri: V2_USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v2' },
+      { uri: USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v3' },
+    ] as const;
+
+    try {
+      for (const [index, { uri, resourceName }] of widgetUris.entries()) {
+        logSpy.mockClear();
+        const correlationId = `sampled-corr-${index + 1}`;
+        const readResponse = await app.fetch(
+          buildMcpJsonRpcRequest(
+            '/mcp',
+            'resources/read',
+            { uri },
+            `sampled-resources-read-${index + 1}`,
+            { [CORRELATION_ID_HEADER]: correlationId }
+          ),
+          env,
+          mockExecutionContext()
+        );
+        expect(readResponse.status).toBe(200);
+
+        const widgetReadLogLines = logSpy.mock.calls
+          .map((call) => call[0])
+          .filter(
+            (line): line is string =>
+              typeof line === 'string' && line.includes('"widget_resource_read"')
+          );
+        expect(widgetReadLogLines).toHaveLength(1);
+        expect(JSON.parse(widgetReadLogLines[0])).toMatchObject({
+          event: 'widget_resource_read',
+          uri,
+          resource_name: resourceName,
+          sample_rate: WIDGET_READ_LOG_SAMPLE_RATE,
+          correlation_id: correlationId,
+        });
+      }
+    } finally {
+      randomSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('does not log widget_resource_read when not sampled in', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+    // 0.5 * WIDGET_READ_LOG_SAMPLE_RATE (50) = 25, which is not < 1, so the
+    // sample check must reject it.
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      const readResponse = await app.fetch(
+        buildMcpJsonRpcRequest(
+          '/mcp',
+          'resources/read',
+          { uri: USER_SESSION_WIDGET_URI },
+          'unsampled-resources-read-1'
+        ),
+        env,
+        mockExecutionContext()
+      );
+      expect(readResponse.status).toBe(200);
+
+      const widgetReadLogLines = logSpy.mock.calls
+        .map((call) => call[0])
+        .filter(
+          (line): line is string =>
+            typeof line === 'string' && line.includes('widget_resource_read')
+        );
+      expect(widgetReadLogLines).toHaveLength(0);
+    } finally {
+      randomSpy.mockRestore();
+      logSpy.mockRestore();
+    }
   });
 
   it('HTTP fallback widget routes serve the current attributed body', async () => {

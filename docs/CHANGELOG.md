@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Gateway Copy and Widget-Read Telemetry (FLA-257, FLA-258)
+- **Fixed**: The `mcp:write` insufficient-scope error (`refresh_leagues` denials) now tells the caller how to fix it — "Disconnect and reconnect the Flaim connector in your AI app to grant this permission" — instead of stating only that the scope is missing. The copy is client-neutral ("your AI app"), since this error reaches Claude and custom MCP clients as well as ChatGPT.
+- **Added**: A sample of widget resource reads (`user-session-widget`, `-v2`, `-v3`) — sampled 1-in-50 via `sample_rate` in the payload, so absolute rates are `count × 50` — now emit a structured `widget_resource_read` log line (`uri`, `resource_name`, `correlation_id`, `sample_rate`) so v1's share of reads — and thus its retirement readiness — is computable from observability data instead of guessed at.
 ### Provider Plumbing Hygiene (FLA-223, FLA-126, FLA-188)
 - **Fixed**: Yahoo `get_standings` guards `playoff_seed` with a finiteness check before `Number()` conversion — a non-numeric upstream value (e.g. `"N/A"`) now yields `playoffSeed: null` (and therefore `madePlayoffs: null`) instead of `NaN`, which would have failed the gateway's `z.number().nullable()` descriptor validation. Matches the existing guards on `current_week`/`playoff_start_week`.
 - **Changed**: auth-worker stores Yahoo access-token expiry with a 60-second write-time safety buffer (`computeYahooExpiresAt` in `yahoo-storage.ts`, floor-clamped to 60s), correcting for token-exchange round-trip latency between Yahoo minting the token and the worker's `Date.now()`. The existing 5-minute read-time `REFRESH_BUFFER_MS` is unchanged — the two buffers guard different latency sources (write: exchange round-trip; read: subsequent-call duration).
