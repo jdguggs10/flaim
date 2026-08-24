@@ -2379,16 +2379,30 @@ describe('mcpInsufficientScopeError', () => {
   });
 
   /**
-   * The re-grant instruction text never reaches classifyRefreshResult: the
-   * widget's refreshLeagues() handler (user-session-widget.ts:763-765) throws
-   * on isError before classification runs, so this copy only ever surfaces
-   * via the raw error message shown to the user.
+   * The re-grant instruction text never reaches the rendered widget: the
+   * widget's refreshLeagues() handler (user-session-widget.ts:751-791) throws
+   * on isError, but its catch block (lines 785-786) swallows the specific
+   * error text and always shows a generic "Refresh failed. Open leagues."
+   * line — by design, not something this PR changes. This copy only
+   * surfaces when the LLM client itself calls refresh_leagues directly and
+   * relays the tool-error text to the user (e.g. Claude, ChatGPT's
+   * chat-level tool calls, or a custom MCP connector) — never through the
+   * widget's Refresh button.
    */
   it('pins the mcp:write re-grant instruction copy', () => {
     const result = mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
 
-    expect(result.content[0]?.text).toBe(
-      'INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.'
+    // The test above already pins result.content[0].text and the full
+    // structuredContent/challenge strings; this one covers what that test
+    // doesn't isolate on its own: the copy inside structuredContent.error,
+    // and inside the WWW-Authenticate error_description.
+    expect(result.structuredContent).toMatchObject({
+      error: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
+    });
+
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toContain(
+      'error_description="mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission."'
     );
   });
 
