@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Sleeper Recurring-ID Backfill Orchestrator (FLA-168)
+- **Added**: `backfillSleeperRecurringIds` (auth-worker) now accepts an optional `{ dryRun }` flag — when true it runs the same `previous_league_id` chain-resolution read path but skips the write, returning per-row `{ userId, leagueId, currentRecurringId, wouldSetRecurringId }` detail alongside `processed`/`resolved`/`changed` counts. Existing callers are unaffected. A new orchestrator (`sleeper-recurring-backfill.ts`) finds distinct users with a NULL `recurring_league_id` via a paginated, select-only `sleeper_leagues` query (never loading the whole table), then backfills them in small batches with per-user failure isolation, emitting a structured `sleeper_recurring_backfill` log event per run.
+- **Added**: A new internal route, `POST /internal/backfill/sleeper-recurring-ids`, gated by the existing service-token check, triggers a run on demand. The request body defaults to dry-run (`{ dryRun: true }`) and refuses a malformed body or a non-boolean `dryRun` rather than silently falling back to the safe default.
+
 ### Gateway Copy and Widget-Read Telemetry (FLA-257, FLA-258)
 - **Fixed**: The `mcp:write` insufficient-scope error (`refresh_leagues` denials) now tells the caller how to fix it — "Disconnect and reconnect the Flaim connector in your AI app to grant this permission" — instead of stating only that the scope is missing. The copy is client-neutral ("your AI app"), since this error reaches Claude and custom MCP clients as well as ChatGPT.
 - **Added**: A sample of widget resource reads (`user-session-widget`, `-v2`, `-v3`) — sampled 1-in-50 via `sample_rate` in the payload, so absolute rates are `count × 50` — now emit a structured `widget_resource_read` log line (`uri`, `resource_name`, `correlation_id`, `sample_rate`) so v1's share of reads — and thus its retirement readiness — is computable from observability data instead of guessed at.
