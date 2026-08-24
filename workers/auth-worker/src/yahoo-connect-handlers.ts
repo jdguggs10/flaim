@@ -18,6 +18,7 @@
  */
 
 import {
+  computeYahooExpiresAt,
   REFRESH_COOLDOWN_OWNER_PREFIX,
   YahooStorage,
   type YahooCredentialHealth,
@@ -1173,7 +1174,7 @@ async function getValidYahooAccessToken(
     return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
   }
 
-  const expiresAt = new Date(Date.now() + result.expires_in * 1000);
+  const expiresAt = computeYahooExpiresAt(result.expires_in);
   const nextRefreshToken = result.refresh_token || credentials.refreshToken;
   const refreshTokenReturned = Boolean(result.refresh_token);
   const refreshTokenChanged = Boolean(result.refresh_token && result.refresh_token !== credentials.refreshToken);
@@ -1657,7 +1658,7 @@ export async function handleYahooCallback(
       console.warn(`[yahoo-connect] Yahoo token exchange omitted GUID for user ${maskUserId(clerkUserId)}`);
     }
 
-    const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000);
+    const expiresAt = computeYahooExpiresAt(tokenResponse.expires_in);
 
     // Save credentials, stamped with the fingerprint of the Yahoo app that
     // minted them so later refreshes can detect app/secret mismatches.
@@ -2577,6 +2578,7 @@ export async function fetchYahooLeaguesReadOnly(
     const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues;out=teams?format=json`;
     const apiResponse = await fetch(apiUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!apiResponse.ok) {
@@ -2598,7 +2600,8 @@ export async function fetchYahooLeaguesReadOnly(
     return { status: 'ok', leagues: parseYahooLeaguesResponse(rawData) };
   } catch (error) {
     console.error('[yahoo-connect] Read-only discovery error:', error instanceof Error ? error.message : error);
-    return { status: 'error', errorCode: 'server_error', retryable: true };
+    const errorCode = error instanceof Error && error.name === 'TimeoutError' ? 'yahoo_timeout' : 'server_error';
+    return { status: 'error', errorCode, retryable: true };
   }
 }
 

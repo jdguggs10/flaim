@@ -143,6 +143,23 @@ function isMissingRecurringLeagueIdColumnError(error: SupabaseErrorLike | null |
 // expires so user-facing tool calls do not land exactly on the expiry boundary.
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
+// Yahoo's expires_in is measured from when Yahoo issued the token, not when we
+// finish storing it. Shave a buffer off at write time so the stored expiry
+// accounts for the token-exchange round-trip, independent of REFRESH_BUFFER_MS
+// above (which guards the duration of the subsequent tool call instead).
+export const EXPIRY_WRITE_BUFFER_MS = 60 * 1000;
+
+export function computeYahooExpiresAt(expiresInSeconds: number, nowMs: number = Date.now()): Date {
+  // The 60s floor only holds when Yahoo's actual lifetime allows it — a safety
+  // buffer must never extend the stored expiry beyond what Yahoo granted, so
+  // the floored value is capped back down to expiresInSeconds itself.
+  const bufferedSeconds = Math.min(
+    expiresInSeconds,
+    Math.max(expiresInSeconds - EXPIRY_WRITE_BUFFER_MS / 1000, 60),
+  );
+  return new Date(nowMs + bufferedSeconds * 1000);
+}
+
 /**
  * Mask user ID for logging
  */

@@ -79,6 +79,7 @@ function mapSport(sleeperSport: string): string {
 async function sleeperGet<T>(path: string): Promise<T> {
   const res = await fetch(`${SLEEPER_API}${path}`, {
     headers: { Accept: 'application/json', 'User-Agent': 'flaim-auth-worker/1.0' },
+    signal: AbortSignal.timeout(10000),
   });
   if (!res.ok) throw new Error(`Sleeper API ${res.status}: ${path}`);
   return res.json() as Promise<T>;
@@ -577,12 +578,24 @@ export async function fetchSleeperLeaguesReadOnly(
   }
 
   if (results.length > 0 && failedSports.length === results.length) {
-    // sleeperGet folds the HTTP status into its error message; surface it so
-    // callers can distinguish a 429 (back off) from other failures.
-    const firstRejection = results.find(
+    const rejections = results.filter(
       (result): result is PromiseRejectedResult => result.status === 'rejected'
     );
-    const message = firstRejection?.reason instanceof Error ? firstRejection.reason.message : '';
+    // Scan every rejection, not just the first: with multiple sports, a 404
+    // on the first request and a timeout on a later one must still surface
+    // as a timeout, or reconciliation's `.endsWith('_timeout')` backoff check
+    // never fires.
+    const timedOut = rejections.some(
+      (result) => result.reason instanceof Error && result.reason.name === 'TimeoutError'
+    );
+    if (timedOut) {
+      // AbortSignal.timeout() rejection — no HTTP status to report.
+      return { status: 'error', errorCode: 'sleeper_timeout' };
+    }
+    // sleeperGet folds the HTTP status into its error message; surface it so
+    // callers can distinguish a 429 (back off) from other failures.
+    const reason = rejections[0]?.reason;
+    const message = reason instanceof Error ? reason.message : '';
     const statusMatch = /Sleeper API (\d{3})/.exec(message);
     return {
       status: 'error',

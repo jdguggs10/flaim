@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  fetchYahooLeaguesReadOnly,
   handleYahooAuthorize,
   handleYahooCallback,
   handleYahooCredentials,
@@ -12,12 +13,10 @@ import {
 import { YahooStorage } from '../yahoo-storage';
 
 // Mock YahooStorage
-vi.mock('../yahoo-storage', () => ({
-  REFRESH_COOLDOWN_OWNER_PREFIX: 'cooldown:',
-  YahooStorage: {
-    fromEnvironment: vi.fn(),
-  },
-}));
+vi.mock('../yahoo-storage', async () => {
+  const actual = await vi.importActual<typeof import('../yahoo-storage')>('../yahoo-storage');
+  return { ...actual, YahooStorage: { fromEnvironment: vi.fn() } };
+});
 
 // Mock global fetch for Yahoo OAuth API calls
 const mockFetch = vi.fn();
@@ -288,7 +287,9 @@ describe('yahoo-connect-handlers', () => {
 
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
 
+      const beforeCall = Date.now();
       const response = await handleYahooCallback(request, env, corsHeaders);
+      const afterCall = Date.now();
 
       expect(response.status).toBe(302);
       const location = response.headers.get('Location')!;
@@ -305,6 +306,11 @@ describe('yahoo-connect-handlers', () => {
           appFingerprint: await expectedAppFingerprint('test-yahoo-client-id'),
         })
       );
+      // Stored expiry should be buffered ~60s under the raw expires_in (3600s),
+      // to absorb the token-exchange round-trip (FLA-126).
+      const savedExpiresAt = mockStorage.saveYahooCredentials.mock.calls[0][0].expiresAt as Date;
+      expect(savedExpiresAt.getTime()).toBeGreaterThanOrEqual(beforeCall + 3540 * 1000);
+      expect(savedExpiresAt.getTime()).toBeLessThanOrEqual(afterCall + 3540 * 1000);
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       const exchangeRequest = mockFetch.mock.calls[0][1] as RequestInit;
@@ -596,7 +602,9 @@ describe('yahoo-connect-handlers', () => {
         )
       );
 
+      const beforeCall = Date.now();
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+      const afterCall = Date.now();
 
       expect(response.status).toBe(200);
       const body = (await response.json()) as Record<string, unknown>;
@@ -623,6 +631,11 @@ describe('yahoo-connect-handlers', () => {
         }),
         expect.any(String)
       );
+      // Stored expiry should be buffered ~60s under the raw expires_in (3600s),
+      // to absorb the token-exchange round-trip (FLA-126).
+      const updateCall = mockStorage.updateYahooCredentials.mock.calls[0][1] as { expiresAt: Date };
+      expect(updateCall.expiresAt.getTime()).toBeGreaterThanOrEqual(beforeCall + 3540 * 1000);
+      expect(updateCall.expiresAt.getTime()).toBeLessThanOrEqual(afterCall + 3540 * 1000);
     });
 
     it('omits redirect_uri from refresh-token grants and records the request shape in diagnostics', async () => {
@@ -3241,6 +3254,44 @@ describe('yahoo-connect-handlers', () => {
           teamKey: '449.l.123.t.3',
           teamName: 'Gerry Team',
         })
+      );
+    });
+  });
+
+  describe('fetchYahooLeaguesReadOnly', () => {
+    it('classifies a timed-out leagues fetch as yahoo_timeout after a successful token refresh (FLA-188)', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000), // within the refresh buffer
+        needsRefresh: true,
+      });
+
+      // First fetch: Yahoo token refresh succeeds.
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      );
+      // Second fetch: the leagues lookup times out.
+      mockFetch.mockRejectedValueOnce(new DOMException('The operation timed out.', 'TimeoutError'));
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toEqual({ status: 'error', errorCode: 'yahoo_timeout', retryable: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // The timeout classification only matters if the leagues request actually
+      // carries an abort signal — assert it's still wired up (FLA-188).
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
   });
