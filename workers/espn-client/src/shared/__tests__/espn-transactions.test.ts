@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { assertTransactionsSeasonSupported, fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, normalizeMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds } from '../espn-transactions';
+import { assertTransactionsSeasonSupported, executeEspnTransactionOperation, fetchEspnTransactionsByWeeks, fetchEspnMTransactions2, normalizeMTransactions2, mergeTradePlayerDetails, getEspnLeagueContext, fetchEspnPlayersByIds } from '../espn-transactions';
 import type { EspnMTransaction, NormalizedTransaction } from '../espn-transactions';
 import { getCurrentSeasonYear } from '../season';
 
@@ -1106,6 +1106,132 @@ describe('espn-transactions', () => {
     it('allows a future season', () => {
       const currentSeason = getCurrentSeasonYear('basketball');
       expect(() => assertTransactionsSeasonSupported('basketball', currentSeason + 1)).not.toThrow();
+    });
+  });
+
+  describe('executeEspnTransactionOperation count cap', () => {
+    it('flags possibly_truncated and reports returned_rows when matching transactions exceed count', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          scoringPeriodId: 3,
+          currentMatchupPeriod: 3,
+          teams: [],
+        }))
+        .mockResolvedValueOnce(jsonResponse({
+          transactions: [
+            {
+              id: 20,
+              type: 'FREEAGENT',
+              status: 'EXECUTED',
+              teamId: 1,
+              processDate: Date.parse('2026-09-20T16:00:00Z'),
+              scoringPeriodId: 3,
+              items: [],
+            },
+            {
+              id: 21,
+              type: 'FREEAGENT',
+              status: 'EXECUTED',
+              teamId: 1,
+              processDate: Date.parse('2026-09-20T15:00:00Z'),
+              scoringPeriodId: 3,
+              items: [],
+            },
+          ],
+        }))
+        .mockResolvedValueOnce(jsonResponse({ transactions: [] }));
+
+      const result = await executeEspnTransactionOperation({
+        gameId: 'ffl',
+        leagueId: '123',
+        seasonYear: 2026,
+        sport: 'football',
+        credentials: { s2: 'x', swid: '{y}' },
+        count: 1,
+        getPositionName: String,
+        getProTeamAbbrev: String,
+      });
+
+      expect(result.transactions).toHaveLength(1);
+      expect(result.window.returned_rows).toBe(1);
+      expect(result.truncated).toBe(true);
+      expect(result.limitations.possibly_truncated).toBe(true);
+    });
+
+    it('leaves possibly_truncated unset when matching transactions fit within count', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          scoringPeriodId: 3,
+          currentMatchupPeriod: 3,
+          teams: [],
+        }))
+        .mockResolvedValueOnce(jsonResponse({
+          transactions: [
+            {
+              id: 30,
+              type: 'FREEAGENT',
+              status: 'EXECUTED',
+              teamId: 1,
+              processDate: Date.parse('2026-09-20T16:00:00Z'),
+              scoringPeriodId: 3,
+              items: [],
+            },
+          ],
+        }))
+        .mockResolvedValueOnce(jsonResponse({ transactions: [] }));
+
+      const result = await executeEspnTransactionOperation({
+        gameId: 'ffl',
+        leagueId: '123',
+        seasonYear: 2026,
+        sport: 'football',
+        credentials: { s2: 'x', swid: '{y}' },
+        count: 25,
+        getPositionName: String,
+        getProTeamAbbrev: String,
+      });
+
+      expect(result.transactions).toHaveLength(1);
+      expect(result.window.returned_rows).toBe(1);
+      expect(result.truncated).toBe(false);
+      expect(result.limitations.possibly_truncated).toBeUndefined();
+    });
+
+    it('leaves possibly_truncated unset when matching transactions exactly equal count (boundary, not >=)', async () => {
+      const items = Array.from({ length: 25 }, (_, i) => ({
+        id: 100 + i,
+        type: 'FREEAGENT',
+        status: 'EXECUTED',
+        teamId: 1,
+        processDate: Date.parse('2026-09-20T16:00:00Z') - i * 1000,
+        scoringPeriodId: 3,
+        items: [],
+      }));
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          scoringPeriodId: 3,
+          currentMatchupPeriod: 3,
+          teams: [],
+        }))
+        .mockResolvedValueOnce(jsonResponse({ transactions: items }))
+        .mockResolvedValueOnce(jsonResponse({ transactions: [] }));
+
+      const result = await executeEspnTransactionOperation({
+        gameId: 'ffl',
+        leagueId: '123',
+        seasonYear: 2026,
+        sport: 'football',
+        credentials: { s2: 'x', swid: '{y}' },
+        count: 25,
+        getPositionName: String,
+        getProTeamAbbrev: String,
+      });
+
+      expect(result.transactions).toHaveLength(25);
+      expect(result.window.returned_rows).toBe(25);
+      expect(result.truncated).toBe(false);
+      expect(result.limitations.possibly_truncated).toBeUndefined();
     });
   });
 });

@@ -682,6 +682,7 @@ describe('get_transactions output schema', () => {
         end_date: '2026-04-24',
         date_bounds_kind: 'exact_contiguous',
         timezone: 'America/New_York',
+        returned_rows: 2,
       },
       source: 'activity_feed',
       limitations: {
@@ -689,6 +690,7 @@ describe('get_transactions output schema', () => {
         omitted_unscoped_rows: 2,
         omitted_conflicting_rows: 1,
         window_coverage_incomplete: true,
+        possibly_truncated: true,
       },
       count: 2,
       truncated: true,
@@ -725,10 +727,12 @@ describe('get_transactions output schema', () => {
         weeks: [],
         start_timestamp_ms: 1760000000000,
         end_timestamp_ms: 1761209600000,
+        returned_rows: 1,
       },
       warning: 'Some transactions were missing timestamps and were dropped.',
       dropped_invalid_timestamp_count: 1,
       count: 1,
+      limitations: { possibly_truncated: true },
       transactions: [
         {
           transaction_id: '449.l.123.tr.10',
@@ -777,8 +781,9 @@ describe('get_transactions output schema', () => {
       sport: 'football',
       league_id: 'sleeper-2025',
       season_year: 2025,
-      window: { mode: 'explicit_week', weeks: [15] },
+      window: { mode: 'explicit_week', weeks: [15], returned_rows: 1 },
       count: 1,
+      limitations: { possibly_truncated: true },
       transactions: [
         { transaction_id: '9990', date: '2026-07-18', type: 'add', status: 'complete', week: 15, team_ids: [7] },
       ],

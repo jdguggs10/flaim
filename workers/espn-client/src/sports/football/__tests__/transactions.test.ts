@@ -50,6 +50,7 @@ describe('football get_transactions handler', () => {
         end_date: null,
         date_bounds_kind: 'unavailable',
         timezone: 'America/New_York',
+        returned_rows: 0,
       },
       source: 'activity_feed',
       limitations: {
