@@ -416,7 +416,9 @@ describe('ESPN transaction matchup-window contract', () => {
 
     expect(result.transactions).toHaveLength(1);
     expect(result.truncated).toBe(true);
+    expect(result.limitations.possibly_truncated).toBe(true);
     expect(result.limitations.window_coverage_incomplete).toBeUndefined();
+    expect(result.window.returned_rows).toBe(1);
     fetchMock.mockRestore();
   });
 
