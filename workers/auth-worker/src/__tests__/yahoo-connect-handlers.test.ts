@@ -14,6 +14,13 @@ import { YahooStorage } from '../yahoo-storage';
 // Mock YahooStorage
 vi.mock('../yahoo-storage', () => ({
   REFRESH_COOLDOWN_OWNER_PREFIX: 'cooldown:',
+  // Mirrors the real yahoo-storage.ts implementation (FLA-126); kept in sync
+  // manually since this module is fully mocked out for these tests.
+  EXPIRY_WRITE_BUFFER_MS: 60 * 1000,
+  computeYahooExpiresAt: (expiresInSeconds: number, nowMs: number = Date.now()) => {
+    const bufferedSeconds = Math.max(expiresInSeconds - 60, 60);
+    return new Date(nowMs + bufferedSeconds * 1000);
+  },
   YahooStorage: {
     fromEnvironment: vi.fn(),
   },
@@ -288,7 +295,9 @@ describe('yahoo-connect-handlers', () => {
 
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
 
+      const beforeCall = Date.now();
       const response = await handleYahooCallback(request, env, corsHeaders);
+      const afterCall = Date.now();
 
       expect(response.status).toBe(302);
       const location = response.headers.get('Location')!;
@@ -305,6 +314,11 @@ describe('yahoo-connect-handlers', () => {
           appFingerprint: await expectedAppFingerprint('test-yahoo-client-id'),
         })
       );
+      // Stored expiry should be buffered ~60s under the raw expires_in (3600s),
+      // to absorb the token-exchange round-trip (FLA-126).
+      const savedExpiresAt = mockStorage.saveYahooCredentials.mock.calls[0][0].expiresAt as Date;
+      expect(savedExpiresAt.getTime()).toBeGreaterThanOrEqual(beforeCall + 3540 * 1000);
+      expect(savedExpiresAt.getTime()).toBeLessThanOrEqual(afterCall + 3540 * 1000);
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       const exchangeRequest = mockFetch.mock.calls[0][1] as RequestInit;
@@ -596,7 +610,9 @@ describe('yahoo-connect-handlers', () => {
         )
       );
 
+      const beforeCall = Date.now();
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+      const afterCall = Date.now();
 
       expect(response.status).toBe(200);
       const body = (await response.json()) as Record<string, unknown>;
@@ -623,6 +639,11 @@ describe('yahoo-connect-handlers', () => {
         }),
         expect.any(String)
       );
+      // Stored expiry should be buffered ~60s under the raw expires_in (3600s),
+      // to absorb the token-exchange round-trip (FLA-126).
+      const updateCall = mockStorage.updateYahooCredentials.mock.calls[0][1] as { expiresAt: Date };
+      expect(updateCall.expiresAt.getTime()).toBeGreaterThanOrEqual(beforeCall + 3540 * 1000);
+      expect(updateCall.expiresAt.getTime()).toBeLessThanOrEqual(afterCall + 3540 * 1000);
     });
 
     it('omits redirect_uri from refresh-token grants and records the request shape in diagnostics', async () => {

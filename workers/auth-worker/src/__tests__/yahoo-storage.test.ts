@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { YahooStorage } from '../yahoo-storage';
+import { computeYahooExpiresAt, EXPIRY_WRITE_BUFFER_MS, YahooStorage } from '../yahoo-storage';
 
 // Mock Supabase client
 const mockFrom = vi.fn();
@@ -1095,5 +1095,22 @@ describe('YahooStorage', () => {
 
       expect(instance).toBeInstanceOf(YahooStorage);
     });
+  });
+});
+
+describe('computeYahooExpiresAt', () => {
+  it('subtracts the write buffer from the reported lifetime', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const expiresAt = computeYahooExpiresAt(3600, now);
+
+    const expectedMs = now + (3600 * 1000 - EXPIRY_WRITE_BUFFER_MS);
+    expect(expiresAt.getTime()).toBe(expectedMs);
+  });
+
+  it('clamps to a 60-second floor for very short lifetimes', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const expiresAt = computeYahooExpiresAt(30, now);
+
+    expect(expiresAt.getTime()).toBe(now + 60 * 1000);
   });
 });

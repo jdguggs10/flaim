@@ -18,6 +18,7 @@
  */
 
 import {
+  computeYahooExpiresAt,
   REFRESH_COOLDOWN_OWNER_PREFIX,
   YahooStorage,
   type YahooCredentialHealth,
@@ -1173,7 +1174,7 @@ async function getValidYahooAccessToken(
     return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
   }
 
-  const expiresAt = new Date(Date.now() + result.expires_in * 1000);
+  const expiresAt = computeYahooExpiresAt(result.expires_in);
   const nextRefreshToken = result.refresh_token || credentials.refreshToken;
   const refreshTokenReturned = Boolean(result.refresh_token);
   const refreshTokenChanged = Boolean(result.refresh_token && result.refresh_token !== credentials.refreshToken);
@@ -1657,7 +1658,7 @@ export async function handleYahooCallback(
       console.warn(`[yahoo-connect] Yahoo token exchange omitted GUID for user ${maskUserId(clerkUserId)}`);
     }
 
-    const expiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000);
+    const expiresAt = computeYahooExpiresAt(tokenResponse.expires_in);
 
     // Save credentials, stamped with the fingerprint of the Yahoo app that
     // minted them so later refreshes can detect app/secret mismatches.
