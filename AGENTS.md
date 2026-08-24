@@ -83,6 +83,8 @@ Before opening a PR, classify the change. It is **gated** (do not merge while a 
 
 When unsure whether a change touches the frozen surface, treat it as gated and say so in the PR description.
 
+The gate is driven by OpenAI's versioned review model only. Anthropic's connector directory reads the live server and does not pin an approved contract — tools, schemas, descriptions, and scopes may change without resubmission there; only renaming the published listing or moving the endpoint URL is a directory-side event (see claude.com/docs/connectors/verification and /building/managing-your-listing).
+
 ## Verification
 
 Run the narrowest relevant checks for the area you changed.
