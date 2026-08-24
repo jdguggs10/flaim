@@ -578,17 +578,23 @@ export async function fetchSleeperLeaguesReadOnly(
   }
 
   if (results.length > 0 && failedSports.length === results.length) {
-    // sleeperGet folds the HTTP status into its error message; surface it so
-    // callers can distinguish a 429 (back off) from other failures.
-    const firstRejection = results.find(
+    const rejections = results.filter(
       (result): result is PromiseRejectedResult => result.status === 'rejected'
     );
-    const reason = firstRejection?.reason;
-    if (reason instanceof Error && reason.name === 'TimeoutError') {
-      // AbortSignal.timeout() rejection — no HTTP status to report, and
-      // reconciliation's `.endsWith('_timeout')` backoff check keys off this.
+    // Scan every rejection, not just the first: with multiple sports, a 404
+    // on the first request and a timeout on a later one must still surface
+    // as a timeout, or reconciliation's `.endsWith('_timeout')` backoff check
+    // never fires.
+    const timedOut = rejections.some(
+      (result) => result.reason instanceof Error && result.reason.name === 'TimeoutError'
+    );
+    if (timedOut) {
+      // AbortSignal.timeout() rejection — no HTTP status to report.
       return { status: 'error', errorCode: 'sleeper_timeout' };
     }
+    // sleeperGet folds the HTTP status into its error message; surface it so
+    // callers can distinguish a 429 (back off) from other failures.
+    const reason = rejections[0]?.reason;
     const message = reason instanceof Error ? reason.message : '';
     const statusMatch = /Sleeper API (\d{3})/.exec(message);
     return {

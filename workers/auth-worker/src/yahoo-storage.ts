@@ -150,7 +150,13 @@ const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 export const EXPIRY_WRITE_BUFFER_MS = 60 * 1000;
 
 export function computeYahooExpiresAt(expiresInSeconds: number, nowMs: number = Date.now()): Date {
-  const bufferedSeconds = Math.max(expiresInSeconds - EXPIRY_WRITE_BUFFER_MS / 1000, 60);
+  // The 60s floor only holds when Yahoo's actual lifetime allows it — a safety
+  // buffer must never extend the stored expiry beyond what Yahoo granted, so
+  // the floored value is capped back down to expiresInSeconds itself.
+  const bufferedSeconds = Math.min(
+    expiresInSeconds,
+    Math.max(expiresInSeconds - EXPIRY_WRITE_BUFFER_MS / 1000, 60),
+  );
   return new Date(nowMs + bufferedSeconds * 1000);
 }
 

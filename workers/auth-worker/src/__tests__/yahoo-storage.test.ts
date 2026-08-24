@@ -1107,10 +1107,17 @@ describe('computeYahooExpiresAt', () => {
     expect(expiresAt.getTime()).toBe(expectedMs);
   });
 
-  it('clamps to a 60-second floor for very short lifetimes', () => {
+  it('clamps to a 60-second floor when the granted lifetime allows it', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const expiresAt = computeYahooExpiresAt(90, now);
+
+    expect(expiresAt.getTime()).toBe(now + 60 * 1000);
+  });
+
+  it('never stores an expiry beyond the granted lifetime, even under the floor', () => {
     const now = Date.parse('2026-01-01T00:00:00.000Z');
     const expiresAt = computeYahooExpiresAt(30, now);
 
-    expect(expiresAt.getTime()).toBe(now + 60 * 1000);
+    expect(expiresAt.getTime()).toBe(now + 30 * 1000);
   });
 });

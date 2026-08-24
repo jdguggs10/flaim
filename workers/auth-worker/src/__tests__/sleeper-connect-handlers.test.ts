@@ -1104,5 +1104,26 @@ describe('sleeper-connect-handlers', () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
+
+    it('classifies as sleeper_timeout when any rejection (not just the first) is a timeout', async () => {
+      const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes('/leagues/nfl/')) {
+          return new Response(null, { status: 404 });
+        }
+        if (url.includes('/leagues/nba/')) {
+          throw timeoutError;
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await fetchSleeperLeaguesReadOnly(env, 'user_1', [
+        { sleeperSport: 'nfl', seasonYear: 2025 },
+        { sleeperSport: 'nba', seasonYear: 2025 },
+      ]);
+
+      expect(result).toEqual({ status: 'error', errorCode: 'sleeper_timeout' });
+    });
   });
 });
