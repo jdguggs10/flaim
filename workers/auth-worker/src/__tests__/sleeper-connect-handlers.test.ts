@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import {
+  fetchSleeperLeaguesReadOnly,
   handleSleeperDiscover,
   handleSleeperLeagueDelete,
   handleSleeperLeagues,
@@ -1057,6 +1058,72 @@ describe('sleeper-connect-handlers', () => {
       expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
         expect.objectContaining({ leagueId: 'sleeper-2025', recurringLeagueId: 'sleeper-2024' }),
       );
+    });
+  });
+
+  // ===========================================================================
+  // fetchSleeperLeaguesReadOnly (FLA-188: discovery timeouts + error classification)
+  // ===========================================================================
+
+  describe('fetchSleeperLeaguesReadOnly', () => {
+    beforeEach(() => {
+      mockStorage.getSleeperConnection.mockResolvedValue({
+        sleeperUserId: 'sleeper_123',
+        sleeperUsername: 'a_user',
+        updatedAt: '2026-07-04T12:00:00.000Z',
+      });
+    });
+
+    it('surfaces the HTTP status when every sport request is rate-limited', async () => {
+      mockFetch.mockResolvedValue(new Response(null, { status: 429 }));
+
+      const result = await fetchSleeperLeaguesReadOnly(env, 'user_1', [
+        { sleeperSport: 'nfl', seasonYear: 2025 },
+      ]);
+
+      expect(result).toEqual({
+        status: 'error',
+        errorCode: 'sleeper_unavailable',
+        httpStatus: 429,
+      });
+    });
+
+    it('classifies a timed-out fetch as sleeper_timeout without an HTTP status', async () => {
+      const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+      mockFetch.mockRejectedValue(timeoutError);
+
+      const result = await fetchSleeperLeaguesReadOnly(env, 'user_1', [
+        { sleeperSport: 'nfl', seasonYear: 2025 },
+      ]);
+
+      expect(result).toEqual({ status: 'error', errorCode: 'sleeper_timeout' });
+      // The timeout classification only matters if the request actually carries
+      // an abort signal — assert sleeperGet still wires one up (FLA-188).
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+
+    it('classifies as sleeper_timeout when any rejection (not just the first) is a timeout', async () => {
+      const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.includes('/leagues/nfl/')) {
+          return new Response(null, { status: 404 });
+        }
+        if (url.includes('/leagues/nba/')) {
+          throw timeoutError;
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await fetchSleeperLeaguesReadOnly(env, 'user_1', [
+        { sleeperSport: 'nfl', seasonYear: 2025 },
+        { sleeperSport: 'nba', seasonYear: 2025 },
+      ]);
+
+      expect(result).toEqual({ status: 'error', errorCode: 'sleeper_timeout' });
     });
   });
 });

@@ -56,9 +56,15 @@ export function createGetStandingsHandler(_config: YahooHandlerContext): Handler
         const teamStandings = team.team_standings as Record<string, unknown> | undefined;
         const outcomeTotals = teamStandings?.outcome_totals as Record<string, unknown> | undefined;
 
-        const playoffSeed = teamStandings?.playoff_seed != null
-          ? Number(teamStandings.playoff_seed)
-          : null;
+        const rawPlayoffSeed = teamStandings?.playoff_seed;
+        const parsedPlayoffSeed =
+          typeof rawPlayoffSeed === 'number'
+            ? rawPlayoffSeed
+            : typeof rawPlayoffSeed === 'string' && rawPlayoffSeed.trim() !== ''
+              ? Number(rawPlayoffSeed)
+              : NaN;
+        const playoffSeed =
+          Number.isInteger(parsedPlayoffSeed) && parsedPlayoffSeed >= 1 ? parsedPlayoffSeed : null;
 
         return {
           rank: teamStandings?.rank,
