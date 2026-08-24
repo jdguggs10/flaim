@@ -630,7 +630,43 @@ describe('yahoo cross-sport handler characterization tests', () => {
                         { team_standings: { rank: 3, playoff_seed: 'N/A', outcome_totals: { wins: 5, losses: 8, ties: 0, percentage: '.385' }, points_for: '1100', points_against: '1350' } },
                       ],
                     },
-                    count: 3,
+                    '3': {
+                      team: [
+                        [{ team_key: '449.l.123.t.4', team_id: '4', name: 'Team D' }],
+                        { team_standings: { rank: 4, playoff_seed: '', outcome_totals: { wins: 4, losses: 9, ties: 0, percentage: '.308' }, points_for: '1050', points_against: '1400' } },
+                      ],
+                    },
+                    '4': {
+                      team: [
+                        [{ team_key: '449.l.123.t.5', team_id: '5', name: 'Team E' }],
+                        { team_standings: { rank: 5, playoff_seed: '   ', outcome_totals: { wins: 3, losses: 10, ties: 0, percentage: '.231' }, points_for: '1000', points_against: '1450' } },
+                      ],
+                    },
+                    '5': {
+                      team: [
+                        [{ team_key: '449.l.123.t.6', team_id: '6', name: 'Team F' }],
+                        { team_standings: { rank: 6, playoff_seed: false, outcome_totals: { wins: 2, losses: 11, ties: 0, percentage: '.154' }, points_for: '950', points_against: '1500' } },
+                      ],
+                    },
+                    '6': {
+                      team: [
+                        [{ team_key: '449.l.123.t.7', team_id: '7', name: 'Team G' }],
+                        { team_standings: { rank: 7, playoff_seed: true, outcome_totals: { wins: 1, losses: 12, ties: 0, percentage: '.077' }, points_for: '900', points_against: '1550' } },
+                      ],
+                    },
+                    '7': {
+                      team: [
+                        [{ team_key: '449.l.123.t.8', team_id: '8', name: 'Team H' }],
+                        { team_standings: { rank: 8, playoff_seed: 0, outcome_totals: { wins: 0, losses: 13, ties: 0, percentage: '.000' }, points_for: '850', points_against: '1600' } },
+                      ],
+                    },
+                    '8': {
+                      team: [
+                        [{ team_key: '449.l.123.t.9', team_id: '9', name: 'Team I' }],
+                        { team_standings: { rank: 9, playoff_seed: '3', outcome_totals: { wins: 6, losses: 7, ties: 0, percentage: '.462' }, points_for: '1150', points_against: '1300' } },
+                      ],
+                    },
+                    count: 9,
                   },
                 },
               ],
@@ -653,6 +689,12 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const teamA = standings.find((s) => s.name === 'Team A');
       const teamB = standings.find((s) => s.name === 'Team B');
       const teamC = standings.find((s) => s.name === 'Team C');
+      const teamD = standings.find((s) => s.name === 'Team D');
+      const teamE = standings.find((s) => s.name === 'Team E');
+      const teamF = standings.find((s) => s.name === 'Team F');
+      const teamG = standings.find((s) => s.name === 'Team G');
+      const teamH = standings.find((s) => s.name === 'Team H');
+      const teamI = standings.find((s) => s.name === 'Team I');
       expect(teamA?.madePlayoffs).toBe(true);
       expect(teamA?.playoffSeed).toBe(1);
       expect(teamB?.madePlayoffs).toBeNull();
@@ -660,6 +702,21 @@ describe('yahoo cross-sport handler characterization tests', () => {
       // Non-numeric playoff_seed ('N/A') must fall back to null, never NaN
       expect(teamC?.madePlayoffs).toBeNull();
       expect(teamC?.playoffSeed).toBeNull();
+      // Empty string, whitespace-only string, booleans, and zero must all reject
+      // rather than coerce via Number() (Number('') === 0, Number(true) === 1, etc.)
+      expect(teamD?.madePlayoffs).toBeNull();
+      expect(teamD?.playoffSeed).toBeNull();
+      expect(teamE?.madePlayoffs).toBeNull();
+      expect(teamE?.playoffSeed).toBeNull();
+      expect(teamF?.madePlayoffs).toBeNull();
+      expect(teamF?.playoffSeed).toBeNull();
+      expect(teamG?.madePlayoffs).toBeNull();
+      expect(teamG?.playoffSeed).toBeNull();
+      expect(teamH?.madePlayoffs).toBeNull();
+      expect(teamH?.playoffSeed).toBeNull();
+      // A valid numeric string must still parse correctly
+      expect(teamI?.madePlayoffs).toBe(true);
+      expect(teamI?.playoffSeed).toBe(3);
 
       // Yahoo cannot verify championship outcome — always null
       expect(teamA?.finalRank).toBeNull();

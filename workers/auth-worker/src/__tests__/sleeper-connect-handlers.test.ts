@@ -1097,6 +1097,12 @@ describe('sleeper-connect-handlers', () => {
       ]);
 
       expect(result).toEqual({ status: 'error', errorCode: 'sleeper_timeout' });
+      // The timeout classification only matters if the request actually carries
+      // an abort signal — assert sleeperGet still wires one up (FLA-188).
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
   });
 });

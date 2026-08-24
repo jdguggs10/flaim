@@ -13,19 +13,10 @@ import {
 import { YahooStorage } from '../yahoo-storage';
 
 // Mock YahooStorage
-vi.mock('../yahoo-storage', () => ({
-  REFRESH_COOLDOWN_OWNER_PREFIX: 'cooldown:',
-  // Mirrors the real yahoo-storage.ts implementation (FLA-126); kept in sync
-  // manually since this module is fully mocked out for these tests.
-  EXPIRY_WRITE_BUFFER_MS: 60 * 1000,
-  computeYahooExpiresAt: (expiresInSeconds: number, nowMs: number = Date.now()) => {
-    const bufferedSeconds = Math.max(expiresInSeconds - 60, 60);
-    return new Date(nowMs + bufferedSeconds * 1000);
-  },
-  YahooStorage: {
-    fromEnvironment: vi.fn(),
-  },
-}));
+vi.mock('../yahoo-storage', async () => {
+  const actual = await vi.importActual<typeof import('../yahoo-storage')>('../yahoo-storage');
+  return { ...actual, YahooStorage: { fromEnvironment: vi.fn() } };
+});
 
 // Mock global fetch for Yahoo OAuth API calls
 const mockFetch = vi.fn();
@@ -3295,6 +3286,13 @@ describe('yahoo-connect-handlers', () => {
 
       expect(result).toEqual({ status: 'error', errorCode: 'yahoo_timeout', retryable: true });
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      // The timeout classification only matters if the leagues request actually
+      // carries an abort signal — assert it's still wired up (FLA-188).
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
   });
 });
