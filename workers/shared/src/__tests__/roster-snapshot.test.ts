@@ -257,4 +257,11 @@ describe('toSnapshotMetadata', () => {
     expect(toSnapshotMetadata({ type: 'date', date: '2026-07-10' }, { providerScoringPeriodId: 108 }))
       .toEqual({ type: 'date', date: '2026-07-10', providerScoringPeriodId: 108 });
   });
+
+  it('emits leagueStatus when passed via extras, alongside other extras', () => {
+    expect(toSnapshotMetadata({ type: 'current' }, { leagueStatus: 'drafting' }))
+      .toEqual({ type: 'current', leagueStatus: 'drafting' });
+    expect(toSnapshotMetadata({ type: 'date', date: '2026-07-10' }, { providerScoringPeriodId: 108, leagueStatus: 'in_season' }))
+      .toEqual({ type: 'date', date: '2026-07-10', providerScoringPeriodId: 108, leagueStatus: 'in_season' });
+  });
 });

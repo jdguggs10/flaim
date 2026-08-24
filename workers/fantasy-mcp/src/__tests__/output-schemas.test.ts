@@ -459,6 +459,21 @@ describe('get_roster output schema', () => {
     }));
   });
 
+  it('accepts the Sleeper current roster mid-draft, with snapshot.leagueStatus disclosing why it is empty (FLA-293)', () => {
+    expectValid('get_roster', routed({
+      leagueId: 'sleeper-2025',
+      rosterId: 7,
+      ownerId: 'user-1',
+      ownerName: 'Gerry',
+      snapshot: { type: 'current', leagueStatus: 'drafting' },
+      starters: [],
+      bench: [],
+      reserve: [],
+      taxi: [],
+      record: { wins: 0, losses: 0, ties: 0 },
+    }));
+  });
+
   it('accepts the Sleeper current league-wide roster list', () => {
     expectValid('get_roster', routed({
       leagueId: 'sleeper-2025',
