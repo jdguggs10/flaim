@@ -624,7 +624,13 @@ describe('yahoo cross-sport handler characterization tests', () => {
                         { team_standings: { rank: 2, outcome_totals: { wins: 9, losses: 4, ties: 0, percentage: '.692' }, points_for: '1400', points_against: '1300' } },
                       ],
                     },
-                    count: 2,
+                    '2': {
+                      team: [
+                        [{ team_key: '449.l.123.t.3', team_id: '3', name: 'Team C' }],
+                        { team_standings: { rank: 3, playoff_seed: 'N/A', outcome_totals: { wins: 5, losses: 8, ties: 0, percentage: '.385' }, points_for: '1100', points_against: '1350' } },
+                      ],
+                    },
+                    count: 3,
                   },
                 },
               ],
@@ -646,10 +652,14 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const standings = data.standings as Array<Record<string, unknown>>;
       const teamA = standings.find((s) => s.name === 'Team A');
       const teamB = standings.find((s) => s.name === 'Team B');
+      const teamC = standings.find((s) => s.name === 'Team C');
       expect(teamA?.madePlayoffs).toBe(true);
       expect(teamA?.playoffSeed).toBe(1);
       expect(teamB?.madePlayoffs).toBeNull();
       expect(teamB?.playoffSeed).toBeNull();
+      // Non-numeric playoff_seed ('N/A') must fall back to null, never NaN
+      expect(teamC?.madePlayoffs).toBeNull();
+      expect(teamC?.playoffSeed).toBeNull();
 
       // Yahoo cannot verify championship outcome — always null
       expect(teamA?.finalRank).toBeNull();
