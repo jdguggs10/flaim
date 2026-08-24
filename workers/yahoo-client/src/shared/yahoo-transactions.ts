@@ -24,8 +24,12 @@ type TransactionPlayer = {
   team?: string;
 };
 
+export function clampYahooTransactionCount(count: number): number {
+  return Math.max(1, Math.min(100, count));
+}
+
 export function buildYahooTransactionsPath(leagueKey: string, count = 25): string {
-  const clamped = Math.max(1, Math.min(100, count));
+  const clamped = clampYahooTransactionCount(count);
   return `/league/${leagueKey}/transactions;count=${clamped}`;
 }
 
@@ -35,7 +39,7 @@ export function buildYahooPendingTransactionsPath(
   types: string[],
   count = 25,
 ): string {
-  const clamped = Math.max(1, Math.min(100, count));
+  const clamped = clampYahooTransactionCount(count);
   return `/league/${leagueKey}/transactions;types=${types.join(',')};team_key=${teamKey};count=${clamped}`;
 }
 

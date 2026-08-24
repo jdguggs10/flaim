@@ -77,6 +77,7 @@ export interface EspnTransactionLimitations {
   omitted_conflicting_rows?: number;
   exact_date_bounds_unavailable?: true;
   window_coverage_incomplete?: true;
+  possibly_truncated?: boolean;
 }
 
 export interface EspnTransactionOperationResult {
@@ -91,6 +92,7 @@ export interface EspnTransactionOperationResult {
     end_date: string | null;
     date_bounds_kind: TransactionDateBoundsKind;
     timezone: 'America/New_York';
+    returned_rows: number;
   };
   // Source values are part of the published get_transactions contract (the
   // gateway outputSchema enumerates exactly these three): pure structured
@@ -1580,6 +1582,9 @@ export async function executeEspnTransactionOperation({
   if (DAILY_SPORTS.has(sport) && window.dateBoundsKind === 'unavailable') {
     limitations.exact_date_bounds_unavailable = true;
   }
+  if (countTruncated) {
+    limitations.possibly_truncated = true;
+  }
 
   return {
     window: {
@@ -1593,6 +1598,7 @@ export async function executeEspnTransactionOperation({
       end_date: window.endDate,
       date_bounds_kind: window.dateBoundsKind,
       timezone: window.timezone,
+      returned_rows: transactions.length,
     },
     source,
     limitations,

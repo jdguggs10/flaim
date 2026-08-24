@@ -23,6 +23,7 @@ vi.mock('../../shared/yahoo-api', async () => {
 vi.mock('../../shared/yahoo-transactions', () => ({
   buildYahooTransactionsPath: vi.fn(),
   buildYahooPendingTransactionsPath: vi.fn(),
+  clampYahooTransactionCount: (count: number) => Math.max(1, Math.min(100, count)),
   normalizeYahooTransactions: vi.fn(),
 }));
 
