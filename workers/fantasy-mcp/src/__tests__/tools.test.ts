@@ -683,9 +683,14 @@ describe('fantasy-mcp tools', () => {
       INTERNAL_SERVICE_TOKEN: 'internal-secret',
       AUTH_WORKER: {
         fetch: async () => {
+          // Mirrors what auth-worker actually sends today (index-hono.ts:861,
+          // deliberately out of scope here): the gateway discards this
+          // upstream error_description entirely — it branches only on
+          // payload.error === 'insufficient_scope' — and builds its own
+          // re-grant copy via mcpInsufficientScopeError, asserted below.
           return new Response(JSON.stringify({
             error: 'insufficient_scope',
-            error_description: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
+            error_description: 'mcp:write scope is required to refresh leagues',
           }), {
             status: 403,
             headers: { 'Content-Type': 'application/json' },

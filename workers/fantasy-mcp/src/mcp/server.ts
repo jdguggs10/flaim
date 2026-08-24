@@ -92,6 +92,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
     ['user-session-widget-v3', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
   ] as const;
 
+  // Log ~1 in 50 reads; absolute rates reconstruct via sample_rate. This path
+  // is public and unauthenticated (no per-client rate limit), so an unsampled
+  // log line risks blowing the Workers Logs quota — see the FLA-255
+  // icon-storm precedent (~500k reads/day on a comparable path).
+  const WIDGET_READ_LOG_SAMPLE_RATE = 50;
+
   for (const [name, uri, widgetHtml] of widgetResources) {
     server.registerResource(
       name,
@@ -100,14 +106,20 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         mimeType: 'text/html;profile=mcp-app',
       },
       async () => {
-        // Structured log on every widget resource read so v1's share of
-        // reads is computable (v1-retirement tracking, FLA-258) — log all
+        // Structured log on a sample of widget resource reads so v1's share
+        // of reads is computable (v1-retirement tracking, FLA-258) — log all
         // three URIs, not just v1, so the denominator is available too.
-        console.log(JSON.stringify({
-          schema_version: 1, service: 'fantasy-mcp', component: 'widget-resources',
-          event: 'widget_resource_read', uri, resource_name: name,
-          correlation_id: ctx.correlationId ?? null, client_name: ctx.clientName ?? null,
-        }));
+        // client_name is intentionally omitted: this path is public and
+        // never goes through token introspection, so ctx.clientName is
+        // always null here.
+        if (Math.random() * WIDGET_READ_LOG_SAMPLE_RATE < 1) {
+          console.log(JSON.stringify({
+            schema_version: 1, service: 'fantasy-mcp', component: 'widget-resources',
+            event: 'widget_resource_read', uri, resource_name: name,
+            sample_rate: WIDGET_READ_LOG_SAMPLE_RATE,
+            correlation_id: ctx.correlationId ?? null,
+          }));
+        }
         return {
           contents: [{
             uri,
