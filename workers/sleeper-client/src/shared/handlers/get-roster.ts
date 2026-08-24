@@ -1,5 +1,5 @@
 import type { HandlerFn } from './types';
-import type { Env, SleeperLeagueUser, SleeperMatchup, SleeperRoster, ToolParams } from '../../types';
+import type { Env, SleeperLeague, SleeperLeagueUser, SleeperMatchup, SleeperRoster, ToolParams } from '../../types';
 import {
   ErrorCode,
   malformedRosterSnapshotError,
@@ -16,6 +16,46 @@ import { buildUserDirectory, loadSleeperPlayersIndexForEnrichment, resolveSleepe
 // team_id matches either the roster ID or the owner's user ID.
 function findRoster(rosters: SleeperRoster[], teamId: string): SleeperRoster | undefined {
   return rosters.find((r) => String(r.roster_id) === teamId || r.owner_id === teamId);
+}
+
+export const LEAGUE_STATUS_UNAVAILABLE_WARNING =
+  'LEAGUE_STATUS_UNAVAILABLE: Sleeper league status unavailable; snapshot.leagueStatus omitted.';
+
+interface LeagueStatusResult {
+  status?: string;
+  warning?: string;
+}
+
+/**
+ * Fetches the league's status ("pre_draft" | "drafting" | "in_season" |
+ * "complete") for snapshot.leagueStatus, so a caller hitting an empty
+ * mid-draft roster (drafting: no starters/bench/record yet) can see why.
+ * Kicked off alongside — but never awaited inside — the required rosters/users
+ * Promise.all for both the roster-summary and single-team branches, so a
+ * black-holed /league/{id} call can never delay a prompt rosters/users error
+ * (e.g. a 404) by its own fetch timeout. Never throws: a failed fetch, a
+ * non-OK status, or a 200 body without a usable status string all degrade to
+ * an omitted leagueStatus plus a warning, mirroring get-league-info.ts's
+ * TRADED_PICKS_UNAVAILABLE degradation. Not used by the historical week
+ * branch: a past week always has a played, non-drafting league.
+ */
+async function loadLeagueStatus(league_id: string): Promise<LeagueStatusResult> {
+  try {
+    const res = await sleeperFetch(`/league/${league_id}`);
+    if (!res.ok) {
+      console.error(`[get-roster] league fetch failed for league ${league_id} (status ${res.status})`);
+      return { warning: LEAGUE_STATUS_UNAVAILABLE_WARNING };
+    }
+    const league: SleeperLeague = await res.json();
+    if (typeof league?.status === 'string' && league.status.length > 0) {
+      return { status: league.status };
+    }
+    console.error(`[get-roster] league response for league ${league_id} had no usable status`);
+    return { warning: LEAGUE_STATUS_UNAVAILABLE_WARNING };
+  } catch (error) {
+    console.error(`[get-roster] league fetch threw for league ${league_id}:`, error);
+    return { warning: LEAGUE_STATUS_UNAVAILABLE_WARNING };
+  }
 }
 
 /**
@@ -144,6 +184,16 @@ export function createGetRosterHandler(): HandlerFn {
         ? loadSleeperPlayersIndexForEnrichment(env, sport, 'get-roster:current')
         : undefined;
 
+      // League status is kicked off for both branches below (roster-summary
+      // and single-team) so an empty mid-draft roster can explain itself —
+      // see loadLeagueStatus. Deliberately NOT joined into the Promise.all
+      // below: it never rejects, but a black-holed /league/{id} call could
+      // otherwise delay a required rosters/users error (e.g. a prompt 404)
+      // by its own fetch timeout. It's awaited only on the success paths
+      // further down; left un-awaited on an error path, which is safe since
+      // it never rejects (no unhandled rejection).
+      const leagueStatusPromise = loadLeagueStatus(league_id);
+
       const [rostersRes, usersRes] = await Promise.all([
         sleeperFetch(`/league/${league_id}/rosters`),
         sleeperFetch(`/league/${league_id}/users`),
@@ -160,11 +210,12 @@ export function createGetRosterHandler(): HandlerFn {
       if (team_id) {
         roster = findRoster(rosters, team_id);
       } else {
+        const leagueStatusResult = await leagueStatusPromise;
         return {
           success: true,
           data: {
             leagueId: league_id,
-            snapshot: toSnapshotMetadata(snapshot),
+            snapshot: toSnapshotMetadata(snapshot, { leagueStatus: leagueStatusResult.status }),
             rosters: rosters.map((r) => {
               const entry = userDirectory.get(r.owner_id);
               return {
@@ -176,6 +227,7 @@ export function createGetRosterHandler(): HandlerFn {
                 starterCount: r.starters?.length ?? 0,
               };
             }),
+            ...(leagueStatusResult.warning ? { warnings: [leagueStatusResult.warning] } : {}),
           },
         };
       }
@@ -201,6 +253,8 @@ export function createGetRosterHandler(): HandlerFn {
       // playersIndexPromise is always defined here: we only reach this point
       // when team_id was truthy (the no-team_id branch returns above).
       const { index: playersIndex, warnings } = await playersIndexPromise!;
+      const leagueStatusResult = await leagueStatusPromise;
+      if (leagueStatusResult.warning) warnings.push(leagueStatusResult.warning);
 
       return {
         success: true,
@@ -210,7 +264,7 @@ export function createGetRosterHandler(): HandlerFn {
           ownerId: roster.owner_id,
           ownerName: ownerEntry?.displayName ?? 'Unknown',
           teamName: ownerEntry?.teamName,
-          snapshot: toSnapshotMetadata(snapshot),
+          snapshot: toSnapshotMetadata(snapshot, { leagueStatus: leagueStatusResult.status }),
           starters: resolveSleeperPlayerEntries(starters, playersIndex),
           bench: resolveSleeperPlayerEntries(bench, playersIndex),
           reserve: resolveSleeperPlayerEntries(reserve, playersIndex),

@@ -248,7 +248,7 @@ export function malformedRosterSnapshotError(): {
  */
 export function toSnapshotMetadata(
   snapshot: RosterSnapshot,
-  extras?: { providerScoringPeriodId?: number }
+  extras?: { providerScoringPeriodId?: number; leagueStatus?: string }
 ): Record<string, unknown> {
   const base: Record<string, unknown> = { type: snapshot.type };
   if (snapshot.type === 'current' && snapshot.requestedWeek !== undefined) {
@@ -259,6 +259,9 @@ export function toSnapshotMetadata(
   if (snapshot.type === 'date') base.date = snapshot.date;
   if (extras?.providerScoringPeriodId !== undefined) {
     base.providerScoringPeriodId = extras.providerScoringPeriodId;
+  }
+  if (extras?.leagueStatus !== undefined) {
+    base.leagueStatus = extras.leagueStatus;
   }
   return base;
 }
