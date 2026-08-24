@@ -232,6 +232,22 @@ async function buildSleeperLeagueResponse(
   }));
 }
 
+export interface SleeperBackfillRowDetail {
+  userId: string;
+  leagueId: string;
+  currentRecurringId: string | null;
+  wouldSetRecurringId: string;
+}
+
+export interface SleeperBackfillUserResult {
+  processed: number;
+  resolved: number;
+  /** Rows whose stored recurring_league_id differs from the resolved root — written when not dryRun. */
+  changed: number;
+  /** Per-row would-change detail. Present only when dryRun is true. */
+  rows?: SleeperBackfillRowDetail[];
+}
+
 /**
  * Backfill `recurring_league_id` for a user's existing Sleeper rows by re-running
  * the full previous_league_id chain walk — NOT the cheap `= league_id`
@@ -240,14 +256,17 @@ async function buildSleeperLeagueResponse(
  * tolerates a missing column). Where a chain is genuinely unresolvable, the
  * resolver already falls back to the season-scoped league_id.
  *
- * This is a callable mechanism only; nothing invokes it automatically. Run it
- * deliberately (e.g. via a one-off route or script) after migration 023 ships.
+ * `options.dryRun` (default false) runs the same read/resolve path but skips
+ * saveSleeperLeague, returning per-row would-change detail instead.
+ *
+ * Callable via the FLA-168 internal route/orchestrator (sleeper-recurring-backfill.ts).
  */
-// TODO(FLA-124): one-off backfill mechanism — wire to an admin route/script after the recurring_league_id migration ships. Intentionally not auto-invoked.
 export async function backfillSleeperRecurringIds(
   env: SleeperConnectEnv,
-  userId: string
-): Promise<{ processed: number; resolved: number }> {
+  userId: string,
+  options: { dryRun?: boolean } = {}
+): Promise<SleeperBackfillUserResult> {
+  const dryRun = options.dryRun ?? false;
   const storage = SleeperStorage.fromEnvironment(env);
   const leagues = await storage.getSleeperLeagues(userId, 'include-all');
 
@@ -256,6 +275,8 @@ export async function backfillSleeperRecurringIds(
 
   let processed = 0;
   let resolved = 0;
+  let changed = 0;
+  const rows: SleeperBackfillRowDetail[] = [];
 
   for (const league of leagues) {
     processed++;
@@ -267,6 +288,17 @@ export async function backfillSleeperRecurringIds(
 
     // Skip a write when the stored value already matches the resolved root.
     if (league.recurringLeagueId === recurringLeagueId) continue;
+
+    changed++;
+    if (dryRun) {
+      rows.push({
+        userId,
+        leagueId: league.leagueId,
+        currentRecurringId: league.recurringLeagueId ?? null,
+        wouldSetRecurringId: recurringLeagueId,
+      });
+      continue;
+    }
 
     await storage.saveSleeperLeague({
       clerkUserId: userId,
@@ -280,7 +312,7 @@ export async function backfillSleeperRecurringIds(
     });
   }
 
-  return { processed, resolved };
+  return dryRun ? { processed, resolved, changed, rows } : { processed, resolved, changed };
 }
 
 /**

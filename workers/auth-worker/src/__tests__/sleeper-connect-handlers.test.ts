@@ -1054,9 +1054,103 @@ describe('sleeper-connect-handlers', () => {
 
       const result = await backfillSleeperRecurringIds(env, 'user_1');
 
-      expect(result).toEqual({ processed: 1, resolved: 1 });
+      expect(result).toEqual({ processed: 1, resolved: 1, changed: 1 });
       expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
         expect.objectContaining({ leagueId: 'sleeper-2025', recurringLeagueId: 'sleeper-2024' }),
+      );
+    });
+
+    it('only writes rows where recurring_league_id is null or stale, never an already-correct row', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+        { id: 'row-y', clerkUserId: 'user_1', leagueId: 'y', sport: 'football', seasonYear: 2025, leagueName: 'Y', rosterId: 2, recurringLeagueId: 'stale-y', sleeperUserId: 'sleeper_123' },
+        { id: 'row-z', clerkUserId: 'user_1', leagueId: 'z', sport: 'football', seasonYear: 2025, leagueName: 'Z', rosterId: 3, recurringLeagueId: 'z', sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        const match = /\/league\/([a-z])$/.exec(url);
+        if (match) {
+          return jsonResponse({ league_id: match[1], name: match[1], sport: 'nfl', season: '2025', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1');
+
+      expect(result).toEqual({ processed: 3, resolved: 3, changed: 2 });
+      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(2);
+      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'x', recurringLeagueId: 'x' }));
+      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'y', recurringLeagueId: 'y' }));
+      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'z' }));
+    });
+
+    it('is idempotent: a second run against the persisted result performs zero writes', async () => {
+      const row = { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null as string | null, sleeperUserId: 'sleeper_123' };
+      mockStorage.getSleeperLeagues.mockResolvedValue([row]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/x')) {
+          return jsonResponse({ league_id: 'x', name: 'X', sport: 'nfl', season: '2025', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const first = await backfillSleeperRecurringIds(env, 'user_1');
+      expect(first.changed).toBe(1);
+      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(1);
+
+      // Simulate the write the first run performed, then re-run.
+      mockStorage.saveSleeperLeague.mockClear();
+      mockStorage.getSleeperLeagues.mockResolvedValue([{ ...row, recurringLeagueId: 'x' }]);
+
+      const second = await backfillSleeperRecurringIds(env, 'user_1');
+      expect(second).toEqual({ processed: 1, resolved: 1, changed: 0 });
+      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
+    });
+
+    it('dry run reports would-change detail without calling saveSleeperLeague', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/x')) {
+          return jsonResponse({ league_id: 'x', name: 'X', sport: 'nfl', season: '2025', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1', { dryRun: true });
+
+      expect(result).toEqual({
+        processed: 1,
+        resolved: 1,
+        changed: 1,
+        rows: [{ userId: 'user_1', leagueId: 'x', currentRecurringId: null, wouldSetRecurringId: 'x' }],
+      });
+      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
+    });
+
+    it('does not throw on a cyclic previous_league_id chain and falls back to the season-scoped id', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-a', clerkUserId: 'user_1', leagueId: 'cycle-a', sport: 'football', seasonYear: 2025, leagueName: 'Cycle', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/cycle-a')) {
+          return jsonResponse({ league_id: 'cycle-a', name: 'Cycle', sport: 'nfl', season: '2025', previous_league_id: 'cycle-b' });
+        }
+        if (url.endsWith('/league/cycle-b')) {
+          return jsonResponse({ league_id: 'cycle-b', name: 'Cycle', sport: 'nfl', season: '2024', previous_league_id: 'cycle-a' });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1');
+
+      expect(result).toEqual({ processed: 1, resolved: 0, changed: 1 });
+      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
+        expect.objectContaining({ leagueId: 'cycle-a', recurringLeagueId: 'cycle-a' }),
       );
     });
   });
