@@ -84,6 +84,7 @@ import {
 import { logSyncEnvelope, SyncStateStorage } from './sync-state';
 import { handleWebSetupSignal } from './signal-handlers';
 import { runReconciliation } from './reconciliation';
+import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } from './sleeper-recurring-backfill';
 
 // =============================================================================
 // TYPES
@@ -894,6 +895,26 @@ api.post('/internal/reconciliation/run', async (c) => {
   const summary = await runReconciliation(c.env, 'manual');
   const refused = summary.outcome === 'disabled' || summary.outcome === 'refused_not_dry_run';
   return c.json(summary, refused ? 409 : 200);
+});
+
+// One-off backfill for Sleeper recurring_league_id (FLA-168). Service-token
+// only. Defaults to dry-run; callers must explicitly opt into
+// { dryRun: false } to perform writes.
+api.post('/internal/backfill/sleeper-recurring-ids', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const validation = await parseSleeperRecurringBackfillRequest(c.req.raw);
+  if (validation.error) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const summary = await runSleeperRecurringBackfill(c.env, validation.dryRun ?? true);
+  // A concurrent live run already holds the backfill's single-flight lease
+  // (sync-state.ts, FLA-168 audit Fix 5) — 409 rather than racing writes.
+  return c.json(summary, summary.outcome === 'blocked' ? 409 : 200);
 });
 
 // Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).

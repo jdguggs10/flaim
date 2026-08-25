@@ -718,6 +718,74 @@ describe('SleeperStorage', () => {
   });
 
   // ===========================================================================
+  // backfillRecurringLeagueId: narrow conditional write used ONLY by the
+  // FLA-168 backfill orchestrator (round-3 audit finding — replaces an
+  // unconditional full-row upsert that could resurrect a deleted row or
+  // clobber a concurrently-written value).
+  // ===========================================================================
+
+  describe('backfillRecurringLeagueId', () => {
+    function mockConditionalUpdateChain(result: { data: unknown; error: unknown }) {
+      const mockSelectAfterUpdate = vi.fn().mockResolvedValue(result);
+      const mockIs = vi.fn().mockReturnValue({ select: mockSelectAfterUpdate });
+      const mockEqSeason = vi.fn().mockReturnValue({ is: mockIs });
+      const mockEqLeague = vi.fn().mockReturnValue({ eq: mockEqSeason });
+      const mockEqUser = vi.fn().mockReturnValue({ eq: mockEqLeague });
+      const mockUpdateFn = vi.fn().mockReturnValue({ eq: mockEqUser });
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') return { update: mockUpdateFn };
+        return {};
+      });
+      return { mockUpdateFn, mockEqUser, mockEqLeague, mockEqSeason, mockIs };
+    }
+
+    it('sets recurring_league_id scoped to the exact row, guarded on IS NULL', async () => {
+      const { mockUpdateFn, mockEqUser, mockEqLeague, mockEqSeason, mockIs } =
+        mockConditionalUpdateChain({ data: [{ id: 'row-1' }], error: null });
+
+      const result = await storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024');
+
+      expect(result).toBe(true);
+      expect(mockUpdateFn).toHaveBeenCalledOnce();
+      expect(mockUpdateFn.mock.calls[0][0]).toMatchObject({ recurring_league_id: 'root-2024' });
+      expect(mockEqUser).toHaveBeenCalledWith('clerk_user_id', 'user_1');
+      expect(mockEqLeague).toHaveBeenCalledWith('league_id', 'league-2025');
+      expect(mockEqSeason).toHaveBeenCalledWith('season_year', 2025);
+      expect(mockIs).toHaveBeenCalledWith('recurring_league_id', null);
+    });
+
+    it('returns false as a clean skip when zero rows match (deleted, or already filled concurrently)', async () => {
+      mockConditionalUpdateChain({ data: [], error: null });
+
+      const result = await storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024');
+
+      expect(result).toBe(false);
+    });
+
+    it('tolerates the missing recurring_league_id column (pre-migration) by returning false', async () => {
+      mockConditionalUpdateChain({
+        data: null,
+        error: { code: '42703', message: 'column sleeper_leagues.recurring_league_id does not exist' },
+      });
+
+      await expect(
+        storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024')
+      ).resolves.toBe(false);
+    });
+
+    it('does not treat an unrelated error as a missing column', async () => {
+      mockConditionalUpdateChain({
+        data: null,
+        error: { code: '42501', message: 'permission denied' },
+      });
+
+      await expect(
+        storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024')
+      ).rejects.toThrow('Failed to backfill Sleeper recurring_league_id: permission denied');
+    });
+  });
+
+  // ===========================================================================
   // deleteSleeperLeague also removes the archive row
   // ===========================================================================
 

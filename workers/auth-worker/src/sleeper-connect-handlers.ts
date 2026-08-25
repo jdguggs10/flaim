@@ -1,6 +1,7 @@
 import { SleeperStorage, type SleeperLeague } from './sleeper-storage';
 import { ArchiveStorage, archivedKey, type ArchivedFilter, type ArchiveMode } from './archive-storage';
 import { getDefaultSeasonYear } from './season-utils';
+import type { LeaseRenewalCheckpoint } from './sync-state';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
 const MAX_HISTORY_YEARS = 5;
@@ -102,6 +103,24 @@ async function getSleeperLeague(
   }
 
   const request = sleeperGet<SleeperApiLeague | null>(`/league/${leagueId}`);
+  // Evict on rejection (round-4 audit finding): without this, a transient
+  // failure (a 503, a timeout) fetching a shared intermediate league stays
+  // cached as a rejected promise for the rest of this run, so a LATER row
+  // whose own chain passes through that same league fails instantly too, even
+  // after Sleeper has recovered — contradicting tryResolveRecurringLeagueId's
+  // own "a transient failure on one row's walk must not poison resolution for
+  // a different row" comment above, which only covers the recurringIdCache,
+  // not this raw-fetch cache. Attaching `.catch()` directly to `request`
+  // marks it "handled" for unhandled-rejection purposes without altering the
+  // promise identity: this function (and any other in-flight caller who
+  // already read the cached `request` before eviction) still awaits the same
+  // rejected promise and still sees the failure; only a NEW cache lookup
+  // after the eviction runs gets a fresh fetch instead of the stale rejection.
+  request.catch(() => {
+    if (leagueCache.get(leagueId) === request) {
+      leagueCache.delete(leagueId);
+    }
+  });
   leagueCache.set(leagueId, request);
   return request;
 }
@@ -117,10 +136,30 @@ function describeSleeperResolutionFailure(leagueId: string, error: unknown): str
   return `unknown error while resolving ${leagueId}`;
 }
 
+/**
+ * `maxDepth` bounds the previous_league_id walk to that many hops before
+ * treating the chain as unresolved (audit FLA-168 Fix 2); `undefined`
+ * (the default) is unbounded, restoring this resolver's original shared
+ * behavior. Only the backfill path (backfillSleeperRecurringIds, below)
+ * passes a cap (MAX_HISTORY_YEARS) — it re-walks chains for potentially very
+ * old rows in bulk, where an unbounded walk is the actual risk. UI reads
+ * (buildSleeperLeagueResponse), archive resolution (resolveSleeperArchiveTarget),
+ * and discovery (refreshSleeperLeaguesForUsername) all need the true root for
+ * a deep-but-legitimate dynasty chain, and share this function via
+ * resolveRecurringLeagueId or a direct unbounded call — round one's mistake
+ * was applying the backfill-only cap here at the shared level, which
+ * collaterally broke identity for those unbounded contexts too.
+ */
 async function tryResolveRecurringLeagueId(
   leagueId: string,
-  cache: Map<string, string | null>,
-  leagueCache: Map<string, Promise<SleeperApiLeague | null>>
+  // Positive-only caching (see below: every negative outcome is deliberately
+  // left uncached) makes a `null` cache value unreachable in practice, so the
+  // parameter is typed as `Map<string, string>` rather than
+  // `Map<string, string | null>` (PR #206 review, Claude bot minor) — every
+  // caller below already only ever constructs and populates one with strings.
+  cache: Map<string, string>,
+  leagueCache: Map<string, Promise<SleeperApiLeague | null>>,
+  maxDepth?: number
 ): Promise<RecurringLeagueResolutionResult> {
   const path: string[] = [];
   const visited = new Set<string>();
@@ -128,21 +167,47 @@ async function tryResolveRecurringLeagueId(
 
   while (currentLeagueId) {
     if (cache.has(currentLeagueId)) {
-      const cached = cache.get(currentLeagueId) ?? null;
+      // The shared per-run cache only ever holds POSITIVE resolutions (see
+      // below) — a `has()` hit here is always a resolved root. Non-null
+      // assertion only narrows away `undefined` (the `.has()` check above
+      // already proves the key is present); the value itself is always a
+      // `string`, never `null` (Map<string, string>).
+      const cached = cache.get(currentLeagueId)!;
       for (const pathLeagueId of path) {
         cache.set(pathLeagueId, cached);
       }
-
-      return cached
-        ? { recurringLeagueId: cached }
-        : { failureReason: `unresolved recurring chain at ${currentLeagueId}` };
+      return { recurringLeagueId: cached };
     }
 
     if (visited.has(currentLeagueId)) {
-      for (const pathLeagueId of path) {
-        cache.set(pathLeagueId, null);
-      }
+      // Cycle: a negative outcome, but NOT cached (round-3 audit finding) —
+      // see the cap-exceeded branch below for why negatives are never written
+      // to the shared cache.
       return { failureReason: `detected recurring league cycle at ${currentLeagueId}` };
+    }
+
+    // Bound the walk at maxDepth hops (backfill only — see the doc comment
+    // above) so a very long (or malformed, non-cyclic) previous_league_id
+    // chain can't be walked indefinitely in a bulk re-resolution. Hitting the
+    // cap is treated as unresolved (audit FLA-168 Fix 2), not as a discovered
+    // root. Unbounded (maxDepth undefined) for every other caller.
+    //
+    // Cap-exceeded (and every other negative outcome below) is deliberately
+    // NOT written into the shared per-run `cache` for the visited path
+    // (round-3 audit finding): the cap only describes THIS walk's budget, not
+    // whether the chain is actually unresolvable. Poisoning the cache with a
+    // null entry for an intermediate league would make a later, unrelated row
+    // whose OWN chain passes through that same league — but is short enough
+    // to resolve within its own full depth budget — incorrectly fail too,
+    // just because some earlier row happened to enter the shared history at a
+    // deeper point. Only positive (resolved-root) entries are ever cached;
+    // every negative outcome recomputes from scratch for the next row that
+    // needs it. Duplicate Sleeper API calls within one run are acceptable —
+    // getSleeperLeague's own leagueCache still memoizes the raw league
+    // fetches, so this only costs repeated (cheap) chain-walk bookkeeping,
+    // not repeated network requests for the same league.
+    if (maxDepth !== undefined && path.length >= maxDepth) {
+      return { failureReason: `previous_league_id chain exceeded ${maxDepth}-season depth cap at ${currentLeagueId}` };
     }
 
     visited.add(currentLeagueId);
@@ -151,13 +216,13 @@ async function tryResolveRecurringLeagueId(
     try {
       const league = await getSleeperLeague(currentLeagueId, leagueCache);
       if (!league) {
-        for (const pathLeagueId of path) {
-          cache.set(pathLeagueId, null);
-        }
         return { failureReason: `Sleeper returned null while resolving ${currentLeagueId}` };
       }
 
       if (!league.previous_league_id) {
+        // Positive resolution: safe to cache for every league visited on this
+        // walk, since the resolved root is a fact independent of any depth
+        // budget or which row triggered the walk.
         for (const pathLeagueId of path) {
           cache.set(pathLeagueId, league.league_id);
         }
@@ -166,11 +231,11 @@ async function tryResolveRecurringLeagueId(
 
       currentLeagueId = league.previous_league_id;
     } catch (error) {
-      const failureReason = describeSleeperResolutionFailure(currentLeagueId, error);
-      for (const pathLeagueId of path) {
-        cache.set(pathLeagueId, null);
-      }
-      return { failureReason };
+      // Transient fetch error: also a negative outcome, and also left
+      // uncached for the same reason as the cap — a transient failure on one
+      // row's walk must not poison resolution for a different row's chain
+      // that happens to share an intermediate league.
+      return { failureReason: describeSleeperResolutionFailure(currentLeagueId, error) };
     }
   }
 
@@ -179,7 +244,7 @@ async function tryResolveRecurringLeagueId(
 
 async function resolveRecurringLeagueId(
   leagueId: string,
-  cache: Map<string, string | null>,
+  cache: Map<string, string>,
   leagueCache: Map<string, Promise<SleeperApiLeague | null>>
 ): Promise<string> {
   const resolution = await tryResolveRecurringLeagueId(leagueId, cache, leagueCache);
@@ -197,7 +262,7 @@ async function buildSleeperLeagueResponse(
   leagues: SleeperLeague[],
   archivedMap?: Map<string, ArchiveMode>
 ): Promise<SleeperLeagueResponse[]> {
-  const recurringIdCache = new Map<string, string | null>();
+  const recurringIdCache = new Map<string, string>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
   for (const league of leagues) {
     if (league.recurringLeagueId) {
@@ -232,55 +297,195 @@ async function buildSleeperLeagueResponse(
   }));
 }
 
+export interface SleeperBackfillRowDetail {
+  userId: string;
+  leagueId: string;
+  currentRecurringId: string | null;
+  wouldSetRecurringId: string;
+}
+
+export interface SleeperBackfillUserResult {
+  processed: number;
+  resolved: number;
+  /** NULL rows successfully resolved and written this run (null-only; see below). */
+  changed: number;
+  /**
+   * NULL rows whose previous_league_id chain could not be resolved this run
+   * (transient fetch error, cycle, or depth cap) — left NULL rather than
+   * persisting a wrong fallback, so a later healthy run can retry them.
+   */
+  unresolved: number;
+  /**
+   * NULL rows that resolved successfully but whose conditional write matched
+   * zero rows — the row was deleted, or normal sync/discovery already filled
+   * its recurring_league_id, between the snapshot read at the top of this
+   * function and the write (round-3 audit finding). A clean no-op, not an
+   * error: 0 for dry runs, since no write is ever attempted there.
+   */
+  skippedConcurrent: number;
+  /** Per-row would-change detail. Present only when dryRun is true. */
+  rows?: SleeperBackfillRowDetail[];
+  /**
+   * True when `options.onRowCheckpoint` reported the lease was lost partway
+   * through this user's rows (round-4 audit finding) — the loop stopped
+   * immediately and any rows after the one that failed the checkpoint were
+   * never attempted. The caller (the backfill orchestrator) must treat this
+   * the same as its own renewal failures: stop processing further users too.
+   */
+  leaseLost?: boolean;
+}
+
 /**
  * Backfill `recurring_league_id` for a user's existing Sleeper rows by re-running
  * the full previous_league_id chain walk — NOT the cheap `= league_id`
- * shortcut. For each row, resolves the canonical root and persists it via
- * saveSleeperLeague (which upserts on (clerk_user_id, league_id, season_year) and
- * tolerates a missing column). Where a chain is genuinely unresolvable, the
- * resolver already falls back to the season-scoped league_id.
+ * shortcut. Only rows whose stored recurring_league_id is NULL are candidates:
+ * a row that already has a value (even one that looks stale) is left for the
+ * sync path to correct on its next refresh — backfill never overwrites a
+ * non-null value (audit FLA-168 Fix 3).
  *
- * This is a callable mechanism only; nothing invokes it automatically. Run it
- * deliberately (e.g. via a one-off route or script) after migration 023 ships.
+ * For each NULL candidate, resolves the canonical root and persists it via
+ * storage.backfillRecurringLeagueId — a narrow conditional UPDATE scoped to
+ * this exact row and guarded on `recurring_league_id IS NULL` — but ONLY when
+ * the chain walk actually resolved. This function reads the candidate rows
+ * once at the top and may run for a while (bulk, many users); an unconditional
+ * full-row upsert built from that stale snapshot would either resurrect a row
+ * the user deleted in the interval, or clobber fresher fields normal sync
+ * already wrote. The conditional write makes both cases a clean no-op,
+ * counted in `skippedConcurrent` (round-3 audit finding).
+ *
+ * When the walk is unresolved (transient fetch error, a cycle, or the resolver's
+ * depth cap), the row is left NULL and counted in `unresolved` instead of being
+ * persisted with a fallback value: a fallback born from a transient failure
+ * would otherwise look like a genuine terminal state and never be revisited by
+ * this null-only selector (audit FLA-168 Fix 1/2).
+ *
+ * `options.dryRun` (default false) runs the same read/resolve path but skips
+ * the write, returning per-row would-change detail instead.
+ *
+ * `options.onRowCheckpoint` (round-4 audit finding), when provided, is
+ * awaited immediately before EACH row — not once per user — and a `false`
+ * return stops the loop right there, before that row is touched, reporting
+ * `leaseLost: true`. This exists because a single user can own many rows, and
+ * each row's own chain walk can make up to MAX_HISTORY_YEARS (5) Sleeper
+ * requests at a 10s timeout apiece: renewing only once per user (or once per
+ * batch of users, as an earlier version of this backfill did) leaves a gap
+ * between renewals that scales with how many rows and how deep their chains
+ * are, not with a fixed budget — exactly the unbounded-per-user-work gap the
+ * round-4 audit flagged as able to exceed the lease TTL. The SAME checkpoint
+ * is consulted a second time immediately before the write itself, right
+ * after the (possibly slow) chain walk finishes (round-5 audit finding, Fix
+ * 1a) — a `false` there stops the loop too, reporting `leaseLost: true`
+ * without ever calling `storage.backfillRecurringLeagueId` for that row. The
+ * caller (the backfill orchestrator in sleeper-recurring-backfill.ts)
+ * supplies a checkpoint that only actually calls `extendLease` once enough
+ * wall-clock time has passed since the last renewal (and single-flights
+ * concurrent calls from other users in the same batch — see that file), so
+ * this hook is cheap to call before every single row and again before every
+ * write. Omitted entirely for dry runs, which never hold the lease or write
+ * anything. This is a bound on wasted work once a lease loss is detected, not
+ * the reason concurrent writes are safe — `backfillRecurringLeagueId`'s own
+ * conditional UPDATE is what makes an actual overlap a clean no-op rather
+ * than corruption; see this function's write-path comment below.
+ *
+ * Callable via the FLA-168 internal route/orchestrator (sleeper-recurring-backfill.ts).
  */
-// TODO(FLA-124): one-off backfill mechanism — wire to an admin route/script after the recurring_league_id migration ships. Intentionally not auto-invoked.
 export async function backfillSleeperRecurringIds(
   env: SleeperConnectEnv,
-  userId: string
-): Promise<{ processed: number; resolved: number }> {
+  userId: string,
+  options: { dryRun?: boolean; onRowCheckpoint?: LeaseRenewalCheckpoint } = {}
+): Promise<SleeperBackfillUserResult> {
+  const dryRun = options.dryRun ?? false;
   const storage = SleeperStorage.fromEnvironment(env);
   const leagues = await storage.getSleeperLeagues(userId, 'include-all');
 
-  const recurringIdCache = new Map<string, string | null>();
+  const recurringIdCache = new Map<string, string>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
 
   let processed = 0;
   let resolved = 0;
+  let changed = 0;
+  let unresolved = 0;
+  let skippedConcurrent = 0;
+  let leaseLost = false;
+  const rows: SleeperBackfillRowDetail[] = [];
 
   for (const league of leagues) {
+    // Checkpoint before EACH row (round-4 audit finding), not each user — see
+    // the doc comment above. Checked before any work on this row, including
+    // the null-check skip below, so the invariant is simple: nothing past
+    // this point runs once the lease is confirmed lost.
+    if (options.onRowCheckpoint) {
+      const stillHeld = await options.onRowCheckpoint();
+      if (!stillHeld) {
+        leaseLost = true;
+        break;
+      }
+    }
+
     processed++;
-    const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache);
-    // Use the resolved root; only fall back to the season-scoped id when the
-    // chain is genuinely unresolvable (mirrors discovery's safety net).
-    const recurringLeagueId = resolution.recurringLeagueId ?? league.leagueId;
-    if (resolution.recurringLeagueId) resolved++;
 
-    // Skip a write when the stored value already matches the resolved root.
-    if (league.recurringLeagueId === recurringLeagueId) continue;
+    // Null-only (Fix 3): a row that already has a stored value, stale or not,
+    // is sync's job to correct, not backfill's.
+    if (league.recurringLeagueId != null) continue;
 
-    await storage.saveSleeperLeague({
-      clerkUserId: userId,
-      leagueId: league.leagueId,
-      sport: league.sport,
-      seasonYear: league.seasonYear,
-      leagueName: league.leagueName,
-      rosterId: league.rosterId,
-      recurringLeagueId,
-      sleeperUserId: league.sleeperUserId,
-    });
+    // Backfill is the one caller that bounds the walk (audit FLA-168 Fix 2):
+    // it re-resolves potentially very old rows in bulk, so a malformed chain
+    // shouldn't be walked indefinitely here the way it's fine to for a single
+    // UI read or discovery run.
+    const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache, MAX_HISTORY_YEARS);
+    if (!resolution.recurringLeagueId) {
+      unresolved++;
+      continue;
+    }
+
+    resolved++;
+    const recurringLeagueId = resolution.recurringLeagueId;
+
+    if (dryRun) {
+      changed++;
+      rows.push({
+        userId,
+        leagueId: league.leagueId,
+        currentRecurringId: null,
+        wouldSetRecurringId: recurringLeagueId,
+      });
+      continue;
+    }
+
+    // Re-consult the SAME checkpoint immediately before the write (round-5
+    // audit finding, Fix 1a) — not just once before the row started above.
+    // The pre-row checkpoint only proves the lease looked held BEFORE this
+    // row's chain walk; that walk can itself take a while (up to
+    // MAX_HISTORY_YEARS Sleeper requests), so a lease loss DETECTED by a
+    // concurrent lane (a different user in the same batch, via the shared
+    // renewer in sleeper-recurring-backfill.ts) partway through this row's
+    // walk would otherwise go unnoticed until the NEXT row's pre-row check —
+    // by which point this row's write had already happened. Checking again
+    // right here means "no further writes once loss is detected" holds at
+    // WRITE granularity, which is the actual invariant this checkpoint
+    // exists to provide (bounding duplicate/wasted work after a detected
+    // loss) — it is not what makes an overlapping write safe; the
+    // conditional UPDATE below already guarantees that on its own (see the
+    // orchestrator's file doc comment).
+    if (options.onRowCheckpoint) {
+      const stillHeld = await options.onRowCheckpoint();
+      if (!stillHeld) {
+        leaseLost = true;
+        break;
+      }
+    }
+
+    const wrote = await storage.backfillRecurringLeagueId(userId, league.leagueId, league.seasonYear, recurringLeagueId);
+    if (wrote) {
+      changed++;
+    } else {
+      skippedConcurrent++;
+    }
   }
 
-  return { processed, resolved };
+  return dryRun
+    ? { processed, resolved, changed, unresolved, skippedConcurrent, rows, ...(leaseLost ? { leaseLost } : {}) }
+    : { processed, resolved, changed, unresolved, skippedConcurrent, ...(leaseLost ? { leaseLost } : {}) };
 }
 
 /**
@@ -323,7 +528,7 @@ export async function resolveSleeperArchiveTarget(
 
   let recurringLeagueId = requestedRecurringId;
   if (freshest) {
-    const recurringIdCache = new Map<string, string | null>();
+    const recurringIdCache = new Map<string, string>();
     const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
     recurringLeagueId = await resolveRecurringLeagueId(freshest.leagueId, recurringIdCache, leagueCache);
   }
@@ -410,7 +615,7 @@ export async function refreshSleeperLeaguesForUsername(
   const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
   let totalSaved = 0;
   const seasonsDiscovered = new Set<string>();
-  const recurringIdCache = new Map<string, string | null>();
+  const recurringIdCache = new Map<string, string>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
   const processedLeagueIds = new Set<string>();
 

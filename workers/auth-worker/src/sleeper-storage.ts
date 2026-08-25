@@ -235,6 +235,63 @@ export class SleeperStorage {
     this.recurringLeagueIdColumnStatus = 'missing';
   }
 
+  /**
+   * Backfill-only conditional write (round-3 FLA-168 audit finding): sets ONLY
+   * `recurring_league_id` on the exact (clerk_user_id, league_id,
+   * season_year) row, and ONLY while that column is still NULL there.
+   *
+   * This exists because the backfill orchestrator resolves rows from a
+   * snapshot read taken earlier in a potentially long-running batch. Writing
+   * that snapshot back via saveSleeperLeague's full-row upsert would be
+   * unsafe by the time the write actually happens: if the user deleted the
+   * league in the interval, the upsert would RESURRECT the deleted row from
+   * stale snapshot data; if normal discovery/sync already wrote fresher
+   * fields (or the same recurring_league_id) to that row, the upsert would
+   * clobber them with the stale snapshot's values. Scoping to the row's exact
+   * key and guarding on `recurring_league_id IS NULL` makes both cases a
+   * clean, silent no-op instead of a corrupting write.
+   *
+   * Returns `true` when the row was updated, `false` when zero rows matched
+   * (already resolved concurrently, or the row no longer exists) — callers
+   * should count `false` as a skip, not an error.
+   *
+   * Tolerates the pre-migration missing-column case like saveSleeperLeague/
+   * persistRecurringRoot: if the column doesn't exist there is nothing
+   * meaningful to backfill, so this returns `false` rather than throwing.
+   */
+  async backfillRecurringLeagueId(
+    clerkUserId: string,
+    leagueId: string,
+    seasonYear: number,
+    recurringLeagueId: string
+  ): Promise<boolean> {
+    if (this.recurringLeagueIdColumnStatus === 'missing') return false;
+
+    const { data, error } = await this.supabase
+      .from('sleeper_leagues')
+      .update({ recurring_league_id: recurringLeagueId, updated_at: new Date().toISOString() })
+      .eq('clerk_user_id', clerkUserId)
+      .eq('league_id', leagueId)
+      .eq('season_year', seasonYear)
+      .is('recurring_league_id', null)
+      .select('id');
+
+    if (!error) {
+      this.recurringLeagueIdColumnStatus = 'available';
+      return (data?.length ?? 0) > 0;
+    }
+
+    if (!isMissingRecurringLeagueIdColumnError(error as SupabaseErrorLike)) {
+      throw new Error(`Failed to backfill Sleeper recurring_league_id: ${(error as SupabaseErrorLike).message}`);
+    }
+
+    console.warn(
+      `[sleeper-storage] recurring_league_id column unavailable for user ${maskUserId(clerkUserId)} league ${leagueId}; skipping backfill write (code=${(error as SupabaseErrorLike).code ?? 'unknown'})`
+    );
+    this.recurringLeagueIdColumnStatus = 'missing';
+    return false;
+  }
+
   async deleteSleeperLeague(clerkUserId: string, leagueId: string): Promise<void> {
     // Resolve platform identifiers before deleting (route arg is DB row UUID).
     // Single read serves both the default-clear (league_id + season_year) and the
