@@ -30,6 +30,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: The shared `FlaimEmailLayout` uses a 36px Flaim mark and a 29px card-aligned header inset across the welcome, league-connected, ESPN setup-link, and broadcast templates, not just the August broadcast.
 - **Added**: The documented, pinned Resend CLI v2 draft invocation reads the local HTML and text exports and uses an explicitly supplied, manually verified Segment ID. It deliberately omits send/schedule flags, so the dashboard remains the proof and Send surface. The workflow never substitutes an audience ID for a Segment ID. Content stays in the repository because dashboard edits lock future code-side revisions.
 
+### Email Template Single Source (FLA-300)
+- **Changed**: The Resend welcome-automation setup script now renders both HTML and plain text directly from `web/emails/welcome.tsx` through `@react-email/render`, so automation content cannot drift from the React email template. The retired unused league-connected product-email template and send helper were removed; welcome and ESPN setup-link email support remain.
+
 ### Gateway Copy and Widget-Read Telemetry (FLA-257, FLA-258)
 - **Fixed**: The `mcp:write` insufficient-scope error (`refresh_leagues` denials) now tells the caller how to fix it — "Disconnect and reconnect the Flaim connector in your AI app to grant this permission" — instead of stating only that the scope is missing. The copy is client-neutral ("your AI app"), since this error reaches Claude and custom MCP clients as well as ChatGPT.
 - **Added**: A sample of widget resource reads (`user-session-widget`, `-v2`, `-v3`) — sampled 1-in-50 via `sample_rate` in the payload, so absolute rates are `count × 50` — now emit a structured `widget_resource_read` log line (`uri`, `resource_name`, `correlation_id`, `sample_rate`) so v1's share of reads — and thus its retirement readiness — is computable from observability data instead of guessed at.
