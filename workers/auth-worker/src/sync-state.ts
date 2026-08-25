@@ -39,6 +39,29 @@ export type SyncLeaseAcquisition =
   | { acquired: true }
   | { acquired: false; state: SyncLeaseState; retryAfterSeconds: number };
 
+/**
+ * Returned only by the `{ onStorageError: 'fail' }` opt-in (round-4 FLA-168
+ * audit finding) — distinguishable from the normal "another owner holds the
+ * lease" result above via `state: 'error'` rather than `'in_progress'` /
+ * `'cooldown'`, so a caller can tell "the lease is genuinely held elsewhere,
+ * retry later" apart from "we don't actually know who holds it, a
+ * provider_sync_state outage is masking the real state."
+ */
+export type SyncLeaseAcquisitionError = { acquired: false; state: 'error'; errorMessage: string };
+
+/**
+ * A checkpoint hook a long-running lease holder calls periodically (at points
+ * spaced well under the lease TTL) to renew before expiry. Returns `false`
+ * the moment renewal fails — storage error or the lease already stolen by a
+ * new holder — and every later call is expected to also return `false`
+ * without retrying, so the caller's very next checkpoint halts it instead of
+ * racing a new holder. `sleeper-recurring-backfill.ts`'s `createLeaseRenewer`
+ * is the only current implementation (round-4 FLA-168 audit finding); the
+ * type lives here, not there, so `sleeper-connect-handlers.ts` can accept one
+ * without importing from the orchestrator that already imports it.
+ */
+export type LeaseRenewalCheckpoint = () => Promise<boolean>;
+
 export interface SyncSettleOutcome {
   /**
    * 'skipped' = the provider was never attempted (e.g. no stored credentials).
@@ -88,14 +111,42 @@ export class SyncStateStorage {
    *
    * Ensures the row exists, then takes the lease only when no other owner
    * holds an unexpired lease or cooldown marker. Losing the race returns the
-   * blocking state and a Retry-After hint. Storage errors fail open.
+   * blocking state and a Retry-After hint. Storage errors fail open by
+   * default: refresh availability matters more than cooldown enforcement for
+   * every existing caller (per-user provider refresh, reconciliation).
+   *
+   * `{ onStorageError: 'fail' }` is an explicit opt-in (round-4 FLA-168 audit
+   * finding) for a caller where fail-open is actively wrong — the Sleeper
+   * recurring-id backfill's single-flight guard, where a provider_sync_state
+   * outage failing open would let multiple live backfill runs proceed
+   * leaseless and race writes. It reports the storage error back as
+   * `{ acquired: false, state: 'error', errorMessage }` — distinguishable
+   * from the normal "someone else holds it" result — instead of the default
+   * `{ acquired: true }`. Overloaded so every caller that doesn't pass this
+   * option keeps the original three-branch return type unchanged; only a
+   * caller that explicitly asks for it sees the widened type.
    */
   async acquireLease(
     clerkUserId: string,
     provider: SyncProvider,
     ownerId: string,
-    ttlMs: number = SYNC_LEASE_TTL_MS
-  ): Promise<SyncLeaseAcquisition> {
+    ttlMs?: number
+  ): Promise<SyncLeaseAcquisition>;
+  async acquireLease(
+    clerkUserId: string,
+    provider: SyncProvider,
+    ownerId: string,
+    ttlMs: number,
+    options: { onStorageError: 'fail' }
+  ): Promise<SyncLeaseAcquisition | SyncLeaseAcquisitionError>;
+  async acquireLease(
+    clerkUserId: string,
+    provider: SyncProvider,
+    ownerId: string,
+    ttlMs: number = SYNC_LEASE_TTL_MS,
+    options: { onStorageError?: 'acquire' | 'fail' } = {}
+  ): Promise<SyncLeaseAcquisition | SyncLeaseAcquisitionError> {
+    const failClosed = options.onStorageError === 'fail';
     const nowMs = Date.now();
     const now = new Date(nowMs).toISOString();
     const expiresAt = new Date(nowMs + ttlMs).toISOString();
@@ -135,7 +186,11 @@ export class SyncStateStorage {
         retryAfterSeconds: boundedRetryAfterSeconds(blocking?.sync_lease_expires_at ?? null, nowMs),
       };
     } catch (error) {
-      console.error(`[sync-state] Lease acquisition failed open for ${provider}:`, error);
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[sync-state] Lease acquisition failed ${failClosed ? 'closed (opt-in)' : 'open'} for ${provider}:`, error);
+      if (failClosed) {
+        return { acquired: false, state: 'error', errorMessage: message };
+      }
       return { acquired: true };
     }
   }

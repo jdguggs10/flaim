@@ -113,6 +113,57 @@ describe('SyncStateStorage.acquireLease', () => {
 
     expect(result).toEqual({ acquired: true });
   });
+
+  // Round-4 FLA-168 audit finding: an explicit opt-in for the one caller
+  // (the Sleeper recurring-id backfill) where fail-open is actively wrong.
+  // Every existing caller (league-refresh.ts, index-hono.ts, reconciliation.ts)
+  // calls acquireLease without a 5th argument at all, so this pins that they
+  // keep the default fail-open behavior asserted above — unchanged.
+  it('fails CLOSED with a distinguishable error state when { onStorageError: "fail" } is passed (round-4 audit finding)', async () => {
+    const { client } = fakeSupabase([
+      { error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('error');
+      if (result.state === 'error') {
+        expect(result.errorMessage).toContain('supabase down');
+      }
+    }
+  });
+
+  it('still acquires normally with { onStorageError: "fail" } when there is no storage error', async () => {
+    const { client } = fakeSupabase([
+      { error: null },
+      { data: [{ clerk_user_id: '__backfill__' }], error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result).toEqual({ acquired: true });
+  });
+
+  it('still reports the normal blocked (not error) state with { onStorageError: "fail" } when another owner holds the lease', async () => {
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const { client } = fakeSupabase([
+      { error: null },
+      { data: [], error: null },
+      { data: { sync_lease_owner: 'someone-else', sync_lease_expires_at: expiresAt }, error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('in_progress');
+    }
+  });
 });
 
 describe('SyncStateStorage.extendLease', () => {

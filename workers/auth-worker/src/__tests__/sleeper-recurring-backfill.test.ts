@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockBackfillSleeperRecurringIds = vi.hoisted(() => vi.fn());
 
@@ -206,7 +206,12 @@ describe('runSleeperRecurringBackfill', () => {
 
     const summary = await runSleeperRecurringBackfill(baseEnv, false);
 
-    expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_a', { dryRun: false });
+    // A live run threads a per-row lease-renewal checkpoint down into every
+    // backfillSleeperRecurringIds call (round-4 audit finding) — dryRun still
+    // matches exactly, but the options object now also carries
+    // onRowCheckpoint (absent for dry runs; see the `dryRun: true` tests
+    // above, unaffected).
+    expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_a', { dryRun: false, onRowCheckpoint: expect.any(Function) });
     expect(summary.dryRun).toBe(false);
     if (!summary.dryRun) {
       expect(summary.rowsChanged).toBe(1);
@@ -316,21 +321,69 @@ describe('runSleeperRecurringBackfill', () => {
     expect(summary.leaseCleanup).toBeUndefined();
   });
 
-  describe('lease renewal (audit FLA-168 Fix 1)', () => {
-    it('renews the lease after every user batch during a multi-batch live run', async () => {
-      // BATCH_SIZE is 2, so 4 users span 2 batches.
+  // Round-4 audit finding (Fix 1b): acquireLease's default fail-open posture
+  // (a storage error acquires anyway) is wrong for this single-flight guard —
+  // a provider_sync_state outage must not let multiple live runs proceed
+  // leaseless. The backfill opts into acquireLease's strict
+  // `{ onStorageError: 'fail' }` mode, which reports the error back as
+  // `{ acquired: false, state: 'error' }` instead of acquiring.
+  it("returns a 'failed' outcome (not 'blocked') and touches no rows when lease acquisition fails on a storage error", async () => {
+    supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
+    mockAcquireLease.mockResolvedValue({ acquired: false, state: 'error', errorMessage: 'supabase down' });
+
+    const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+    // Not 'blocked': that outcome carries 409 semantics ("another run holds
+    // the lease"), which doesn't apply when the real problem is that
+    // provider_sync_state itself couldn't be reached.
+    expect(summary.outcome).toBe('failed');
+    expect(summary.usersScanned).toBe(0);
+    expect(summary.rowsProcessed).toBe(0);
+    expect(mockBackfillSleeperRecurringIds).not.toHaveBeenCalled();
+    // No lease was ever held, so nothing to clean up — same as 'blocked'.
+    expect(mockDeleteLeaseRow).not.toHaveBeenCalled();
+    expect(summary.leaseCleanup).toBeUndefined();
+  });
+
+  describe('lease renewal (audit FLA-168 Fix 1, time-based cadence — round-4 audit finding)', () => {
+    // RENEW_INTERVAL_MS is not exported (matching this file's existing
+    // convention of hardcoding BACKFILL_LEASE_TTL_MS's 15-minute value rather
+    // than exporting it) — it's TTL/3.
+    const RENEW_INTERVAL_MS = 5 * 60 * 1000;
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('renews based on elapsed wall-clock time, not on a fixed per-batch cadence', async () => {
+      // BATCH_SIZE is 2, so 6 users span 3 batches. Each backfillSleeperRecurringIds
+      // call advances the fake clock by 100s; two calls per batch = 200s of
+      // elapsed time per batch — under RENEW_INTERVAL_MS (300s) on its own.
+      vi.useFakeTimers();
       supabaseStub.state.rows = [
         { clerk_user_id: 'user_a' },
         { clerk_user_id: 'user_b' },
         { clerk_user_id: 'user_c' },
         { clerk_user_id: 'user_d' },
+        { clerk_user_id: 'user_e' },
+        { clerk_user_id: 'user_f' },
       ];
-      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+      mockBackfillSleeperRecurringIds.mockImplementation(async () => {
+        vi.advanceTimersByTime(100_000);
+        return { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 };
+      });
 
       const summary = await runSleeperRecurringBackfill(baseEnv, false);
 
       expect(summary.outcome).toBe('completed');
-      expect(mockExtendLease).toHaveBeenCalledTimes(2);
+      // Cumulative elapsed time: 200s (batch 1, no renewal — under 300s),
+      // 400s (batch 2, crosses 300s since acquire — ONE renewal), 200s more
+      // since that renewal (batch 3, under 300s again — no renewal). A
+      // batch-count-based cadence (the old behavior) would have called this
+      // once per batch (3 times); time-based cadence calls it exactly once,
+      // and specifically because of elapsed time, not because of which batch
+      // just finished.
+      expect(mockExtendLease).toHaveBeenCalledTimes(1);
       const [extendUserId, extendProvider, extendOwner, extendTtlMs] = mockExtendLease.mock.calls[0];
       expect(extendUserId).toBe('__backfill__');
       expect(extendProvider).toBe('sleeper');
@@ -343,6 +396,21 @@ describe('runSleeperRecurringBackfill', () => {
       expect(mockDeleteLeaseRow).toHaveBeenCalledTimes(1);
     });
 
+    it('threads a per-row renewal checkpoint into every live backfillSleeperRecurringIds call, but never for a dry run', async () => {
+      supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
+      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+
+      await runSleeperRecurringBackfill(baseEnv, false);
+      const [, , liveOptions] = mockBackfillSleeperRecurringIds.mock.calls[0];
+      expect(typeof liveOptions.onRowCheckpoint).toBe('function');
+
+      mockBackfillSleeperRecurringIds.mockClear();
+      await runSleeperRecurringBackfill(baseEnv, true);
+      const [, , dryRunOptions] = mockBackfillSleeperRecurringIds.mock.calls[0];
+      expect(dryRunOptions).toEqual({ dryRun: true });
+      expect(dryRunOptions.onRowCheckpoint).toBeUndefined();
+    });
+
     // Round-3 audit finding: extendLease itself now fails CLOSED (returns
     // `false`) on a storage error rather than fail-open (see
     // sync-state.test.ts's "fails CLOSED... when storage errors" test) — from
@@ -350,9 +418,12 @@ describe('runSleeperRecurringBackfill', () => {
     // genuinely stolen lease are indistinguishable and handled identically:
     // both surface as `false` here, and both must halt the loop immediately
     // with no further writes.
-    it('halts the loop with partial counts and performs no further writes when renewal fails mid-run', async () => {
-      // 3 batches of 2 users each (BATCH_SIZE=2): renewal fails after the
-      // first batch, so the second and third batches must never run.
+    it('halts the loop with partial counts and performs no further writes when a time-based renewal fails mid-run', async () => {
+      // 3 batches of 2 users each (BATCH_SIZE=2). Force every single call to
+      // cross RENEW_INTERVAL_MS on its own, so the post-batch checkpoint
+      // always attempts a renewal — the first attempt fails, so the second
+      // and third batches must never run.
+      vi.useFakeTimers();
       supabaseStub.state.rows = [
         { clerk_user_id: 'user_a' },
         { clerk_user_id: 'user_b' },
@@ -361,7 +432,10 @@ describe('runSleeperRecurringBackfill', () => {
         { clerk_user_id: 'user_e' },
         { clerk_user_id: 'user_f' },
       ];
-      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+      mockBackfillSleeperRecurringIds.mockImplementation(async () => {
+        vi.advanceTimersByTime(RENEW_INTERVAL_MS + 1);
+        return { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 };
+      });
       mockExtendLease.mockResolvedValueOnce(false);
 
       const summary = await runSleeperRecurringBackfill(baseEnv, false);
@@ -369,8 +443,8 @@ describe('runSleeperRecurringBackfill', () => {
       expect(summary.outcome).toBe('lease_lost');
       // Only the first batch (user_a, user_b) was processed.
       expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledTimes(2);
-      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_a', { dryRun: false });
-      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_b', { dryRun: false });
+      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_a', { dryRun: false, onRowCheckpoint: expect.any(Function) });
+      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_b', { dryRun: false, onRowCheckpoint: expect.any(Function) });
       expect(mockBackfillSleeperRecurringIds).not.toHaveBeenCalledWith(baseEnv, 'user_c', expect.anything());
       expect(summary.rowsProcessed).toBe(2);
       if (!summary.dryRun) {
@@ -381,14 +455,48 @@ describe('runSleeperRecurringBackfill', () => {
       expect(mockExtendLease).toHaveBeenCalledTimes(1);
     });
 
-    it('does not clobber a stolen lease when releasing (delete) after a lease_lost halt', async () => {
+    // Simulates a row-level checkpoint (inside the real, unmocked
+    // backfillSleeperRecurringIds — see sleeper-connect-handlers.test.ts for
+    // that mechanism) discovering the lease lost mid-user: the mock reports
+    // `leaseLost: true` back, exactly like a real row-checkpoint failure
+    // would, and the orchestrator must stop the whole run from that signal
+    // alone — without waiting for its own separate post-batch checkpoint.
+    it('halts immediately when a row-level checkpoint (inside backfillSleeperRecurringIds) reports leaseLost, without waiting for the post-batch check', async () => {
       supabaseStub.state.rows = [
         { clerk_user_id: 'user_a' },
         { clerk_user_id: 'user_b' },
         { clerk_user_id: 'user_c' },
         { clerk_user_id: 'user_d' },
       ];
-      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+      mockBackfillSleeperRecurringIds.mockImplementation(async (_env: unknown, userId: string) =>
+        userId === 'user_a'
+          ? { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0, leaseLost: true }
+          : { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 }
+      );
+
+      const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+      expect(summary.outcome).toBe('lease_lost');
+      // Only the first batch ran; the post-batch extendLease checkpoint is
+      // never even reached because the batch-level leaseLost flag short-
+      // circuits before it.
+      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledTimes(2);
+      expect(mockBackfillSleeperRecurringIds).not.toHaveBeenCalledWith(baseEnv, 'user_c', expect.anything());
+      expect(mockExtendLease).not.toHaveBeenCalled();
+    });
+
+    it('does not clobber a stolen lease when releasing (delete) after a lease_lost halt', async () => {
+      vi.useFakeTimers();
+      supabaseStub.state.rows = [
+        { clerk_user_id: 'user_a' },
+        { clerk_user_id: 'user_b' },
+        { clerk_user_id: 'user_c' },
+        { clerk_user_id: 'user_d' },
+      ];
+      mockBackfillSleeperRecurringIds.mockImplementation(async () => {
+        vi.advanceTimersByTime(RENEW_INTERVAL_MS + 1);
+        return { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 };
+      });
       mockExtendLease.mockResolvedValueOnce(false);
 
       await runSleeperRecurringBackfill(baseEnv, false);

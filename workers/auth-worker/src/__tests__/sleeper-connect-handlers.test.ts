@@ -1321,6 +1321,110 @@ describe('sleeper-connect-handlers', () => {
       expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'deep-3', 2022, 'deep-5');
       expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalledWith('user_1', 'deep-0', 2025, expect.anything());
     });
+
+    // Round-4 audit finding (Fix 1a): per-user work is unbounded relative to
+    // the backfill orchestrator's lease TTL — a user can own many rows, and
+    // each row's own chain walk can make several Sleeper requests. The
+    // orchestrator (sleeper-recurring-backfill.ts) renews the lease via this
+    // hook before EVERY row, not once per user.
+    it('checks options.onRowCheckpoint before EACH row, not once per user, and stops immediately with no further writes once it reports the lease lost', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+        { id: 'row-y', clerkUserId: 'user_1', leagueId: 'y', sport: 'football', seasonYear: 2025, leagueName: 'Y', rosterId: 2, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        const match = /\/league\/([a-z])$/.exec(url);
+        if (match) {
+          return jsonResponse({ league_id: match[1], name: match[1], sport: 'nfl', season: '2025', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+      const onRowCheckpoint = vi.fn()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1', { onRowCheckpoint });
+
+      // Checked before row x (allowed) and before row y (denied) — never
+      // skipped just because it's the "same user".
+      expect(onRowCheckpoint).toHaveBeenCalledTimes(2);
+      // Row x was fully processed (checkpoint passed before it). Row y's
+      // checkpoint failed BEFORE any work started on it, so it's never even
+      // counted in `processed`.
+      expect(result.processed).toBe(1);
+      expect(result.resolved).toBe(1);
+      expect(result.changed).toBe(1);
+      expect(result.leaseLost).toBe(true);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledTimes(1);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'x', 2025, 'x');
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalledWith('user_1', 'y', expect.anything(), expect.anything());
+    });
+
+    it('omits leaseLost from the result entirely when no onRowCheckpoint is provided (default/dry-run shape unchanged)', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/x')) {
+          return jsonResponse({ league_id: 'x', name: 'X', sport: 'nfl', season: '2025', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1');
+
+      expect(result).toEqual({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+      expect('leaseLost' in result).toBe(false);
+    });
+
+    // Round-4 audit finding (Fix 2): the per-run leagueCache stores fetch
+    // PROMISES; without eviction on rejection, a transient failure fetching a
+    // shared intermediate league stays cached as a rejected promise for the
+    // rest of this call, so a later row whose own chain passes through the
+    // same league fails instantly too — even after Sleeper recovers.
+    it('does not let a transient failure fetching a shared intermediate league poison a LATER row that walks through the same league in the same run', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-a', clerkUserId: 'user_1', leagueId: 'row-a-league', sport: 'football', seasonYear: 2025, leagueName: 'A', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+        { id: 'row-b', clerkUserId: 'user_1', leagueId: 'row-b-league', sport: 'football', seasonYear: 2024, leagueName: 'B', rosterId: 2, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+
+      let sharedFetchCount = 0;
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/row-a-league')) {
+          return jsonResponse({ league_id: 'row-a-league', name: 'A', sport: 'nfl', season: '2025', previous_league_id: 'shared-x' });
+        }
+        if (url.endsWith('/league/row-b-league')) {
+          return jsonResponse({ league_id: 'row-b-league', name: 'B', sport: 'nfl', season: '2024', previous_league_id: 'shared-x' });
+        }
+        if (url.endsWith('/league/shared-x')) {
+          sharedFetchCount++;
+          if (sharedFetchCount === 1) {
+            // Row A's walk hits a transient 503 fetching the shared league.
+            return new Response(null, { status: 503 });
+          }
+          // Sleeper has recovered by the time row B's walk reaches it.
+          return jsonResponse({ league_id: 'shared-x', name: 'Shared', sport: 'nfl', season: '2023', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1');
+
+      // Row A's walk failed at the shared league and stays unresolved. Row
+      // B's walk reaches the SAME shared league fresh — not poisoned by row
+      // A's cached rejection — and resolves successfully.
+      expect(result.processed).toBe(2);
+      expect(result.resolved).toBe(1);
+      expect(result.unresolved).toBe(1);
+      // Proves getSleeperLeague re-fetched for row B instead of reusing the
+      // rejected promise cached by row A's walk.
+      expect(sharedFetchCount).toBe(2);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledTimes(1);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'row-b-league', 2024, 'shared-x');
+    });
   });
 
   // ===========================================================================

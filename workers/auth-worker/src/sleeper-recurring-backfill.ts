@@ -25,32 +25,58 @@
  * The lease is acquired with an explicit 15-minute TTL (BACKFILL_LEASE_TTL_MS,
  * below) rather than the 120s SYNC_LEASE_TTL_MS sized for a single provider
  * refresh — a whole backfill run's initial snapshot read, or even one slow
- * user batch, can plausibly exceed 120s on its own. On top of that longer
- * window, the lease is still renewed after every user batch (same 15-minute
- * TTL each time) so a run that outlives even that generous window doesn't let
- * a second live run acquire mid-run (audit FLA-168 Fix 1, hardened further in
- * round 3: longer explicit TTL on both acquire and renew). Renewal is
- * fail-closed: if it returns false OR the underlying storage call itself
- * fails (sync-state.ts's extendLease reports storage errors as failure here,
- * unlike its other, fail-open siblings — round-3 audit finding), the run
- * stops touching rows immediately and returns a `lease_lost` outcome with
- * whatever partial counts it completed. This backfill is idempotent and
- * resumable (re-running it only ever touches rows still NULL), so aborting on
- * uncertain lease ownership is safe — continuing to write under unknown
- * ownership is not. On a normal finish, the synthetic lease row is deleted
- * outright rather than released back to an unheld state (audit FLA-168
- * Fix 3) — it has no real user's telemetry worth keeping, and a leftover row
- * would otherwise sit in provider_sync_state indefinitely, inflating
- * sync_7d.users_attempted and risking a phantom Sleeper entry in sync_recent.
- * The row is still visible for the run's own (manual, minutes-long) duration,
- * which is acceptable. That cleanup delete can itself fail; its result is now
- * reported back as `leaseCleanup` in the response and a console.warn on
- * failure (round-3 audit finding), without changing the run's own outcome.
+ * user batch, can plausibly exceed 120s on its own. Acquisition itself opts
+ * into `acquireLease`'s `{ onStorageError: 'fail' }` mode (round-4 audit
+ * finding): every OTHER caller of acquireLease fails OPEN on a storage error
+ * (refresh availability matters more than cooldown enforcement for a
+ * per-user action), but that posture is wrong here — a provider_sync_state
+ * outage failing open would let multiple live backfill runs proceed
+ * leaseless and race writes against each other. A storage-error acquisition
+ * failure here returns outcome 'failed' (not 'blocked' — 'blocked' means
+ * another run genuinely holds the lease) and never touches a row.
+ *
+ * Once acquired, the lease is renewed on a TIME-based cadence, not a
+ * batch-count-based one (round-4 audit finding replacing round 3's
+ * once-per-batch renewal): per-user work is unbounded relative to the TTL,
+ * since one user's rows are processed sequentially and each row's own
+ * previous_league_id chain walk can itself make up to MAX_HISTORY_YEARS (5)
+ * Sleeper requests at a 10s timeout apiece — enough rows/chains under a single
+ * user could exceed the old once-per-batch renewal's 15-minute window well
+ * before the next batch boundary ever arrives. `createLeaseRenewer` below
+ * tracks `lastRenewedAt` and only actually calls `extendLease` once
+ * RENEW_INTERVAL_MS (BACKFILL_LEASE_TTL_MS / 3 = 5 minutes) has elapsed since
+ * the last successful renewal, so the same `maybeRenewLease()` checkpoint is
+ * cheap to call frequently: after every keyset snapshot page, before EVERY
+ * row (not just once per user — threaded into backfillSleeperRecurringIds as
+ * `onRowCheckpoint`, sleeper-connect-handlers.ts), and after every batch. The
+ * invariant this preserves: checkpoint spacing must stay well under
+ * BACKFILL_LEASE_TTL_MS, so the worst-case gap between real renewals is one
+ * row's chain walk (~5 x 10s plus DB writes), not an entire user's or an
+ * entire batch's worth of unbounded work. Renewal is fail-closed: if a
+ * checkpoint's `extendLease` call returns false OR the underlying storage
+ * call itself fails (sync-state.ts's extendLease reports storage errors as
+ * failure here, unlike its other, fail-open siblings — round-3 audit
+ * finding), every subsequent checkpoint (even a concurrently in-flight one
+ * for a different user in the same batch) also reports lost without
+ * re-attempting the network call, and the run stops touching rows
+ * immediately, returning a `lease_lost` outcome with whatever partial counts
+ * it completed. This backfill is idempotent and resumable (re-running it only
+ * ever touches rows still NULL), so aborting on uncertain lease ownership is
+ * safe — continuing to write under unknown ownership is not. On a normal
+ * finish, the synthetic lease row is deleted outright rather than released
+ * back to an unheld state (audit FLA-168 Fix 3) — it has no real user's
+ * telemetry worth keeping, and a leftover row would otherwise sit in
+ * provider_sync_state indefinitely, inflating sync_7d.users_attempted and
+ * risking a phantom Sleeper entry in sync_recent. The row is still visible
+ * for the run's own (manual, minutes-long) duration, which is acceptable.
+ * That cleanup delete can itself fail; its result is now reported back as
+ * `leaseCleanup` in the response and a console.warn on failure (round-3 audit
+ * finding), without changing the run's own outcome.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { backfillSleeperRecurringIds, type SleeperConnectEnv } from './sleeper-connect-handlers';
-import { SyncStateStorage, type SyncProvider } from './sync-state';
+import { SyncStateStorage, type SyncProvider, type LeaseRenewalCheckpoint } from './sync-state';
 
 export type SleeperRecurringBackfillEnv = SleeperConnectEnv;
 
@@ -68,8 +94,59 @@ const BACKFILL_LEASE_OWNER_PREFIX = 'sleeper-recurring-backfill:';
 // Explicit long TTL for the backfill's lease (round-3 audit finding) —
 // deliberately independent of sync-state.ts's SYNC_LEASE_TTL_MS (120s), which
 // is sized for a single provider refresh, not a whole bulk backfill run. Used
-// for both the initial acquire and every per-batch renewal below.
+// for both the initial acquire and every renewal below.
 const BACKFILL_LEASE_TTL_MS = 15 * 60 * 1000;
+
+// Renewal cadence (round-4 audit finding, replacing round 3's once-per-batch
+// renewal): TTL/3 = 5 minutes. INVARIANT — every checkpoint that calls
+// maybeRenewLease() (snapshot page, per-row, post-batch) must be spaced well
+// under BACKFILL_LEASE_TTL_MS so a slow stretch of work between two
+// checkpoints can never itself exceed the TTL. A single previous_league_id
+// chain walk (the slowest unit of work between two per-row checkpoints) is at
+// most MAX_HISTORY_YEARS Sleeper requests at a 10s timeout each — well under
+// 5 minutes even in the worst case.
+const RENEW_INTERVAL_MS = BACKFILL_LEASE_TTL_MS / 3;
+
+/**
+ * Tracks when the backfill's lease was last renewed and exposes a single
+ * `maybeRenewLease()` checkpoint that every call site (snapshot pagination,
+ * per-row, post-batch) shares. No-ops (returns true without a network call)
+ * unless RENEW_INTERVAL_MS has elapsed since the last successful renewal —
+ * cheap enough to call before every single row. Once a renewal attempt fails
+ * (extendLease returns false, whether from a stolen lease or its own
+ * fail-closed storage-error handling), `lost` latches permanently: every
+ * later call — including a concurrently in-flight checkpoint for a different
+ * user in the same batch — returns false immediately without retrying the
+ * network call, so the whole run converges on stopping at its next
+ * checkpoint rather than some callers retrying past a lease that is already
+ * gone.
+ */
+function createLeaseRenewer(
+  syncState: SyncStateStorage,
+  leaseOwner: string,
+  now: () => number = Date.now
+): LeaseRenewalCheckpoint {
+  let lastRenewedAt = now();
+  let lost = false;
+
+  return async () => {
+    if (lost) return false;
+    if (now() - lastRenewedAt < RENEW_INTERVAL_MS) return true;
+
+    const stillHeld = await syncState.extendLease(
+      BACKFILL_LEASE_USER_ID,
+      BACKFILL_LEASE_PROVIDER,
+      leaseOwner,
+      BACKFILL_LEASE_TTL_MS
+    );
+    if (stillHeld) {
+      lastRenewedAt = now();
+      return true;
+    }
+    lost = true;
+    return false;
+  };
+}
 
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
@@ -101,10 +178,22 @@ function logBackfill(fields: Record<string, unknown>): void {
  * `userIds` is fine, since only set membership (not per-row detail) is needed
  * here — the row-level data is re-read fresh per user inside
  * backfillSleeperRecurringIds.
+ *
+ * `leaseRenewer` (round-4 audit finding), when provided, is checked after
+ * EVERY page fetch — including the last one — so a run whose snapshot alone
+ * takes a while (a very large table, many pages) still renews on the same
+ * cadence as the rest of the run. A `false` return stops paging immediately;
+ * `leaseLost: true` on the result tells the caller to skip the whole batch
+ * loop rather than process a snapshot gathered under a lease that's already
+ * gone.
  */
-async function fetchUsersMissingRecurringId(supabase: SupabaseClient): Promise<string[]> {
+async function fetchUsersMissingRecurringId(
+  supabase: SupabaseClient,
+  leaseRenewer: LeaseRenewalCheckpoint | null
+): Promise<{ userIds: string[]; leaseLost: boolean }> {
   const userIds = new Set<string>();
   let lastUserId: string | null = null;
+  let leaseLost = false;
 
   for (;;) {
     // All filter calls (.is(), .gt()) happen before any transform call
@@ -127,10 +216,22 @@ async function fetchUsersMissingRecurringId(supabase: SupabaseClient): Promise<s
 
     const page = (data ?? []) as unknown as Array<{ clerk_user_id: string }>;
     for (const row of page) userIds.add(row.clerk_user_id);
+
+    // Checkpoint (i), round-4 audit finding: renew after every page fetch,
+    // including the last one before this loop breaks — a large table can
+    // page for a while on its own.
+    if (leaseRenewer) {
+      const stillHeld = await leaseRenewer();
+      if (!stillHeld) {
+        leaseLost = true;
+        break;
+      }
+    }
+
     if (page.length < SNAPSHOT_PAGE_SIZE) break;
     lastUserId = page[page.length - 1].clerk_user_id;
   }
-  return Array.from(userIds);
+  return { userIds: Array.from(userIds), leaseLost };
 }
 
 // 'lease_lost' = the lease was renewed after a batch and had already expired
@@ -192,94 +293,142 @@ export async function runSleeperRecurringBackfill(
   let retryAfterSeconds: number | undefined;
   let leaseCleanup: 'ok' | 'failed' | undefined;
 
+  const logLeaseLost = () => logBackfill({
+    run_id: runId,
+    status: 'lease_lost',
+    dry_run: dryRun,
+    users_scanned: usersScanned,
+    rows_processed: rowsProcessed,
+    rows_resolved: rowsResolved,
+    rows_unresolved: rowsUnresolved,
+    rows_changed: rowsChanged,
+    rows_skipped_concurrent: rowsSkippedConcurrent,
+  });
+
   logBackfill({ run_id: runId, status: 'run_start', dry_run: dryRun });
 
   // Single-flight guard for live runs only (audit FLA-168 Fix 5): dry runs
   // never write, so two concurrent dry runs can't race anything. Explicit
   // 15-minute TTL (round-3 audit finding) — see BACKFILL_LEASE_TTL_MS above.
+  // `{ onStorageError: 'fail' }` (round-4 audit finding) opts this call out of
+  // acquireLease's default fail-open posture — see the file doc comment above
+  // for why fail-open is wrong specifically for this single-flight guard.
   const syncState = dryRun ? null : SyncStateStorage.fromEnvironment(env);
   const lease = syncState
-    ? await syncState.acquireLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner, BACKFILL_LEASE_TTL_MS)
+    ? await syncState.acquireLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner, BACKFILL_LEASE_TTL_MS, { onStorageError: 'fail' })
     : null;
 
-  if (lease && !lease.acquired) {
+  if (lease && !lease.acquired && lease.state === 'error') {
+    // A provider_sync_state storage error during acquisition, not a lease
+    // genuinely held by another run — 'failed', not 'blocked', since
+    // 'blocked' carries 409 semantics ("another run holds the lease") that
+    // don't apply when we don't actually know who (if anyone) holds it.
+    outcome = 'failed';
+    console.error(
+      `[sleeper-recurring-backfill] Lease acquisition failed (storage error) for run ${runId}; refusing to run leaseless: ${lease.errorMessage}`
+    );
+    logBackfill({ run_id: runId, status: 'failed', dry_run: dryRun, reason: 'lease_acquire_error', error: lease.errorMessage });
+  } else if (lease && !lease.acquired) {
     outcome = 'blocked';
     retryAfterSeconds = lease.retryAfterSeconds;
     logBackfill({ run_id: runId, status: 'blocked', dry_run: dryRun, retry_after: retryAfterSeconds });
   } else {
+    // Shared time-based renewal checkpoint (round-4 audit finding) — see
+    // createLeaseRenewer and the file doc comment above. `null` for dry runs
+    // (no lease held, so `syncState` is null); threaded into the snapshot
+    // scan, every row inside backfillSleeperRecurringIds, and the post-batch
+    // check below, all through this single instance so `lost` latches once
+    // for the whole run regardless of which checkpoint discovers it.
+    const leaseRenewer = syncState ? createLeaseRenewer(syncState, leaseOwner) : null;
+
     try {
       const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
         auth: { persistSession: false },
       });
-      const userIds = await fetchUsersMissingRecurringId(supabase);
+      const { userIds, leaseLost: snapshotLeaseLost } = await fetchUsersMissingRecurringId(supabase, leaseRenewer);
       usersScanned = userIds.length;
 
-      for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
-        const batch = userIds.slice(i, i + BATCH_SIZE);
-        // Isolate per-user failures: an unexpected throw for one user must not
-        // abandon the rest of the batch, mirroring runReconciliation's
-        // candidate isolation in reconciliation.ts.
-        await Promise.all(
-          batch.map(async (userId) => {
-            try {
-              const result = await backfillSleeperRecurringIds(env, userId, { dryRun });
-              rowsProcessed += result.processed;
-              rowsResolved += result.resolved;
-              rowsUnresolved += result.unresolved;
-              rowsChanged += result.changed;
-              rowsSkippedConcurrent += result.skippedConcurrent;
-              logBackfill({
-                run_id: runId,
-                status: 'user_processed',
-                user_id: maskUserId(userId),
-                processed: result.processed,
-                resolved: result.resolved,
-                unresolved: result.unresolved,
-                changed: result.changed,
-                skipped_concurrent: result.skippedConcurrent,
-              });
-            } catch (error) {
-              errors++;
-              logBackfill({ run_id: runId, status: 'user_failed', user_id: maskUserId(userId) });
-              console.error(
-                `[sleeper-recurring-backfill] Failed for user ${maskUserId(userId)}:`,
-                error instanceof Error ? error.message : error
-              );
-            }
-          })
-        );
+      if (snapshotLeaseLost) {
+        // Lost before a single user was even attempted — skip the batch loop
+        // entirely rather than process a snapshot gathered under a lease
+        // that's already gone.
+        outcome = 'lease_lost';
+        logLeaseLost();
+      } else {
+        for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+          const batch = userIds.slice(i, i + BATCH_SIZE);
+          let batchLeaseLost = false;
+          // Isolate per-user failures: an unexpected throw for one user must not
+          // abandon the rest of the batch, mirroring runReconciliation's
+          // candidate isolation in reconciliation.ts.
+          await Promise.all(
+            batch.map(async (userId) => {
+              try {
+                const result = await backfillSleeperRecurringIds(env, userId, {
+                  dryRun,
+                  // Checkpoint (ii), round-4 audit finding: renews before EACH
+                  // row inside backfillSleeperRecurringIds, not once per user —
+                  // see that function's doc comment for why.
+                  ...(leaseRenewer ? { onRowCheckpoint: leaseRenewer } : {}),
+                });
+                rowsProcessed += result.processed;
+                rowsResolved += result.resolved;
+                rowsUnresolved += result.unresolved;
+                rowsChanged += result.changed;
+                rowsSkippedConcurrent += result.skippedConcurrent;
+                if (result.leaseLost) batchLeaseLost = true;
+                logBackfill({
+                  run_id: runId,
+                  status: 'user_processed',
+                  user_id: maskUserId(userId),
+                  processed: result.processed,
+                  resolved: result.resolved,
+                  unresolved: result.unresolved,
+                  changed: result.changed,
+                  skipped_concurrent: result.skippedConcurrent,
+                });
+              } catch (error) {
+                errors++;
+                logBackfill({ run_id: runId, status: 'user_failed', user_id: maskUserId(userId) });
+                console.error(
+                  `[sleeper-recurring-backfill] Failed for user ${maskUserId(userId)}:`,
+                  error instanceof Error ? error.message : error
+                );
+              }
+            })
+          );
 
-        // Renew the lease after every batch, resetting it back to the full
-        // 15-minute BACKFILL_LEASE_TTL_MS each time (audit FLA-168 Fix 1,
-        // hardened in round 3): a whole backfill run can outlive even that
-        // generous window across many batches. Without renewal, a second live
-        // run could acquire mid-run and race writes against this one. The
-        // owner-guarded renewal only succeeds while this run still holds the
-        // lease; a `false` return — whether because the lease already expired
-        // and was re-acquired by another run, OR because the underlying
-        // storage call itself failed (extendLease reports storage errors as
-        // failure, not success, specifically for this caller — round-3 audit
-        // finding) — means ownership is no longer certain, so this run stops
-        // touching rows immediately rather than risk racing a new holder.
-        // Fail-closed, not a throw: this backfill is idempotent and
-        // resumable, so a `lease_lost` outcome with partial counts is safe;
-        // finishing 'completed' under unknown ownership would not be.
-        if (syncState) {
-          const stillHeld = await syncState.extendLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner, BACKFILL_LEASE_TTL_MS);
-          if (!stillHeld) {
+          if (batchLeaseLost) {
+            // A row-level checkpoint inside backfillSleeperRecurringIds
+            // already found the lease gone for one or more users in this
+            // batch (round-4 audit finding) — stop immediately rather than
+            // starting the next batch under a lease that's already lost.
             outcome = 'lease_lost';
-            logBackfill({
-              run_id: runId,
-              status: 'lease_lost',
-              dry_run: dryRun,
-              users_scanned: usersScanned,
-              rows_processed: rowsProcessed,
-              rows_resolved: rowsResolved,
-              rows_unresolved: rowsUnresolved,
-              rows_changed: rowsChanged,
-              rows_skipped_concurrent: rowsSkippedConcurrent,
-            });
+            logLeaseLost();
             break;
+          }
+
+          // Post-batch checkpoint, routed through the same time-based helper
+          // (round-4 audit finding, replacing round 3's unconditional
+          // once-per-batch extendLease call): a no-op unless RENEW_INTERVAL_MS
+          // has actually elapsed since the last renewal, so this no longer
+          // forces a network round-trip on every single batch. A `false`
+          // return — whether because the lease already expired and was
+          // re-acquired by another run, OR because the underlying storage
+          // call itself failed (extendLease reports storage errors as
+          // failure, not success, specifically for this caller — round-3
+          // audit finding) — means ownership is no longer certain, so this
+          // run stops touching rows immediately rather than risk racing a new
+          // holder. Fail-closed, not a throw: this backfill is idempotent and
+          // resumable, so a `lease_lost` outcome with partial counts is safe;
+          // finishing 'completed' under unknown ownership would not be.
+          if (leaseRenewer) {
+            const stillHeld = await leaseRenewer();
+            if (!stillHeld) {
+              outcome = 'lease_lost';
+              logLeaseLost();
+              break;
+            }
           }
         }
       }

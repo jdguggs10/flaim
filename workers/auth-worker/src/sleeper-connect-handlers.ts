@@ -1,6 +1,7 @@
 import { SleeperStorage, type SleeperLeague } from './sleeper-storage';
 import { ArchiveStorage, archivedKey, type ArchivedFilter, type ArchiveMode } from './archive-storage';
 import { getDefaultSeasonYear } from './season-utils';
+import type { LeaseRenewalCheckpoint } from './sync-state';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
 const MAX_HISTORY_YEARS = 5;
@@ -102,6 +103,24 @@ async function getSleeperLeague(
   }
 
   const request = sleeperGet<SleeperApiLeague | null>(`/league/${leagueId}`);
+  // Evict on rejection (round-4 audit finding): without this, a transient
+  // failure (a 503, a timeout) fetching a shared intermediate league stays
+  // cached as a rejected promise for the rest of this run, so a LATER row
+  // whose own chain passes through that same league fails instantly too, even
+  // after Sleeper has recovered — contradicting tryResolveRecurringLeagueId's
+  // own "a transient failure on one row's walk must not poison resolution for
+  // a different row" comment above, which only covers the recurringIdCache,
+  // not this raw-fetch cache. Attaching `.catch()` directly to `request`
+  // marks it "handled" for unhandled-rejection purposes without altering the
+  // promise identity: this function (and any other in-flight caller who
+  // already read the cached `request` before eviction) still awaits the same
+  // rejected promise and still sees the failure; only a NEW cache lookup
+  // after the eviction runs gets a fresh fetch instead of the stale rejection.
+  request.catch(() => {
+    if (leagueCache.get(leagueId) === request) {
+      leagueCache.delete(leagueId);
+    }
+  });
   leagueCache.set(leagueId, request);
   return request;
 }
@@ -298,6 +317,14 @@ export interface SleeperBackfillUserResult {
   skippedConcurrent: number;
   /** Per-row would-change detail. Present only when dryRun is true. */
   rows?: SleeperBackfillRowDetail[];
+  /**
+   * True when `options.onRowCheckpoint` reported the lease was lost partway
+   * through this user's rows (round-4 audit finding) — the loop stopped
+   * immediately and any rows after the one that failed the checkpoint were
+   * never attempted. The caller (the backfill orchestrator) must treat this
+   * the same as its own renewal failures: stop processing further users too.
+   */
+  leaseLost?: boolean;
 }
 
 /**
@@ -327,12 +354,27 @@ export interface SleeperBackfillUserResult {
  * `options.dryRun` (default false) runs the same read/resolve path but skips
  * the write, returning per-row would-change detail instead.
  *
+ * `options.onRowCheckpoint` (round-4 audit finding), when provided, is
+ * awaited immediately before EACH row — not once per user — and a `false`
+ * return stops the loop right there, before that row is touched, reporting
+ * `leaseLost: true`. This exists because a single user can own many rows, and
+ * each row's own chain walk can make up to MAX_HISTORY_YEARS (5) Sleeper
+ * requests at a 10s timeout apiece: renewing only once per user (or once per
+ * batch of users, as an earlier version of this backfill did) leaves a gap
+ * between renewals that scales with how many rows and how deep their chains
+ * are, not with a fixed budget — exactly the unbounded-per-user-work gap the
+ * round-4 audit flagged as able to exceed the lease TTL. The caller (the
+ * backfill orchestrator in sleeper-recurring-backfill.ts) supplies a checkpoint
+ * that only actually calls `extendLease` once enough wall-clock time has
+ * passed since the last renewal, so this hook is cheap to call before every
+ * single row. Omitted entirely for dry runs, which never hold the lease.
+ *
  * Callable via the FLA-168 internal route/orchestrator (sleeper-recurring-backfill.ts).
  */
 export async function backfillSleeperRecurringIds(
   env: SleeperConnectEnv,
   userId: string,
-  options: { dryRun?: boolean } = {}
+  options: { dryRun?: boolean; onRowCheckpoint?: LeaseRenewalCheckpoint } = {}
 ): Promise<SleeperBackfillUserResult> {
   const dryRun = options.dryRun ?? false;
   const storage = SleeperStorage.fromEnvironment(env);
@@ -346,9 +388,22 @@ export async function backfillSleeperRecurringIds(
   let changed = 0;
   let unresolved = 0;
   let skippedConcurrent = 0;
+  let leaseLost = false;
   const rows: SleeperBackfillRowDetail[] = [];
 
   for (const league of leagues) {
+    // Checkpoint before EACH row (round-4 audit finding), not each user — see
+    // the doc comment above. Checked before any work on this row, including
+    // the null-check skip below, so the invariant is simple: nothing past
+    // this point runs once the lease is confirmed lost.
+    if (options.onRowCheckpoint) {
+      const stillHeld = await options.onRowCheckpoint();
+      if (!stillHeld) {
+        leaseLost = true;
+        break;
+      }
+    }
+
     processed++;
 
     // Null-only (Fix 3): a row that already has a stored value, stale or not,
@@ -388,8 +443,8 @@ export async function backfillSleeperRecurringIds(
   }
 
   return dryRun
-    ? { processed, resolved, changed, unresolved, skippedConcurrent, rows }
-    : { processed, resolved, changed, unresolved, skippedConcurrent };
+    ? { processed, resolved, changed, unresolved, skippedConcurrent, rows, ...(leaseLost ? { leaseLost } : {}) }
+    : { processed, resolved, changed, unresolved, skippedConcurrent, ...(leaseLost ? { leaseLost } : {}) };
 }
 
 /**
