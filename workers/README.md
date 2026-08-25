@@ -171,6 +171,21 @@ candidates, not a mid-probe cutoff.
   `X-Flaim-Internal-Token`; returns the run summary (409 when disabled or
   refused).
 
+### Sleeper recurring-id backfill (one-shot, dry-run default)
+
+Fills missing `recurring_league_id` values on Sleeper league rows saved before
+chain resolution existed. Operator-triggered only — there is no cron.
+
+- Trigger: `POST /auth/internal/backfill/sleeper-recurring-ids` guarded by
+  `X-Flaim-Internal-Token`. `dryRun` defaults to `true`; pass
+  `{"dryRun": false}` explicitly for a live run.
+- Writes are a conditional `UPDATE` of only `recurring_league_id` where it is
+  still `NULL` — convergent and safe under any overlap; a synthetic
+  `__backfill__` lease bounds duplicate work and is removed on completion.
+- Returns a JSON summary with `outcome` (`completed` | `failed` | `blocked` |
+  `lease_lost`) and per-run counts; only `blocked` maps to a non-200 status
+  (409), so drive it off the JSON `outcome`, not the HTTP code.
+
 ## ESPN API Reference
 
 Host: `https://lm-api-reads.fantasy.espn.com`
