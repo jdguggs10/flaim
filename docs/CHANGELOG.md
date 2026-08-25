@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Homepage Yahoo Outage Indicator (FLA-305)
+- **Added**: The homepage "Fantasy platforms" pill row marks Yahoo with a small dot indicator and an accessible popover (new `YahooOutagePill` client component, `web/components/site/yahoo-outage-pill.tsx`) explaining that Yahoo connections are temporarily unavailable while Yahoo reviews third-party API access, with a "Learn more" link to the existing `/support#yahoo-outage-heading` explanation. Self-contained — comes out once the underlying Yahoo outage (FLA-237) resolves.
+
 ### Homepage Football-Demo Coming-Soon Note (FLA-290)
 - **Added**: A small, muted note below the homepage live demo — "Football demos are on the way — ESPN and Sleeper league previews land as soon as drafts wrap up." — sets expectations while the ESPN and Sleeper football demo targets are staged but not yet live in the `live-demo` capabilities feed. Self-contained and removable in one deletion once those targets go live.
 
