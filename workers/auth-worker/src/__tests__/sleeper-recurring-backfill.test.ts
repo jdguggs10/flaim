@@ -30,14 +30,26 @@ vi.mock('../sync-state', () => ({
  * write method throws — same no-write-guarantee shape as reconciliation.test.ts's
  * supabaseStub. This module's own snapshot query never writes; all writes go
  * through backfillSleeperRecurringIds, which is mocked above.
+ *
+ * Paginates by keyset (`.gt('clerk_user_id', lastSeen).limit(n)`), matching
+ * the production query (round-3 audit finding replacing numeric-offset
+ * `.range()` pagination). `state.rows` is re-sorted and re-filtered by the
+ * live `gtValue` on every `.limit()` call rather than snapshotted once, so a
+ * test can mutate `state.rows` between pages to simulate a concurrent write
+ * shrinking the candidate set mid-scan.
  */
 const supabaseStub = vi.hoisted(() => {
   const state: {
     rows: Array<{ clerk_user_id: string }>;
     selectColumns: string[];
     isCalls: Array<{ column: string; value: unknown }>;
-    rangeCalls: Array<[number, number]>;
-  } = { rows: [], selectColumns: [], isCalls: [], rangeCalls: [] };
+    gtCalls: Array<{ column: string; value: unknown }>;
+    limitCalls: number[];
+    /** Fires right as a `.gt()` cursor call is made (i.e. just before a page
+     *  after the first is fetched) — lets a test mutate `state.rows` exactly
+     *  between two pages, to simulate a concurrent write landing mid-scan. */
+    onGt?: () => void;
+  } = { rows: [], selectColumns: [], isCalls: [], gtCalls: [], limitCalls: [] };
 
   const writeAttempt = (method: string) => () => {
     throw new Error(`WRITE ATTEMPTED: ${method}`);
@@ -45,6 +57,7 @@ const supabaseStub = vi.hoisted(() => {
 
   const client = {
     from(_table: string) {
+      let gtValue: string | undefined;
       const builder = {
         select: (columns: string) => {
           state.selectColumns.push(columns);
@@ -55,9 +68,17 @@ const supabaseStub = vi.hoisted(() => {
           return builder;
         },
         order: () => builder,
-        range: (from: number, to: number) => {
-          state.rangeCalls.push([from, to]);
-          return Promise.resolve({ data: state.rows.slice(from, to + 1), error: null });
+        gt: (column: string, value: unknown) => {
+          state.gtCalls.push({ column, value });
+          gtValue = value as string;
+          state.onGt?.();
+          return builder;
+        },
+        limit: (n: number) => {
+          state.limitCalls.push(n);
+          const sorted = [...state.rows].sort((a, b) => a.clerk_user_id.localeCompare(b.clerk_user_id));
+          const filtered = gtValue !== undefined ? sorted.filter((r) => r.clerk_user_id > gtValue!) : sorted;
+          return Promise.resolve({ data: filtered.slice(0, n), error: null });
         },
         insert: writeAttempt('insert'),
         update: writeAttempt('update'),
@@ -88,14 +109,18 @@ beforeEach(() => {
   supabaseStub.state.rows = [];
   supabaseStub.state.selectColumns = [];
   supabaseStub.state.isCalls = [];
-  supabaseStub.state.rangeCalls = [];
+  supabaseStub.state.gtCalls = [];
+  supabaseStub.state.limitCalls = [];
+  supabaseStub.state.onGt = undefined;
   createClientMock.mockReturnValue(supabaseStub.client);
   // Default: lease always available and renews cleanly, so existing
   // dryRun:false tests exercise the normal run path unless a test overrides
   // this to simulate contention or a stolen lease.
   mockAcquireLease.mockResolvedValue({ acquired: true });
   mockExtendLease.mockResolvedValue(true);
-  mockDeleteLeaseRow.mockResolvedValue(undefined);
+  // deleteLeaseRow now reports success/failure (round-3 audit finding); tests
+  // that care about a failed cleanup override this to false.
+  mockDeleteLeaseRow.mockResolvedValue(true);
 });
 
 describe('runSleeperRecurringBackfill', () => {
@@ -105,7 +130,7 @@ describe('runSleeperRecurringBackfill', () => {
       { clerk_user_id: 'user_a' },
       { clerk_user_id: 'user_b' },
     ];
-    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 0, unresolved: 0 });
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 0, unresolved: 0, skippedConcurrent: 0 });
 
     const summary = await runSleeperRecurringBackfill(baseEnv, true);
 
@@ -117,22 +142,52 @@ describe('runSleeperRecurringBackfill', () => {
     expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_b', { dryRun: true });
   });
 
-  it('paginates the snapshot query in pages of 1000 instead of loading the whole table', async () => {
-    supabaseStub.state.rows = Array.from({ length: 1500 }, (_, i) => ({ clerk_user_id: `user_${i}` }));
-    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 0, unresolved: 0 });
+  it('paginates the snapshot query in pages of 1000 by keyset, not the whole table at once', async () => {
+    // Zero-padded so string sort order equals numeric order, matching
+    // Postgres's `ORDER BY clerk_user_id`.
+    const userId = (i: number) => `user_${String(i).padStart(4, '0')}`;
+    supabaseStub.state.rows = Array.from({ length: 1500 }, (_, i) => ({ clerk_user_id: userId(i) }));
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 0, unresolved: 0, skippedConcurrent: 0 });
 
     const summary = await runSleeperRecurringBackfill(baseEnv, true);
 
-    expect(supabaseStub.state.rangeCalls).toEqual([
-      [0, 999],
-      [1000, 1999],
-    ]);
+    // First page has no cursor; second page keys off the last row of the first.
+    expect(supabaseStub.state.gtCalls).toEqual([{ column: 'clerk_user_id', value: userId(999) }]);
+    expect(supabaseStub.state.limitCalls).toEqual([1000, 1000]);
     expect(summary.usersScanned).toBe(1500);
+  });
+
+  it('keyset pagination still covers every user when earlier rows are resolved out from under the scan mid-run (round-3 audit finding)', async () => {
+    // Numeric-offset pagination would have re-based page 2 on the SHRUNKEN
+    // table (after concurrent normal sync fills some earlier NULLs), silently
+    // skipping a contiguous block of users near the tail: with 1500 rows and
+    // a page size of 1000, removing the first 300 rows before page 2 fetches
+    // `.range(1000, 1999)` would shift indices so page 2 actually returns
+    // rows 1300-1499, silently dropping rows 1000-1299 (300 users) that
+    // neither page ever touches. Keyset pagination must be unaffected, since
+    // it cursors on the last VALUE seen (user_0999), not a position.
+    const userId = (i: number) => `user_${String(i).padStart(4, '0')}`;
+    supabaseStub.state.rows = Array.from({ length: 1500 }, (_, i) => ({ clerk_user_id: userId(i) }));
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 0, unresolved: 0, skippedConcurrent: 0 });
+    // Fires right before page 2's query executes (i.e. exactly between the
+    // two pages) — simulates a concurrent normal sync resolving the first 300
+    // users' recurring_league_id in that window.
+    supabaseStub.state.onGt = () => {
+      supabaseStub.state.rows = supabaseStub.state.rows.filter((row) => row.clerk_user_id > userId(299));
+    };
+
+    const summary = await runSleeperRecurringBackfill(baseEnv, true);
+
+    // All 1500 users are still scanned — none silently dropped despite the
+    // underlying table shrinking mid-scan.
+    expect(summary.usersScanned).toBe(1500);
+    expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, userId(1499), { dryRun: true });
+    expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, userId(0), { dryRun: true });
   });
 
   it('propagates dryRun:true to every user call and aggregates rowsWouldChange and rowsUnresolved', async () => {
     supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
-    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 3, resolved: 2, changed: 2, unresolved: 1 });
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 3, resolved: 2, changed: 2, unresolved: 1, skippedConcurrent: 0 });
 
     const summary = await runSleeperRecurringBackfill(baseEnv, true);
 
@@ -147,12 +202,31 @@ describe('runSleeperRecurringBackfill', () => {
 
   it('propagates dryRun:false to every user call and aggregates rowsChanged', async () => {
     supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
-    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 3, resolved: 3, changed: 1, unresolved: 0 });
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 3, resolved: 3, changed: 1, unresolved: 0, skippedConcurrent: 0 });
 
     const summary = await runSleeperRecurringBackfill(baseEnv, false);
 
     expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_a', { dryRun: false });
     expect(summary.dryRun).toBe(false);
+    if (!summary.dryRun) {
+      expect(summary.rowsChanged).toBe(1);
+    }
+  });
+
+  it('aggregates rowsSkippedConcurrent across users (round-3 audit finding)', async () => {
+    supabaseStub.state.rows = [
+      { clerk_user_id: 'user_a' },
+      { clerk_user_id: 'user_b' },
+    ];
+    mockBackfillSleeperRecurringIds.mockImplementation(async (_env: unknown, userId: string) =>
+      userId === 'user_a'
+        ? { processed: 2, resolved: 2, changed: 1, unresolved: 0, skippedConcurrent: 1 }
+        : { processed: 1, resolved: 1, changed: 0, unresolved: 0, skippedConcurrent: 1 }
+    );
+
+    const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+    expect(summary.rowsSkippedConcurrent).toBe(2);
     if (!summary.dryRun) {
       expect(summary.rowsChanged).toBe(1);
     }
@@ -166,7 +240,7 @@ describe('runSleeperRecurringBackfill', () => {
     ];
     mockBackfillSleeperRecurringIds.mockImplementation(async (_env: unknown, userId: string) => {
       if (userId === 'user_b') throw new Error('boom');
-      return { processed: 1, resolved: 1, changed: 1, unresolved: 0 };
+      return { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 };
     });
 
     const summary = await runSleeperRecurringBackfill(baseEnv, false);
@@ -179,14 +253,17 @@ describe('runSleeperRecurringBackfill', () => {
 
   it('acquires the single-flight lease before a live run and deletes its row under the same owner when done', async () => {
     supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
-    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
 
-    await runSleeperRecurringBackfill(baseEnv, false);
+    const summary = await runSleeperRecurringBackfill(baseEnv, false);
 
     expect(mockAcquireLease).toHaveBeenCalledTimes(1);
-    const [acquireUserId, acquireProvider, acquireOwner] = mockAcquireLease.mock.calls[0];
+    const [acquireUserId, acquireProvider, acquireOwner, acquireTtlMs] = mockAcquireLease.mock.calls[0];
     expect(acquireUserId).toBe('__backfill__');
     expect(acquireProvider).toBe('sleeper');
+    // Round-3 audit finding: an explicit 15-minute TTL, not sync-state.ts's
+    // 120s default sized for a single provider refresh.
+    expect(acquireTtlMs).toBe(15 * 60 * 1000);
 
     // Audit FLA-168 Fix 3: the synthetic row is deleted outright on a normal
     // finish, not released back to an unheld state.
@@ -195,17 +272,32 @@ describe('runSleeperRecurringBackfill', () => {
     expect(deleteUserId).toBe('__backfill__');
     expect(deleteProvider).toBe('sleeper');
     expect(deleteOwner).toBe(acquireOwner);
+    // Round-3 audit finding: a successful cleanup delete is surfaced in the response.
+    expect(summary.leaseCleanup).toBe('ok');
+  });
+
+  it('reports a failed lease cleanup in the response without changing the run outcome (round-3 audit finding)', async () => {
+    supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+    mockDeleteLeaseRow.mockResolvedValue(false);
+
+    const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+    expect(summary.outcome).toBe('completed');
+    expect(summary.leaseCleanup).toBe('failed');
   });
 
   it('skips the lease entirely for a dry run', async () => {
     supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
-    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+    mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
 
-    await runSleeperRecurringBackfill(baseEnv, true);
+    const summary = await runSleeperRecurringBackfill(baseEnv, true);
 
     expect(mockAcquireLease).not.toHaveBeenCalled();
     expect(mockExtendLease).not.toHaveBeenCalled();
     expect(mockDeleteLeaseRow).not.toHaveBeenCalled();
+    // No lease was ever held, so there's nothing to report cleanup for.
+    expect(summary.leaseCleanup).toBeUndefined();
   });
 
   it('returns a blocked outcome for a 409 when a concurrent live run already holds the lease, without touching any rows', async () => {
@@ -221,6 +313,7 @@ describe('runSleeperRecurringBackfill', () => {
     // Nothing was acquired: no other holder's row must be deleted (audit
     // FLA-168 Fix 3 — blocked never deletes, since another run owns the row).
     expect(mockDeleteLeaseRow).not.toHaveBeenCalled();
+    expect(summary.leaseCleanup).toBeUndefined();
   });
 
   describe('lease renewal (audit FLA-168 Fix 1)', () => {
@@ -232,21 +325,31 @@ describe('runSleeperRecurringBackfill', () => {
         { clerk_user_id: 'user_c' },
         { clerk_user_id: 'user_d' },
       ];
-      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
 
       const summary = await runSleeperRecurringBackfill(baseEnv, false);
 
       expect(summary.outcome).toBe('completed');
       expect(mockExtendLease).toHaveBeenCalledTimes(2);
-      const [extendUserId, extendProvider, extendOwner] = mockExtendLease.mock.calls[0];
+      const [extendUserId, extendProvider, extendOwner, extendTtlMs] = mockExtendLease.mock.calls[0];
       expect(extendUserId).toBe('__backfill__');
       expect(extendProvider).toBe('sleeper');
+      // Round-3 audit finding: renewal resets the same explicit 15-minute
+      // window used on acquire, not sync-state.ts's 120s default.
+      expect(extendTtlMs).toBe(15 * 60 * 1000);
       const [, , acquireOwner] = mockAcquireLease.mock.calls[0];
       expect(extendOwner).toBe(acquireOwner);
       // A clean finish still deletes the row.
       expect(mockDeleteLeaseRow).toHaveBeenCalledTimes(1);
     });
 
+    // Round-3 audit finding: extendLease itself now fails CLOSED (returns
+    // `false`) on a storage error rather than fail-open (see
+    // sync-state.test.ts's "fails CLOSED... when storage errors" test) — from
+    // this orchestrator's point of view, a real storage error and a
+    // genuinely stolen lease are indistinguishable and handled identically:
+    // both surface as `false` here, and both must halt the loop immediately
+    // with no further writes.
     it('halts the loop with partial counts and performs no further writes when renewal fails mid-run', async () => {
       // 3 batches of 2 users each (BATCH_SIZE=2): renewal fails after the
       // first batch, so the second and third batches must never run.
@@ -258,7 +361,7 @@ describe('runSleeperRecurringBackfill', () => {
         { clerk_user_id: 'user_e' },
         { clerk_user_id: 'user_f' },
       ];
-      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
       mockExtendLease.mockResolvedValueOnce(false);
 
       const summary = await runSleeperRecurringBackfill(baseEnv, false);
@@ -285,7 +388,7 @@ describe('runSleeperRecurringBackfill', () => {
         { clerk_user_id: 'user_c' },
         { clerk_user_id: 'user_d' },
       ];
-      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
       mockExtendLease.mockResolvedValueOnce(false);
 
       await runSleeperRecurringBackfill(baseEnv, false);

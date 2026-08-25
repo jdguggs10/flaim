@@ -25,8 +25,8 @@ const baseEnv = {
 
 function summary(dryRun: boolean): SleeperRecurringBackfillSummary {
   return dryRun
-    ? { outcome: 'completed', dryRun: true, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsUnresolved: 0, rowsWouldChange: 1, errors: 0 }
-    : { outcome: 'completed', dryRun: false, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsUnresolved: 0, rowsChanged: 1, errors: 0 };
+    ? { outcome: 'completed', dryRun: true, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsUnresolved: 0, rowsWouldChange: 1, rowsSkippedConcurrent: 0, errors: 0 }
+    : { outcome: 'completed', dryRun: false, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsUnresolved: 0, rowsChanged: 1, rowsSkippedConcurrent: 0, errors: 0, leaseCleanup: 'ok' };
 }
 
 function makeRequest(token?: string, body?: string): Request {
@@ -99,6 +99,7 @@ describe('POST /auth/internal/backfill/sleeper-recurring-ids', () => {
       rowsResolved: 0,
       rowsUnresolved: 0,
       rowsChanged: 0,
+      rowsSkippedConcurrent: 0,
       errors: 0,
     });
 

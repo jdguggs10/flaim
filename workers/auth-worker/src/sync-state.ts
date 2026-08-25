@@ -154,9 +154,14 @@ export class SyncStateStorage {
    * longer this caller's to hold. Callers must treat `false` as "stop
    * immediately" — continuing to write after this would race the new holder.
    *
-   * Storage errors fail open (return `true`), matching acquireLease/settle's
-   * posture: a transient Supabase blip should not itself be treated as proof
-   * of a stolen lease.
+   * Storage errors fail CLOSED here (return `false`), deliberately diverging
+   * from acquireLease/settle's fail-open posture (round-3 FLA-168 audit
+   * finding): the one caller of this method (the Sleeper recurring-id
+   * backfill) is idempotent and resumable, so aborting on an
+   * uncertain-ownership renewal is safe, while continuing to write under
+   * unknown ownership is not. If a future caller needs fail-open renewal
+   * semantics, give it its own method rather than flipping this one back —
+   * as of this fix, backfill is the only caller of extendLease.
    */
   async extendLease(
     clerkUserId: string,
@@ -182,8 +187,8 @@ export class SyncStateStorage {
 
       return (data?.length ?? 0) > 0;
     } catch (error) {
-      console.error(`[sync-state] Lease extension failed open for ${provider}:`, error);
-      return true;
+      console.error(`[sync-state] Lease extension failed closed for ${provider}:`, error);
+      return false;
     }
   }
 
@@ -271,10 +276,16 @@ export class SyncStateStorage {
    * only clears the lease fields, this permanently destroys the row's
    * last_success_at/cooldown history. Owner-guarded exactly like release() so
    * a lease already stolen by a new holder (e.g. after a failed extendLease)
-   * is left untouched instead of being deleted out from under it. Storage
-   * errors fail open (no-op) — same posture as the rest of this class.
+   * is left untouched instead of being deleted out from under it.
+   *
+   * Unlike the rest of this class, storage errors are reported to the caller
+   * (returns `false`) rather than swallowed (round-3 FLA-168 audit finding):
+   * a failed cleanup here silently leaves the synthetic '__backfill__' row
+   * polluting dashboard sync metrics, so the backfill orchestrator surfaces
+   * this in its response (`leaseCleanup: 'failed'`) and logs a warning —
+   * without treating it as a reason to change the run's own outcome.
    */
-  async deleteLeaseRow(clerkUserId: string, provider: SyncProvider, ownerId: string): Promise<void> {
+  async deleteLeaseRow(clerkUserId: string, provider: SyncProvider, ownerId: string): Promise<boolean> {
     try {
       const { error } = await this.supabase
         .from('provider_sync_state')
@@ -283,8 +294,10 @@ export class SyncStateStorage {
         .eq('provider', provider)
         .eq('sync_lease_owner', ownerId);
       if (error) throw error;
+      return true;
     } catch (error) {
-      console.error(`[sync-state] Lease row delete failed open for ${provider}:`, error);
+      console.error(`[sync-state] Lease row delete failed for ${provider}:`, error);
+      return false;
     }
   }
 

@@ -148,7 +148,7 @@ describe('SyncStateStorage.extendLease', () => {
     expect(result).toBe(false);
   });
 
-  it('fails open (returns true) when storage errors', async () => {
+  it('fails CLOSED (returns false) when storage errors — unlike acquireLease/settle (round-3 FLA-168 audit finding)', async () => {
     const { client } = fakeSupabase([
       { error: new Error('supabase down') },
     ]);
@@ -156,19 +156,20 @@ describe('SyncStateStorage.extendLease', () => {
 
     const result = await storage.extendLease('__backfill__', 'sleeper', 'owner-1');
 
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 });
 
 describe('SyncStateStorage.deleteLeaseRow', () => {
-  it('deletes the owner-guarded row outright', async () => {
+  it('deletes the owner-guarded row outright and reports success', async () => {
     const { client, calls } = fakeSupabase([
       { data: null, error: null },
     ]);
     const storage = new SyncStateStorage(client);
 
-    await storage.deleteLeaseRow('__backfill__', 'sleeper', 'owner-1');
+    const result = await storage.deleteLeaseRow('__backfill__', 'sleeper', 'owner-1');
 
+    expect(result).toBe(true);
     expect(calls[0].delete).toHaveLength(1);
     // Owner guard: only the current lease holder's row is deleted.
     expect(calls[0].eq?.map((args) => args)).toContainEqual(['clerk_user_id', '__backfill__']);
@@ -176,13 +177,13 @@ describe('SyncStateStorage.deleteLeaseRow', () => {
     expect(calls[0].eq?.map((args) => args)).toContainEqual(['sync_lease_owner', 'owner-1']);
   });
 
-  it('swallows storage errors (fail open)', async () => {
+  it('reports failure instead of swallowing storage errors (round-3 FLA-168 audit finding)', async () => {
     const { client } = fakeSupabase([
       { error: new Error('supabase down') },
     ]);
     const storage = new SyncStateStorage(client);
 
-    await expect(storage.deleteLeaseRow('__backfill__', 'sleeper', 'owner-1')).resolves.toBeUndefined();
+    await expect(storage.deleteLeaseRow('__backfill__', 'sleeper', 'owner-1')).resolves.toBe(false);
   });
 });
 

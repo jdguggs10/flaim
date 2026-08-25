@@ -22,17 +22,30 @@
  * instead of racing writes against the first. Dry runs are read-only and
  * skip the guard entirely (audit FLA-168 Fix 5).
  *
- * The lease is renewed after every user batch so a run that outlives the
- * 120s TTL doesn't let a second live run acquire mid-run (audit FLA-168
- * Fix 1); if renewal ever fails (lease already expired and re-acquired by
- * someone else), the run stops touching rows immediately and returns a
- * `lease_lost` outcome with whatever partial counts it completed. On a normal
- * finish, the synthetic lease row is deleted outright rather than released
- * back to an unheld state (audit FLA-168 Fix 3) — it has no real user's
- * telemetry worth keeping, and a leftover row would otherwise sit in
- * provider_sync_state indefinitely, inflating sync_7d.users_attempted and
- * risking a phantom Sleeper entry in sync_recent. The row is still visible
- * for the run's own (manual, minutes-long) duration, which is acceptable.
+ * The lease is acquired with an explicit 15-minute TTL (BACKFILL_LEASE_TTL_MS,
+ * below) rather than the 120s SYNC_LEASE_TTL_MS sized for a single provider
+ * refresh — a whole backfill run's initial snapshot read, or even one slow
+ * user batch, can plausibly exceed 120s on its own. On top of that longer
+ * window, the lease is still renewed after every user batch (same 15-minute
+ * TTL each time) so a run that outlives even that generous window doesn't let
+ * a second live run acquire mid-run (audit FLA-168 Fix 1, hardened further in
+ * round 3: longer explicit TTL on both acquire and renew). Renewal is
+ * fail-closed: if it returns false OR the underlying storage call itself
+ * fails (sync-state.ts's extendLease reports storage errors as failure here,
+ * unlike its other, fail-open siblings — round-3 audit finding), the run
+ * stops touching rows immediately and returns a `lease_lost` outcome with
+ * whatever partial counts it completed. This backfill is idempotent and
+ * resumable (re-running it only ever touches rows still NULL), so aborting on
+ * uncertain lease ownership is safe — continuing to write under unknown
+ * ownership is not. On a normal finish, the synthetic lease row is deleted
+ * outright rather than released back to an unheld state (audit FLA-168
+ * Fix 3) — it has no real user's telemetry worth keeping, and a leftover row
+ * would otherwise sit in provider_sync_state indefinitely, inflating
+ * sync_7d.users_attempted and risking a phantom Sleeper entry in sync_recent.
+ * The row is still visible for the run's own (manual, minutes-long) duration,
+ * which is acceptable. That cleanup delete can itself fail; its result is now
+ * reported back as `leaseCleanup` in the response and a console.warn on
+ * failure (round-3 audit finding), without changing the run's own outcome.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -52,6 +65,12 @@ const BACKFILL_LEASE_USER_ID = '__backfill__';
 const BACKFILL_LEASE_PROVIDER: SyncProvider = 'sleeper';
 const BACKFILL_LEASE_OWNER_PREFIX = 'sleeper-recurring-backfill:';
 
+// Explicit long TTL for the backfill's lease (round-3 audit finding) —
+// deliberately independent of sync-state.ts's SYNC_LEASE_TTL_MS (120s), which
+// is sized for a single provider refresh, not a whole bulk backfill run. Used
+// for both the initial acquire and every per-batch renewal below.
+const BACKFILL_LEASE_TTL_MS = 15 * 60 * 1000;
+
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
   return `${userId.substring(0, 8)}...`;
@@ -63,30 +82,53 @@ function logBackfill(fields: Record<string, unknown>): void {
 
 /**
  * Distinct clerk_user_ids with at least one sleeper_leagues row where
- * recurring_league_id IS NULL. Selects only the id column and pages through
- * results — the full table is never loaded, matching fetchProviderSnapshot's
- * select-only, paginated approach in reconciliation.ts.
+ * recurring_league_id IS NULL. Selects only the clerk_user_id column and
+ * pages through results — the full table is never loaded, matching
+ * fetchProviderSnapshot's select-only, paginated approach in reconciliation.ts.
+ *
+ * Paginated by keyset on clerk_user_id (`clerk_user_id > lastSeen`), NOT
+ * numeric offset (round-3 audit finding). This scan filters on
+ * `recurring_league_id IS NULL`, and concurrent normal sync can fill that
+ * column for earlier rows while this scan is still paging. Offset pagination
+ * is defined by position in the current result set, so removing rows ahead of
+ * an unfetched page shifts every later row backward — the next `.range()`
+ * call then lands on the wrong slice and a contiguous block of users at the
+ * tail is silently skipped. A keyset cursor has no such dependency on
+ * position: each page asks for "clerk_user_id strictly greater than the last
+ * one seen," which stays correct regardless of what happened to earlier rows.
+ * A single user can still contribute rows across a page boundary; skipping
+ * that user's remaining rows once its id has already been recorded in
+ * `userIds` is fine, since only set membership (not per-row detail) is needed
+ * here — the row-level data is re-read fresh per user inside
+ * backfillSleeperRecurringIds.
  */
 async function fetchUsersMissingRecurringId(supabase: SupabaseClient): Promise<string[]> {
   const userIds = new Set<string>();
-  for (let offset = 0; ; offset += SNAPSHOT_PAGE_SIZE) {
-    const { data, error } = await supabase
+  let lastUserId: string | null = null;
+
+  for (;;) {
+    // All filter calls (.is(), .gt()) happen before any transform call
+    // (.order(), .limit()) so `query`'s type never narrows away from
+    // PostgrestFilterBuilder (which is what .gt() requires) partway through
+    // — reassigning `query` after an .order()/.limit() call would lose the
+    // ability to conditionally add a further filter.
+    let query = supabase
       .from('sleeper_leagues')
       .select('clerk_user_id')
-      .is('recurring_league_id', null)
-      // Tiebreakers so pages have a total order even though only clerk_user_id
-      // is selected — (clerk_user_id, league_id, season_year) is a unique
-      // constraint on sleeper_leagues, mirroring fetchProviderSnapshot's
-      // ordering in reconciliation.ts.
+      .is('recurring_league_id', null);
+    if (lastUserId !== null) {
+      query = query.gt('clerk_user_id', lastUserId);
+    }
+
+    const { data, error } = await query
       .order('clerk_user_id', { ascending: true })
-      .order('league_id', { ascending: true })
-      .order('season_year', { ascending: true })
-      .range(offset, offset + SNAPSHOT_PAGE_SIZE - 1);
+      .limit(SNAPSHOT_PAGE_SIZE);
     if (error) throw new Error(`sleeper_leagues snapshot query failed: ${error.message}`);
 
     const page = (data ?? []) as unknown as Array<{ clerk_user_id: string }>;
     for (const row of page) userIds.add(row.clerk_user_id);
     if (page.length < SNAPSHOT_PAGE_SIZE) break;
+    lastUserId = page[page.length - 1].clerk_user_id;
   }
   return Array.from(userIds);
 }
@@ -105,7 +147,11 @@ export type SleeperRecurringBackfillSummary =
       rowsResolved: number;
       rowsUnresolved: number;
       rowsWouldChange: number;
+      /** Always 0 for a dry run — no write is ever attempted. */
+      rowsSkippedConcurrent: number;
       errors: number;
+      /** Present only when a live lease-holding run reached its cleanup step (never for dry runs or a 'blocked' outcome). */
+      leaseCleanup?: 'ok' | 'failed';
     }
   | {
       outcome: SleeperRecurringBackfillOutcome;
@@ -115,7 +161,16 @@ export type SleeperRecurringBackfillSummary =
       rowsResolved: number;
       rowsUnresolved: number;
       rowsChanged: number;
+      /**
+       * Rows whose conditional write matched zero rows (round-3 audit
+       * finding) — deleted, or already filled by a concurrent normal sync,
+       * between the per-user snapshot read and the write. A clean skip, not
+       * an error.
+       */
+      rowsSkippedConcurrent: number;
       errors: number;
+      /** Present only when this run held the lease and reached its cleanup step (never for a 'blocked' outcome). */
+      leaseCleanup?: 'ok' | 'failed';
     };
 
 export async function runSleeperRecurringBackfill(
@@ -132,16 +187,19 @@ export async function runSleeperRecurringBackfill(
   let rowsResolved = 0;
   let rowsUnresolved = 0;
   let rowsChanged = 0;
+  let rowsSkippedConcurrent = 0;
   let errors = 0;
   let retryAfterSeconds: number | undefined;
+  let leaseCleanup: 'ok' | 'failed' | undefined;
 
   logBackfill({ run_id: runId, status: 'run_start', dry_run: dryRun });
 
   // Single-flight guard for live runs only (audit FLA-168 Fix 5): dry runs
-  // never write, so two concurrent dry runs can't race anything.
+  // never write, so two concurrent dry runs can't race anything. Explicit
+  // 15-minute TTL (round-3 audit finding) — see BACKFILL_LEASE_TTL_MS above.
   const syncState = dryRun ? null : SyncStateStorage.fromEnvironment(env);
   const lease = syncState
-    ? await syncState.acquireLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner)
+    ? await syncState.acquireLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner, BACKFILL_LEASE_TTL_MS)
     : null;
 
   if (lease && !lease.acquired) {
@@ -169,6 +227,7 @@ export async function runSleeperRecurringBackfill(
               rowsResolved += result.resolved;
               rowsUnresolved += result.unresolved;
               rowsChanged += result.changed;
+              rowsSkippedConcurrent += result.skippedConcurrent;
               logBackfill({
                 run_id: runId,
                 status: 'user_processed',
@@ -177,6 +236,7 @@ export async function runSleeperRecurringBackfill(
                 resolved: result.resolved,
                 unresolved: result.unresolved,
                 changed: result.changed,
+                skipped_concurrent: result.skippedConcurrent,
               });
             } catch (error) {
               errors++;
@@ -189,17 +249,23 @@ export async function runSleeperRecurringBackfill(
           })
         );
 
-        // Renew the lease after every batch (audit FLA-168 Fix 1): the
-        // 120s SYNC_LEASE_TTL_MS was sized for a single provider refresh, not
-        // a whole backfill run, which can easily outlive it across many
-        // batches. Without renewal, a second live run could acquire mid-run
-        // and race writes against this one. The owner-guarded renewal only
-        // succeeds while this run still holds the lease; if it comes back
-        // false, the lease already expired and was re-acquired by that other
-        // run, so this run stops touching rows immediately rather than
-        // racing the new holder — no throw, just a structured outcome.
+        // Renew the lease after every batch, resetting it back to the full
+        // 15-minute BACKFILL_LEASE_TTL_MS each time (audit FLA-168 Fix 1,
+        // hardened in round 3): a whole backfill run can outlive even that
+        // generous window across many batches. Without renewal, a second live
+        // run could acquire mid-run and race writes against this one. The
+        // owner-guarded renewal only succeeds while this run still holds the
+        // lease; a `false` return — whether because the lease already expired
+        // and was re-acquired by another run, OR because the underlying
+        // storage call itself failed (extendLease reports storage errors as
+        // failure, not success, specifically for this caller — round-3 audit
+        // finding) — means ownership is no longer certain, so this run stops
+        // touching rows immediately rather than risk racing a new holder.
+        // Fail-closed, not a throw: this backfill is idempotent and
+        // resumable, so a `lease_lost` outcome with partial counts is safe;
+        // finishing 'completed' under unknown ownership would not be.
         if (syncState) {
-          const stillHeld = await syncState.extendLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner);
+          const stillHeld = await syncState.extendLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner, BACKFILL_LEASE_TTL_MS);
           if (!stillHeld) {
             outcome = 'lease_lost';
             logBackfill({
@@ -211,6 +277,7 @@ export async function runSleeperRecurringBackfill(
               rows_resolved: rowsResolved,
               rows_unresolved: rowsUnresolved,
               rows_changed: rowsChanged,
+              rows_skipped_concurrent: rowsSkippedConcurrent,
             });
             break;
           }
@@ -232,7 +299,20 @@ export async function runSleeperRecurringBackfill(
         // exactly like release() was, so if the lease was already stolen
         // (the lease_lost path above), this deletes zero rows rather than
         // clobbering the new holder's row.
-        await syncState.deleteLeaseRow(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner);
+        //
+        // deleteLeaseRow now reports its own storage failures back (round-3
+        // audit finding) instead of swallowing them: a failed cleanup leaves
+        // the synthetic row polluting dashboard sync metrics, so it's worth a
+        // warning and a flag on the response — but it must not change this
+        // run's own outcome, which already reflects what happened to the
+        // actual rows being backfilled.
+        const cleanedUp = await syncState.deleteLeaseRow(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner);
+        leaseCleanup = cleanedUp ? 'ok' : 'failed';
+        if (!cleanedUp) {
+          console.warn(
+            `[sleeper-recurring-backfill] Failed to delete backfill lease row for run ${runId}; the synthetic '__backfill__' row may still be present in provider_sync_state.`
+          );
+        }
       }
     }
   }
@@ -248,14 +328,16 @@ export async function runSleeperRecurringBackfill(
     rows_resolved: rowsResolved,
     rows_unresolved: rowsUnresolved,
     ...(dryRun ? { rows_would_change: rowsChanged } : { rows_changed: rowsChanged }),
+    rows_skipped_concurrent: rowsSkippedConcurrent,
     errors,
     duration_ms: durationMs,
     ...(retryAfterSeconds !== undefined ? { retry_after: retryAfterSeconds } : {}),
+    ...(leaseCleanup !== undefined ? { lease_cleanup: leaseCleanup } : {}),
   });
 
   return dryRun
-    ? { outcome, dryRun: true, usersScanned, rowsProcessed, rowsResolved, rowsUnresolved, rowsWouldChange: rowsChanged, errors }
-    : { outcome, dryRun: false, usersScanned, rowsProcessed, rowsResolved, rowsUnresolved, rowsChanged, errors };
+    ? { outcome, dryRun: true, usersScanned, rowsProcessed, rowsResolved, rowsUnresolved, rowsWouldChange: rowsChanged, rowsSkippedConcurrent, errors, ...(leaseCleanup !== undefined ? { leaseCleanup } : {}) }
+    : { outcome, dryRun: false, usersScanned, rowsProcessed, rowsResolved, rowsUnresolved, rowsChanged, rowsSkippedConcurrent, errors, ...(leaseCleanup !== undefined ? { leaseCleanup } : {}) };
 }
 
 // =============================================================================

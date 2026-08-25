@@ -66,6 +66,7 @@ describe('sleeper-connect-handlers', () => {
     getSleeperConnection: ReturnType<typeof vi.fn>;
     getSleeperLeagues: ReturnType<typeof vi.fn>;
     persistRecurringRoot: ReturnType<typeof vi.fn>;
+    backfillRecurringLeagueId: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -80,6 +81,11 @@ describe('sleeper-connect-handlers', () => {
       getSleeperConnection: vi.fn().mockResolvedValue(null),
       getSleeperLeagues: vi.fn().mockResolvedValue([]),
       persistRecurringRoot: vi.fn().mockResolvedValue(undefined),
+      // Default: the conditional write always succeeds (round-3 audit finding
+      // — the backfill-only narrow UPDATE that replaced saveSleeperLeague's
+      // full-row upsert). Tests below override this to simulate a concurrent
+      // delete/fill (returns false).
+      backfillRecurringLeagueId: vi.fn().mockResolvedValue(true),
     };
 
     vi.mocked(SleeperStorage.fromEnvironment).mockReturnValue(mockStorage as unknown as SleeperStorage);
@@ -1059,10 +1065,11 @@ describe('sleeper-connect-handlers', () => {
 
       const result = await backfillSleeperRecurringIds(env, 'user_1');
 
-      expect(result).toEqual({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
-      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
-        expect.objectContaining({ leagueId: 'sleeper-2025', recurringLeagueId: 'sleeper-2024' }),
-      );
+      expect(result).toEqual({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+      // Round-3 audit finding: persistence goes through the narrow conditional
+      // write, not saveSleeperLeague's full-row upsert.
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'sleeper-2025', 2025, 'sleeper-2024');
+      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
     });
 
     it('only writes rows where recurring_league_id is null, leaving already-set rows (even if stale) for sync to correct', async () => {
@@ -1085,11 +1092,9 @@ describe('sleeper-connect-handlers', () => {
       // Null-only (Fix 3): only row x is a candidate. Row y's non-null-but-stale
       // value and row z's already-correct value are both left untouched —
       // resolution is never even attempted for them.
-      expect(result).toEqual({ processed: 3, resolved: 1, changed: 1, unresolved: 0 });
-      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(1);
-      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'x', recurringLeagueId: 'x' }));
-      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'y' }));
-      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'z' }));
+      expect(result).toEqual({ processed: 3, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledTimes(1);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'x', 2025, 'x');
     });
 
     it('is idempotent: a second run against the persisted result performs zero writes', async () => {
@@ -1105,20 +1110,47 @@ describe('sleeper-connect-handlers', () => {
 
       const first = await backfillSleeperRecurringIds(env, 'user_1');
       expect(first.changed).toBe(1);
-      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(1);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledTimes(1);
 
       // Simulate the write the first run performed, then re-run.
-      mockStorage.saveSleeperLeague.mockClear();
+      mockStorage.backfillRecurringLeagueId.mockClear();
       mockStorage.getSleeperLeagues.mockResolvedValue([{ ...row, recurringLeagueId: 'x' }]);
 
       const second = await backfillSleeperRecurringIds(env, 'user_1');
       // Null-only: the now-non-null row is skipped outright, so resolution is
       // never attempted the second time either.
-      expect(second).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 0 });
+      expect(second).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 0, skippedConcurrent: 0 });
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalled();
+    });
+
+    it('counts a concurrent delete/fill between snapshot and write as a clean skip, not a write', async () => {
+      // Row is NULL in the snapshot read, but by the time the conditional
+      // write runs, another process (a delete, or normal sync filling the
+      // same field) has already changed it — the guarded UPDATE matches zero
+      // rows (round-3 audit finding: this must never fall back to an
+      // unconditional upsert that could resurrect a deleted row or clobber a
+      // fresher value).
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/x')) {
+          return jsonResponse({ league_id: 'x', name: 'X', sport: 'nfl', season: '2025', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+      mockStorage.backfillRecurringLeagueId.mockResolvedValue(false);
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1');
+
+      // Resolution still succeeded (resolved: 1) — only the write was a no-op.
+      expect(result).toEqual({ processed: 1, resolved: 1, changed: 0, unresolved: 0, skippedConcurrent: 1 });
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'x', 2025, 'x');
       expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
     });
 
-    it('dry run reports would-change detail without calling saveSleeperLeague', async () => {
+    it('dry run reports would-change detail without calling backfillRecurringLeagueId', async () => {
       mockStorage.getSleeperLeagues.mockResolvedValue([
         { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
       ]);
@@ -1137,8 +1169,10 @@ describe('sleeper-connect-handlers', () => {
         resolved: 1,
         changed: 1,
         unresolved: 0,
+        skippedConcurrent: 0,
         rows: [{ userId: 'user_1', leagueId: 'x', currentRecurringId: null, wouldSetRecurringId: 'x' }],
       });
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalled();
       expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
     });
 
@@ -1161,8 +1195,8 @@ describe('sleeper-connect-handlers', () => {
 
       // Audit Fix 1: a cycle is unresolved, not a discovered root — the row
       // stays NULL rather than being poisoned with a self-referential fallback.
-      expect(result).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 1 });
-      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
+      expect(result).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 1, skippedConcurrent: 0 });
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalled();
     });
 
     it('leaves a row unresolved on a mid-chain fetch failure, then repairs it on a healthy re-run (outage -> rerun -> repair)', async () => {
@@ -1183,8 +1217,8 @@ describe('sleeper-connect-handlers', () => {
 
       const first = await backfillSleeperRecurringIds(env, 'user_1');
 
-      expect(first).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 1 });
-      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
+      expect(first).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 1, skippedConcurrent: 0 });
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalled();
 
       // Second run: same still-NULL row, but the upstream API is healthy now.
       mockFetch.mockImplementation(async (input) => {
@@ -1200,10 +1234,8 @@ describe('sleeper-connect-handlers', () => {
 
       const second = await backfillSleeperRecurringIds(env, 'user_1');
 
-      expect(second).toEqual({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
-      expect(mockStorage.saveSleeperLeague).toHaveBeenCalledWith(
-        expect.objectContaining({ leagueId: 'flaky-2025', recurringLeagueId: 'flaky-2024' }),
-      );
+      expect(second).toEqual({ processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 });
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'flaky-2025', 2025, 'flaky-2024');
     });
 
     it('stops a six-link chain at the MAX_HISTORY_YEARS depth cap and treats it as unresolved', async () => {
@@ -1230,11 +1262,64 @@ describe('sleeper-connect-handlers', () => {
 
       const result = await backfillSleeperRecurringIds(env, 'user_1');
 
-      expect(result).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 1 });
-      expect(mockStorage.saveSleeperLeague).not.toHaveBeenCalled();
+      expect(result).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 1, skippedConcurrent: 0 });
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalled();
       // deep-5 (the 6th league, and the true root) must never be fetched.
       const fetchedUrls = mockFetch.mock.calls.map((call) => String(call[0]));
       expect(fetchedUrls.some((url) => url.endsWith('/league/deep-5'))).toBe(false);
+    });
+
+    it('does not let a cap-exceeded deep chain poison resolution for a shorter row sharing an intermediate league (round-3 audit finding)', async () => {
+      // Row A's chain is 6 links deep (deep-0..deep-5, deep-5 being the true
+      // root) — one more hop than the 5-season MAX_HISTORY_YEARS cap allows,
+      // so row A's walk gives up partway through, having only visited
+      // deep-0..deep-4 (5 nodes) before hitting the cap on the 6th
+      // (deep-5, never fetched).
+      //
+      // Row B is a SEPARATE stored row whose own league_id happens to be
+      // "deep-3" — one of the intermediate leagues row A's walk visited
+      // (plausible: an older season's row the user still has, whose current
+      // chain merges into the same history). Row B's OWN walk from deep-3 is
+      // only 2 hops from the real root (deep-3 -> deep-4 -> deep-5), well
+      // within its own fresh 5-hop budget.
+      //
+      // Both rows resolve within ONE backfillSleeperRecurringIds call, so
+      // they share a single recurringIdCache. The bug: row A's cap-exceeded
+      // walk used to write a null entry into that shared cache for every
+      // node on its path — including deep-3 — so row B's `cache.has('deep-3')`
+      // would hit that poisoned null and fail immediately without ever
+      // attempting its own (perfectly resolvable) walk.
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-deep', clerkUserId: 'user_1', leagueId: 'deep-0', sport: 'football', seasonYear: 2025, leagueName: 'Deep', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+        { id: 'row-mid', clerkUserId: 'user_1', leagueId: 'deep-3', sport: 'football', seasonYear: 2022, leagueName: 'Deep (older row)', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        const match = /\/league\/deep-(\d)$/.exec(url);
+        if (match) {
+          const n = Number(match[1]);
+          return jsonResponse({
+            league_id: `deep-${n}`,
+            name: 'Deep',
+            sport: 'nfl',
+            season: String(2025 - n),
+            previous_league_id: n < 5 ? `deep-${n + 1}` : null,
+          });
+        }
+        return new Response(null, { status: 404 });
+      });
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1');
+
+      // Row A (deep-0) hits the cap and stays unresolved; row B (deep-3)
+      // still resolves to the true root despite deep-0's walk having visited
+      // deep-3 first and given up there.
+      expect(result.processed).toBe(2);
+      expect(result.resolved).toBe(1);
+      expect(result.unresolved).toBe(1);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledTimes(1);
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'deep-3', 2022, 'deep-5');
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalledWith('user_1', 'deep-0', 2025, expect.anything());
     });
   });
 
