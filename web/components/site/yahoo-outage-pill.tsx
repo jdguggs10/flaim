@@ -21,7 +21,7 @@ export function YahooOutagePill() {
         <button
           type="button"
           className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1 text-sm text-foreground transition-colors hover:bg-muted"
-          aria-label="Yahoo — connections are temporarily unavailable, more info"
+          aria-label="Yahoo: connections are temporarily unavailable, more info"
         >
           Yahoo
           <span
@@ -34,8 +34,8 @@ export function YahooOutagePill() {
         <p className="text-muted-foreground">
           Yahoo connections are temporarily unavailable while Yahoo reviews
           third-party access to its Fantasy Sports API. Flaim has applied for
-          approval — existing connections resume automatically once access
-          returns.
+          re-approval and we expect access to return soon. Existing
+          connections will resume automatically.
         </p>
         <Link
           href="/support#yahoo-outage-heading"
