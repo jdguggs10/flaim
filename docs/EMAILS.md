@@ -50,17 +50,19 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
 1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
 2. Run `corepack pnpm --dir web run email:dev` for local iteration.
 3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
-4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and set it only in the current shell as `RESEND_BROADCAST_SEGMENT_ID`. An audience ID is not a segment ID; never substitute one for the other.
+4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and set it in the subshell below. An audience ID is not a segment ID; never substitute one for the other.
 
    ```sh
    # From the repository root. Nothing here prints RESEND_API_KEY.
    (
-     set -a
-     . web/.env.local
-     set +a
-     export RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
+     unset RESEND_API_KEY
+     RESEND_API_KEY="$(
+       node --env-file=web/.env.local -e 'process.stdout.write(process.env.RESEND_API_KEY ?? "")'
+     )"
+     : "${RESEND_API_KEY:?Set RESEND_API_KEY in web/.env.local first}"
+     RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
 
-     corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
+     RESEND_API_KEY="$RESEND_API_KEY" corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
        --from "Flaim <updates@flaim.app>" \
        --reply-to support@flaim.app \
        --subject "Keepers, draft details, and more" \
@@ -72,7 +74,7 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
    )
    ```
 
-   `RESEND_API_KEY` and `RESEND_BROADCAST_SEGMENT_ID` exist only in that subshell and disappear when it exits. If using the same commands directly in an interactive shell instead, run `unset RESEND_API_KEY RESEND_BROADCAST_SEGMENT_ID` afterward. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
+   The subshell first clears any ambient `RESEND_API_KEY`, then Node's built-in dotenv loader reads that key from `web/.env.local`. The key is passed only to `pnpm` and the downloaded CLI; no other `web/.env.local` values are exported. `RESEND_BROADCAST_SEGMENT_ID` exists only in that subshell and is passed as an argument. Both disappear when it exits. If using the same commands directly in an interactive shell instead, run `unset RESEND_API_KEY RESEND_BROADCAST_SEGMENT_ID` afterward. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
 5. Use the Resend dashboard only to confirm the audience, send proof emails, and send after review. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
 6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
 
