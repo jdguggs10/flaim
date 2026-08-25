@@ -128,6 +128,9 @@ import { SyncStateStorage, type SyncProvider, type LeaseRenewalCheckpoint } from
 export type SleeperRecurringBackfillEnv = SleeperConnectEnv;
 
 const SNAPSHOT_PAGE_SIZE = 1000;
+// Deliberately small: throttles concurrent Sleeper API fan-out (each user in
+// a batch drives its own previous_league_id chain walk against the Sleeper
+// API in parallel — see the Promise.all below), not a leftover default.
 const BATCH_SIZE = 2;
 
 // Synthetic (clerk_user_id, provider) key for the backfill's single-flight

@@ -152,7 +152,12 @@ function describeSleeperResolutionFailure(leagueId: string, error: unknown): str
  */
 async function tryResolveRecurringLeagueId(
   leagueId: string,
-  cache: Map<string, string | null>,
+  // Positive-only caching (see below: every negative outcome is deliberately
+  // left uncached) makes a `null` cache value unreachable in practice, so the
+  // parameter is typed as `Map<string, string>` rather than
+  // `Map<string, string | null>` (PR #206 review, Claude bot minor) — every
+  // caller below already only ever constructs and populates one with strings.
+  cache: Map<string, string>,
   leagueCache: Map<string, Promise<SleeperApiLeague | null>>,
   maxDepth?: number
 ): Promise<RecurringLeagueResolutionResult> {
@@ -163,8 +168,11 @@ async function tryResolveRecurringLeagueId(
   while (currentLeagueId) {
     if (cache.has(currentLeagueId)) {
       // The shared per-run cache only ever holds POSITIVE resolutions (see
-      // below) — a `has()` hit here is always a resolved root.
-      const cached = cache.get(currentLeagueId) as string;
+      // below) — a `has()` hit here is always a resolved root. Non-null
+      // assertion only narrows away `undefined` (the `.has()` check above
+      // already proves the key is present); the value itself is always a
+      // `string`, never `null` (Map<string, string>).
+      const cached = cache.get(currentLeagueId)!;
       for (const pathLeagueId of path) {
         cache.set(pathLeagueId, cached);
       }
@@ -236,7 +244,7 @@ async function tryResolveRecurringLeagueId(
 
 async function resolveRecurringLeagueId(
   leagueId: string,
-  cache: Map<string, string | null>,
+  cache: Map<string, string>,
   leagueCache: Map<string, Promise<SleeperApiLeague | null>>
 ): Promise<string> {
   const resolution = await tryResolveRecurringLeagueId(leagueId, cache, leagueCache);
@@ -254,7 +262,7 @@ async function buildSleeperLeagueResponse(
   leagues: SleeperLeague[],
   archivedMap?: Map<string, ArchiveMode>
 ): Promise<SleeperLeagueResponse[]> {
-  const recurringIdCache = new Map<string, string | null>();
+  const recurringIdCache = new Map<string, string>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
   for (const league of leagues) {
     if (league.recurringLeagueId) {
@@ -390,7 +398,7 @@ export async function backfillSleeperRecurringIds(
   const storage = SleeperStorage.fromEnvironment(env);
   const leagues = await storage.getSleeperLeagues(userId, 'include-all');
 
-  const recurringIdCache = new Map<string, string | null>();
+  const recurringIdCache = new Map<string, string>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
 
   let processed = 0;
@@ -520,7 +528,7 @@ export async function resolveSleeperArchiveTarget(
 
   let recurringLeagueId = requestedRecurringId;
   if (freshest) {
-    const recurringIdCache = new Map<string, string | null>();
+    const recurringIdCache = new Map<string, string>();
     const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
     recurringLeagueId = await resolveRecurringLeagueId(freshest.leagueId, recurringIdCache, leagueCache);
   }
@@ -607,7 +615,7 @@ export async function refreshSleeperLeaguesForUsername(
   const currentLeagues = [...(nflLeagues ?? []), ...(nbaLeagues ?? [])];
   let totalSaved = 0;
   const seasonsDiscovered = new Set<string>();
-  const recurringIdCache = new Map<string, string | null>();
+  const recurringIdCache = new Map<string, string>();
   const leagueCache = new Map<string, Promise<SleeperApiLeague | null>>();
   const processedLeagueIds = new Set<string>();
 

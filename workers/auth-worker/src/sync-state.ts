@@ -30,6 +30,19 @@ export const SYNC_LEASE_TTL_MS = 120_000;
  */
 export const MAX_REPORTED_RETRY_AFTER_SECONDS = 3_600;
 
+/**
+ * The synthetic `clerk_user_id` used only by the Sleeper recurring-id
+ * backfill's single-flight lease (`sleeper-recurring-backfill.ts`'s
+ * `BACKFILL_LEASE_USER_ID`, kept as its own literal there rather than
+ * imported from here, so this file's hard-scoping can't be widened by a
+ * sibling file's constant). `acquireLease`'s strict-mode cleanup (PR #206
+ * review, round-6) checks a caller's `clerkUserId` against this literal
+ * before ever issuing a delete — not against whatever value the caller
+ * happened to pass — so a future strict-mode caller acquiring a lease for a
+ * real user can never trigger it, even by accident.
+ */
+const BACKFILL_SYNTHETIC_USER_ID = '__backfill__';
+
 export type SyncProvider = 'espn' | 'yahoo' | 'sleeper';
 export type SyncSource = 'web' | 'mcp' | 'extension' | 'scheduled';
 
@@ -156,6 +169,28 @@ export class SyncStateStorage {
    * Default-mode callers (every existing one) are unaffected: they still go
    * through the original `getRow` helper and its plain fail-to-null
    * behavior, unchanged.
+   *
+   * PR #206 review finding (Codex, round-6): the upsert above can succeed —
+   * creating a fresh, unowned row for a (clerk_user_id, provider) pair that
+   * didn't exist yet — and then the guarded update can itself throw (a
+   * transient PostgREST failure), or, once it matches zero rows, the
+   * diagnostic read that follows can throw. Either way this method returns
+   * `state: 'error'` without ever having set an owner, and the orchestrator
+   * that called `acquireLease` never runs its cleanup (`deleteLeaseRow` is
+   * only reached after a *held* lease). For the backfill's synthetic
+   * `__backfill__` key specifically, that stranded row has no owner and no
+   * expiry to ever age it out, so it sits in `provider_sync_state` forever,
+   * inflating the dashboard's `sync_7d` metric. Both strict-mode error exits
+   * below now call `cleanupUnownedSyntheticRow` first: a best-effort,
+   * conditional `DELETE` scoped to `(clerk_user_id, provider) AND
+   * sync_lease_owner IS NULL`. The `IS NULL` guard means it can never remove
+   * a lease genuinely held by another run (a non-null owner makes it match
+   * zero rows), and the hard-coded synthetic-user check inside that helper
+   * means it can never touch a real user's row even if some future caller
+   * adopts `{ onStorageError: 'fail' }` with a real clerk_user_id. Cleanup
+   * failures are logged and swallowed — this is a best-effort tidy-up, not
+   * part of the method's own success/failure contract, so the original error
+   * result is always returned unchanged.
    */
   async acquireLease(
     clerkUserId: string,
@@ -227,6 +262,7 @@ export class SyncStateStorage {
         if (getRowError) {
           const message = getRowError.message;
           console.error(`[sync-state] Diagnostic lease-state read failed closed (opt-in) for ${provider}:`, getRowError);
+          await this.cleanupUnownedSyntheticRow(clerkUserId, provider);
           return { acquired: false, state: 'error', errorMessage: message };
         }
         return buildBlockedResult((blockingRow as SyncStateRow) ?? null, nowMs);
@@ -238,9 +274,47 @@ export class SyncStateStorage {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[sync-state] Lease acquisition failed ${failClosed ? 'closed (opt-in)' : 'open'} for ${provider}:`, error);
       if (failClosed) {
+        await this.cleanupUnownedSyntheticRow(clerkUserId, provider);
         return { acquired: false, state: 'error', errorMessage: message };
       }
       return { acquired: true };
+    }
+  }
+
+  /**
+   * Best-effort tidy-up for the strict `acquireLease` error paths (PR #206
+   * review finding, round-6): deletes the row for `(clerkUserId, provider)`
+   * ONLY if it is currently unowned (`sync_lease_owner IS NULL`) — never a
+   * row genuinely held by another run, since a non-null owner makes the
+   * conditional `DELETE` match zero rows regardless of what this call site
+   * believes about the current state.
+   *
+   * Hard-scoped to the backfill's literal synthetic user id, not to
+   * whatever `clerkUserId` the caller passed, even though today the strict
+   * overload only ever gets called with it: this is the design that "cannot
+   * ever touch real-user rows even if a future caller adopts strict mode"
+   * (PR #206 review) — a future strict-mode caller acquiring a lease for a
+   * REAL clerk_user_id would silently no-op here instead of risking a
+   * conditional delete against real refresh/cooldown telemetry.
+   *
+   * Failures are logged and swallowed: this cleanup is strictly best-effort
+   * and must never change what `acquireLease` reports to its caller.
+   */
+  private async cleanupUnownedSyntheticRow(clerkUserId: string, provider: SyncProvider): Promise<void> {
+    if (clerkUserId !== BACKFILL_SYNTHETIC_USER_ID) return;
+    try {
+      const { error } = await this.supabase
+        .from('provider_sync_state')
+        .delete()
+        .eq('clerk_user_id', clerkUserId)
+        .eq('provider', provider)
+        .is('sync_lease_owner', null);
+      if (error) throw error;
+    } catch (cleanupError) {
+      console.warn(
+        `[sync-state] Best-effort cleanup of an unowned synthetic lease row failed after a strict-mode acquisition error for ${provider}:`,
+        cleanupError
+      );
     }
   }
 
@@ -340,47 +414,19 @@ export class SyncStateStorage {
   }
 
   /**
-   * Release this owner's lease outright — clears sync_lease_owner/expires_at
-   * back to null without setting a cooldown marker or touching telemetry.
-   * For callers using the lease purely as a single-flight concurrency guard
-   * (e.g. the FLA-168 Sleeper recurring-id backfill's synthetic pseudo-user
-   * lease) rather than a provider refresh with its own cooldown semantics.
-   * Owner-guarded so a stale caller cannot release another request's lease.
-   * Storage errors fail open (no-op) — same posture as acquireLease/settle.
-   */
-  async release(clerkUserId: string, provider: SyncProvider, ownerId: string): Promise<void> {
-    try {
-      const { error } = await this.supabase
-        .from('provider_sync_state')
-        .update({
-          sync_lease_owner: null,
-          sync_lease_expires_at: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('clerk_user_id', clerkUserId)
-        .eq('provider', provider)
-        .eq('sync_lease_owner', ownerId);
-      if (error) throw error;
-    } catch (error) {
-      console.error(`[sync-state] Lease release failed open for ${provider}:`, error);
-    }
-  }
-
-  /**
    * Delete this owner's row outright, rather than clearing it back to an
-   * unheld state like release() does. For a caller whose (clerk_user_id,
-   * provider) key is a synthetic pseudo-user rather than a real refresh
-   * target (the FLA-168 Sleeper recurring-id backfill's single-flight lease)
-   * and so has no cooldown/telemetry history worth keeping between runs — a
-   * row left behind after release() would sit in `provider_sync_state`
-   * indefinitely, inflating `sync_7d.users_attempted` and risking a phantom
-   * Sleeper provider entry in `sync_recent` (audit FLA-168 Fix 3).
+   * unheld state. For a caller whose (clerk_user_id, provider) key is a
+   * synthetic pseudo-user rather than a real refresh target (the FLA-168
+   * Sleeper recurring-id backfill's single-flight lease) and so has no
+   * cooldown/telemetry history worth keeping between runs — a row left
+   * behind indefinitely would sit in `provider_sync_state`, inflating
+   * `sync_7d.users_attempted` and risking a phantom Sleeper provider entry
+   * in `sync_recent` (audit FLA-168 Fix 3).
    *
-   * Do NOT use this for a real user/provider row: unlike release(), which
-   * only clears the lease fields, this permanently destroys the row's
-   * last_success_at/cooldown history. Owner-guarded exactly like release() so
-   * a lease already stolen by a new holder (e.g. after a failed extendLease)
-   * is left untouched instead of being deleted out from under it.
+   * Do NOT use this for a real user/provider row: this permanently destroys
+   * the row's last_success_at/cooldown history. Owner-guarded so a lease
+   * already stolen by a new holder (e.g. after a failed extendLease) is left
+   * untouched instead of being deleted out from under it.
    *
    * Unlike the rest of this class, storage errors are reported to the caller
    * (returns `false`) rather than swallowed (round-3 FLA-168 audit finding):

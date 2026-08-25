@@ -21,7 +21,7 @@ function fakeSupabase(results: unknown[]) {
     const recorded: Record<string, unknown[][]> = {};
     calls.push(recorded);
     const chain: Record<string, unknown> = {};
-    for (const method of ['upsert', 'update', 'delete', 'eq', 'or', 'select', 'single']) {
+    for (const method of ['upsert', 'update', 'delete', 'eq', 'or', 'is', 'select', 'single']) {
       chain[method] = vi.fn((...args: unknown[]) => {
         (recorded[method] ??= []).push(args);
         return chain;
@@ -216,6 +216,135 @@ describe('SyncStateStorage.acquireLease', () => {
   });
 });
 
+// PR #206 review finding (Codex, round-6): the strict path's guarded update
+// can throw AFTER the upsert already created a fresh, unowned row for
+// (clerk_user_id, provider) — and the strict path then returns `state:
+// 'error'` without ever setting an owner. Because the orchestrator only ever
+// calls deleteLeaseRow after a *held* lease, that stranded row would
+// otherwise sit in provider_sync_state forever, polluting the dashboard's
+// sync_7d metric. acquireLease's strict error exits now attempt a
+// best-effort, conditional cleanup DELETE scoped to `(clerk_user_id,
+// provider) AND sync_lease_owner IS NULL` before returning.
+describe('SyncStateStorage.acquireLease strict-mode unowned-row cleanup (PR #206 review)', () => {
+  it('deletes the unowned synthetic row when the guarded update throws in strict mode, and still reports state error', async () => {
+    const { client, calls } = fakeSupabase([
+      { error: null },                                              // upsert row-exists
+      { error: new Error('supabase down') },                        // guarded update throws
+      { data: [{ clerk_user_id: '__backfill__' }], error: null },   // cleanup delete: row was unowned, deleted
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('error');
+      if (result.state === 'error') {
+        expect(result.errorMessage).toContain('supabase down');
+      }
+    }
+
+    // Cleanup delete conditionally scoped to (clerk_user_id, provider) AND
+    // sync_lease_owner IS NULL — never an unconditional delete.
+    expect(calls).toHaveLength(3);
+    expect(calls[2].delete).toHaveLength(1);
+    expect(calls[2].eq?.map((args) => args)).toContainEqual(['clerk_user_id', '__backfill__']);
+    expect(calls[2].eq?.map((args) => args)).toContainEqual(['provider', 'sleeper']);
+    expect(calls[2].is?.map((args) => args)).toContainEqual(['sync_lease_owner', null]);
+  });
+
+  it('does not remove a row genuinely held by another run: the conditional delete matches zero rows, and the original error is returned unchanged', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client, calls } = fakeSupabase([
+      { error: null },
+      { error: new Error('supabase down') },
+      { data: [], error: null }, // cleanup delete: sync_lease_owner IS NULL matched nothing — the row is owned
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('error');
+      if (result.state === 'error') {
+        expect(result.errorMessage).toContain('supabase down');
+      }
+    }
+    // Same conditional guard is used regardless of what actually happened at
+    // the DB layer — it's the `IS NULL` filter, not client-side knowledge,
+    // that keeps an owned row safe.
+    expect(calls[2].is?.map((args) => args)).toContainEqual(['sync_lease_owner', null]);
+    // A zero-row match is a clean no-op, not a cleanup failure.
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it('logs a warning and still returns the original error when the cleanup delete itself fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { client } = fakeSupabase([
+      { error: null },
+      { error: new Error('supabase down') },
+      { error: new Error('cleanup delete failed') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('error');
+      if (result.state === 'error') {
+        // The ORIGINAL acquisition error, not the cleanup failure.
+        expect(result.errorMessage).toContain('supabase down');
+      }
+    }
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain('[sync-state]');
+
+    warnSpy.mockRestore();
+  });
+
+  it('also attempts cleanup when the diagnostic read itself fails (the other strict-mode error exit)', async () => {
+    const { client, calls } = fakeSupabase([
+      { error: null },                                             // upsert row-exists
+      { data: [], error: null },                                   // guarded update matched zero rows
+      { data: null, error: new Error('supabase down') },           // diagnostic read itself fails
+      { data: [{ clerk_user_id: '__backfill__' }], error: null },  // cleanup delete
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('error');
+    }
+    expect(calls).toHaveLength(4);
+    expect(calls[3].delete).toHaveLength(1);
+    expect(calls[3].is?.map((args) => args)).toContainEqual(['sync_lease_owner', null]);
+  });
+
+  it('never attempts cleanup for a non-synthetic clerk_user_id, even in strict mode (hard-scoped to the backfill user)', async () => {
+    const { client, calls } = fakeSupabase([
+      { error: null },
+      { error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('real_user_123', 'espn', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('error');
+    }
+    // No third `.from()` call — the hard-coded synthetic-user check short-
+    // circuits before any delete is ever issued against a real user's row.
+    expect(calls).toHaveLength(2);
+  });
+});
+
 describe('SyncStateStorage.extendLease', () => {
   it('renews an owned lease, guarded to the current owner', async () => {
     const { client, calls } = fakeSupabase([
@@ -367,32 +496,6 @@ describe('SyncStateStorage.settle', () => {
       cooldownSeconds: 75,
       syncSource: 'web',
     })).resolves.toBeUndefined();
-  });
-});
-
-describe('SyncStateStorage.release', () => {
-  it('clears the lease owner and expiry, guarded to the current owner', async () => {
-    const { client, calls } = fakeSupabase([
-      { data: [{ clerk_user_id: 'user_1' }], error: null },
-    ]);
-    const storage = new SyncStateStorage(client);
-
-    await storage.release('__backfill__', 'sleeper', 'owner-1');
-
-    const update = calls[0].update?.[0]?.[0] as Record<string, unknown>;
-    expect(update.sync_lease_owner).toBeNull();
-    expect(update.sync_lease_expires_at).toBeNull();
-    // Owner guard: only the current lease holder may release it.
-    expect(calls[0].eq?.map((args) => args)).toContainEqual(['sync_lease_owner', 'owner-1']);
-  });
-
-  it('swallows storage errors (fail open)', async () => {
-    const { client } = fakeSupabase([
-      { error: new Error('supabase down') },
-    ]);
-    const storage = new SyncStateStorage(client);
-
-    await expect(storage.release('__backfill__', 'sleeper', 'owner-1')).resolves.toBeUndefined();
   });
 });
 
