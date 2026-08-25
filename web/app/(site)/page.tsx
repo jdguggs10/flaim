@@ -182,6 +182,15 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         initialPresetId={initialPresetId ?? null}
       />
 
+      {/* FLA-290: temporary note pointing out the football demo lanes are
+          staged but not yet live. Self-contained — safe to delete this
+          paragraph once ESPN/Sleeper football targets go live in the
+          live-demo capabilities feed. */}
+      <p className="mx-auto max-w-md px-4 pb-8 text-center text-sm text-muted-foreground">
+        Football demos are on the way — ESPN and Sleeper league previews land
+        as soon as drafts wrap up.
+      </p>
+
       <section
         className="px-4 pb-10 pt-2 sm:px-6 lg:px-8"
         aria-label="Flaim platform, sport, and AI support"
