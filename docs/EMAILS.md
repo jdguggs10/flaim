@@ -112,6 +112,52 @@ Clerk is the source of truth for user identity. Resend is the product email audi
 
 The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and acknowledges verified Clerk events even if downstream Resend work fails, so Resend outages do not create Clerk webhook retry storms.
 
+## Delivery operations and recovery
+
+Email operations emit compact JSON records to Vercel structured logs. The stable
+event names are `email.welcome_event_failed`, `email.contact_sync_failed`,
+`email.send_failed`, `email.bounced`, `email.complained`, `email.failed`, and
+`email.delivery_delayed`. Webhook verification failures use
+`email.webhook_verification_failed`. These records include provider-safe IDs and
+failure categories but never recipient addresses, raw webhook bodies, signatures,
+or API keys.
+
+When a Resend welcome event or contact sync fails after a verified Clerk webhook,
+Flaim stores the matching retry marker in that user's Clerk private metadata at
+`flaim_email_ops.welcomeEvent` or `flaim_email_ops.contactSync`. Clerk's metadata
+write is a deep merge, so unrelated private metadata is retained. A retry marker
+is never refreshed when it already exists, which prevents marker-caused
+`user.updated` webhooks from looping during an outage. A successful contact sync
+clears only `contactSync`; it cannot clear a failed `welcomeEvent` marker.
+
+Direct `resend.emails.send` calls pass the SDK request option
+`{ idempotencyKey: '<event-type>/<user-id>' }`. Resend currently supports that
+provider-side idempotency option for email endpoints, but not for
+`events.send`. Welcome automation events therefore rely on their Clerk retry
+marker and the flagged recovery command below instead of an unsupported SDK
+option.
+
+### Resend delivery-feedback webhook
+
+`POST /api/webhooks/resend` verifies `svix-id`, `svix-timestamp`, and
+`svix-signature` against the exact raw request text with
+`RESEND_WEBHOOK_SIGNING_SECRET`. Do not parse and stringify the body before
+verification because even whitespace changes invalidate the signature. The route
+records `email.bounced`, `email.complained`, `email.failed`, and
+`email.delivery_delayed`; delivery feedback is logged only and does not mutate
+Clerk users or Resend suppressions.
+
+Required manual follow-up for Gerry, not an automated deploy step:
+
+1. Create a Resend webhook for `https://flaim.app/api/webhooks/resend` that sends
+   `email.bounced`, `email.complained`, `email.failed`, and
+   `email.delivery_delayed`.
+2. Set that endpoint's signing secret as `RESEND_WEBHOOK_SIGNING_SECRET` in the
+   Vercel environment before enabling the webhook.
+3. Send an intentional test through the configured Resend workflow and confirm a
+   structured delivery event in Vercel logs. Do not use a production recipient
+   without approval.
+
 The maintenance contact sync stores only email, first name, and last name. It updates first and creates only if Resend reports the contact is missing, avoiding a separate contact-existence preflight. It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, repaired contacts are assigned to that Resend Segment for future Broadcast targeting. Avoid writing custom Resend contact properties unless those properties have first been created in Resend.
 
 The first automated product email is a Resend Automation for new-user welcome email. Flaim does not queue, schedule, create the signup contact, or send this email itself. After a verified Clerk `user.created` webhook passes the `RESEND_WELCOME_AUTOMATION_ENABLED=true` gate, it emits `flaim.user_created` with the user's email and greeting payload. Resend identifies the contact by email, automatically creates a missing contact, adds the contact to the configured Segment, sends the templated welcome email, handles unsubscribe, and records the automation run history. Contact name enrichment remains on the `user.updated` repair path and the backfill script.
@@ -141,6 +187,41 @@ The script requires `CLERK_SECRET_KEY` for dry-runs and also requires `RESEND_CO
 ```sh
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --apply --max-users 1
 ```
+
+To inspect only users with failed Clerk email-operation markers, keeping the
+default dry-run behavior:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --flagged-only
+```
+
+Apply the marked recovery only after reviewing that output:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --flagged-only --apply
+```
+
+The apply command retries contact syncs and failed welcome events. Retrying a
+welcome event can deliver a late welcome email, so it requires an explicit
+`--apply`, does not run automatically, and should be limited with
+`--max-users` when used for a controlled recovery.
+
+### Read-only suppression reconciliation
+
+Resend's team-level suppression list protects sender reputation after bounces or
+complaints. Flaim does not remove suppressions automatically. The reconciliation
+script pages through the current Resend Suppressions API, compares masked
+addresses with Clerk primary emails, and reports matches without writing to
+either provider:
+
+```sh
+corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
+```
+
+It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`, where the
+Resend key has read access to Suppressions. The command is always read-only,
+including its default dry-run mode. Any suppression removal must be reviewed and
+performed manually in Resend after the underlying delivery problem is resolved.
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 

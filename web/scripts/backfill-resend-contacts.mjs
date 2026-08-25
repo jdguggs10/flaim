@@ -6,11 +6,14 @@ import { Resend } from "resend";
 const CLERK_USERS_URL = "https://api.clerk.com/v1/users";
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
+const EMAIL_RETRY_METADATA_KEY = "flaim_email_ops";
+const WELCOME_AUTOMATION_EVENT_NAME = "flaim.user_created";
 
 export function parseArgs(argv) {
   const args = {
     apply: false,
     delayMs: 0,
+    flaggedOnly: false,
     limit: DEFAULT_LIMIT,
     maxUsers: Number.POSITIVE_INFINITY,
     offset: 0,
@@ -23,6 +26,11 @@ export function parseArgs(argv) {
 
     if (arg === "--apply") {
       args.apply = true;
+      continue;
+    }
+
+    if (arg === "--flagged-only") {
+      args.flaggedOnly = true;
       continue;
     }
 
@@ -95,6 +103,7 @@ Apply to one eligible user:
 
 Options:
   --apply              Write contacts to Resend. Omit for dry-run.
+  --flagged-only       Process only Clerk users with a failed email-operation marker.
   --delay-ms <n>       Wait between Resend writes. Defaults to 0.
   --limit <n>          Clerk page size. Defaults to ${DEFAULT_LIMIT}, max ${MAX_LIMIT}.
   --max-users <n>      Stop after scanning this many Clerk users.
@@ -102,12 +111,19 @@ Options:
   --segment-id <id>    Resend Segment ID. Defaults to RESEND_CONTACT_SEGMENT_ID.
 
 Resend rate limits apply. Use --delay-ms, --max-users, and --offset to pace larger backfills.
+
+When used with --apply, --flagged-only retries failed welcome events too. That can
+deliver a late welcome email, so review the dry-run output before applying it.
 `);
 }
 
 export function cleanString(value) {
   const cleaned = typeof value === "string" ? value.trim() : "";
   return cleaned || null;
+}
+
+export function resolveResendEventsApiKey(eventsApiKey, contactsApiKey) {
+  return cleanString(eventsApiKey) ?? cleanString(contactsApiKey);
 }
 
 // Keep primary email selection aligned with web/lib/server/resend-contact-sync.ts.
@@ -156,6 +172,38 @@ export function maskEmail(email) {
   return `${prefix}${"*".repeat(Math.max(local.length - 2, 1))}@${domain}`;
 }
 
+export function getEmailRetryMarkers(user) {
+  const privateMetadata = user?.private_metadata ?? user?.privateMetadata;
+  const retryMetadata = privateMetadata?.[EMAIL_RETRY_METADATA_KEY];
+
+  if (!retryMetadata || typeof retryMetadata !== "object" || Array.isArray(retryMetadata)) {
+    return { contactSync: false, welcomeEvent: false };
+  }
+
+  return {
+    contactSync:
+      typeof retryMetadata.contactSync === "object" && retryMetadata.contactSync !== null,
+    welcomeEvent:
+      typeof retryMetadata.welcomeEvent === "object" && retryMetadata.welcomeEvent !== null,
+  };
+}
+
+function getWelcomeGivenName(value) {
+  const cleaned = cleanString(value);
+  if (!cleaned) return "there";
+
+  const safeName = cleaned
+    .replace(/<[^>]*>/g, "")
+    .replace(/[<>]/g, "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80)
+    .trim();
+
+  return safeName || "there";
+}
+
 async function listClerkUsers({ clerkSecretKey, limit, offset }) {
   const url = new URL(CLERK_USERS_URL);
   url.searchParams.set("limit", String(limit));
@@ -188,6 +236,37 @@ async function listClerkUsers({ clerkSecretKey, limit, offset }) {
   }
 
   throw new Error("Clerk user list returned an unexpected response shape");
+}
+
+export async function clearEmailRetryMarker({
+  clerkSecretKey,
+  fetchImpl = fetch,
+  kind,
+  userId,
+}) {
+  const response = await fetchImpl(`${CLERK_USERS_URL}/${encodeURIComponent(userId)}/metadata`, {
+    body: JSON.stringify({
+      private_metadata: {
+        [EMAIL_RETRY_METADATA_KEY]: {
+          [kind]: null,
+        },
+      },
+    }),
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${clerkSecretKey}`,
+      "Content-Type": "application/json",
+    },
+    method: "PATCH",
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    const message = body?.errors?.[0]?.message ?? body?.message ?? response.statusText;
+    return { error: `Clerk retry marker clear failed: ${response.status} ${message}`, ok: false };
+  }
+
+  return { ok: true };
 }
 
 async function ensureContactSegment(resend, email, segmentId) {
@@ -242,25 +321,151 @@ export async function syncContact({ resend, segmentId, user }) {
   return { ok: true, action: "updated", email };
 }
 
+export async function sendWelcomeRetryEvent({ resend, user }) {
+  const email = getPrimaryEmail(user);
+  if (!email) {
+    return { error: "Clerk user has no email address", ok: false, skipped: true };
+  }
+
+  if (hasExplicitUnverifiedStatus(getPrimaryEmailAddress(user))) {
+    return { error: "Clerk user primary email is not verified", ok: false, skipped: true };
+  }
+
+  try {
+    const { data, error } = await resend.events.send({
+      email,
+      event: WELCOME_AUTOMATION_EVENT_NAME,
+      payload: {
+        clerk_user_id: user.id,
+        given_name: getWelcomeGivenName(user.first_name),
+        source: "backfill-resend-contacts.flagged-only",
+      },
+    });
+
+    if (error) {
+      return { error: getResendErrorMessage(error), ok: false };
+    }
+
+    return { event: data?.event ?? WELCOME_AUTOMATION_EVENT_NAME, ok: true };
+  } catch (error) {
+    return { error: getResendErrorMessage(error), ok: false };
+  }
+}
+
+/**
+ * Retry only operations which Clerk previously marked as failed. A marker is
+ * cleared only after its matching Resend operation succeeds. It is deliberately
+ * never cleared by an unrelated contact sync.
+ */
+export async function retryFlaggedUser({
+  clearMarker = clearEmailRetryMarker,
+  clerkSecretKey,
+  resendContacts,
+  resendEvents,
+  segmentId,
+  user,
+}) {
+  const markers = getEmailRetryMarkers(user);
+  const results = [];
+
+  if (markers.contactSync) {
+    if (!resendContacts) {
+      results.push({ error: "RESEND_CONTACTS_API_KEY is required", kind: "contactSync", ok: false });
+    } else {
+      let result;
+      try {
+        result = await syncContact({ resend: resendContacts, segmentId, user });
+      } catch (error) {
+        // A network/SDK rejection must retain this marker and let the next
+        // marked operation (or user) continue through the sweep.
+        results.push({
+          error: getResendErrorMessage(error),
+          kind: "contactSync",
+          ok: false,
+        });
+        result = null;
+      }
+
+      if (!result) {
+        // The failure was recorded above; do not clear the marker.
+      } else if (!result.ok) {
+        results.push({ ...result, kind: "contactSync" });
+      } else {
+        try {
+          const cleared = await clearMarker({
+            clerkSecretKey,
+            kind: "contactSync",
+            userId: user.id,
+          });
+          results.push(cleared.ok ? { kind: "contactSync", ok: true } : { ...cleared, kind: "contactSync" });
+        } catch (error) {
+          results.push({
+            error: getResendErrorMessage(error),
+            kind: "contactSync",
+            ok: false,
+          });
+        }
+      }
+    }
+  }
+
+  if (markers.welcomeEvent) {
+    if (!resendEvents) {
+      results.push({ error: "RESEND_EVENTS_API_KEY or RESEND_CONTACTS_API_KEY is required", kind: "welcomeEvent", ok: false });
+    } else {
+      const result = await sendWelcomeRetryEvent({ resend: resendEvents, user });
+      if (!result.ok) {
+        results.push({ ...result, kind: "welcomeEvent" });
+      } else {
+        try {
+          const cleared = await clearMarker({
+            clerkSecretKey,
+            kind: "welcomeEvent",
+            userId: user.id,
+          });
+          results.push(cleared.ok ? { kind: "welcomeEvent", ok: true } : { ...cleared, kind: "welcomeEvent" });
+        } catch (error) {
+          results.push({
+            error: getResendErrorMessage(error),
+            kind: "welcomeEvent",
+            ok: false,
+          });
+        }
+      }
+    }
+  }
+
+  return results;
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const clerkSecretKey = process.env.CLERK_SECRET_KEY;
-  const resendContactsApiKey = process.env.RESEND_CONTACTS_API_KEY;
+  const resendContactsApiKey = cleanString(process.env.RESEND_CONTACTS_API_KEY);
 
   if (!clerkSecretKey) {
     throw new Error("CLERK_SECRET_KEY is required");
   }
 
-  if (args.apply && !resendContactsApiKey) {
+  if (args.apply && !args.flaggedOnly && !resendContactsApiKey) {
     throw new Error("RESEND_CONTACTS_API_KEY is required when --apply is set");
   }
 
-  const resend = args.apply ? new Resend(resendContactsApiKey) : null;
+  const resendContacts = args.apply && resendContactsApiKey ? new Resend(resendContactsApiKey) : null;
+  const resendEventsApiKey = resolveResendEventsApiKey(
+    process.env.RESEND_EVENTS_API_KEY,
+    resendContactsApiKey,
+  );
+  const resendEvents = args.apply && resendEventsApiKey ? new Resend(resendEventsApiKey) : null;
   const stats = {
     created: 0,
     dryRunEligible: 0,
     failed: 0,
+    flagged: 0,
+    retryCleared: 0,
+    retryRetained: 0,
     scanned: 0,
+    skippedUnflagged: 0,
     skippedNoEmail: 0,
     skippedUnverified: 0,
     updated: 0,
@@ -280,8 +485,41 @@ async function main() {
 
       const primaryEmailAddress = getPrimaryEmailAddress(user);
       const email = getPrimaryEmail(user);
+      const retryMarkers = getEmailRetryMarkers(user);
+      const isFlagged = retryMarkers.contactSync || retryMarkers.welcomeEvent;
 
-      if (!email) {
+      if (args.flaggedOnly && !isFlagged) {
+        stats.skippedUnflagged += 1;
+      } else if (args.flaggedOnly && !args.apply) {
+        stats.flagged += 1;
+        const kinds = [
+          ...(retryMarkers.contactSync ? ["contactSync"] : []),
+          ...(retryMarkers.welcomeEvent ? ["welcomeEvent"] : []),
+        ];
+        console.log(`dry-run flagged ${user.id} ${kinds.join(",")}`);
+      } else if (args.flaggedOnly) {
+        stats.flagged += 1;
+        const results = await retryFlaggedUser({
+          clerkSecretKey,
+          resendContacts,
+          resendEvents,
+          segmentId: args.segmentId,
+          user,
+        });
+
+        for (const result of results) {
+          if (result.ok) {
+            stats.retryCleared += 1;
+            console.log(`retry-cleared ${result.kind} ${user.id}`);
+          } else {
+            stats.retryRetained += 1;
+            stats.failed += 1;
+            console.error(`retry-retained ${result.kind} ${user.id}: ${result.error}`);
+          }
+        }
+
+        await delay(args.delayMs);
+      } else if (!email) {
         stats.skippedNoEmail += 1;
       } else if (hasExplicitUnverifiedStatus(primaryEmailAddress)) {
         stats.skippedUnverified += 1;
@@ -289,7 +527,7 @@ async function main() {
         stats.dryRunEligible += 1;
         console.log(`dry-run eligible ${maskEmail(email)} ${user.id}`);
       } else {
-        const result = await syncContact({ resend, segmentId: args.segmentId, user });
+        const result = await syncContact({ resend: resendContacts, segmentId: args.segmentId, user });
         if (result.ok) {
           if (result.action === "created") {
             stats.created += 1;
@@ -314,7 +552,12 @@ async function main() {
     if (page.totalCount !== null && offset >= page.totalCount) break;
   }
 
-  console.log(JSON.stringify({ apply: args.apply, segmentId: args.segmentId, stats }, null, 2));
+  console.log(JSON.stringify({
+    apply: args.apply,
+    flaggedOnly: args.flaggedOnly,
+    segmentId: args.segmentId,
+    stats,
+  }, null, 2));
 
   if (stats.failed > 0) {
     process.exitCode = 1;

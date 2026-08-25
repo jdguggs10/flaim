@@ -4,6 +4,7 @@ import { emailBrand } from "@/emails/brand";
 import EspnSetupLinkEmail from "@/emails/espn-setup-link";
 import LeagueConnectedEmail from "@/emails/league-connected";
 import WelcomeEmail from "@/emails/welcome";
+import { logEmailOps } from "@/lib/server/email-ops";
 import { getResendClient, getResendErrorMessage } from "@/lib/server/resend-client";
 
 type ProductEmailTemplate = "welcome" | "league-connected" | "espn-setup-link";
@@ -16,10 +17,12 @@ interface ProductEmailResult {
 }
 
 interface SendProductEmailParams {
+  eventType: string;
   react: React.ReactElement;
   subject: string;
   template: ProductEmailTemplate;
   to: string;
+  userId: string;
 }
 
 interface SendWelcomeEmailParams {
@@ -27,6 +30,7 @@ interface SendWelcomeEmailParams {
   leaguesUrl: string;
   to: string;
   unsubscribeUrl: string;
+  userId: string;
 }
 
 interface SendLeagueConnectedEmailParams {
@@ -35,12 +39,14 @@ interface SendLeagueConnectedEmailParams {
   platform?: string;
   to: string;
   unsubscribeUrl: string;
+  userId: string;
 }
 
 interface SendEspnSetupLinkEmailParams {
   extensionUrl: string;
   leaguesUrl: string;
   to: string;
+  userId: string;
 }
 
 function isProductEmailEnabled() {
@@ -48,10 +54,12 @@ function isProductEmailEnabled() {
 }
 
 async function sendProductEmail({
+  eventType,
   react,
   subject,
   template,
   to,
+  userId,
 }: SendProductEmailParams): Promise<ProductEmailResult> {
   if (!isProductEmailEnabled()) {
     return { ok: false, skipped: true, error: "Product email sending is disabled" };
@@ -63,25 +71,40 @@ async function sendProductEmail({
   }
 
   try {
-    const { data, error } = await client.emails.send({
-      from: emailBrand.senders.product,
-      react,
-      replyTo: emailBrand.senders.replyTo,
-      subject,
-      tags: [{ name: "template", value: template }],
-      to,
-    });
+    const { data, error } = await client.emails.send(
+      {
+        from: emailBrand.senders.product,
+        react,
+        replyTo: emailBrand.senders.replyTo,
+        subject,
+        tags: [{ name: "template", value: template }],
+        to,
+      },
+      { idempotencyKey: `${eventType}/${userId}` },
+    );
 
     if (error) {
       const message = getResendErrorMessage(error);
-      console.error(`Resend ${template} email failed:`, message);
+      logEmailOps("email.send_failed", {
+        error: message,
+        provider: "resend",
+        reason: "resend_email_send_failed",
+        source: `product.${template}`,
+        userId,
+      });
       return { ok: false, error: message };
     }
 
     return { ok: true, id: data?.id };
   } catch (error) {
     const message = getResendErrorMessage(error);
-    console.error(`Resend ${template} email failed:`, message);
+    logEmailOps("email.send_failed", {
+      error: message,
+      provider: "resend",
+      reason: "resend_email_send_failed",
+      source: `product.${template}`,
+      userId,
+    });
     return { ok: false, error: message };
   }
 }
@@ -91,8 +114,10 @@ export function sendWelcomeEmail({
   leaguesUrl,
   to,
   unsubscribeUrl,
+  userId,
 }: SendWelcomeEmailParams) {
   return sendProductEmail({
+    eventType: "welcome",
     react: (
       <WelcomeEmail
         firstName={firstName}
@@ -103,6 +128,7 @@ export function sendWelcomeEmail({
     subject: "Welcome to Flaim",
     template: "welcome",
     to,
+    userId,
   });
 }
 
@@ -112,10 +138,12 @@ export function sendLeagueConnectedEmail({
   platform,
   to,
   unsubscribeUrl,
+  userId,
 }: SendLeagueConnectedEmailParams) {
   const resolvedLeagueName = leagueName || "Your league";
 
   return sendProductEmail({
+    eventType: "league-connected",
     react: (
       <LeagueConnectedEmail
         aiDocsUrl={aiDocsUrl}
@@ -127,6 +155,7 @@ export function sendLeagueConnectedEmail({
     subject: `${resolvedLeagueName} is ready in Flaim`,
     template: "league-connected",
     to,
+    userId,
   });
 }
 
@@ -134,13 +163,16 @@ export function sendEspnSetupLinkEmail({
   extensionUrl,
   leaguesUrl,
   to,
+  userId,
 }: SendEspnSetupLinkEmailParams) {
   return sendProductEmail({
+    eventType: "espn-setup-link",
     react: (
       <EspnSetupLinkEmail extensionUrl={extensionUrl} leaguesUrl={leaguesUrl} />
     ),
     subject: "Your ESPN setup link for Flaim",
     template: "espn-setup-link",
     to,
+    userId,
   });
 }

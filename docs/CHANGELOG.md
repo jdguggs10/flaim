@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Email Reliability and Delivery Feedback (FLA-295, FLA-298)
+
+- **Added**: Clerk-to-Resend welcome-event and contact-sync failures now emit stable, privacy-bounded structured email-operation logs and leave independent retry markers in Clerk private metadata. The flagged-only backfill mode can inspect or explicitly recover those markers without treating an unrelated contact-sync success as a welcome-event recovery.
+- **Added**: A signature-verified Resend delivery-feedback route records bounced, complained, failed, and delayed delivery events from the exact raw Svix body; a read-only paginated suppression reconciliation script compares masked Resend suppression addresses to Clerk users and has no write mode.
+- **Changed**: Direct Resend email sends accept a caller-supplied semantic idempotency key only for genuinely one-time events. Repeatable ESPN setup-link requests omit the key so a legitimate resend is not provider replay-cached. Flagged welcome recovery checks for the automation-created contact before resending and can be deliberately overridden with `--force-resend`; custom automation events remain outside Resend's email idempotency support.
+
 ### Sleeper Backfill Chain-Walk Depth Cap (FLA-303)
 - **Changed**: The Sleeper recurring-id backfill's chain-walk depth cap is now its own constant, `BACKFILL_MAX_CHAIN_DEPTH` (10), split from `MAX_HISTORY_YEARS` (still 5 — discovery's per-league history-persistence cap is a product choice and is unchanged). A classification of all 438 unresolved prod rows (2026-08-25) showed the previous shared 5-hop walk cap misclassifying legitimately long-running leagues, which grow more common every season; nearly all unresolved rows are upstream Sleeper 404s no cap can fix, so the walk cap only needs to stop malformed non-cyclic chains.
 

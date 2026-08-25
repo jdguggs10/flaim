@@ -22,6 +22,7 @@ export type ClerkUserEmailSyncPayload = {
   first_name?: string | null;
   id: string;
   last_name?: string | null;
+  private_metadata?: Record<string, unknown> | null;
   primary_email_address_id?: string | null;
 };
 
