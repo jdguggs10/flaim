@@ -19,7 +19,7 @@ Resend's verified domain is `flaim.app`. The `send.flaim.app` DNS records are fo
 - Keep emails quiet and utilitarian: white card, light gray page background, one primary action.
 - Mirror the website tokens in `web/app/globals.css`, but use email-safe hex values in `web/emails/brand.ts`.
 - Use shared colors, type, button styling, support footer, and plain-language copy across providers.
-- Resend product emails use the Flaim mark at 28px next to the text wordmark in the header.
+- Resend product emails use the Flaim mark at 36px next to the text wordmark in the header. Header content starts 29px from the card edge, matching the card's 1px border plus 28px inner padding.
 - Clerk auth emails use the dashboard application logo at 72px with the `FLAIM FANTASY` label. Keep this provider-specific because Clerk/Revolvapp controls the final email HTML.
 - Use system fonts, 8px containers, 6px buttons, and plain-language copy.
 - Do not add promotional hero art to auth or security emails.
@@ -43,10 +43,48 @@ corepack pnpm --dir web run email:export
 
 This writes ignored preview HTML to `web/.email-out/`.
 
+### Broadcast workflow
+
+Broadcasts are repo-authored and provider-sent. Follow this order:
+
+1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
+2. Run `corepack pnpm --dir web run email:dev` for local iteration.
+3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
+4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and set it only in the current shell as `RESEND_BROADCAST_SEGMENT_ID`. An audience ID is not a segment ID; never substitute one for the other.
+
+   ```sh
+   # From the repository root. Nothing here prints RESEND_API_KEY.
+   (
+     set -a
+     . web/.env.local
+     set +a
+     export RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
+
+     corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
+       --from "Flaim <updates@flaim.app>" \
+       --reply-to support@flaim.app \
+       --subject "Keepers, draft details, and more" \
+       --preview-text "Keeper costs, dynasty draft picks, and sharper trade detail for your connected leagues." \
+       --name "Football kickoff: keepers + Yahoo" \
+       --segment-id "${RESEND_BROADCAST_SEGMENT_ID:?Set a manually verified Resend Segment ID first}" \
+       --html-file .email-out/broadcast-2026-08-kickoff.html \
+       --text-file .email-out/broadcast-2026-08-kickoff.txt
+   )
+   ```
+
+   `RESEND_API_KEY` and `RESEND_BROADCAST_SEGMENT_ID` exist only in that subshell and disappear when it exits. If using the same commands directly in an interactive shell instead, run `unset RESEND_API_KEY RESEND_BROADCAST_SEGMENT_ID` afterward. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
+5. Use the Resend dashboard only to confirm the audience, send proof emails, and send after review. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
+6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
+
+Do not send a real email while developing this workflow. FLA-296 will scope a local key later; do not change current keys or feature flags as part of broadcast work.
+
+The official [`resend-cli` v2 broadcast reference](https://github.com/resend/resend-cli/blob/main/skills/resend-cli/references/broadcasts.md) supports `--html-file`, `--text-file`, `--name`, `--reply-to`, and `--preview-text`, and saves a draft unless `--send` is supplied. It targets the current API's required `segment_id` contract and maps the CLI reply-to input to the API's `reply_to` array. The pinned CLI command above therefore replaces a custom draft creator.
+
 The first product templates are:
 
 - `web/emails/welcome.tsx`
 - `web/emails/league-connected.tsx`
+- `web/emails/broadcast-2026-08-kickoff.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
 

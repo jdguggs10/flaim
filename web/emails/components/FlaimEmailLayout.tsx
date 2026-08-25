@@ -21,6 +21,7 @@ interface FlaimEmailLayoutProps {
   footerDisclosure?: React.ReactNode;
   footerDescription?: React.ReactNode;
   footerSupport?: React.ReactNode;
+  headerUrl?: string;
   lang?: string;
   preview: string;
   title: string;
@@ -37,6 +38,7 @@ export function FlaimEmailLayout({
   footerDisclosure,
   footerDescription,
   footerSupport,
+  headerUrl = emailBrand.url,
   lang = "en",
   preview,
   title,
@@ -57,17 +59,17 @@ export function FlaimEmailLayout({
       <Preview>{preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Section style={styles.header}>
-            <Link href={emailBrand.url} style={styles.logoLink}>
+          <Section data-skip-in-text="true" style={styles.header}>
+            <Link href={headerUrl} style={styles.logoLink}>
               <Img
                 alt=""
-                height="32"
+                height="36"
                 src={emailBrand.logoUrl}
                 style={styles.logo}
-                width="32"
+                width="36"
               />
             </Link>
-            <Link href={emailBrand.url} style={styles.wordmark}>
+            <Link href={headerUrl} style={styles.wordmark}>
               {emailBrand.name}
             </Link>
           </Section>
@@ -151,7 +153,8 @@ const styles = {
     padding: "32px 16px",
   },
   header: {
-    padding: "0 0 16px",
+    // Matches the card's 1px border plus 28px inner padding.
+    padding: "0 29px 16px",
   },
   logoLink: {
     textDecoration: "none",
