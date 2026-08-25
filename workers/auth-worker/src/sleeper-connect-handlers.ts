@@ -145,6 +145,19 @@ async function tryResolveRecurringLeagueId(
       return { failureReason: `detected recurring league cycle at ${currentLeagueId}` };
     }
 
+    // Bound the walk at MAX_HISTORY_YEARS hops so a very long (or malformed,
+    // non-cyclic) previous_league_id chain can't be walked indefinitely.
+    // Mirrors the depth cap processLeague already applies when persisting
+    // discovery history, so the resolver never reaches further back than what
+    // discovery actually stores. Hitting the cap is treated as unresolved
+    // (audit FLA-168 Fix 2), not as a discovered root.
+    if (path.length >= MAX_HISTORY_YEARS) {
+      for (const pathLeagueId of path) {
+        cache.set(pathLeagueId, null);
+      }
+      return { failureReason: `previous_league_id chain exceeded ${MAX_HISTORY_YEARS}-season depth cap at ${currentLeagueId}` };
+    }
+
     visited.add(currentLeagueId);
     path.push(currentLeagueId);
 
@@ -242,8 +255,14 @@ export interface SleeperBackfillRowDetail {
 export interface SleeperBackfillUserResult {
   processed: number;
   resolved: number;
-  /** Rows whose stored recurring_league_id differs from the resolved root — written when not dryRun. */
+  /** NULL rows successfully resolved and written this run (null-only; see below). */
   changed: number;
+  /**
+   * NULL rows whose previous_league_id chain could not be resolved this run
+   * (transient fetch error, cycle, or depth cap) — left NULL rather than
+   * persisting a wrong fallback, so a later healthy run can retry them.
+   */
+  unresolved: number;
   /** Per-row would-change detail. Present only when dryRun is true. */
   rows?: SleeperBackfillRowDetail[];
 }
@@ -251,10 +270,19 @@ export interface SleeperBackfillUserResult {
 /**
  * Backfill `recurring_league_id` for a user's existing Sleeper rows by re-running
  * the full previous_league_id chain walk — NOT the cheap `= league_id`
- * shortcut. For each row, resolves the canonical root and persists it via
+ * shortcut. Only rows whose stored recurring_league_id is NULL are candidates:
+ * a row that already has a value (even one that looks stale) is left for the
+ * sync path to correct on its next refresh — backfill never overwrites a
+ * non-null value (audit FLA-168 Fix 3).
+ *
+ * For each NULL candidate, resolves the canonical root and persists it via
  * saveSleeperLeague (which upserts on (clerk_user_id, league_id, season_year) and
- * tolerates a missing column). Where a chain is genuinely unresolvable, the
- * resolver already falls back to the season-scoped league_id.
+ * tolerates a missing column) — but ONLY when the chain walk actually resolved.
+ * When the walk is unresolved (transient fetch error, a cycle, or the resolver's
+ * depth cap), the row is left NULL and counted in `unresolved` instead of being
+ * persisted with a fallback value: a fallback born from a transient failure
+ * would otherwise look like a genuine terminal state and never be revisited by
+ * this null-only selector (audit FLA-168 Fix 1/2).
  *
  * `options.dryRun` (default false) runs the same read/resolve path but skips
  * saveSleeperLeague, returning per-row would-change detail instead.
@@ -276,25 +304,31 @@ export async function backfillSleeperRecurringIds(
   let processed = 0;
   let resolved = 0;
   let changed = 0;
+  let unresolved = 0;
   const rows: SleeperBackfillRowDetail[] = [];
 
   for (const league of leagues) {
     processed++;
+
+    // Null-only (Fix 3): a row that already has a stored value, stale or not,
+    // is sync's job to correct, not backfill's.
+    if (league.recurringLeagueId != null) continue;
+
     const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache);
-    // Use the resolved root; only fall back to the season-scoped id when the
-    // chain is genuinely unresolvable (mirrors discovery's safety net).
-    const recurringLeagueId = resolution.recurringLeagueId ?? league.leagueId;
-    if (resolution.recurringLeagueId) resolved++;
+    if (!resolution.recurringLeagueId) {
+      unresolved++;
+      continue;
+    }
 
-    // Skip a write when the stored value already matches the resolved root.
-    if (league.recurringLeagueId === recurringLeagueId) continue;
-
+    resolved++;
     changed++;
+    const recurringLeagueId = resolution.recurringLeagueId;
+
     if (dryRun) {
       rows.push({
         userId,
         leagueId: league.leagueId,
-        currentRecurringId: league.recurringLeagueId ?? null,
+        currentRecurringId: null,
         wouldSetRecurringId: recurringLeagueId,
       });
       continue;
@@ -312,7 +346,9 @@ export async function backfillSleeperRecurringIds(
     });
   }
 
-  return dryRun ? { processed, resolved, changed, rows } : { processed, resolved, changed };
+  return dryRun
+    ? { processed, resolved, changed, unresolved, rows }
+    : { processed, resolved, changed, unresolved };
 }
 
 /**

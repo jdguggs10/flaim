@@ -183,6 +183,33 @@ export class SyncStateStorage {
     }
   }
 
+  /**
+   * Release this owner's lease outright — clears sync_lease_owner/expires_at
+   * back to null without setting a cooldown marker or touching telemetry.
+   * For callers using the lease purely as a single-flight concurrency guard
+   * (e.g. the FLA-168 Sleeper recurring-id backfill's synthetic pseudo-user
+   * lease) rather than a provider refresh with its own cooldown semantics.
+   * Owner-guarded so a stale caller cannot release another request's lease.
+   * Storage errors fail open (no-op) — same posture as acquireLease/settle.
+   */
+  async release(clerkUserId: string, provider: SyncProvider, ownerId: string): Promise<void> {
+    try {
+      const { error } = await this.supabase
+        .from('provider_sync_state')
+        .update({
+          sync_lease_owner: null,
+          sync_lease_expires_at: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('clerk_user_id', clerkUserId)
+        .eq('provider', provider)
+        .eq('sync_lease_owner', ownerId);
+      if (error) throw error;
+    } catch (error) {
+      console.error(`[sync-state] Lease release failed open for ${provider}:`, error);
+    }
+  }
+
   private async getRow(clerkUserId: string, provider: SyncProvider): Promise<SyncStateRow | null> {
     const { data, error } = await this.supabase
       .from('provider_sync_state')

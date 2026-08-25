@@ -25,8 +25,8 @@ const baseEnv = {
 
 function summary(dryRun: boolean): SleeperRecurringBackfillSummary {
   return dryRun
-    ? { outcome: 'completed', dryRun: true, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsWouldChange: 1, errors: 0 }
-    : { outcome: 'completed', dryRun: false, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsChanged: 1, errors: 0 };
+    ? { outcome: 'completed', dryRun: true, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsUnresolved: 0, rowsWouldChange: 1, errors: 0 }
+    : { outcome: 'completed', dryRun: false, usersScanned: 1, rowsProcessed: 1, rowsResolved: 1, rowsUnresolved: 0, rowsChanged: 1, errors: 0 };
 }
 
 function makeRequest(token?: string, body?: string): Request {
@@ -88,5 +88,24 @@ describe('POST /auth/internal/backfill/sleeper-recurring-ids', () => {
     const res = await app.fetch(makeRequest(INTERNAL_SERVICE_TOKEN, '{not json'), baseEnv);
     expect(res.status).toBe(400);
     expect(runSleeperRecurringBackfill).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when a concurrent live run already holds the backfill lease', async () => {
+    vi.mocked(runSleeperRecurringBackfill).mockResolvedValue({
+      outcome: 'blocked',
+      dryRun: false,
+      usersScanned: 0,
+      rowsProcessed: 0,
+      rowsResolved: 0,
+      rowsUnresolved: 0,
+      rowsChanged: 0,
+      errors: 0,
+    });
+
+    const res = await app.fetch(makeRequest(INTERNAL_SERVICE_TOKEN, '{"dryRun":false}'), baseEnv);
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as SleeperRecurringBackfillSummary;
+    expect(body.outcome).toBe('blocked');
   });
 });

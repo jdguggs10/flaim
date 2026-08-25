@@ -12,15 +12,33 @@
  * `dryRun: false` to perform writes. Every run emits structured
  * `sleeper_recurring_backfill` JSON log lines, mirroring reconciliation.ts's
  * `league_reconciliation` event style.
+ *
+ * Concurrency: live (dryRun:false) runs single-flight via the same
+ * provider_sync_state lease machinery used for per-user provider syncs
+ * (sync-state.ts), keyed on a reserved pseudo-user id rather than a real
+ * clerk_user_id. This is a global lock across all users being backfilled in
+ * one run — adequate because this route is an operator-triggered one-off,
+ * not a per-user user-facing action. A second concurrent live run gets a 409
+ * instead of racing writes against the first. Dry runs are read-only and
+ * skip the guard entirely (audit FLA-168 Fix 5).
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { backfillSleeperRecurringIds, type SleeperConnectEnv } from './sleeper-connect-handlers';
+import { SyncStateStorage, type SyncProvider } from './sync-state';
 
 export type SleeperRecurringBackfillEnv = SleeperConnectEnv;
 
 const SNAPSHOT_PAGE_SIZE = 1000;
 const BATCH_SIZE = 2;
+
+// Synthetic (clerk_user_id, provider) key for the backfill's single-flight
+// lease. No schema change needed: provider_sync_state's primary key is
+// (clerk_user_id, provider) with no FK to a real users table, and 'sleeper'
+// already satisfies its provider check constraint.
+const BACKFILL_LEASE_USER_ID = '__backfill__';
+const BACKFILL_LEASE_PROVIDER: SyncProvider = 'sleeper';
+const BACKFILL_LEASE_OWNER_PREFIX = 'sleeper-recurring-backfill:';
 
 function maskUserId(userId: string): string {
   if (!userId || userId.length <= 8) return '***';
@@ -44,7 +62,13 @@ async function fetchUsersMissingRecurringId(supabase: SupabaseClient): Promise<s
       .from('sleeper_leagues')
       .select('clerk_user_id')
       .is('recurring_league_id', null)
+      // Tiebreakers so pages have a total order even though only clerk_user_id
+      // is selected — (clerk_user_id, league_id, season_year) is a unique
+      // constraint on sleeper_leagues, mirroring fetchProviderSnapshot's
+      // ordering in reconciliation.ts.
       .order('clerk_user_id', { ascending: true })
+      .order('league_id', { ascending: true })
+      .order('season_year', { ascending: true })
       .range(offset, offset + SNAPSHOT_PAGE_SIZE - 1);
     if (error) throw new Error(`sleeper_leagues snapshot query failed: ${error.message}`);
 
@@ -57,20 +81,22 @@ async function fetchUsersMissingRecurringId(supabase: SupabaseClient): Promise<s
 
 export type SleeperRecurringBackfillSummary =
   | {
-      outcome: 'completed' | 'failed';
+      outcome: 'completed' | 'failed' | 'blocked';
       dryRun: true;
       usersScanned: number;
       rowsProcessed: number;
       rowsResolved: number;
+      rowsUnresolved: number;
       rowsWouldChange: number;
       errors: number;
     }
   | {
-      outcome: 'completed' | 'failed';
+      outcome: 'completed' | 'failed' | 'blocked';
       dryRun: false;
       usersScanned: number;
       rowsProcessed: number;
       rowsResolved: number;
+      rowsUnresolved: number;
       rowsChanged: number;
       errors: number;
     };
@@ -81,57 +107,79 @@ export async function runSleeperRecurringBackfill(
 ): Promise<SleeperRecurringBackfillSummary> {
   const startedAt = Date.now();
   const runId = crypto.randomUUID();
+  const leaseOwner = `${BACKFILL_LEASE_OWNER_PREFIX}${runId}`;
 
-  let outcome: 'completed' | 'failed' = 'completed';
+  let outcome: 'completed' | 'failed' | 'blocked' = 'completed';
   let usersScanned = 0;
   let rowsProcessed = 0;
   let rowsResolved = 0;
+  let rowsUnresolved = 0;
   let rowsChanged = 0;
   let errors = 0;
+  let retryAfterSeconds: number | undefined;
 
   logBackfill({ run_id: runId, status: 'run_start', dry_run: dryRun });
 
-  try {
-    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
-      auth: { persistSession: false },
-    });
-    const userIds = await fetchUsersMissingRecurringId(supabase);
-    usersScanned = userIds.length;
+  // Single-flight guard for live runs only (audit FLA-168 Fix 5): dry runs
+  // never write, so two concurrent dry runs can't race anything.
+  const syncState = dryRun ? null : SyncStateStorage.fromEnvironment(env);
+  const lease = syncState
+    ? await syncState.acquireLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner)
+    : null;
 
-    for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
-      const batch = userIds.slice(i, i + BATCH_SIZE);
-      // Isolate per-user failures: an unexpected throw for one user must not
-      // abandon the rest of the batch, mirroring runReconciliation's
-      // candidate isolation in reconciliation.ts.
-      await Promise.all(
-        batch.map(async (userId) => {
-          try {
-            const result = await backfillSleeperRecurringIds(env, userId, { dryRun });
-            rowsProcessed += result.processed;
-            rowsResolved += result.resolved;
-            rowsChanged += result.changed;
-            logBackfill({
-              run_id: runId,
-              status: 'user_processed',
-              user_id: maskUserId(userId),
-              processed: result.processed,
-              resolved: result.resolved,
-              changed: result.changed,
-            });
-          } catch (error) {
-            errors++;
-            logBackfill({ run_id: runId, status: 'user_failed', user_id: maskUserId(userId) });
-            console.error(
-              `[sleeper-recurring-backfill] Failed for user ${maskUserId(userId)}:`,
-              error instanceof Error ? error.message : error
-            );
-          }
-        })
-      );
+  if (lease && !lease.acquired) {
+    outcome = 'blocked';
+    retryAfterSeconds = lease.retryAfterSeconds;
+    logBackfill({ run_id: runId, status: 'blocked', dry_run: dryRun, retry_after: retryAfterSeconds });
+  } else {
+    try {
+      const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
+        auth: { persistSession: false },
+      });
+      const userIds = await fetchUsersMissingRecurringId(supabase);
+      usersScanned = userIds.length;
+
+      for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+        const batch = userIds.slice(i, i + BATCH_SIZE);
+        // Isolate per-user failures: an unexpected throw for one user must not
+        // abandon the rest of the batch, mirroring runReconciliation's
+        // candidate isolation in reconciliation.ts.
+        await Promise.all(
+          batch.map(async (userId) => {
+            try {
+              const result = await backfillSleeperRecurringIds(env, userId, { dryRun });
+              rowsProcessed += result.processed;
+              rowsResolved += result.resolved;
+              rowsUnresolved += result.unresolved;
+              rowsChanged += result.changed;
+              logBackfill({
+                run_id: runId,
+                status: 'user_processed',
+                user_id: maskUserId(userId),
+                processed: result.processed,
+                resolved: result.resolved,
+                unresolved: result.unresolved,
+                changed: result.changed,
+              });
+            } catch (error) {
+              errors++;
+              logBackfill({ run_id: runId, status: 'user_failed', user_id: maskUserId(userId) });
+              console.error(
+                `[sleeper-recurring-backfill] Failed for user ${maskUserId(userId)}:`,
+                error instanceof Error ? error.message : error
+              );
+            }
+          })
+        );
+      }
+    } catch (error) {
+      outcome = 'failed';
+      console.error('[sleeper-recurring-backfill] Run failed:', error instanceof Error ? error.message : error);
+    } finally {
+      if (syncState) {
+        await syncState.release(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner);
+      }
     }
-  } catch (error) {
-    outcome = 'failed';
-    console.error('[sleeper-recurring-backfill] Run failed:', error instanceof Error ? error.message : error);
   }
 
   const durationMs = Date.now() - startedAt;
@@ -143,14 +191,16 @@ export async function runSleeperRecurringBackfill(
     users_scanned: usersScanned,
     rows_processed: rowsProcessed,
     rows_resolved: rowsResolved,
+    rows_unresolved: rowsUnresolved,
     ...(dryRun ? { rows_would_change: rowsChanged } : { rows_changed: rowsChanged }),
     errors,
     duration_ms: durationMs,
+    ...(retryAfterSeconds !== undefined ? { retry_after: retryAfterSeconds } : {}),
   });
 
   return dryRun
-    ? { outcome, dryRun: true, usersScanned, rowsProcessed, rowsResolved, rowsWouldChange: rowsChanged, errors }
-    : { outcome, dryRun: false, usersScanned, rowsProcessed, rowsResolved, rowsChanged, errors };
+    ? { outcome, dryRun: true, usersScanned, rowsProcessed, rowsResolved, rowsUnresolved, rowsWouldChange: rowsChanged, errors }
+    : { outcome, dryRun: false, usersScanned, rowsProcessed, rowsResolved, rowsUnresolved, rowsChanged, errors };
 }
 
 // =============================================================================
@@ -192,7 +242,16 @@ export async function parseSleeperRecurringBackfillRequest(request: Request): Pr
     };
   }
 
-  if (!isRecord(body) || body.dryRun === undefined) {
+  if (!isRecord(body)) {
+    return {
+      error: {
+        status: 400,
+        body: { error: 'invalid_request', error_description: 'Request body must be a JSON object' },
+      },
+    };
+  }
+
+  if (body.dryRun === undefined) {
     return { dryRun: true };
   }
 

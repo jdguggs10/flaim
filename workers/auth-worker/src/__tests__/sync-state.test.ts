@@ -196,6 +196,32 @@ describe('SyncStateStorage.settle', () => {
   });
 });
 
+describe('SyncStateStorage.release', () => {
+  it('clears the lease owner and expiry, guarded to the current owner', async () => {
+    const { client, calls } = fakeSupabase([
+      { data: [{ clerk_user_id: 'user_1' }], error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await storage.release('__backfill__', 'sleeper', 'owner-1');
+
+    const update = calls[0].update?.[0]?.[0] as Record<string, unknown>;
+    expect(update.sync_lease_owner).toBeNull();
+    expect(update.sync_lease_expires_at).toBeNull();
+    // Owner guard: only the current lease holder may release it.
+    expect(calls[0].eq?.map((args) => args)).toContainEqual(['sync_lease_owner', 'owner-1']);
+  });
+
+  it('swallows storage errors (fail open)', async () => {
+    const { client } = fakeSupabase([
+      { error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.release('__backfill__', 'sleeper', 'owner-1')).resolves.toBeUndefined();
+  });
+});
+
 describe('cooldownSecondsForResult', () => {
   it('uses the normal cooldown for plain successes and errors', () => {
     expect(cooldownSecondsForResult({ platform: 'espn', status: 'success', httpStatus: 200 }))

@@ -912,7 +912,9 @@ api.post('/internal/backfill/sleeper-recurring-ids', async (c) => {
   }
 
   const summary = await runSleeperRecurringBackfill(c.env, validation.dryRun ?? true);
-  return c.json(summary, 200);
+  // A concurrent live run already holds the backfill's single-flight lease
+  // (sync-state.ts, FLA-168 audit Fix 5) — 409 rather than racing writes.
+  return c.json(summary, summary.outcome === 'blocked' ? 409 : 200);
 });
 
 // Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).
