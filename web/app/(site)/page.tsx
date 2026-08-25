@@ -3,6 +3,7 @@ import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
 import { HeroChat } from "@/components/site/hero-chat";
 import { HomepageProductProof } from "@/components/site/homepage-product-proof";
+import { YahooOutagePill } from "@/components/site/yahoo-outage-pill";
 
 export const metadata: Metadata = {
   title: {
@@ -201,14 +202,21 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               Fantasy platforms
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              {SUPPORTED_PLATFORMS.map((platform) => (
-                <span
-                  key={platform}
-                  className="rounded-full border bg-background px-3 py-1"
-                >
-                  {platform}
-                </span>
-              ))}
+              {SUPPORTED_PLATFORMS.map((platform) =>
+                /* FLA-305: Yahoo gets an outage indicator + popover instead
+                   of a plain pill while Yahoo API access is down (FLA-237).
+                   Revert to the plain span below once that resolves. */
+                platform === "Yahoo" ? (
+                  <YahooOutagePill key={platform} />
+                ) : (
+                  <span
+                    key={platform}
+                    className="rounded-full border bg-background px-3 py-1"
+                  >
+                    {platform}
+                  </span>
+                ),
+              )}
             </div>
           </div>
           <div className="rounded-2xl border bg-background/70 p-4">
