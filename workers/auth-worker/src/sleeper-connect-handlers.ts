@@ -4,7 +4,18 @@ import { getDefaultSeasonYear } from './season-utils';
 import type { LeaseRenewalCheckpoint } from './sync-state';
 
 const SLEEPER_API = 'https://api.sleeper.app/v1';
+// How many seasons of history discovery persists per league (product choice —
+// unchanged by FLA-303).
 const MAX_HISTORY_YEARS = 5;
+// Depth cap for the backfill's chain walk only (see tryResolveRecurringLeagueId).
+// Deliberately deeper than MAX_HISTORY_YEARS (FLA-303): a 2026-08-25
+// classification of all 438 unresolved prod rows showed a 5-hop walk cap
+// misclassifying legitimately long-running leagues — Sleeper has existed since
+// ~2017, so 6+-season previous_league_id chains are real and grow more common
+// every season. Nearly all unresolved rows are actually upstream 404s (Sleeper
+// no longer serves the predecessor records), which no cap can fix; the walk cap
+// only needs to stop malformed non-cyclic chains, and 10 keeps that guarantee.
+const BACKFILL_MAX_CHAIN_DEPTH = 10;
 
 export interface SleeperConnectEnv {
   SUPABASE_URL: string;
@@ -141,7 +152,7 @@ function describeSleeperResolutionFailure(leagueId: string, error: unknown): str
  * treating the chain as unresolved (audit FLA-168 Fix 2); `undefined`
  * (the default) is unbounded, restoring this resolver's original shared
  * behavior. Only the backfill path (backfillSleeperRecurringIds, below)
- * passes a cap (MAX_HISTORY_YEARS) — it re-walks chains for potentially very
+ * passes a cap (BACKFILL_MAX_CHAIN_DEPTH) — it re-walks chains for potentially very
  * old rows in bulk, where an unbounded walk is the actual risk. UI reads
  * (buildSleeperLeagueResponse), archive resolution (resolveSleeperArchiveTarget),
  * and discovery (refreshSleeperLeaguesForUsername) all need the true root for
@@ -366,7 +377,7 @@ export interface SleeperBackfillUserResult {
  * awaited immediately before EACH row — not once per user — and a `false`
  * return stops the loop right there, before that row is touched, reporting
  * `leaseLost: true`. This exists because a single user can own many rows, and
- * each row's own chain walk can make up to MAX_HISTORY_YEARS (5) Sleeper
+ * each row's own chain walk can make up to BACKFILL_MAX_CHAIN_DEPTH (10) Sleeper
  * requests at a 10s timeout apiece: renewing only once per user (or once per
  * batch of users, as an earlier version of this backfill did) leaves a gap
  * between renewals that scales with how many rows and how deep their chains
@@ -432,7 +443,7 @@ export async function backfillSleeperRecurringIds(
     // it re-resolves potentially very old rows in bulk, so a malformed chain
     // shouldn't be walked indefinitely here the way it's fine to for a single
     // UI read or discovery run.
-    const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache, MAX_HISTORY_YEARS);
+    const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache, BACKFILL_MAX_CHAIN_DEPTH);
     if (!resolution.recurringLeagueId) {
       unresolved++;
       continue;
@@ -456,7 +467,7 @@ export async function backfillSleeperRecurringIds(
     // audit finding, Fix 1a) — not just once before the row started above.
     // The pre-row checkpoint only proves the lease looked held BEFORE this
     // row's chain walk; that walk can itself take a while (up to
-    // MAX_HISTORY_YEARS Sleeper requests), so a lease loss DETECTED by a
+    // BACKFILL_MAX_CHAIN_DEPTH Sleeper requests), so a lease loss DETECTED by a
     // concurrent lane (a different user in the same batch, via the shared
     // renewer in sleeper-recurring-backfill.ts) partway through this row's
     // walk would otherwise go unnoticed until the NEXT row's pre-row check —

@@ -1238,15 +1238,16 @@ describe('sleeper-connect-handlers', () => {
       expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'flaky-2025', 2025, 'flaky-2024');
     });
 
-    it('stops a six-link chain at the MAX_HISTORY_YEARS depth cap and treats it as unresolved', async () => {
-      // deep-0 -> deep-1 -> deep-2 -> deep-3 -> deep-4 -> deep-5 (root). Five
-      // hops exceeds the 5-season cap, so deep-5 is never even fetched.
+    it('stops an eleven-link chain at the MAX_HISTORY_YEARS depth cap and treats it as unresolved', async () => {
+      // deep-0 -> deep-1 -> ... -> deep-10 (root). Ten hops exhausts the
+      // 10-season cap (FLA-303 raised it from 5), so deep-10 is never even
+      // fetched.
       mockStorage.getSleeperLeagues.mockResolvedValue([
         { id: 'row-deep', clerkUserId: 'user_1', leagueId: 'deep-0', sport: 'football', seasonYear: 2025, leagueName: 'Deep', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
       ]);
       mockFetch.mockImplementation(async (input) => {
         const url = String(input);
-        const match = /\/league\/deep-(\d)$/.exec(url);
+        const match = /\/league\/deep-(\d+)$/.exec(url);
         if (match) {
           const n = Number(match[1]);
           return jsonResponse({
@@ -1254,7 +1255,7 @@ describe('sleeper-connect-handlers', () => {
             name: 'Deep',
             sport: 'nfl',
             season: String(2025 - n),
-            previous_league_id: n < 5 ? `deep-${n + 1}` : null,
+            previous_league_id: n < 10 ? `deep-${n + 1}` : null,
           });
         }
         return new Response(null, { status: 404 });
@@ -1264,24 +1265,24 @@ describe('sleeper-connect-handlers', () => {
 
       expect(result).toEqual({ processed: 1, resolved: 0, changed: 0, unresolved: 1, skippedConcurrent: 0 });
       expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalled();
-      // deep-5 (the 6th league, and the true root) must never be fetched.
+      // deep-10 (the 11th league, and the true root) must never be fetched.
       const fetchedUrls = mockFetch.mock.calls.map((call) => String(call[0]));
-      expect(fetchedUrls.some((url) => url.endsWith('/league/deep-5'))).toBe(false);
+      expect(fetchedUrls.some((url) => url.endsWith('/league/deep-10'))).toBe(false);
     });
 
     it('does not let a cap-exceeded deep chain poison resolution for a shorter row sharing an intermediate league (round-3 audit finding)', async () => {
-      // Row A's chain is 6 links deep (deep-0..deep-5, deep-5 being the true
-      // root) — one more hop than the 5-season MAX_HISTORY_YEARS cap allows,
-      // so row A's walk gives up partway through, having only visited
-      // deep-0..deep-4 (5 nodes) before hitting the cap on the 6th
-      // (deep-5, never fetched).
+      // Row A's chain is 11 links deep (deep-0..deep-10, deep-10 being the
+      // true root) — one more hop than the 10-season MAX_HISTORY_YEARS cap
+      // allows, so row A's walk gives up partway through, having only visited
+      // deep-0..deep-9 (10 nodes) before hitting the cap on the 11th
+      // (deep-10, never fetched).
       //
       // Row B is a SEPARATE stored row whose own league_id happens to be
       // "deep-3" — one of the intermediate leagues row A's walk visited
       // (plausible: an older season's row the user still has, whose current
       // chain merges into the same history). Row B's OWN walk from deep-3 is
-      // only 2 hops from the real root (deep-3 -> deep-4 -> deep-5), well
-      // within its own fresh 5-hop budget.
+      // only 7 hops from the real root (deep-3 -> ... -> deep-10), well
+      // within its own fresh 10-hop budget.
       //
       // Both rows resolve within ONE backfillSleeperRecurringIds call, so
       // they share a single recurringIdCache. The bug: row A's cap-exceeded
@@ -1295,7 +1296,7 @@ describe('sleeper-connect-handlers', () => {
       ]);
       mockFetch.mockImplementation(async (input) => {
         const url = String(input);
-        const match = /\/league\/deep-(\d)$/.exec(url);
+        const match = /\/league\/deep-(\d+)$/.exec(url);
         if (match) {
           const n = Number(match[1]);
           return jsonResponse({
@@ -1303,7 +1304,7 @@ describe('sleeper-connect-handlers', () => {
             name: 'Deep',
             sport: 'nfl',
             season: String(2025 - n),
-            previous_league_id: n < 5 ? `deep-${n + 1}` : null,
+            previous_league_id: n < 10 ? `deep-${n + 1}` : null,
           });
         }
         return new Response(null, { status: 404 });
@@ -1318,7 +1319,7 @@ describe('sleeper-connect-handlers', () => {
       expect(result.resolved).toBe(1);
       expect(result.unresolved).toBe(1);
       expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledTimes(1);
-      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'deep-3', 2022, 'deep-5');
+      expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'deep-3', 2022, 'deep-10');
       expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalledWith('user_1', 'deep-0', 2025, expect.anything());
     });
 

@@ -58,7 +58,7 @@
  * batch-count-based one (round-4 audit finding replacing round 3's
  * once-per-batch renewal): per-user work is unbounded relative to the TTL,
  * since one user's rows are processed sequentially and each row's own
- * previous_league_id chain walk can itself make up to MAX_HISTORY_YEARS (5)
+ * previous_league_id chain walk can itself make up to BACKFILL_MAX_CHAIN_DEPTH (10)
  * Sleeper requests at a 10s timeout apiece — enough rows/chains under a single
  * user could exceed the old once-per-batch renewal's 15-minute window well
  * before the next batch boundary ever arrives. `createLeaseRenewer` below
@@ -153,8 +153,8 @@ const BACKFILL_LEASE_TTL_MS = 15 * 60 * 1000;
 // under BACKFILL_LEASE_TTL_MS so a slow stretch of work between two
 // checkpoints can never itself exceed the TTL. A single previous_league_id
 // chain walk (the slowest unit of work between two per-row checkpoints) is at
-// most MAX_HISTORY_YEARS Sleeper requests at a 10s timeout each — well under
-// 5 minutes even in the worst case.
+// most BACKFILL_MAX_CHAIN_DEPTH (10) Sleeper requests at a 10s timeout each —
+// well under 5 minutes even in the worst case.
 const RENEW_INTERVAL_MS = BACKFILL_LEASE_TTL_MS / 3;
 
 /**
