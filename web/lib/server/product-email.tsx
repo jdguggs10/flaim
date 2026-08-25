@@ -17,7 +17,12 @@ interface ProductEmailResult {
 }
 
 interface SendProductEmailParams {
-  eventType: string;
+  /**
+   * Use a stable semantic key only when this exact send is genuinely one-time
+   * (for example, an immutable order receipt). Do not derive a permanent key
+   * from a user and template for emails that users may legitimately request again.
+   */
+  idempotencyKey?: string;
   react: React.ReactElement;
   subject: string;
   template: ProductEmailTemplate;
@@ -27,6 +32,7 @@ interface SendProductEmailParams {
 
 interface SendWelcomeEmailParams {
   firstName?: string;
+  idempotencyKey?: string;
   leaguesUrl: string;
   to: string;
   unsubscribeUrl: string;
@@ -35,6 +41,7 @@ interface SendWelcomeEmailParams {
 
 interface SendLeagueConnectedEmailParams {
   aiDocsUrl: string;
+  idempotencyKey?: string;
   leagueName?: string;
   platform?: string;
   to: string;
@@ -54,7 +61,7 @@ function isProductEmailEnabled() {
 }
 
 async function sendProductEmail({
-  eventType,
+  idempotencyKey,
   react,
   subject,
   template,
@@ -71,17 +78,17 @@ async function sendProductEmail({
   }
 
   try {
-    const { data, error } = await client.emails.send(
-      {
-        from: emailBrand.senders.product,
-        react,
-        replyTo: emailBrand.senders.replyTo,
-        subject,
-        tags: [{ name: "template", value: template }],
-        to,
-      },
-      { idempotencyKey: `${eventType}/${userId}` },
-    );
+    const message = {
+      from: emailBrand.senders.product,
+      react,
+      replyTo: emailBrand.senders.replyTo,
+      subject,
+      tags: [{ name: "template", value: template }],
+      to,
+    };
+    const { data, error } = idempotencyKey
+      ? await client.emails.send(message, { idempotencyKey })
+      : await client.emails.send(message);
 
     if (error) {
       const message = getResendErrorMessage(error);
@@ -111,13 +118,14 @@ async function sendProductEmail({
 
 export function sendWelcomeEmail({
   firstName,
+  idempotencyKey,
   leaguesUrl,
   to,
   unsubscribeUrl,
   userId,
 }: SendWelcomeEmailParams) {
   return sendProductEmail({
-    eventType: "welcome",
+    idempotencyKey,
     react: (
       <WelcomeEmail
         firstName={firstName}
@@ -134,6 +142,7 @@ export function sendWelcomeEmail({
 
 export function sendLeagueConnectedEmail({
   aiDocsUrl,
+  idempotencyKey,
   leagueName,
   platform,
   to,
@@ -143,7 +152,7 @@ export function sendLeagueConnectedEmail({
   const resolvedLeagueName = leagueName || "Your league";
 
   return sendProductEmail({
-    eventType: "league-connected",
+    idempotencyKey,
     react: (
       <LeagueConnectedEmail
         aiDocsUrl={aiDocsUrl}
@@ -166,7 +175,6 @@ export function sendEspnSetupLinkEmail({
   userId,
 }: SendEspnSetupLinkEmailParams) {
   return sendProductEmail({
-    eventType: "espn-setup-link",
     react: (
       <EspnSetupLinkEmail extensionUrl={extensionUrl} leaguesUrl={leaguesUrl} />
     ),

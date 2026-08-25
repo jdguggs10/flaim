@@ -14,6 +14,7 @@ export function parseArgs(argv) {
     apply: false,
     delayMs: 0,
     flaggedOnly: false,
+    forceResend: false,
     limit: DEFAULT_LIMIT,
     maxUsers: Number.POSITIVE_INFINITY,
     offset: 0,
@@ -31,6 +32,11 @@ export function parseArgs(argv) {
 
     if (arg === "--flagged-only") {
       args.flaggedOnly = true;
+      continue;
+    }
+
+    if (arg === "--force-resend") {
+      args.forceResend = true;
       continue;
     }
 
@@ -88,6 +94,10 @@ export function parseArgs(argv) {
     throw new Error("--delay-ms must be zero or greater");
   }
 
+  if (args.forceResend && (!args.flaggedOnly || !args.apply)) {
+    throw new Error("--force-resend requires --flagged-only --apply");
+  }
+
   return args;
 }
 
@@ -104,6 +114,7 @@ Apply to one eligible user:
 Options:
   --apply              Write contacts to Resend. Omit for dry-run.
   --flagged-only       Process only Clerk users with a failed email-operation marker.
+  --force-resend       Re-send a flagged welcome event even when its Resend contact exists.
   --delay-ms <n>       Wait between Resend writes. Defaults to 0.
   --limit <n>          Clerk page size. Defaults to ${DEFAULT_LIMIT}, max ${MAX_LIMIT}.
   --max-users <n>      Stop after scanning this many Clerk users.
@@ -112,8 +123,10 @@ Options:
 
 Resend rate limits apply. Use --delay-ms, --max-users, and --offset to pace larger backfills.
 
-When used with --apply, --flagged-only retries failed welcome events too. That can
-deliver a late welcome email, so review the dry-run output before applying it.
+When used with --apply, --flagged-only clears a failed welcome-event marker without
+re-sending when the automation-created contact already exists. Use --force-resend to
+override that conservative deduplication; it requires --flagged-only --apply. A replay
+can deliver a late welcome email, so review the dry-run output before applying it.
 `);
 }
 
@@ -321,6 +334,25 @@ export async function syncContact({ resend, segmentId, user }) {
   return { ok: true, action: "updated", email };
 }
 
+/**
+ * In resend@6.22.0, contacts.get({ email }) returns the SDK's standard
+ * { data, error } envelope. A missing contact is a 404 error, while any other
+ * error leaves the recovery marker intact rather than risking a duplicate send.
+ */
+async function getResendContactStatus({ resend, email }) {
+  try {
+    const { data, error } = await resend.contacts.get({ email });
+
+    if (data) return { exists: true, ok: true };
+    if (error && isNotFound(error)) return { exists: false, ok: true };
+    if (error) return { error: getResendErrorMessage(error), ok: false };
+
+    return { error: "Resend contacts.get returned no data or error", ok: false };
+  } catch (error) {
+    return { error: getResendErrorMessage(error), ok: false };
+  }
+}
+
 export async function sendWelcomeRetryEvent({ resend, user }) {
   const email = getPrimaryEmail(user);
   if (!email) {
@@ -354,12 +386,14 @@ export async function sendWelcomeRetryEvent({ resend, user }) {
 
 /**
  * Retry only operations which Clerk previously marked as failed. A marker is
- * cleared only after its matching Resend operation succeeds. It is deliberately
- * never cleared by an unrelated contact sync.
+ * cleared after its matching Resend operation succeeds, or after a welcome
+ * contact-existence check conservatively finds automation-created evidence. It
+ * is deliberately never cleared by an unrelated contact sync.
  */
 export async function retryFlaggedUser({
   clearMarker = clearEmailRetryMarker,
   clerkSecretKey,
+  forceResend = false,
   resendContacts,
   resendEvents,
   segmentId,
@@ -368,6 +402,85 @@ export async function retryFlaggedUser({
   const markers = getEmailRetryMarkers(user);
   const results = [];
 
+  if (markers.welcomeEvent) {
+    if (!resendEvents) {
+      results.push({ error: "RESEND_EVENTS_API_KEY or RESEND_CONTACTS_API_KEY is required", kind: "welcomeEvent", ok: false });
+    } else {
+      const email = getPrimaryEmail(user);
+      const primaryEmailAddress = getPrimaryEmailAddress(user);
+      let shouldSend = true;
+
+      if (!email) {
+        results.push({ error: "Clerk user has no email address", kind: "welcomeEvent", ok: false, skipped: true });
+        shouldSend = false;
+      } else if (hasExplicitUnverifiedStatus(primaryEmailAddress)) {
+        results.push({ error: "Clerk user primary email is not verified", kind: "welcomeEvent", ok: false, skipped: true });
+        shouldSend = false;
+      } else if (!forceResend) {
+        if (!resendContacts) {
+          results.push({
+            error: "RESEND_CONTACTS_API_KEY is required to check a flagged welcome event",
+            kind: "welcomeEvent",
+            ok: false,
+          });
+          shouldSend = false;
+        } else {
+          const contact = await getResendContactStatus({ resend: resendContacts, email });
+          if (!contact.ok) {
+            results.push({ ...contact, kind: "welcomeEvent" });
+            shouldSend = false;
+          } else if (contact.exists) {
+            // The welcome automation normally owns contact creation. Treat an
+            // existing contact as conservative evidence that it already handled
+            // this event, unless an operator deliberately passes --force-resend.
+            shouldSend = false;
+            try {
+              const cleared = await clearMarker({
+                clerkSecretKey,
+                kind: "welcomeEvent",
+                userId: user.id,
+              });
+              results.push(cleared.ok
+                ? { kind: "welcomeEvent", ok: true, skipped: true }
+                : { ...cleared, kind: "welcomeEvent" });
+            } catch (error) {
+              results.push({
+                error: getResendErrorMessage(error),
+                kind: "welcomeEvent",
+                ok: false,
+              });
+            }
+          }
+        }
+      }
+
+      if (shouldSend) {
+        const result = await sendWelcomeRetryEvent({ resend: resendEvents, user });
+        if (!result.ok) {
+          results.push({ ...result, kind: "welcomeEvent" });
+        } else {
+          try {
+            const cleared = await clearMarker({
+              clerkSecretKey,
+              kind: "welcomeEvent",
+              userId: user.id,
+            });
+            results.push(cleared.ok ? { kind: "welcomeEvent", ok: true } : { ...cleared, kind: "welcomeEvent" });
+          } catch (error) {
+            results.push({
+              error: getResendErrorMessage(error),
+              kind: "welcomeEvent",
+              ok: false,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Welcome recovery runs before contact repair so a contact-sync retry cannot
+  // create the contact that would cause this same recovery pass to skip the
+  // welcome event.
   if (markers.contactSync) {
     if (!resendContacts) {
       results.push({ error: "RESEND_CONTACTS_API_KEY is required", kind: "contactSync", ok: false });
@@ -409,32 +522,6 @@ export async function retryFlaggedUser({
     }
   }
 
-  if (markers.welcomeEvent) {
-    if (!resendEvents) {
-      results.push({ error: "RESEND_EVENTS_API_KEY or RESEND_CONTACTS_API_KEY is required", kind: "welcomeEvent", ok: false });
-    } else {
-      const result = await sendWelcomeRetryEvent({ resend: resendEvents, user });
-      if (!result.ok) {
-        results.push({ ...result, kind: "welcomeEvent" });
-      } else {
-        try {
-          const cleared = await clearMarker({
-            clerkSecretKey,
-            kind: "welcomeEvent",
-            userId: user.id,
-          });
-          results.push(cleared.ok ? { kind: "welcomeEvent", ok: true } : { ...cleared, kind: "welcomeEvent" });
-        } catch (error) {
-          results.push({
-            error: getResendErrorMessage(error),
-            kind: "welcomeEvent",
-            ok: false,
-          });
-        }
-      }
-    }
-  }
-
   return results;
 }
 
@@ -464,6 +551,7 @@ async function main() {
     flagged: 0,
     retryCleared: 0,
     retryRetained: 0,
+    retrySkipped: 0,
     scanned: 0,
     skippedUnflagged: 0,
     skippedNoEmail: 0,
@@ -501,6 +589,7 @@ async function main() {
         stats.flagged += 1;
         const results = await retryFlaggedUser({
           clerkSecretKey,
+          forceResend: args.forceResend,
           resendContacts,
           resendEvents,
           segmentId: args.segmentId,
@@ -510,7 +599,12 @@ async function main() {
         for (const result of results) {
           if (result.ok) {
             stats.retryCleared += 1;
-            console.log(`retry-cleared ${result.kind} ${user.id}`);
+            if (result.skipped) {
+              stats.retrySkipped += 1;
+              console.log(`retry-skipped ${result.kind} ${user.id}: Resend contact already exists`);
+            } else {
+              console.log(`retry-cleared ${result.kind} ${user.id}`);
+            }
           } else {
             stats.retryRetained += 1;
             stats.failed += 1;
@@ -555,6 +649,7 @@ async function main() {
   console.log(JSON.stringify({
     apply: args.apply,
     flaggedOnly: args.flaggedOnly,
+    forceResend: args.forceResend,
     segmentId: args.segmentId,
     stats,
   }, null, 2));

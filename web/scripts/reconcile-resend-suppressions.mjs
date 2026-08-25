@@ -10,7 +10,6 @@ const MAX_LIMIT = 100;
 export function parseArgs(argv) {
   const args = {
     clerkLimit: DEFAULT_LIMIT,
-    dryRun: true,
     maxSuppressions: Number.POSITIVE_INFINITY,
     suppressionLimit: DEFAULT_LIMIT,
   };
@@ -244,7 +243,7 @@ async function main() {
     );
   }
 
-  console.log(JSON.stringify({ dryRun: args.dryRun, stats }, null, 2));
+  console.log(JSON.stringify({ stats }, null, 2));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

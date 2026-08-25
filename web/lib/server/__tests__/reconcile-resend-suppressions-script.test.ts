@@ -10,8 +10,12 @@ import {
 } from "../../../scripts/reconcile-resend-suppressions.mjs";
 
 describe("reconcile-resend-suppressions script helpers", () => {
-  it("defaults to a read-only dry run", () => {
-    expect(parseArgs([])).toMatchObject({ dryRun: true, suppressionLimit: 100 });
+  it("defaults to its always-read-only limits without implying a write mode", () => {
+    expect(parseArgs([])).toEqual({
+      clerkLimit: 100,
+      maxSuppressions: Number.POSITIVE_INFINITY,
+      suppressionLimit: 100,
+    });
   });
 
   it("accepts the current SDK nested pagination response", () => {

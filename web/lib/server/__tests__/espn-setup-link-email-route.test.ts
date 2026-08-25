@@ -63,6 +63,7 @@ describe('POST /api/espn/setup-link-email', () => {
       to: string;
       leaguesUrl: string;
       extensionUrl: string;
+      idempotencyKey?: string;
       userId: string;
     };
     expect(params.to).toBe('fan@example.com');
@@ -70,6 +71,7 @@ describe('POST /api/espn/setup-link-email', () => {
     expect(params.leaguesUrl).toBe('https://flaim.app/leagues?ref=email-espn-setup-link');
     expect(params.extensionUrl).toContain('chromewebstore.google.com');
     expect(params.extensionUrl).not.toContain('ref=');
+    expect(params).not.toHaveProperty('idempotencyKey');
   });
 
   it('returns 400 when the account has no email address', async () => {

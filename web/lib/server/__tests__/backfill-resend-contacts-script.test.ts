@@ -36,6 +36,15 @@ describe("backfill-resend-contacts script helpers", () => {
     });
   });
 
+  it("parses --force-resend only for applying flagged recovery", () => {
+    expect(parseArgs(["--flagged-only", "--apply", "--force-resend"])).toMatchObject({
+      apply: true,
+      flaggedOnly: true,
+      forceResend: true,
+    });
+    expect(() => parseArgs(["--force-resend"])).toThrow("--force-resend requires --flagged-only --apply");
+  });
+
   it("falls back to the contacts key when the optional events key is blank", () => {
     expect(resolveResendEventsApiKey(" ", "contacts-key")).toBe("contacts-key");
   });
@@ -182,12 +191,12 @@ describe("backfill-resend-contacts script helpers", () => {
     });
 
     expect(results).toEqual([
-      { kind: "contactSync", ok: true },
       {
         error: "RESEND_EVENTS_API_KEY or RESEND_CONTACTS_API_KEY is required",
         kind: "welcomeEvent",
         ok: false,
       },
+      { kind: "contactSync", ok: true },
     ]);
     expect(clearMarker).toHaveBeenCalledTimes(1);
     expect(clearMarker).toHaveBeenCalledWith({
@@ -197,8 +206,12 @@ describe("backfill-resend-contacts script helpers", () => {
     });
   });
 
-  it("replays a flagged welcome event only through the apply helper and clears it on success", async () => {
+  it("re-sends a flagged welcome event when its Resend contact is missing and clears the marker", async () => {
     const clearMarker = vi.fn(async () => ({ ok: true }));
+    const get = vi.fn(async () => ({
+      data: null,
+      error: { message: "not found", name: "not_found", statusCode: 404 },
+    }));
     const send = vi.fn(async () => ({
       data: { event: "flaim.user_created", object: "event" },
       error: null,
@@ -207,7 +220,7 @@ describe("backfill-resend-contacts script helpers", () => {
     const results = await retryFlaggedUser({
       clearMarker,
       clerkSecretKey: "sk_test",
-      resendContacts: null,
+      resendContacts: { contacts: { get } },
       resendEvents: { events: { send } },
       segmentId: null,
       user: {
@@ -224,6 +237,7 @@ describe("backfill-resend-contacts script helpers", () => {
     });
 
     expect(results).toEqual([{ kind: "welcomeEvent", ok: true }]);
+    expect(get).toHaveBeenCalledWith({ email: "fan@example.com" });
     expect(send).toHaveBeenCalledWith({
       email: "fan@example.com",
       event: "flaim.user_created",
@@ -240,13 +254,127 @@ describe("backfill-resend-contacts script helpers", () => {
     });
   });
 
+  it("clears a flagged welcome marker without re-sending when the Resend contact exists", async () => {
+    const clearMarker = vi.fn(async () => ({ ok: true }));
+    const get = vi.fn(async () => ({
+      data: { email: "fan@example.com", id: "contact_123", object: "contact" },
+      error: null,
+    }));
+    const send = vi.fn();
+
+    const results = await retryFlaggedUser({
+      clearMarker,
+      clerkSecretKey: "sk_test",
+      resendContacts: { contacts: { get } },
+      resendEvents: { events: { send } },
+      segmentId: null,
+      user: {
+        email_addresses: [{ id: "primary", email_address: "fan@example.com" }],
+        id: "user_123",
+        primary_email_address_id: "primary",
+        private_metadata: {
+          flaim_email_ops: {
+            welcomeEvent: { failedAt: "2026-08-24T12:01:00.000Z" },
+          },
+        },
+      },
+    });
+
+    expect(results).toEqual([{ kind: "welcomeEvent", ok: true, skipped: true }]);
+    expect(get).toHaveBeenCalledWith({ email: "fan@example.com" });
+    expect(send).not.toHaveBeenCalled();
+    expect(clearMarker).toHaveBeenCalledWith({
+      clerkSecretKey: "sk_test",
+      kind: "welcomeEvent",
+      userId: "user_123",
+    });
+  });
+
+  it("uses --force-resend to bypass the contact-existence skip", async () => {
+    const clearMarker = vi.fn(async () => ({ ok: true }));
+    const get = vi.fn();
+    const send = vi.fn(async () => ({
+      data: { event: "flaim.user_created", object: "event" },
+      error: null,
+    }));
+
+    const results = await retryFlaggedUser({
+      clearMarker,
+      clerkSecretKey: "sk_test",
+      forceResend: true,
+      resendContacts: { contacts: { get } },
+      resendEvents: { events: { send } },
+      segmentId: null,
+      user: {
+        email_addresses: [{ id: "primary", email_address: "fan@example.com" }],
+        id: "user_123",
+        primary_email_address_id: "primary",
+        private_metadata: {
+          flaim_email_ops: {
+            welcomeEvent: { failedAt: "2026-08-24T12:01:00.000Z" },
+          },
+        },
+      },
+    });
+
+    expect(results).toEqual([{ kind: "welcomeEvent", ok: true }]);
+    expect(get).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(clearMarker).toHaveBeenCalledWith({
+      clerkSecretKey: "sk_test",
+      kind: "welcomeEvent",
+      userId: "user_123",
+    });
+  });
+
+  it("retains the welcome marker when the contact-existence check throws", async () => {
+    const clearMarker = vi.fn(async () => ({ ok: true }));
+    const send = vi.fn();
+
+    await expect(retryFlaggedUser({
+      clearMarker,
+      clerkSecretKey: "sk_test",
+      resendContacts: {
+        contacts: {
+          get: vi.fn(async () => {
+            throw new Error("contact lookup failed");
+          }),
+        },
+      },
+      resendEvents: { events: { send } },
+      segmentId: null,
+      user: {
+        email_addresses: [{ id: "primary", email_address: "fan@example.com" }],
+        id: "user_123",
+        primary_email_address_id: "primary",
+        private_metadata: {
+          flaim_email_ops: {
+            welcomeEvent: { failedAt: "2026-08-24T12:01:00.000Z" },
+          },
+        },
+      },
+    })).resolves.toEqual([
+      { error: "contact lookup failed", kind: "welcomeEvent", ok: false },
+    ]);
+
+    expect(send).not.toHaveBeenCalled();
+    expect(clearMarker).not.toHaveBeenCalled();
+  });
+
   it("retains a welcome marker when the replay is rejected", async () => {
     const clearMarker = vi.fn(async () => ({ ok: true }));
 
     const results = await retryFlaggedUser({
       clearMarker,
       clerkSecretKey: "sk_test",
-      resendContacts: null,
+      resendContacts: {
+        contacts: {
+          get: vi.fn(async () => ({
+            data: null,
+            error: { message: "not found", name: "not_found", statusCode: 404 },
+          })),
+        },
+      },
       resendEvents: {
         events: {
           send: vi.fn(async () => ({ data: null, error: { message: "event rejected" } })),
@@ -269,7 +397,7 @@ describe("backfill-resend-contacts script helpers", () => {
     expect(clearMarker).not.toHaveBeenCalled();
   });
 
-  it("retains a rejected contact retry while continuing to the next marked operation", async () => {
+  it("continues to a rejected contact retry after welcome recovery", async () => {
     const clearMarker = vi.fn(async () => ({ ok: true }));
     const send = vi.fn(async () => ({
       data: { event: "flaim.user_created", object: "event" },
@@ -282,6 +410,10 @@ describe("backfill-resend-contacts script helpers", () => {
       resendContacts: {
         contacts: {
           create: vi.fn(),
+          get: vi.fn(async () => ({
+            data: null,
+            error: { message: "not found", name: "not_found", statusCode: 404 },
+          })),
           segments: { add: vi.fn() },
           update: vi.fn(async () => {
             throw new Error("contact network failed");
@@ -304,8 +436,8 @@ describe("backfill-resend-contacts script helpers", () => {
     });
 
     expect(results).toEqual([
-      { error: "contact network failed", kind: "contactSync", ok: false },
       { kind: "welcomeEvent", ok: true },
+      { error: "contact network failed", kind: "contactSync", ok: false },
     ]);
     expect(send).toHaveBeenCalledTimes(1);
     expect(clearMarker).toHaveBeenCalledTimes(1);
@@ -316,11 +448,11 @@ describe("backfill-resend-contacts script helpers", () => {
     });
   });
 
-  it("retains a contact marker when its Clerk clear rejects and continues to the welcome marker", async () => {
+  it("retains a contact marker when its Clerk clear rejects after welcome recovery", async () => {
     const clearMarker = vi
       .fn()
-      .mockRejectedValueOnce(new Error("Clerk contact clear failed"))
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce({ ok: true })
+      .mockRejectedValueOnce(new Error("Clerk contact clear failed"));
     const send = vi.fn(async () => ({
       data: { event: "flaim.user_created", object: "event" },
       error: null,
@@ -332,6 +464,10 @@ describe("backfill-resend-contacts script helpers", () => {
       resendContacts: {
         contacts: {
           create: vi.fn(),
+          get: vi.fn(async () => ({
+            data: null,
+            error: { message: "not found", name: "not_found", statusCode: 404 },
+          })),
           segments: { add: vi.fn() },
           update: vi.fn(async () => ({ data: { id: "contact_123" }, error: null })),
         },
@@ -352,8 +488,8 @@ describe("backfill-resend-contacts script helpers", () => {
     });
 
     expect(results).toEqual([
-      { error: "Clerk contact clear failed", kind: "contactSync", ok: false },
       { kind: "welcomeEvent", ok: true },
+      { error: "Clerk contact clear failed", kind: "contactSync", ok: false },
     ]);
     expect(send).toHaveBeenCalledTimes(1);
     expect(clearMarker).toHaveBeenCalledTimes(2);
@@ -379,7 +515,14 @@ describe("backfill-resend-contacts script helpers", () => {
     await expect(retryFlaggedUser({
       clearMarker,
       clerkSecretKey: "sk_test",
-      resendContacts: null,
+      resendContacts: {
+        contacts: {
+          get: vi.fn(async () => ({
+            data: null,
+            error: { message: "not found", name: "not_found", statusCode: 404 },
+          })),
+        },
+      },
       resendEvents: { events: { send } },
       segmentId: null,
       user,
@@ -393,7 +536,14 @@ describe("backfill-resend-contacts script helpers", () => {
     await expect(retryFlaggedUser({
       clearMarker: nextClearMarker,
       clerkSecretKey: "sk_test",
-      resendContacts: null,
+      resendContacts: {
+        contacts: {
+          get: vi.fn(async () => ({
+            data: null,
+            error: { message: "not found", name: "not_found", statusCode: 404 },
+          })),
+        },
+      },
       resendEvents: { events: { send } },
       segmentId: null,
       user: { ...user, id: "user_456" },

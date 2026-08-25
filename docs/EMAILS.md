@@ -115,12 +115,12 @@ The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRE
 ## Delivery operations and recovery
 
 Email operations emit compact JSON records to Vercel structured logs. The stable
-event names are `email.welcome_event_failed`, `email.contact_sync_failed`,
-`email.send_failed`, `email.bounced`, `email.complained`, `email.failed`, and
-`email.delivery_delayed`. Webhook verification failures use
-`email.webhook_verification_failed`. These records include provider-safe IDs and
-failure categories but never recipient addresses, raw webhook bodies, signatures,
-or API keys.
+event names are `email.welcome_event_failed`, `email.welcome_event_skipped`,
+`email.contact_sync_failed`, `email.send_failed`, `email.bounced`,
+`email.complained`, `email.failed`, and `email.delivery_delayed`. Webhook
+verification failures use `email.webhook_verification_failed`. These records
+include provider-safe IDs and failure categories but never recipient addresses,
+raw webhook bodies, signatures, or API keys.
 
 When a Resend welcome event or contact sync fails after a verified Clerk webhook,
 Flaim stores the matching retry marker in that user's Clerk private metadata at
@@ -130,12 +130,24 @@ is never refreshed when it already exists, which prevents marker-caused
 `user.updated` webhooks from looping during an outage. A successful contact sync
 clears only `contactSync`; it cannot clear a failed `welcomeEvent` marker.
 
-Direct `resend.emails.send` calls pass the SDK request option
-`{ idempotencyKey: '<event-type>/<user-id>' }`. Resend currently supports that
-provider-side idempotency option for email endpoints, but not for
-`events.send`. Welcome automation events therefore rely on their Clerk retry
-marker and the flagged recovery command below instead of an unsupported SDK
-option.
+The marker bounds webhook retry loops; it is not an exactly-once delivery
+guarantee. Before a flagged recovery re-sends a welcome event, the recovery
+command checks whether the Resend contact exists. When the welcome automation
+owns contact creation, that is conservative evidence that the prior event landed,
+so the command clears the marker and reports a skip instead of sending again.
+That deduplication is reliable with the default disabled contact-sync flag and no
+preexisting contact. If `RESEND_CONTACT_SYNC_ENABLED=true` or the contact may
+have existed before the event, use `--force-resend` for an intentional override.
+
+Direct `resend.emails.send` calls may pass a caller-supplied SDK
+`idempotencyKey` only for a genuinely one-time business event with a stable
+semantic identifier. The send helper never derives a permanent key from a user
+and template: repeatable requests such as an ESPN setup-link resend omit the
+option so Resend does not replay-cache a legitimate later request. Resend
+currently supports that provider-side idempotency option for email endpoints,
+but not for `events.send`. Welcome automation events therefore rely on their
+Clerk retry marker and the flagged recovery command below instead of an
+unsupported SDK option.
 
 ### Resend delivery-feedback webhook
 
@@ -182,7 +194,15 @@ Existing users are backfilled or repaired with a separate dry-run-first script. 
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs
 ```
 
-The script requires `CLERK_SECRET_KEY` for dry-runs and also requires `RESEND_CONTACTS_API_KEY` when applying writes. `RESEND_API_KEY` should remain the send-only email key; the contact sync key needs Resend Contacts and Segments permissions. The script skips users without a primary email and users whose primary email is explicitly unverified. When applying writes, it updates first and creates only if Resend reports the contact is missing. Use `--delay-ms` to pace larger writes if needed. To write a single controlled contact before a full backfill:
+The script requires `CLERK_SECRET_KEY` for dry-runs and `RESEND_CONTACTS_API_KEY`
+when applying contact changes or normal flagged welcome recovery: the latter reads
+the contact before it can safely retry the event. `RESEND_API_KEY` should remain the
+send-only email key; the contact sync key needs Resend Contacts and Segments
+permissions. The script skips users without a primary email and users whose
+primary email is explicitly unverified. When applying writes, it updates first
+and creates only if Resend reports the contact is missing. Use `--delay-ms` to
+pace larger writes if needed. To write a single controlled contact before a full
+backfill:
 
 ```sh
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --apply --max-users 1
@@ -201,10 +221,15 @@ Apply the marked recovery only after reviewing that output:
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --flagged-only --apply
 ```
 
-The apply command retries contact syncs and failed welcome events. Retrying a
-welcome event can deliver a late welcome email, so it requires an explicit
-`--apply`, does not run automatically, and should be limited with
-`--max-users` when used for a controlled recovery.
+The apply command retries contact syncs and failed welcome events. Welcome-event
+recovery first performs the contact-existence deduplication described above. It
+requires an explicit `--apply`, does not run automatically, and should be limited
+with `--max-users` when used for a controlled recovery. To deliberately re-send
+even when the contact exists, add `--force-resend`:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --flagged-only --apply --force-resend --max-users 1
+```
 
 ### Read-only suppression reconciliation
 
@@ -220,8 +245,8 @@ corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
 
 It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`, where the
 Resend key has read access to Suppressions. The command is always read-only,
-including its default dry-run mode. Any suppression removal must be reviewed and
-performed manually in Resend after the underlying delivery problem is resolved.
+and has no write mode. Any suppression removal must be reviewed and performed
+manually in Resend after the underlying delivery problem is resolved.
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 
