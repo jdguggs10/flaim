@@ -401,7 +401,7 @@ describe('sleeper-connect-handlers', () => {
     );
   });
 
-  it('falls back to the leagueId when a Sleeper history chain exceeds the resolver depth cap', async () => {
+  it('persists the verified recurring root for long Sleeper history chains', async () => {
     const currentYear = 2025;
     const rootYear = 1998;
 
@@ -466,32 +466,30 @@ describe('sleeper-connect-handlers', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    // processLeague's own persistence depth cap (unaffected by the resolver's
-    // cap) still limits how many seasons get saved.
+    // processLeague's own persistence depth cap (MAX_HISTORY_YEARS) still
+    // limits how many seasons get saved — but the resolver's own walk that
+    // identifies the recurring root is unbounded for discovery (audit
+    // FLA-168 Fix 2), so it reaches the true 1998 root even though only 5
+    // seasons of history get persisted.
     expect(body.leagues_found).toBe(5);
     expect(body.seasons_discovered).toBe(5);
     expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(5);
-    // The resolver's own MAX_HISTORY_YEARS depth cap (audit FLA-168 Fix 2) now
-    // stops the chain walk before it reaches the true 1998 root. Discovery's
-    // safety net for an unresolved chain omits recurringLeagueId entirely
-    // (same as the "history lookup fails" test below) rather than guessing —
-    // it does not fall back to the leagueId the way the UI/backfill readers do.
     expect(mockStorage.saveSleeperLeague).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
         leagueId: 'deep-2025',
         seasonYear: 2025,
+        recurringLeagueId: `deep-${rootYear}`,
       }),
     );
-    expect(mockStorage.saveSleeperLeague.mock.calls[0][0]).not.toHaveProperty('recurringLeagueId');
     expect(mockStorage.saveSleeperLeague).toHaveBeenNthCalledWith(
       5,
       expect.objectContaining({
         leagueId: 'deep-2021',
         seasonYear: 2021,
+        recurringLeagueId: `deep-${rootYear}`,
       }),
     );
-    expect(mockStorage.saveSleeperLeague.mock.calls[4][0]).not.toHaveProperty('recurringLeagueId');
   });
 
   it('does not persist a synthetic recurringLeagueId when history lookup fails during discovery', async () => {

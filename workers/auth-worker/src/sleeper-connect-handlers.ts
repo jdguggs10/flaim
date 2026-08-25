@@ -117,10 +117,25 @@ function describeSleeperResolutionFailure(leagueId: string, error: unknown): str
   return `unknown error while resolving ${leagueId}`;
 }
 
+/**
+ * `maxDepth` bounds the previous_league_id walk to that many hops before
+ * treating the chain as unresolved (audit FLA-168 Fix 2); `undefined`
+ * (the default) is unbounded, restoring this resolver's original shared
+ * behavior. Only the backfill path (backfillSleeperRecurringIds, below)
+ * passes a cap (MAX_HISTORY_YEARS) — it re-walks chains for potentially very
+ * old rows in bulk, where an unbounded walk is the actual risk. UI reads
+ * (buildSleeperLeagueResponse), archive resolution (resolveSleeperArchiveTarget),
+ * and discovery (refreshSleeperLeaguesForUsername) all need the true root for
+ * a deep-but-legitimate dynasty chain, and share this function via
+ * resolveRecurringLeagueId or a direct unbounded call — round one's mistake
+ * was applying the backfill-only cap here at the shared level, which
+ * collaterally broke identity for those unbounded contexts too.
+ */
 async function tryResolveRecurringLeagueId(
   leagueId: string,
   cache: Map<string, string | null>,
-  leagueCache: Map<string, Promise<SleeperApiLeague | null>>
+  leagueCache: Map<string, Promise<SleeperApiLeague | null>>,
+  maxDepth?: number
 ): Promise<RecurringLeagueResolutionResult> {
   const path: string[] = [];
   const visited = new Set<string>();
@@ -145,17 +160,16 @@ async function tryResolveRecurringLeagueId(
       return { failureReason: `detected recurring league cycle at ${currentLeagueId}` };
     }
 
-    // Bound the walk at MAX_HISTORY_YEARS hops so a very long (or malformed,
-    // non-cyclic) previous_league_id chain can't be walked indefinitely.
-    // Mirrors the depth cap processLeague already applies when persisting
-    // discovery history, so the resolver never reaches further back than what
-    // discovery actually stores. Hitting the cap is treated as unresolved
-    // (audit FLA-168 Fix 2), not as a discovered root.
-    if (path.length >= MAX_HISTORY_YEARS) {
+    // Bound the walk at maxDepth hops (backfill only — see the doc comment
+    // above) so a very long (or malformed, non-cyclic) previous_league_id
+    // chain can't be walked indefinitely in a bulk re-resolution. Hitting the
+    // cap is treated as unresolved (audit FLA-168 Fix 2), not as a discovered
+    // root. Unbounded (maxDepth undefined) for every other caller.
+    if (maxDepth !== undefined && path.length >= maxDepth) {
       for (const pathLeagueId of path) {
         cache.set(pathLeagueId, null);
       }
-      return { failureReason: `previous_league_id chain exceeded ${MAX_HISTORY_YEARS}-season depth cap at ${currentLeagueId}` };
+      return { failureReason: `previous_league_id chain exceeded ${maxDepth}-season depth cap at ${currentLeagueId}` };
     }
 
     visited.add(currentLeagueId);
@@ -314,7 +328,11 @@ export async function backfillSleeperRecurringIds(
     // is sync's job to correct, not backfill's.
     if (league.recurringLeagueId != null) continue;
 
-    const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache);
+    // Backfill is the one caller that bounds the walk (audit FLA-168 Fix 2):
+    // it re-resolves potentially very old rows in bulk, so a malformed chain
+    // shouldn't be walked indefinitely here the way it's fine to for a single
+    // UI read or discovery run.
+    const resolution = await tryResolveRecurringLeagueId(league.leagueId, recurringIdCache, leagueCache, MAX_HISTORY_YEARS);
     if (!resolution.recurringLeagueId) {
       unresolved++;
       continue;

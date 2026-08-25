@@ -21,6 +21,18 @@
  * not a per-user user-facing action. A second concurrent live run gets a 409
  * instead of racing writes against the first. Dry runs are read-only and
  * skip the guard entirely (audit FLA-168 Fix 5).
+ *
+ * The lease is renewed after every user batch so a run that outlives the
+ * 120s TTL doesn't let a second live run acquire mid-run (audit FLA-168
+ * Fix 1); if renewal ever fails (lease already expired and re-acquired by
+ * someone else), the run stops touching rows immediately and returns a
+ * `lease_lost` outcome with whatever partial counts it completed. On a normal
+ * finish, the synthetic lease row is deleted outright rather than released
+ * back to an unheld state (audit FLA-168 Fix 3) — it has no real user's
+ * telemetry worth keeping, and a leftover row would otherwise sit in
+ * provider_sync_state indefinitely, inflating sync_7d.users_attempted and
+ * risking a phantom Sleeper entry in sync_recent. The row is still visible
+ * for the run's own (manual, minutes-long) duration, which is acceptable.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -79,9 +91,14 @@ async function fetchUsersMissingRecurringId(supabase: SupabaseClient): Promise<s
   return Array.from(userIds);
 }
 
+// 'lease_lost' = the lease was renewed after a batch and had already expired
+// and been re-acquired by a new run (audit FLA-168 Fix 1) — processing stops
+// immediately and the summary carries whatever was completed so far.
+export type SleeperRecurringBackfillOutcome = 'completed' | 'failed' | 'blocked' | 'lease_lost';
+
 export type SleeperRecurringBackfillSummary =
   | {
-      outcome: 'completed' | 'failed' | 'blocked';
+      outcome: SleeperRecurringBackfillOutcome;
       dryRun: true;
       usersScanned: number;
       rowsProcessed: number;
@@ -91,7 +108,7 @@ export type SleeperRecurringBackfillSummary =
       errors: number;
     }
   | {
-      outcome: 'completed' | 'failed' | 'blocked';
+      outcome: SleeperRecurringBackfillOutcome;
       dryRun: false;
       usersScanned: number;
       rowsProcessed: number;
@@ -109,7 +126,7 @@ export async function runSleeperRecurringBackfill(
   const runId = crypto.randomUUID();
   const leaseOwner = `${BACKFILL_LEASE_OWNER_PREFIX}${runId}`;
 
-  let outcome: 'completed' | 'failed' | 'blocked' = 'completed';
+  let outcome: SleeperRecurringBackfillOutcome = 'completed';
   let usersScanned = 0;
   let rowsProcessed = 0;
   let rowsResolved = 0;
@@ -171,13 +188,51 @@ export async function runSleeperRecurringBackfill(
             }
           })
         );
+
+        // Renew the lease after every batch (audit FLA-168 Fix 1): the
+        // 120s SYNC_LEASE_TTL_MS was sized for a single provider refresh, not
+        // a whole backfill run, which can easily outlive it across many
+        // batches. Without renewal, a second live run could acquire mid-run
+        // and race writes against this one. The owner-guarded renewal only
+        // succeeds while this run still holds the lease; if it comes back
+        // false, the lease already expired and was re-acquired by that other
+        // run, so this run stops touching rows immediately rather than
+        // racing the new holder — no throw, just a structured outcome.
+        if (syncState) {
+          const stillHeld = await syncState.extendLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner);
+          if (!stillHeld) {
+            outcome = 'lease_lost';
+            logBackfill({
+              run_id: runId,
+              status: 'lease_lost',
+              dry_run: dryRun,
+              users_scanned: usersScanned,
+              rows_processed: rowsProcessed,
+              rows_resolved: rowsResolved,
+              rows_unresolved: rowsUnresolved,
+              rows_changed: rowsChanged,
+            });
+            break;
+          }
+        }
       }
     } catch (error) {
       outcome = 'failed';
       console.error('[sleeper-recurring-backfill] Run failed:', error instanceof Error ? error.message : error);
     } finally {
       if (syncState) {
-        await syncState.release(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner);
+        // Delete rather than release (audit FLA-168 Fix 3): this row's
+        // (clerk_user_id, provider) key is the synthetic '__backfill__'/
+        // 'sleeper' pseudo-user, not a real refresh target, so nothing should
+        // persist here between runs — a leftover row would inflate
+        // sync_7d.users_attempted and could phantom a Sleeper provider entry
+        // in sync_recent. The row IS visible for this run's own duration
+        // (this route is a manual, operator-triggered, minutes-long
+        // one-off — that transient visibility is acceptable). Owner-guarded
+        // exactly like release() was, so if the lease was already stolen
+        // (the lease_lost path above), this deletes zero rows rather than
+        // clobbering the new holder's row.
+        await syncState.deleteLeaseRow(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner);
       }
     }
   }
@@ -232,6 +287,12 @@ export async function parseSleeperRecurringBackfillRequest(request: Request): Pr
 
   let body: unknown;
   try {
+    // JSON.parse is last-wins on duplicate keys (e.g. `{"dryRun":true,"dryRun":false}`
+    // parses as `{ dryRun: false }`) — there is no raw-text duplicate-key
+    // detection here (audit FLA-168 Fix 4). Accepted: this route is
+    // internal-token-gated (requireInternalService, index-hono.ts), not
+    // reachable by an untrusted caller who'd have a reason to smuggle a
+    // second key past a naive reviewer of the request body.
     body = JSON.parse(rawBody);
   } catch {
     return {

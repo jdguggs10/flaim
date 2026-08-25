@@ -141,6 +141,53 @@ export class SyncStateStorage {
   }
 
   /**
+   * Renew this owner's still-held lease for another `ttlMs` (default
+   * SYNC_LEASE_TTL_MS) — for a caller whose single run can outlive the lease
+   * TTL (e.g. the FLA-168 Sleeper recurring-id backfill, which renews after
+   * every user batch) so a second live run can't acquire mid-run just because
+   * the original TTL elapsed while work was still in progress.
+   *
+   * Owner-guarded exactly like acquireLease's guarded update: the row is only
+   * touched `.eq('sync_lease_owner', ownerId)`, so if the lease already
+   * expired and was taken by someone else, the update matches zero rows and
+   * this returns `false` instead of silently re-extending a lease that is no
+   * longer this caller's to hold. Callers must treat `false` as "stop
+   * immediately" — continuing to write after this would race the new holder.
+   *
+   * Storage errors fail open (return `true`), matching acquireLease/settle's
+   * posture: a transient Supabase blip should not itself be treated as proof
+   * of a stolen lease.
+   */
+  async extendLease(
+    clerkUserId: string,
+    provider: SyncProvider,
+    ownerId: string,
+    ttlMs: number = SYNC_LEASE_TTL_MS
+  ): Promise<boolean> {
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+
+    try {
+      const { data, error } = await this.supabase
+        .from('provider_sync_state')
+        .update({
+          sync_lease_expires_at: expiresAt,
+          updated_at: now,
+        })
+        .eq('clerk_user_id', clerkUserId)
+        .eq('provider', provider)
+        .eq('sync_lease_owner', ownerId)
+        .select('clerk_user_id');
+      if (error) throw error;
+
+      return (data?.length ?? 0) > 0;
+    } catch (error) {
+      console.error(`[sync-state] Lease extension failed open for ${provider}:`, error);
+      return true;
+    }
+  }
+
+  /**
    * Settle a finished refresh: convert this owner's lease into a cooldown
    * marker and record last-run telemetry. Owner-guarded so a stale caller
    * cannot extend another request's cooldown. Storage errors fail open.
@@ -207,6 +254,37 @@ export class SyncStateStorage {
       if (error) throw error;
     } catch (error) {
       console.error(`[sync-state] Lease release failed open for ${provider}:`, error);
+    }
+  }
+
+  /**
+   * Delete this owner's row outright, rather than clearing it back to an
+   * unheld state like release() does. For a caller whose (clerk_user_id,
+   * provider) key is a synthetic pseudo-user rather than a real refresh
+   * target (the FLA-168 Sleeper recurring-id backfill's single-flight lease)
+   * and so has no cooldown/telemetry history worth keeping between runs — a
+   * row left behind after release() would sit in `provider_sync_state`
+   * indefinitely, inflating `sync_7d.users_attempted` and risking a phantom
+   * Sleeper provider entry in `sync_recent` (audit FLA-168 Fix 3).
+   *
+   * Do NOT use this for a real user/provider row: unlike release(), which
+   * only clears the lease fields, this permanently destroys the row's
+   * last_success_at/cooldown history. Owner-guarded exactly like release() so
+   * a lease already stolen by a new holder (e.g. after a failed extendLease)
+   * is left untouched instead of being deleted out from under it. Storage
+   * errors fail open (no-op) — same posture as the rest of this class.
+   */
+  async deleteLeaseRow(clerkUserId: string, provider: SyncProvider, ownerId: string): Promise<void> {
+    try {
+      const { error } = await this.supabase
+        .from('provider_sync_state')
+        .delete()
+        .eq('clerk_user_id', clerkUserId)
+        .eq('provider', provider)
+        .eq('sync_lease_owner', ownerId);
+      if (error) throw error;
+    } catch (error) {
+      console.error(`[sync-state] Lease row delete failed open for ${provider}:`, error);
     }
   }
 

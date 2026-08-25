@@ -13,10 +13,15 @@ vi.mock('../sleeper-connect-handlers', () => ({
  * assertions behind a swallowed "WRITE ATTEMPTED" error.
  */
 const mockAcquireLease = vi.hoisted(() => vi.fn());
-const mockRelease = vi.hoisted(() => vi.fn());
+const mockExtendLease = vi.hoisted(() => vi.fn());
+const mockDeleteLeaseRow = vi.hoisted(() => vi.fn());
 vi.mock('../sync-state', () => ({
   SyncStateStorage: {
-    fromEnvironment: vi.fn(() => ({ acquireLease: mockAcquireLease, release: mockRelease })),
+    fromEnvironment: vi.fn(() => ({
+      acquireLease: mockAcquireLease,
+      extendLease: mockExtendLease,
+      deleteLeaseRow: mockDeleteLeaseRow,
+    })),
   },
 }));
 
@@ -85,10 +90,12 @@ beforeEach(() => {
   supabaseStub.state.isCalls = [];
   supabaseStub.state.rangeCalls = [];
   createClientMock.mockReturnValue(supabaseStub.client);
-  // Default: lease always available, so existing dryRun:false tests exercise
-  // the normal run path unless a test overrides this to simulate contention.
+  // Default: lease always available and renews cleanly, so existing
+  // dryRun:false tests exercise the normal run path unless a test overrides
+  // this to simulate contention or a stolen lease.
   mockAcquireLease.mockResolvedValue({ acquired: true });
-  mockRelease.mockResolvedValue(undefined);
+  mockExtendLease.mockResolvedValue(true);
+  mockDeleteLeaseRow.mockResolvedValue(undefined);
 });
 
 describe('runSleeperRecurringBackfill', () => {
@@ -170,7 +177,7 @@ describe('runSleeperRecurringBackfill', () => {
     expect(summary.rowsProcessed).toBe(2);
   });
 
-  it('acquires the single-flight lease before a live run and releases it under the same owner when done', async () => {
+  it('acquires the single-flight lease before a live run and deletes its row under the same owner when done', async () => {
     supabaseStub.state.rows = [{ clerk_user_id: 'user_a' }];
     mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
 
@@ -181,11 +188,13 @@ describe('runSleeperRecurringBackfill', () => {
     expect(acquireUserId).toBe('__backfill__');
     expect(acquireProvider).toBe('sleeper');
 
-    expect(mockRelease).toHaveBeenCalledTimes(1);
-    const [releaseUserId, releaseProvider, releaseOwner] = mockRelease.mock.calls[0];
-    expect(releaseUserId).toBe('__backfill__');
-    expect(releaseProvider).toBe('sleeper');
-    expect(releaseOwner).toBe(acquireOwner);
+    // Audit FLA-168 Fix 3: the synthetic row is deleted outright on a normal
+    // finish, not released back to an unheld state.
+    expect(mockDeleteLeaseRow).toHaveBeenCalledTimes(1);
+    const [deleteUserId, deleteProvider, deleteOwner] = mockDeleteLeaseRow.mock.calls[0];
+    expect(deleteUserId).toBe('__backfill__');
+    expect(deleteProvider).toBe('sleeper');
+    expect(deleteOwner).toBe(acquireOwner);
   });
 
   it('skips the lease entirely for a dry run', async () => {
@@ -195,7 +204,8 @@ describe('runSleeperRecurringBackfill', () => {
     await runSleeperRecurringBackfill(baseEnv, true);
 
     expect(mockAcquireLease).not.toHaveBeenCalled();
-    expect(mockRelease).not.toHaveBeenCalled();
+    expect(mockExtendLease).not.toHaveBeenCalled();
+    expect(mockDeleteLeaseRow).not.toHaveBeenCalled();
   });
 
   it('returns a blocked outcome for a 409 when a concurrent live run already holds the lease, without touching any rows', async () => {
@@ -208,8 +218,88 @@ describe('runSleeperRecurringBackfill', () => {
     expect(summary.usersScanned).toBe(0);
     expect(summary.rowsProcessed).toBe(0);
     expect(mockBackfillSleeperRecurringIds).not.toHaveBeenCalled();
-    // Nothing was acquired, so there's nothing to release.
-    expect(mockRelease).not.toHaveBeenCalled();
+    // Nothing was acquired: no other holder's row must be deleted (audit
+    // FLA-168 Fix 3 — blocked never deletes, since another run owns the row).
+    expect(mockDeleteLeaseRow).not.toHaveBeenCalled();
+  });
+
+  describe('lease renewal (audit FLA-168 Fix 1)', () => {
+    it('renews the lease after every user batch during a multi-batch live run', async () => {
+      // BATCH_SIZE is 2, so 4 users span 2 batches.
+      supabaseStub.state.rows = [
+        { clerk_user_id: 'user_a' },
+        { clerk_user_id: 'user_b' },
+        { clerk_user_id: 'user_c' },
+        { clerk_user_id: 'user_d' },
+      ];
+      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+
+      const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+      expect(summary.outcome).toBe('completed');
+      expect(mockExtendLease).toHaveBeenCalledTimes(2);
+      const [extendUserId, extendProvider, extendOwner] = mockExtendLease.mock.calls[0];
+      expect(extendUserId).toBe('__backfill__');
+      expect(extendProvider).toBe('sleeper');
+      const [, , acquireOwner] = mockAcquireLease.mock.calls[0];
+      expect(extendOwner).toBe(acquireOwner);
+      // A clean finish still deletes the row.
+      expect(mockDeleteLeaseRow).toHaveBeenCalledTimes(1);
+    });
+
+    it('halts the loop with partial counts and performs no further writes when renewal fails mid-run', async () => {
+      // 3 batches of 2 users each (BATCH_SIZE=2): renewal fails after the
+      // first batch, so the second and third batches must never run.
+      supabaseStub.state.rows = [
+        { clerk_user_id: 'user_a' },
+        { clerk_user_id: 'user_b' },
+        { clerk_user_id: 'user_c' },
+        { clerk_user_id: 'user_d' },
+        { clerk_user_id: 'user_e' },
+        { clerk_user_id: 'user_f' },
+      ];
+      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+      mockExtendLease.mockResolvedValueOnce(false);
+
+      const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+      expect(summary.outcome).toBe('lease_lost');
+      // Only the first batch (user_a, user_b) was processed.
+      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledTimes(2);
+      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_a', { dryRun: false });
+      expect(mockBackfillSleeperRecurringIds).toHaveBeenCalledWith(baseEnv, 'user_b', { dryRun: false });
+      expect(mockBackfillSleeperRecurringIds).not.toHaveBeenCalledWith(baseEnv, 'user_c', expect.anything());
+      expect(summary.rowsProcessed).toBe(2);
+      if (!summary.dryRun) {
+        expect(summary.rowsChanged).toBe(2);
+      }
+      // Only one renewal attempt — the loop stopped instead of retrying or
+      // continuing to the next batch.
+      expect(mockExtendLease).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not clobber a stolen lease when releasing (delete) after a lease_lost halt', async () => {
+      supabaseStub.state.rows = [
+        { clerk_user_id: 'user_a' },
+        { clerk_user_id: 'user_b' },
+        { clerk_user_id: 'user_c' },
+        { clerk_user_id: 'user_d' },
+      ];
+      mockBackfillSleeperRecurringIds.mockResolvedValue({ processed: 1, resolved: 1, changed: 1, unresolved: 0 });
+      mockExtendLease.mockResolvedValueOnce(false);
+
+      await runSleeperRecurringBackfill(baseEnv, false);
+
+      // finally still runs and calls deleteLeaseRow under this run's own
+      // owner id; deleteLeaseRow's owner guard (tested in sync-state.test.ts)
+      // is what actually prevents it from touching the new holder's row —
+      // this asserts the orchestrator still issues the guarded call rather
+      // than skipping it or somehow targeting a different owner.
+      expect(mockDeleteLeaseRow).toHaveBeenCalledTimes(1);
+      const [, , acquireOwner] = mockAcquireLease.mock.calls[0];
+      const [, , deleteOwner] = mockDeleteLeaseRow.mock.calls[0];
+      expect(deleteOwner).toBe(acquireOwner);
+    });
   });
 });
 

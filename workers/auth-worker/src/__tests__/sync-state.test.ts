@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   NORMAL_REFRESH_COOLDOWN_SECONDS,
   SYNC_COOLDOWN_OWNER_PREFIX,
+  SYNC_LEASE_TTL_MS,
   SyncStateStorage,
   UPSTREAM_BACKOFF_COOLDOWN_SECONDS,
 } from '../sync-state';
@@ -20,7 +21,7 @@ function fakeSupabase(results: unknown[]) {
     const recorded: Record<string, unknown[][]> = {};
     calls.push(recorded);
     const chain: Record<string, unknown> = {};
-    for (const method of ['upsert', 'update', 'eq', 'or', 'select', 'single']) {
+    for (const method of ['upsert', 'update', 'delete', 'eq', 'or', 'select', 'single']) {
       chain[method] = vi.fn((...args: unknown[]) => {
         (recorded[method] ??= []).push(args);
         return chain;
@@ -111,6 +112,77 @@ describe('SyncStateStorage.acquireLease', () => {
     const result = await storage.acquireLease('user_1', 'espn', 'owner-4');
 
     expect(result).toEqual({ acquired: true });
+  });
+});
+
+describe('SyncStateStorage.extendLease', () => {
+  it('renews an owned lease, guarded to the current owner', async () => {
+    const { client, calls } = fakeSupabase([
+      { data: [{ clerk_user_id: '__backfill__' }], error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const before = Date.now();
+    const result = await storage.extendLease('__backfill__', 'sleeper', 'owner-1');
+    const after = Date.now();
+
+    expect(result).toBe(true);
+    const update = calls[0].update?.[0]?.[0] as Record<string, unknown>;
+    const expiresAtMs = new Date(update.sync_lease_expires_at as string).getTime();
+    // Renewed roughly SYNC_LEASE_TTL_MS out from "now" (loose bound to avoid
+    // flaking on exact timing).
+    expect(expiresAtMs).toBeGreaterThanOrEqual(before + SYNC_LEASE_TTL_MS - 1000);
+    expect(expiresAtMs).toBeLessThanOrEqual(after + SYNC_LEASE_TTL_MS + 1000);
+    // Owner guard: only the current lease holder may renew it.
+    expect(calls[0].eq?.map((args) => args)).toContainEqual(['sync_lease_owner', 'owner-1']);
+  });
+
+  it('returns false when the lease already expired and was taken by a new owner', async () => {
+    const { client } = fakeSupabase([
+      { data: [], error: null }, // guarded update matched nothing — owner no longer holds it
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.extendLease('__backfill__', 'sleeper', 'owner-1');
+
+    expect(result).toBe(false);
+  });
+
+  it('fails open (returns true) when storage errors', async () => {
+    const { client } = fakeSupabase([
+      { error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.extendLease('__backfill__', 'sleeper', 'owner-1');
+
+    expect(result).toBe(true);
+  });
+});
+
+describe('SyncStateStorage.deleteLeaseRow', () => {
+  it('deletes the owner-guarded row outright', async () => {
+    const { client, calls } = fakeSupabase([
+      { data: null, error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await storage.deleteLeaseRow('__backfill__', 'sleeper', 'owner-1');
+
+    expect(calls[0].delete).toHaveLength(1);
+    // Owner guard: only the current lease holder's row is deleted.
+    expect(calls[0].eq?.map((args) => args)).toContainEqual(['clerk_user_id', '__backfill__']);
+    expect(calls[0].eq?.map((args) => args)).toContainEqual(['provider', 'sleeper']);
+    expect(calls[0].eq?.map((args) => args)).toContainEqual(['sync_lease_owner', 'owner-1']);
+  });
+
+  it('swallows storage errors (fail open)', async () => {
+    const { client } = fakeSupabase([
+      { error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.deleteLeaseRow('__backfill__', 'sleeper', 'owner-1')).resolves.toBeUndefined();
   });
 });
 
