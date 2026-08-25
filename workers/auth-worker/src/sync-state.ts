@@ -95,6 +95,26 @@ function boundedRetryAfterSeconds(expiresAt: string | null, nowMs: number): numb
   return Math.min(Math.ceil(remainingMs / 1000), MAX_REPORTED_RETRY_AFTER_SECONDS);
 }
 
+/**
+ * Shared by both `acquireLease` branches (default and strict-mode) once the
+ * blocking row — or `null`, if the diagnostic read itself came back empty —
+ * is known: turns it into the normal "someone else holds it" result. Kept
+ * identical for both branches so strict mode's Fix 3 diagnostic-error
+ * handling (round-5 FLA-168 audit finding) changes only how a storage
+ * failure on the diagnostic read itself is reported, not how a successfully
+ * read blocking row is turned into a result.
+ */
+function buildBlockedResult(blocking: SyncStateRow | null, nowMs: number): SyncLeaseAcquisition {
+  const state: SyncLeaseState = blocking?.sync_lease_owner?.startsWith(SYNC_COOLDOWN_OWNER_PREFIX)
+    ? 'cooldown'
+    : 'in_progress';
+  return {
+    acquired: false,
+    state,
+    retryAfterSeconds: boundedRetryAfterSeconds(blocking?.sync_lease_expires_at ?? null, nowMs),
+  };
+}
+
 export class SyncStateStorage {
   constructor(private supabase: SupabaseClient) {}
 
@@ -125,6 +145,17 @@ export class SyncStateStorage {
    * `{ acquired: true }`. Overloaded so every caller that doesn't pass this
    * option keeps the original three-branch return type unchanged; only a
    * caller that explicitly asks for it sees the widened type.
+   *
+   * When the guarded update matches zero rows, the follow-up diagnostic read
+   * (which owner/state is actually blocking) is itself a storage call and can
+   * itself fail. In strict mode ONLY, that diagnostic-read failure is now
+   * surfaced as `state: 'error'` too (round-5 FLA-168 audit finding) — before
+   * this fix it fell through to the same `null`-blocking-row handling as "no
+   * row found," misreporting a genuine storage outage as `'in_progress'`
+   * (the strict caller then saw a 409 `'blocked'` instead of `'failed'`).
+   * Default-mode callers (every existing one) are unaffected: they still go
+   * through the original `getRow` helper and its plain fail-to-null
+   * behavior, unchanged.
    */
   async acquireLease(
     clerkUserId: string,
@@ -176,15 +207,33 @@ export class SyncStateStorage {
 
       if ((data?.length ?? 0) > 0) return { acquired: true };
 
+      // Round-5 FLA-168 audit finding (Fix 3): in strict mode, a failure of
+      // this diagnostic "who's blocking?" read must itself surface as
+      // `state: 'error'`, not silently collapse into "no row found" (which
+      // reports the same `'in_progress'` a genuinely-held lease would). The
+      // caller opted into `{ onStorageError: 'fail' }` specifically to tell
+      // "the lease is truly held elsewhere" apart from "storage is unhealthy
+      // and we don't actually know" — a swallowed read here would defeat
+      // that for exactly the follow-up read most likely to hit the same
+      // outage that's already causing trouble. Default-mode callers keep
+      // using `getRow`, whose fail-to-null behavior is untouched.
+      if (failClosed) {
+        const { data: blockingRow, error: getRowError } = await this.supabase
+          .from('provider_sync_state')
+          .select('sync_lease_owner, sync_lease_expires_at')
+          .eq('clerk_user_id', clerkUserId)
+          .eq('provider', provider)
+          .single();
+        if (getRowError) {
+          const message = getRowError.message;
+          console.error(`[sync-state] Diagnostic lease-state read failed closed (opt-in) for ${provider}:`, getRowError);
+          return { acquired: false, state: 'error', errorMessage: message };
+        }
+        return buildBlockedResult((blockingRow as SyncStateRow) ?? null, nowMs);
+      }
+
       const blocking = await this.getRow(clerkUserId, provider);
-      const state: SyncLeaseState = blocking?.sync_lease_owner?.startsWith(SYNC_COOLDOWN_OWNER_PREFIX)
-        ? 'cooldown'
-        : 'in_progress';
-      return {
-        acquired: false,
-        state,
-        retryAfterSeconds: boundedRetryAfterSeconds(blocking?.sync_lease_expires_at ?? null, nowMs),
-      };
+      return buildBlockedResult(blocking, nowMs);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`[sync-state] Lease acquisition failed ${failClosed ? 'closed (opt-in)' : 'open'} for ${provider}:`, error);

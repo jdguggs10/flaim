@@ -511,6 +511,144 @@ describe('runSleeperRecurringBackfill', () => {
       const [, , deleteOwner] = mockDeleteLeaseRow.mock.calls[0];
       expect(deleteOwner).toBe(acquireOwner);
     });
+
+    // Round-5 audit finding, Fix 1b: two batch lanes (BATCH_SIZE=2) whose
+    // checkpoint calls both observe renewal as due must not each issue their
+    // own extendLease request — the first call's promise is shared, not
+    // raced against a second, redundant one.
+    it('single-flights concurrent renewal calls from two batch lanes: exactly one extendLease call, both lanes see its result', async () => {
+      vi.useFakeTimers();
+      supabaseStub.state.rows = [
+        { clerk_user_id: 'user_a' },
+        { clerk_user_id: 'user_b' },
+      ];
+      // Advance the clock past RENEW_INTERVAL_MS right after acquisition (the
+      // renewer's cadence base is captured just before this call), so both
+      // batch lanes' pre-row checkpoints see renewal as due.
+      mockAcquireLease.mockImplementation(async () => {
+        vi.advanceTimersByTime(RENEW_INTERVAL_MS + 1);
+        return { acquired: true };
+      });
+      const checkpointResults: boolean[] = [];
+      mockBackfillSleeperRecurringIds.mockImplementation(async (_env: unknown, _userId: string, options: { onRowCheckpoint?: () => Promise<boolean> }) => {
+        const stillHeld = await options.onRowCheckpoint!();
+        checkpointResults.push(stillHeld);
+        return { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 };
+      });
+
+      const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+      expect(mockExtendLease).toHaveBeenCalledTimes(1);
+      expect(checkpointResults).toEqual([true, true]);
+      expect(summary.outcome).toBe('completed');
+    });
+
+    // Round-5 audit finding, Fix 1a + Fix 1b combined: the checkpoint the
+    // orchestrator threads into every backfillSleeperRecurringIds call in a
+    // batch is the SAME shared renewer instance. A loss latched by one
+    // lane's checkpoint call must be visible to the OTHER lane's later
+    // checkpoint call — including one consulted immediately before that
+    // lane's own persist (Fix 1a, tested at the unit level in
+    // sleeper-connect-handlers.test.ts). This test proves the cross-lane
+    // wiring: user A's write is fenced because user B's concurrent renewal
+    // attempt failed, even though user A's own row had already resolved
+    // before that fence check ran.
+    it("fences user A's write once user B's concurrent renewal attempt fails, even though A's row resolved before the fence check (round-5 audit finding)", async () => {
+      vi.useFakeTimers();
+      supabaseStub.state.rows = [
+        { clerk_user_id: 'user_a' },
+        { clerk_user_id: 'user_b' },
+      ];
+      // User B's renewal attempt fails outright (a stolen lease and a
+      // storage error are indistinguishable from this orchestrator's point
+      // of view — see extendLease's fail-closed contract in sync-state.ts).
+      mockExtendLease.mockResolvedValue(false);
+
+      const writeSpy = vi.fn();
+      let resolveAReady: () => void;
+      const aReady = new Promise<void>((resolve) => { resolveAReady = resolve; });
+      let resolveBDone: () => void;
+      const bDone = new Promise<void>((resolve) => { resolveBDone = resolve; });
+
+      mockBackfillSleeperRecurringIds.mockImplementation(async (_env: unknown, userId: string, options: { onRowCheckpoint?: () => Promise<boolean> }) => {
+        if (userId === 'user_a') {
+          await options.onRowCheckpoint!(); // pre-row: passes, interval not yet elapsed
+          resolveAReady();
+          await bDone; // wait for B's renewal attempt to land
+          const stillHeldBeforePersist = await options.onRowCheckpoint!(); // Fix 1a: re-checked immediately before the write
+          if (!stillHeldBeforePersist) {
+            return { processed: 1, resolved: 1, changed: 0, unresolved: 0, skippedConcurrent: 0, leaseLost: true };
+          }
+          writeSpy();
+          return { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 };
+        }
+        // user_b
+        await aReady;
+        vi.advanceTimersByTime(RENEW_INTERVAL_MS + 1); // makes renewal due
+        const stillHeld = await options.onRowCheckpoint!(); // triggers the failing extendLease call
+        resolveBDone();
+        return { processed: 0, resolved: 0, changed: 0, unresolved: 0, skippedConcurrent: 0, leaseLost: !stillHeld };
+      });
+
+      const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+      expect(writeSpy).not.toHaveBeenCalled();
+      expect(summary.outcome).toBe('lease_lost');
+      // Single-flighted: only user_b's attempt actually called extendLease;
+      // user_a's later pre-persist check saw `lost` already latched and
+      // returned false without issuing a second request.
+      expect(mockExtendLease).toHaveBeenCalledTimes(1);
+    });
+
+    // Round-5 audit finding, Fix 2: cadence must be measured from the
+    // pre-request clock base, not from when the (possibly slow) renewal
+    // request resolves.
+    it('measures renewal cadence from the pre-request clock base, not from when the renewal request resolves', async () => {
+      vi.useFakeTimers();
+      supabaseStub.state.rows = [
+        { clerk_user_id: 'user_a' },
+        { clerk_user_id: 'user_b' },
+      ];
+      const requestIssuedAtTimes: number[] = [];
+      const SLOW_RENEWAL_MS = 60_000; // X: a slow Supabase round-trip, well under RENEW_INTERVAL_MS
+      mockExtendLease.mockImplementation(async () => {
+        requestIssuedAtTimes.push(Date.now()); // t (pre-request)
+        vi.advanceTimersByTime(SLOW_RENEWAL_MS); // simulate the request resolving at t+X
+        return true;
+      });
+
+      mockBackfillSleeperRecurringIds.mockImplementation(async (_env: unknown, userId: string, options: { onRowCheckpoint?: () => Promise<boolean> }) => {
+        if (userId !== 'user_a') {
+          return { processed: 0, resolved: 0, changed: 0, unresolved: 0, skippedConcurrent: 0 };
+        }
+
+        await options.onRowCheckpoint!(); // not due yet (t=0 since acquisition)
+        vi.advanceTimersByTime(RENEW_INTERVAL_MS); // due now
+        await options.onRowCheckpoint!(); // issues the slow renewal; resolves at RENEW_INTERVAL_MS + SLOW_RENEWAL_MS
+
+        // If the cadence base were the completion time (the bug this test
+        // guards against), the next renewal wouldn't be due until
+        // RENEW_INTERVAL_MS + SLOW_RENEWAL_MS more had elapsed. Advancing
+        // only exactly RENEW_INTERVAL_MS past the FIRST REQUEST's issue time
+        // and confirming a second renewal fires proves the base is t
+        // (pre-request), not t+X (post-completion).
+        vi.advanceTimersByTime(RENEW_INTERVAL_MS - SLOW_RENEWAL_MS);
+        await options.onRowCheckpoint!();
+
+        return { processed: 1, resolved: 1, changed: 1, unresolved: 0, skippedConcurrent: 0 };
+      });
+
+      const summary = await runSleeperRecurringBackfill(baseEnv, false);
+
+      expect(summary.outcome).toBe('completed');
+      expect(mockExtendLease).toHaveBeenCalledTimes(2);
+      // The second request was issued exactly RENEW_INTERVAL_MS after the
+      // first — proving lastRenewedAt was set to the first request's
+      // PRE-request timestamp, not its post-completion timestamp (which
+      // would have pushed the second request out by SLOW_RENEWAL_MS
+      // further).
+      expect(requestIssuedAtTimes[1] - requestIssuedAtTimes[0]).toBe(RENEW_INTERVAL_MS);
+    });
   });
 });
 

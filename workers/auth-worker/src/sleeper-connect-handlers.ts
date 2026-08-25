@@ -363,11 +363,21 @@ export interface SleeperBackfillUserResult {
  * batch of users, as an earlier version of this backfill did) leaves a gap
  * between renewals that scales with how many rows and how deep their chains
  * are, not with a fixed budget — exactly the unbounded-per-user-work gap the
- * round-4 audit flagged as able to exceed the lease TTL. The caller (the
- * backfill orchestrator in sleeper-recurring-backfill.ts) supplies a checkpoint
- * that only actually calls `extendLease` once enough wall-clock time has
- * passed since the last renewal, so this hook is cheap to call before every
- * single row. Omitted entirely for dry runs, which never hold the lease.
+ * round-4 audit flagged as able to exceed the lease TTL. The SAME checkpoint
+ * is consulted a second time immediately before the write itself, right
+ * after the (possibly slow) chain walk finishes (round-5 audit finding, Fix
+ * 1a) — a `false` there stops the loop too, reporting `leaseLost: true`
+ * without ever calling `storage.backfillRecurringLeagueId` for that row. The
+ * caller (the backfill orchestrator in sleeper-recurring-backfill.ts)
+ * supplies a checkpoint that only actually calls `extendLease` once enough
+ * wall-clock time has passed since the last renewal (and single-flights
+ * concurrent calls from other users in the same batch — see that file), so
+ * this hook is cheap to call before every single row and again before every
+ * write. Omitted entirely for dry runs, which never hold the lease or write
+ * anything. This is a bound on wasted work once a lease loss is detected, not
+ * the reason concurrent writes are safe — `backfillRecurringLeagueId`'s own
+ * conditional UPDATE is what makes an actual overlap a clean no-op rather
+ * than corruption; see this function's write-path comment below.
  *
  * Callable via the FLA-168 internal route/orchestrator (sleeper-recurring-backfill.ts).
  */
@@ -432,6 +442,29 @@ export async function backfillSleeperRecurringIds(
         wouldSetRecurringId: recurringLeagueId,
       });
       continue;
+    }
+
+    // Re-consult the SAME checkpoint immediately before the write (round-5
+    // audit finding, Fix 1a) — not just once before the row started above.
+    // The pre-row checkpoint only proves the lease looked held BEFORE this
+    // row's chain walk; that walk can itself take a while (up to
+    // MAX_HISTORY_YEARS Sleeper requests), so a lease loss DETECTED by a
+    // concurrent lane (a different user in the same batch, via the shared
+    // renewer in sleeper-recurring-backfill.ts) partway through this row's
+    // walk would otherwise go unnoticed until the NEXT row's pre-row check —
+    // by which point this row's write had already happened. Checking again
+    // right here means "no further writes once loss is detected" holds at
+    // WRITE granularity, which is the actual invariant this checkpoint
+    // exists to provide (bounding duplicate/wasted work after a detected
+    // loss) — it is not what makes an overlapping write safe; the
+    // conditional UPDATE below already guarantees that on its own (see the
+    // orchestrator's file doc comment).
+    if (options.onRowCheckpoint) {
+      const stillHeld = await options.onRowCheckpoint();
+      if (!stillHeld) {
+        leaseLost = true;
+        break;
+      }
     }
 
     const wrote = await storage.backfillRecurringLeagueId(userId, league.leagueId, league.seasonYear, recurringLeagueId);

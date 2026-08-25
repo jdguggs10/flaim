@@ -164,6 +164,56 @@ describe('SyncStateStorage.acquireLease', () => {
       expect(result.state).toBe('in_progress');
     }
   });
+
+  // Round-5 FLA-168 audit finding (Fix 3): the guarded update matching zero
+  // rows means "someone else holds it, OR we can't tell because the
+  // follow-up diagnostic read itself just failed." Before this fix, a
+  // diagnostic-read failure fell through to the same handling as "no row
+  // found" (`getRow` returning null), so a strict caller saw the normal
+  // `'in_progress'` blocked state — and downstream, the backfill orchestrator
+  // reported a 409 `'blocked'` — instead of learning that storage itself was
+  // unhealthy.
+  it("surfaces a failed diagnostic read as state 'error' in strict mode when the guarded update matches zero rows (round-5 audit finding, Fix 3)", async () => {
+    const { client } = fakeSupabase([
+      { error: null },                                    // upsert row-exists
+      { data: [], error: null },                          // guarded update matched zero rows
+      { data: null, error: new Error('supabase down') },  // diagnostic read itself fails
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('__backfill__', 'sleeper', 'owner-1', SYNC_LEASE_TTL_MS, { onStorageError: 'fail' });
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('error');
+      if (result.state === 'error') {
+        expect(result.errorMessage).toContain('supabase down');
+      }
+    }
+  });
+
+  // Pins the pre-existing default-mode (fail-open) behavior for the same
+  // failure shape: every existing caller (league-refresh.ts, index-hono.ts,
+  // reconciliation.ts) calls acquireLease without the 5th argument, so this
+  // must stay byte-for-byte unchanged by Fix 3 — a failed diagnostic read
+  // still degrades to the plain `'in_progress'` state via `getRow`'s
+  // fail-to-null behavior, not `'error'`.
+  it('pins legacy default-mode behavior: a failed diagnostic read still reports plain in_progress (not error), unchanged by Fix 3', async () => {
+    const { client } = fakeSupabase([
+      { error: null },
+      { data: [], error: null },
+      { data: null, error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.acquireLease('user_1', 'espn', 'owner-1');
+
+    expect(result.acquired).toBe(false);
+    if (!result.acquired) {
+      expect(result.state).toBe('in_progress');
+      expect(result.retryAfterSeconds).toBe(NORMAL_REFRESH_COOLDOWN_SECONDS);
+    }
+  });
 });
 
 describe('SyncStateStorage.extendLease', () => {

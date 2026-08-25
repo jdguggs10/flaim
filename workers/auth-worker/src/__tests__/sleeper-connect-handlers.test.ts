@@ -1326,8 +1326,10 @@ describe('sleeper-connect-handlers', () => {
     // the backfill orchestrator's lease TTL — a user can own many rows, and
     // each row's own chain walk can make several Sleeper requests. The
     // orchestrator (sleeper-recurring-backfill.ts) renews the lease via this
-    // hook before EVERY row, not once per user.
-    it('checks options.onRowCheckpoint before EACH row, not once per user, and stops immediately with no further writes once it reports the lease lost', async () => {
+    // hook before EVERY row, not once per user. Row x is checked TWICE
+    // (round-5 audit finding, Fix 1a: once pre-row, once again immediately
+    // before its persist call) before row y's pre-row check denies it.
+    it('checks options.onRowCheckpoint before EACH row (and again before each persist), not once per user, and stops immediately with no further writes once it reports the lease lost', async () => {
       mockStorage.getSleeperLeagues.mockResolvedValue([
         { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
         { id: 'row-y', clerkUserId: 'user_1', leagueId: 'y', sport: 'football', seasonYear: 2025, leagueName: 'Y', rosterId: 2, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
@@ -1341,15 +1343,16 @@ describe('sleeper-connect-handlers', () => {
         return new Response(null, { status: 404 });
       });
       const onRowCheckpoint = vi.fn()
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
+        .mockResolvedValueOnce(true) // pre-row x
+        .mockResolvedValueOnce(true) // pre-persist x
+        .mockResolvedValueOnce(false); // pre-row y
 
       const result = await backfillSleeperRecurringIds(env, 'user_1', { onRowCheckpoint });
 
-      // Checked before row x (allowed) and before row y (denied) — never
-      // skipped just because it's the "same user".
-      expect(onRowCheckpoint).toHaveBeenCalledTimes(2);
-      // Row x was fully processed (checkpoint passed before it). Row y's
+      // Checked before row x, again right before its persist, and before row
+      // y (denied) — never skipped just because it's the "same user".
+      expect(onRowCheckpoint).toHaveBeenCalledTimes(3);
+      // Row x was fully processed (both its checkpoints passed). Row y's
       // checkpoint failed BEFORE any work started on it, so it's never even
       // counted in `processed`.
       expect(result.processed).toBe(1);
@@ -1359,6 +1362,38 @@ describe('sleeper-connect-handlers', () => {
       expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledTimes(1);
       expect(mockStorage.backfillRecurringLeagueId).toHaveBeenCalledWith('user_1', 'x', 2025, 'x');
       expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalledWith('user_1', 'y', expect.anything(), expect.anything());
+    });
+
+    // Round-5 audit finding (Fix 1a): the pre-row checkpoint alone only
+    // proves the lease looked held BEFORE a row's (possibly slow) chain
+    // walk. A loss detected DURING that walk — by a concurrent batch lane
+    // sharing the same renewer, in the real orchestrator — must still fence
+    // this row's write, not just the next row's pre-row check.
+    it('fences the write when onRowCheckpoint is denied immediately before persist, even though the row already resolved successfully', async () => {
+      mockStorage.getSleeperLeagues.mockResolvedValue([
+        { id: 'row-x', clerkUserId: 'user_1', leagueId: 'x', sport: 'football', seasonYear: 2025, leagueName: 'X', rosterId: 1, recurringLeagueId: null, sleeperUserId: 'sleeper_123' },
+      ]);
+      mockFetch.mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith('/league/x')) {
+          return jsonResponse({ league_id: 'x', name: 'X', sport: 'nfl', season: '2025', previous_league_id: null });
+        }
+        return new Response(null, { status: 404 });
+      });
+      const onRowCheckpoint = vi.fn()
+        .mockResolvedValueOnce(true) // pre-row: lease still looked held
+        .mockResolvedValueOnce(false); // pre-persist: lost while the chain walk ran
+
+      const result = await backfillSleeperRecurringIds(env, 'user_1', { onRowCheckpoint });
+
+      expect(onRowCheckpoint).toHaveBeenCalledTimes(2);
+      // The row's resolution succeeded (resolved: 1) but the write itself
+      // never happened — this is the write-granularity fence, not a
+      // resolution-time one.
+      expect(result.resolved).toBe(1);
+      expect(result.changed).toBe(0);
+      expect(result.leaseLost).toBe(true);
+      expect(mockStorage.backfillRecurringLeagueId).not.toHaveBeenCalled();
     });
 
     it('omits leaseLost from the result entirely when no onRowCheckpoint is provided (default/dry-run shape unchanged)', async () => {

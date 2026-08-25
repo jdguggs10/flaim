@@ -35,6 +35,25 @@
  * failure here returns outcome 'failed' (not 'blocked' — 'blocked' means
  * another run genuinely holds the lease) and never touches a row.
  *
+ * HONEST INVARIANT (round-5 audit finding — read this before changing
+ * anything lease-related below): the lease is NOT what makes concurrent
+ * writes safe. That job belongs entirely to the persistence path —
+ * `SleeperStorage.backfillRecurringLeagueId` is a conditional `UPDATE`
+ * scoped to one exact `(clerk_user_id, league_id, season_year)` row, guarded
+ * on `recurring_league_id IS NULL`, and two independent runs resolving the
+ * same recurring chain always compute the same deterministic root — so even
+ * a genuine overlap between two live runs (lease bug, clock skew, whatever)
+ * can race a write, but it can never corrupt data: the second writer's
+ * conditional UPDATE either sets the same value the first one did or matches
+ * zero rows because the first one already got there. That's the correctness
+ * backstop, unconditionally, lease or no lease. What the lease actually does
+ * is bound DUPLICATE WORK: without it, two live runs would each burn a full
+ * table scan and a full chain-walk pass redoing (mostly) the same rows for
+ * no benefit. So the goal below is narrower than "no overlap can ever
+ * happen" — it's "once this run has DETECTED that it may have lost the
+ * lease, it stops issuing new writes promptly," which is a much cheaper
+ * property to actually guarantee than hard mutual exclusion would be.
+ *
  * Once acquired, the lease is renewed on a TIME-based cadence, not a
  * batch-count-based one (round-4 audit finding replacing round 3's
  * once-per-batch renewal): per-user work is unbounded relative to the TTL,
@@ -45,33 +64,61 @@
  * before the next batch boundary ever arrives. `createLeaseRenewer` below
  * tracks `lastRenewedAt` and only actually calls `extendLease` once
  * RENEW_INTERVAL_MS (BACKFILL_LEASE_TTL_MS / 3 = 5 minutes) has elapsed since
- * the last successful renewal, so the same `maybeRenewLease()` checkpoint is
- * cheap to call frequently: after every keyset snapshot page, before EVERY
- * row (not just once per user — threaded into backfillSleeperRecurringIds as
- * `onRowCheckpoint`, sleeper-connect-handlers.ts), and after every batch. The
- * invariant this preserves: checkpoint spacing must stay well under
- * BACKFILL_LEASE_TTL_MS, so the worst-case gap between real renewals is one
- * row's chain walk (~5 x 10s plus DB writes), not an entire user's or an
- * entire batch's worth of unbounded work. Renewal is fail-closed: if a
- * checkpoint's `extendLease` call returns false OR the underlying storage
- * call itself fails (sync-state.ts's extendLease reports storage errors as
- * failure here, unlike its other, fail-open siblings — round-3 audit
- * finding), every subsequent checkpoint (even a concurrently in-flight one
- * for a different user in the same batch) also reports lost without
- * re-attempting the network call, and the run stops touching rows
- * immediately, returning a `lease_lost` outcome with whatever partial counts
- * it completed. This backfill is idempotent and resumable (re-running it only
+ * the last successful renewal, so the same checkpoint function is cheap to
+ * call frequently: after every keyset snapshot page, before EVERY row AND
+ * again immediately before that row's persist call (round-5 audit finding,
+ * Fix 1a — not just once per user, and not just once per row either;
+ * threaded into backfillSleeperRecurringIds as `onRowCheckpoint`,
+ * sleeper-connect-handlers.ts), and after every batch. The invariant this
+ * preserves: checkpoint spacing must stay well under BACKFILL_LEASE_TTL_MS,
+ * so the worst-case gap between real renewals is one row's chain walk (~5 x
+ * 10s plus DB writes), not an entire user's or an entire batch's worth of
+ * unbounded work — and because the checkpoint is re-consulted right before
+ * the write itself, not only before the (possibly slow) work leading up to
+ * it, "no further writes once loss is detected" holds at WRITE granularity:
+ * a row whose chain walk started under a valid-looking lease still gets
+ * fenced at the last possible moment if the lease was lost mid-walk.
+ *
+ * Concurrent checkpoint calls from different batch lanes are single-flighted
+ * (round-5 audit finding, Fix 1b): `createLeaseRenewer` only issues one
+ * `extendLease` request at a time — a second lane whose own checkpoint call
+ * lands while a renewal is already in flight awaits that SAME promise
+ * instead of racing a redundant `extendLease` call, which would otherwise
+ * let one call latch `lost` while a second, now-pointless in-flight call
+ * still reports success. Renewal is fail-closed: if the (single-flighted)
+ * `extendLease` call returns false OR the underlying storage call itself
+ * fails (sync-state.ts's extendLease reports storage errors as failure here,
+ * unlike its other, fail-open siblings — round-3 audit finding), every
+ * subsequent checkpoint (including one already queued behind the same
+ * in-flight promise) also reports lost without re-attempting the network
+ * call, and the run stops issuing new writes at its very next checkpoint,
+ * returning a `lease_lost` outcome with whatever partial counts it
+ * completed. This backfill is idempotent and resumable (re-running it only
  * ever touches rows still NULL), so aborting on uncertain lease ownership is
- * safe — continuing to write under unknown ownership is not. On a normal
- * finish, the synthetic lease row is deleted outright rather than released
- * back to an unheld state (audit FLA-168 Fix 3) — it has no real user's
- * telemetry worth keeping, and a leftover row would otherwise sit in
+ * safe — and, per the correctness backstop above, so is NOT aborting
+ * instantly; the point of stopping promptly is to bound wasted work, not to
+ * prevent corruption that the conditional write already rules out. On a
+ * normal finish, the synthetic lease row is deleted outright rather than
+ * released back to an unheld state (audit FLA-168 Fix 3) — it has no real
+ * user's telemetry worth keeping, and a leftover row would otherwise sit in
  * provider_sync_state indefinitely, inflating sync_7d.users_attempted and
  * risking a phantom Sleeper entry in sync_recent. The row is still visible
  * for the run's own (manual, minutes-long) duration, which is acceptable.
  * That cleanup delete can itself fail; its result is now reported back as
  * `leaseCleanup` in the response and a console.warn on failure (round-3 audit
  * finding), without changing the run's own outcome.
+ *
+ * Renewal cadence is measured from a pre-request clock base, not from when
+ * the renewal request resolves (round-5 audit finding, Fix 2): sync-state.ts
+ * computes the STORED `sync_lease_expires_at` from a `Date.now()` taken
+ * before its own awaited Supabase call (both in `acquireLease` and
+ * `extendLease`), so this file's in-memory cadence tracking has to be
+ * measured from that same pre-request side of the await — otherwise a slow
+ * renewal request (there is no configured DB timeout) shifts the in-memory
+ * "when is the next renewal due" base later than the stored expiry's own
+ * base, opening a window where the row has already expired in storage but
+ * this checkpoint still thinks it isn't due for renewal yet. See
+ * `createLeaseRenewer`'s `t0` and this file's `acquireStartedAt` below.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -110,41 +157,87 @@ const RENEW_INTERVAL_MS = BACKFILL_LEASE_TTL_MS / 3;
 /**
  * Tracks when the backfill's lease was last renewed and exposes a single
  * `maybeRenewLease()` checkpoint that every call site (snapshot pagination,
- * per-row, post-batch) shares. No-ops (returns true without a network call)
- * unless RENEW_INTERVAL_MS has elapsed since the last successful renewal —
- * cheap enough to call before every single row. Once a renewal attempt fails
- * (extendLease returns false, whether from a stolen lease or its own
- * fail-closed storage-error handling), `lost` latches permanently: every
- * later call — including a concurrently in-flight checkpoint for a different
- * user in the same batch — returns false immediately without retrying the
- * network call, so the whole run converges on stopping at its next
- * checkpoint rather than some callers retrying past a lease that is already
- * gone.
+ * per-row, pre-persist, post-batch) shares. No-ops (returns true without a
+ * network call) unless RENEW_INTERVAL_MS has elapsed since the last
+ * successful renewal — cheap enough to call before every single row, and
+ * again immediately before that row's write.
+ *
+ * `initialRenewedAt` (Fix 2, round-5 audit finding) is the cadence's starting
+ * base and must be a `now()` timestamp captured by the CALLER before it ever
+ * called `acquireLease` — not one captured here, after acquisition has
+ * already completed. `sync-state.ts`'s `acquireLease` computes the row's
+ * stored `sync_lease_expires_at` from a `Date.now()` taken before its own
+ * awaited Supabase calls; starting this renewer's cadence from a timestamp
+ * captured AFTER `acquireLease` resolves would already be running behind
+ * that stored expiry by however long acquisition itself took.
+ *
+ * Single-flighted (Fix 1b, round-5 audit finding): concurrent checkpoint
+ * calls from different batch lanes can both observe RENEW_INTERVAL_MS as
+ * elapsed at (effectively) the same time. Without single-flighting, both
+ * would issue their own `extendLease` call — a plainly wasted duplicate
+ * request, and worse, a genuine race: one call's fail-closed failure could
+ * latch `lost` while the OTHER, now-redundant in-flight call still resolves
+ * `true`, and whichever settles last wins even though it says nothing new.
+ * `inFlight` fixes this: the first caller to find renewal due starts the
+ * request and stores its promise; every other caller that arrives while it's
+ * still pending (as `now() - lastRenewedAt` remains "due" for them too, since
+ * `lastRenewedAt` isn't updated until the in-flight call resolves) awaits
+ * that SAME promise instead of starting a second request, so every lane sees
+ * one consistent outcome and `extendLease` is called at most once per actual
+ * renewal.
+ *
+ * Once a renewal attempt fails (extendLease returns false, whether from a
+ * stolen lease or its own fail-closed storage-error handling), `lost`
+ * latches permanently: every later call — including one already waiting on
+ * the same in-flight promise, or a concurrently-arriving checkpoint for a
+ * different user in the same batch — returns false, so the whole run
+ * converges on stopping new writes at its very next checkpoint rather than
+ * some callers proceeding past a lease that is already gone. This bounds
+ * DUPLICATE WORK once loss is suspected; it is not what makes an overlapping
+ * write safe — see this file's top doc comment for why that's the
+ * conditional-write persistence path's job, not this checkpoint's.
  */
 function createLeaseRenewer(
   syncState: SyncStateStorage,
   leaseOwner: string,
+  initialRenewedAt: number,
   now: () => number = Date.now
 ): LeaseRenewalCheckpoint {
-  let lastRenewedAt = now();
+  let lastRenewedAt = initialRenewedAt;
   let lost = false;
+  let inFlight: Promise<boolean> | null = null;
 
   return async () => {
     if (lost) return false;
     if (now() - lastRenewedAt < RENEW_INTERVAL_MS) return true;
 
-    const stillHeld = await syncState.extendLease(
-      BACKFILL_LEASE_USER_ID,
-      BACKFILL_LEASE_PROVIDER,
-      leaseOwner,
-      BACKFILL_LEASE_TTL_MS
-    );
-    if (stillHeld) {
-      lastRenewedAt = now();
-      return true;
+    if (!inFlight) {
+      // t0 (Fix 2, round-5 audit finding) is captured BEFORE issuing the
+      // request, mirroring how sync-state.ts computes the stored expiry
+      // before its own awaited call — so a slow renewal round-trip (no
+      // configured DB timeout) shifts this cadence's base later exactly as
+      // much as it would shift the stored expiry, never more. Using the
+      // completion time instead would let a slow request silently push the
+      // NEXT renewal's due time later than the row's real remaining TTL.
+      const t0 = now();
+      inFlight = (async () => {
+        const stillHeld = await syncState.extendLease(
+          BACKFILL_LEASE_USER_ID,
+          BACKFILL_LEASE_PROVIDER,
+          leaseOwner,
+          BACKFILL_LEASE_TTL_MS
+        );
+        if (stillHeld) {
+          lastRenewedAt = t0;
+        } else {
+          lost = true;
+        }
+        return stillHeld;
+      })().finally(() => {
+        inFlight = null;
+      });
     }
-    lost = true;
-    return false;
+    return inFlight;
   };
 }
 
@@ -314,6 +407,12 @@ export async function runSleeperRecurringBackfill(
   // acquireLease's default fail-open posture — see the file doc comment above
   // for why fail-open is wrong specifically for this single-flight guard.
   const syncState = dryRun ? null : SyncStateStorage.fromEnvironment(env);
+  // Captured BEFORE calling acquireLease (Fix 2, round-5 audit finding), not
+  // after it resolves — this is the cadence base createLeaseRenewer starts
+  // from below, and it must sit on the same pre-request side of the await as
+  // the stored lease row's own expiry (sync-state.ts computes that from a
+  // Date.now() taken before ITS awaited Supabase calls too).
+  const acquireStartedAt = Date.now();
   const lease = syncState
     ? await syncState.acquireLease(BACKFILL_LEASE_USER_ID, BACKFILL_LEASE_PROVIDER, leaseOwner, BACKFILL_LEASE_TTL_MS, { onStorageError: 'fail' })
     : null;
@@ -339,7 +438,7 @@ export async function runSleeperRecurringBackfill(
     // scan, every row inside backfillSleeperRecurringIds, and the post-batch
     // check below, all through this single instance so `lost` latches once
     // for the whole run regardless of which checkpoint discovers it.
-    const leaseRenewer = syncState ? createLeaseRenewer(syncState, leaseOwner) : null;
+    const leaseRenewer = syncState ? createLeaseRenewer(syncState, leaseOwner, acquireStartedAt) : null;
 
     try {
       const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, {
@@ -418,10 +517,13 @@ export async function runSleeperRecurringBackfill(
           // call itself failed (extendLease reports storage errors as
           // failure, not success, specifically for this caller — round-3
           // audit finding) — means ownership is no longer certain, so this
-          // run stops touching rows immediately rather than risk racing a new
-          // holder. Fail-closed, not a throw: this backfill is idempotent and
-          // resumable, so a `lease_lost` outcome with partial counts is safe;
-          // finishing 'completed' under unknown ownership would not be.
+          // run stops issuing new writes at the next batch boundary rather
+          // than risk piling up more duplicate work against a new holder
+          // (the conditional write itself, not this stop, is what actually
+          // rules out corruption — see the file doc comment). Fail-closed,
+          // not a throw: this backfill is idempotent and resumable, so a
+          // `lease_lost` outcome with partial counts is safe; finishing
+          // 'completed' under unknown ownership would not be.
           if (leaseRenewer) {
             const stillHeld = await leaseRenewer();
             if (!stillHeld) {
