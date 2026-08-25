@@ -70,7 +70,7 @@ export default function KickoffBroadcastEmail({
         </Button>
       </Section>
       <Section style={styles.assistantButtons}>
-        <Row>
+        <Row data-text-stack="true">
           <Column style={styles.assistantColumn}>
             <Button href={chatGptAppUrl} style={styles.assistantButton}>
               Add to ChatGPT

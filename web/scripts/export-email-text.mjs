@@ -11,7 +11,17 @@ const webDirectory = path.resolve(scriptDirectory, "..");
 const outputDirectory = path.join(webDirectory, ".email-out");
 
 export function htmlToText(html) {
-  return toPlainText(html, { wordwrap: false }).trim();
+  return toPlainText(html, {
+    selectors: [
+      {
+        selector:
+          'table[data-text-stack] > tbody > tr > td[data-id="__react-email-column"]',
+        format: "block",
+        options: { leadingLineBreaks: 2, trailingLineBreaks: 2 },
+      },
+    ],
+    wordwrap: false,
+  }).trim();
 }
 
 function runEmailExport() {
