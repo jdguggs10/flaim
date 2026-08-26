@@ -18,7 +18,7 @@ import { fetchEspnLeagueSeason, unwrapEspnLeaguePayload } from '@flaim/worker-sh
 
 interface EspnApiLeagueResponse {
   id: string | number;
-  name: string;
+  name?: string;
   seasonId: number;
   scoringPeriodId?: number;
   firstScoringPeriod?: number;
@@ -45,9 +45,13 @@ function isEspnApiLeagueResponse(value: unknown): value is EspnApiLeagueResponse
   }
 
   const record = value as Record<string, unknown>;
+  const settings = record.settings;
+  const settingsName = settings && typeof settings === 'object' && !Array.isArray(settings)
+    ? (settings as Record<string, unknown>).name
+    : undefined;
   return (
     (typeof record.id === 'string' || typeof record.id === 'number')
-    && typeof record.name === 'string'
+    && (typeof record.name === 'string' || typeof settingsName === 'string')
     && typeof record.seasonId === 'number'
     && typeof record.gameId === 'number'
   );
@@ -148,10 +152,11 @@ export async function getLeagueInfo(
     const canonicalPreviousSeasons = (data.status?.previousSeasons || []).map((year) =>
       toCanonicalYear(year, sport, 'espn')
     );
+    const leagueName = data.name || data.settings?.name || '';
     
     return {
       leagueId: String(data.id),
-      leagueName: data.name,
+      leagueName,
       sport: sport as SportName,
       seasonYear: canonicalSeasonYear,
       gameId: data.gameId.toString(),
@@ -164,7 +169,7 @@ export async function getLeagueInfo(
         previousSeasons: canonicalPreviousSeasons
       },
       settings: {
-        name: data.settings?.name || '',
+        name: data.settings?.name || leagueName,
         size: data.settings?.size || 0,
         status: data.status?.statusType?.type || 'UNKNOWN',
         season: canonicalSeasonYear,

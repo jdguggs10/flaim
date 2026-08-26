@@ -94,6 +94,34 @@ describe('getLeagueInfo', () => {
     expect(leagueInfo.status?.previousSeasons).toEqual([2025, 2024]);
   });
 
+  it('accepts a valid ESPN response whose league name exists only in settings', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        id: '123',
+        seasonId: 2026,
+        scoringPeriodId: 1,
+        status: {
+          currentMatchupPeriod: 1,
+          isActive: true,
+          previousSeasons: [2025, 2024],
+          statusType: { type: 'ACTIVE' },
+        },
+        settings: {
+          name: 'Settings-Only League',
+          size: 12,
+        },
+        gameId: 2,
+        gameName: 'Fantasy Baseball',
+      }), { status: 200 }),
+    );
+
+    const leagueInfo = await getLeagueInfo('{swid}', 's2token', '123', 2026, 'flb');
+
+    expect(leagueInfo.leagueName).toBe('Settings-Only League');
+    expect(leagueInfo.settings?.name).toBe('Settings-Only League');
+    expect(leagueInfo.status?.previousSeasons).toEqual([2025, 2024]);
+  });
+
   it('retries a modern historical 401 through leagueHistory and unwraps the response', async () => {
     mockFetch
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
