@@ -14,28 +14,47 @@ import {
   type EspnLeagueInfo
 } from '../espn-types';
 import { getDefaultSeasonYear, toCanonicalYear, toPlatformYear } from '../season-utils';
+import { fetchEspnLeagueSeason, unwrapEspnLeaguePayload } from '@flaim/worker-shared';
 
 interface EspnApiLeagueResponse {
-  id: string;
-  name: string;
+  id: string | number;
+  name?: string;
   seasonId: number;
-  scoringPeriodId: number;
-  firstScoringPeriod: number;
-  finalScoringPeriod: number;
-  status: {
-    currentMatchupPeriod: number;
-    isActive: boolean;
-    previousSeasons: number[];
-    statusType: {
-      type: string;
+  scoringPeriodId?: number;
+  firstScoringPeriod?: number;
+  finalScoringPeriod?: number;
+  status?: {
+    currentMatchupPeriod?: number;
+    isActive?: boolean;
+    previousSeasons?: number[];
+    statusType?: {
+      type?: string;
     };
   };
-  settings: {
-    name: string;
-    size: number;
+  settings?: {
+    name?: string;
+    size?: number;
   };
   gameId: number;
-  gameName: string;
+  gameName?: string;
+}
+
+function isEspnApiLeagueResponse(value: unknown): value is EspnApiLeagueResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  const settings = record.settings;
+  const settingsName = settings && typeof settings === 'object' && !Array.isArray(settings)
+    ? (settings as Record<string, unknown>).name
+    : undefined;
+  return (
+    (typeof record.id === 'string' || typeof record.id === 'number')
+    && (typeof record.name === 'string' || typeof settingsName === 'string')
+    && typeof record.seasonId === 'number'
+    && typeof record.gameId === 'number'
+  );
 }
 
 // Export the EspnLeagueInfo type for external use
@@ -72,24 +91,27 @@ export async function getLeagueInfo(
   const requestSeason =
     season ?? toPlatformYear(getDefaultSeasonYear(requestedSport), requestedSport, 'espn');
 
-  // First, try the simpler endpoint with just mSettings view
-  const url = `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}/seasons/${requestSeason}/segments/0/leagues/${leagueId}?view=mSettings`;
-  
   try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Cookie': `SWID=${swid}; espn_s2=${s2}`,
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'X-Fantasy-Source': 'kona',
-        'X-Fantasy-Platform': 'kona-web-2.0.0'
-      }
-    });
-
-    // Clone the response so we can read it multiple times if needed
-    const responseClone = response.clone();
+    const canonicalRequestSeason = toCanonicalYear(requestSeason, requestedSport, 'espn');
+    const response = await fetchEspnLeagueSeason({
+      espnSeasonYear: requestSeason,
+      leagueId,
+      query: 'view=mSettings',
+      historical: canonicalRequestSeason < getDefaultSeasonYear(requestedSport),
+    }, (path) => fetch(
+      `https://lm-api-reads.fantasy.espn.com/apis/v3/games/${gameId}${path}`,
+      {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Cookie': `SWID=${swid}; espn_s2=${s2}`,
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'X-Fantasy-Source': 'kona',
+          'X-Fantasy-Platform': 'kona-web-2.0.0'
+        }
+      },
+    ));
     
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
@@ -105,15 +127,10 @@ export async function getLeagueInfo(
       throw new EspnApiError(`ESPN API error: ${response.status} ${response.statusText}`);
     }
 
-    let data: EspnApiLeagueResponse;
+    let parsed: unknown;
     try {
-      const responseText = await responseClone.text();
-      data = JSON.parse(responseText) as EspnApiLeagueResponse;
-    } catch (error) {
-      // Log response details for debugging
-      const errorText = await response.text().catch(() => 'Failed to read error response');
-      console.error('Failed to parse response as JSON. Response text:', errorText);
-      
+      parsed = JSON.parse(await response.text());
+    } catch {
       // Log headers in a TypeScript-compatible way
       const headers: Record<string, string> = {};
       response.headers.forEach((value, key) => {
@@ -123,8 +140,9 @@ export async function getLeagueInfo(
       
       throw new EspnApiError('Invalid JSON response from ESPN API');
     }
-    
-    if (!data || !data.id) {
+
+    const data = unwrapEspnLeaguePayload(parsed);
+    if (!isEspnApiLeagueResponse(data)) {
       throw new EspnApiError('Invalid response structure from ESPN API');
     }
 
@@ -134,10 +152,11 @@ export async function getLeagueInfo(
     const canonicalPreviousSeasons = (data.status?.previousSeasons || []).map((year) =>
       toCanonicalYear(year, sport, 'espn')
     );
+    const leagueName = data.name || data.settings?.name || '';
     
     return {
-      leagueId: data.id,
-      leagueName: data.name,
+      leagueId: String(data.id),
+      leagueName,
       sport: sport as SportName,
       seasonYear: canonicalSeasonYear,
       gameId: data.gameId.toString(),
@@ -150,7 +169,7 @@ export async function getLeagueInfo(
         previousSeasons: canonicalPreviousSeasons
       },
       settings: {
-        name: data.settings?.name || '',
+        name: data.settings?.name || leagueName,
         size: data.settings?.size || 0,
         status: data.status?.statusType?.type || 'UNKNOWN',
         season: canonicalSeasonYear,

@@ -1,5 +1,9 @@
 // workers/espn-client/src/shared/espn-api.ts
-import type { EspnCredentials } from '@flaim/worker-shared';
+import {
+  fetchEspnLeagueSeason,
+  unwrapEspnLeaguePayload,
+  type EspnCredentials,
+} from '@flaim/worker-shared';
 
 const ESPN_BASE_URL = 'https://lm-api-reads.fantasy.espn.com/apis/v3';
 
@@ -7,18 +11,19 @@ interface EspnFetchOptions {
   credentials?: EspnCredentials | null;
   timeout?: number;
   headers?: Record<string, string>;
+  league?: {
+    leagueId: string;
+    espnSeasonYear: number;
+    historical: boolean;
+  };
 }
 
-/**
- * Make a request to the ESPN Fantasy API
- * @param path - API path after /games/{gameId} (e.g., /seasons/2025/segments/0/leagues/123)
- * @param gameId - ESPN game ID (flb for baseball, ffl for football, etc.)
- * @param options - Request options including credentials and timeout
- */
-export async function espnFetch(
+type EspnRawFetchOptions = Omit<EspnFetchOptions, 'league'>;
+
+async function fetchEspnPath(
   path: string,
   gameId: string,
-  options: EspnFetchOptions = {}
+  options: EspnRawFetchOptions,
 ): Promise<Response> {
   const { credentials, timeout = 5000, headers: additionalHeaders = {} } = options;
 
@@ -40,19 +45,54 @@ export async function espnFetch(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const response = await fetch(url, {
+    return await fetch(url, {
       headers,
       signal: controller.signal
     });
-    clearTimeout(timeoutId);
-    return response;
   } catch (error) {
-    clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('ESPN_TIMEOUT: Request timed out');
     }
     throw error;
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
+
+/**
+ * Make a request to the ESPN Fantasy API
+ * @param path - API path after /games/{gameId} (e.g., /seasons/2025/segments/0/leagues/123)
+ * @param gameId - ESPN game ID (flb for baseball, ffl for football, etc.)
+ * @param options - Request options including credentials and timeout
+ */
+export async function espnFetch(
+  path: string,
+  gameId: string,
+  options: EspnFetchOptions = {}
+): Promise<Response> {
+  const { league, ...rawOptions } = options;
+  if (!league) {
+    return fetchEspnPath(path, gameId, rawOptions);
+  }
+
+  const queryIndex = path.indexOf('?');
+  const query = queryIndex >= 0 ? path.slice(queryIndex + 1) : undefined;
+  return fetchEspnLeagueSeason({
+    espnSeasonYear: league.espnSeasonYear,
+    leagueId: league.leagueId,
+    query,
+    historical: league.historical,
+    modernPath: path,
+  }, (candidatePath) => fetchEspnPath(candidatePath, gameId, rawOptions));
+}
+
+export async function readEspnLeagueJson<T>(
+  response: Response,
+  isValid: (value: unknown) => value is T,
+): Promise<T | null> {
+  const payload: unknown = await response.json();
+  const league = unwrapEspnLeaguePayload(payload);
+  return isValid(league) ? league : null;
 }
 
 /**

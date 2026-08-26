@@ -93,4 +93,93 @@ describe('getLeagueInfo', () => {
     expect(leagueInfo.settings?.season).toBe(2026);
     expect(leagueInfo.status?.previousSeasons).toEqual([2025, 2024]);
   });
+
+  it('accepts a valid ESPN response whose league name exists only in settings', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({
+        id: '123',
+        seasonId: 2026,
+        scoringPeriodId: 1,
+        status: {
+          currentMatchupPeriod: 1,
+          isActive: true,
+          previousSeasons: [2025, 2024],
+          statusType: { type: 'ACTIVE' },
+        },
+        settings: {
+          name: 'Settings-Only League',
+          size: 12,
+        },
+        gameId: 2,
+        gameName: 'Fantasy Baseball',
+      }), { status: 200 }),
+    );
+
+    const leagueInfo = await getLeagueInfo('{swid}', 's2token', '123', 2026, 'flb');
+
+    expect(leagueInfo.leagueName).toBe('Settings-Only League');
+    expect(leagueInfo.settings?.name).toBe('Settings-Only League');
+    expect(leagueInfo.status?.previousSeasons).toEqual([2025, 2024]);
+  });
+
+  it('retries a modern historical 401 through leagueHistory and unwraps the response', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{
+          id: '123',
+          name: 'Historical League',
+          seasonId: 2023,
+          scoringPeriodId: 1,
+          firstScoringPeriod: 1,
+          finalScoringPeriod: 22,
+          status: {
+            currentMatchupPeriod: 22,
+            isActive: false,
+            previousSeasons: [2022],
+            statusType: { type: 'COMPLETE' },
+          },
+          settings: { name: 'Historical League', size: 12 },
+          gameId: 2,
+          gameName: 'Fantasy Baseball',
+        }]), { status: 200 }),
+      );
+
+    const leagueInfo = await getLeagueInfo('{swid}', 's2token', '123', 2023, 'flb');
+
+    expect(leagueInfo.leagueName).toBe('Historical League');
+    expect(mockFetch.mock.calls.map(([url]) => url)).toEqual([
+      'https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2023/segments/0/leagues/123?view=mSettings',
+      'https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/leagueHistory/123?seasonId=2023&view=mSettings',
+    ]);
+  });
+
+  it('uses leagueHistory directly for a pre-2018 season', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify([{
+        id: '123',
+        name: 'Original League',
+        seasonId: 2017,
+        scoringPeriodId: 1,
+        firstScoringPeriod: 1,
+        finalScoringPeriod: 22,
+        status: {
+          currentMatchupPeriod: 22,
+          isActive: false,
+          previousSeasons: [2016],
+          statusType: { type: 'COMPLETE' },
+        },
+        settings: { name: 'Original League', size: 12 },
+        gameId: 2,
+        gameName: 'Fantasy Baseball',
+      }]), { status: 200 }),
+    );
+
+    await getLeagueInfo('{swid}', 's2token', '123', 2017, 'flb');
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(mockFetch.mock.calls[0]?.[0]).toBe(
+      'https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/leagueHistory/123?seasonId=2017&view=mSettings',
+    );
+  });
 });

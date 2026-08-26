@@ -1,7 +1,7 @@
 // workers/espn-client/src/sports/basketball/handlers.ts
-import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
+import { isEspnLeagueResponse, type Env, type RoutedToolParams, type ExecuteResponse, type EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
-import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
+import { espnFetch, handleEspnError, readEspnLeagueJson, requireCredentials } from '../../shared/espn-api';
 import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
@@ -118,13 +118,21 @@ async function handleGetLeagueInfo(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
 
     if (!data || !data.settings) {
       return {
@@ -237,13 +245,21 @@ async function handleGetStandings(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mStandings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const teams = data?.teams || [];
 
@@ -260,7 +276,14 @@ async function handleGetStandings(
     // ESPN leaves final ranks at 0 for some historical seasons; fall back to the
     // playoff bracket to identify the champion and runner-up.
     const bracketFinal = seasonComplete && !hasExplicitFinalRanks(teams)
-      ? await fetchBracketFinal(GAME_ID, league_id, espnYear, credentials, buildPlayoffSeedMap(teams))
+      ? await fetchBracketFinal(
+        GAME_ID,
+        league_id,
+        espnYear,
+        credentials,
+        buildPlayoffSeedMap(teams),
+        canonicalYear < getCurrentSeasonYear('basketball'),
+      )
       : null;
 
     // Transform and sort teams by standings
@@ -351,13 +374,21 @@ async function handleGetMatchups(
       path += `&matchupPeriodId=${week}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const schedule = data?.schedule || [];
     const teamsById = Object.fromEntries(
@@ -422,7 +453,7 @@ async function handleGetRoster(
   correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, team_id } = params;
-  const { espnYear } = getSeasonContext(params);
+  const { canonicalYear, espnYear } = getSeasonContext(params);
   const snapshot = params.rosterSnapshot ?? resolveRosterSnapshotFromParams(params);
   if (!snapshot) {
     return malformedRosterSnapshotError();
@@ -443,13 +474,21 @@ async function handleGetRoster(
       path += `&scoringPeriodId=${resolved.scoringPeriodId}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse) ?? {};
     const teams = data.teams || [];
 
     // Find the requested team
