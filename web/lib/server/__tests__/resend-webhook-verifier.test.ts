@@ -2,7 +2,8 @@ import { createHmac } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Resend } from "resend";
 
-const webhookSecret = "whsec_c2lnbmF0dXJlLXRlc3Qta2V5";
+const testWebhookSecretMarker = "flaim-test-webhook-key";
+const webhookSecret = `whsec_${Buffer.from(testWebhookSecretMarker).toString("base64")}`;
 const messageId = "msg_123";
 const timestamp = "1724500800";
 
