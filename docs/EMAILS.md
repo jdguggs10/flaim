@@ -159,7 +159,7 @@ records `email.bounced`, `email.complained`, `email.failed`, and
 `email.delivery_delayed`; delivery feedback is logged only and does not mutate
 Clerk users or Resend suppressions.
 
-Required manual follow-up for Gerry, not an automated deploy step:
+Webhook setup requirements:
 
 1. Create a Resend webhook for `https://flaim.app/api/webhooks/resend` that sends
    `email.bounced`, `email.complained`, `email.failed`, and
