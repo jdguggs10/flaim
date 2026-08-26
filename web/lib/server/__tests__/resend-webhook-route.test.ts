@@ -39,6 +39,24 @@ afterEach(() => {
 });
 
 describe("POST /api/webhooks/resend", () => {
+  it.each([
+    ["unset", undefined],
+    ["blank", "   "],
+  ])("returns 500 without verification when the signing secret is %s", async (_state, secret) => {
+    vi.stubEnv("RESEND_WEBHOOK_SIGNING_SECRET", secret);
+
+    const response = await POST(request('{"type":"email.failed"}'));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Webhook unavailable" });
+    expect(mocks.verify).not.toHaveBeenCalled();
+    expect(mocks.logEmailOps).toHaveBeenCalledWith("email.webhook_verification_failed", {
+      provider: "resend",
+      reason: "webhook_signing_secret_not_configured",
+      source: "resend.webhook",
+    });
+  });
+
   it("verifies the exact raw request body before logging a bounced delivery", async () => {
     vi.stubEnv("RESEND_WEBHOOK_SIGNING_SECRET", "whsec_test");
     const rawPayload = '{\n  "type": "email.bounced",\n  "data": { "email_id": "email_123" }\n}';
@@ -91,6 +109,21 @@ describe("POST /api/webhooks/resend", () => {
       reason: "invalid_svix_signature",
       source: "resend.webhook",
     });
+  });
+
+  it("acknowledges a verified untracked Resend event without delivery logging", async () => {
+    vi.stubEnv("RESEND_WEBHOOK_SIGNING_SECRET", "whsec_test");
+    mocks.verify.mockReturnValue({
+      created_at: "2026-08-24T12:00:00.000Z",
+      data: { email_id: "email_123" },
+      type: "email.delivered",
+    });
+
+    const response = await POST(request('{"type":"email.delivered"}'));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ received: true, skipped: true });
+    expect(mocks.logEmailOps).not.toHaveBeenCalled();
   });
 
   it("rejects missing Svix signature headers before attempting verification", async () => {
