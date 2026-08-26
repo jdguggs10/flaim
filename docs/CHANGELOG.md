@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Refresh Timeout Alignment (FLA-122)
+
+- **Fixed**: The public `refresh_leagues` MCP path now gives auth-worker up to 60 seconds to complete league discovery, matching the Chrome extension's existing discovery timeout. This replaces the previous 15-second cutoff that could report failure after a long-history ESPN account had already saved only part of its available seasons. The timeout remains bounded so a stuck refresh still terminates.
+
 ### ESPN Historical League Recovery (FLA-307)
 
 - **Fixed**: ESPN league discovery and historical league reads now use ESPN's `leagueHistory` route for seasons before 2018 and retry that route when the modern route incorrectly returns 401 for a later historical season. The alternate route's one-item array response is normalized before league info, standings, matchups, rosters, or past-season membership are processed. Current-season requests keep the existing route and authentication behavior.
