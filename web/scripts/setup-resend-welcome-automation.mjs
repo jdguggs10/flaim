@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as React from "react";
