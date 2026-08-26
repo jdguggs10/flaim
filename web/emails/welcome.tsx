@@ -140,7 +140,7 @@ export default function WelcomeEmail({
       preview="Connect a league to start using Flaim with your AI assistant."
       title="Connect your first league"
     >
-      <FlaimText>Hi {firstName},</FlaimText>
+      <FlaimText>{`Hi ${firstName},`}</FlaimText>
       <FlaimText>
         Flaim lets you ask fantasy questions using your actual, real league
         data. Once connected, you can ask about waiver adds, trade grades,

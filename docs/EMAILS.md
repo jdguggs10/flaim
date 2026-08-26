@@ -85,8 +85,8 @@ The official [`resend-cli` v2 broadcast reference](https://github.com/resend/res
 The first product templates are:
 
 - `web/emails/welcome.tsx`
-- `web/emails/league-connected.tsx`
 - `web/emails/broadcast-2026-08-kickoff.tsx`
+- `web/emails/espn-setup-link.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
 
@@ -181,12 +181,12 @@ Before enabling the flag in production, confirm failed welcome event sends are v
 Create or refresh the Resend-side resources with:
 
 ```sh
-corepack pnpm --dir web exec node scripts/setup-resend-welcome-automation.mjs
+corepack pnpm --dir web exec tsx scripts/setup-resend-welcome-automation.mjs
 ```
 
 The setup script creates the `flaim.user_created` event, publishes the `flaim-welcome-v1` template, and creates/updates the `Flaim Welcome Email` automation as `disabled`. It requires `RESEND_CONTACT_SEGMENT_ID` (the `Flaim Users` segment id, visible in the Resend Audience → Segments URL) because the automation chain is `trigger -> add_to_segment -> send_email`. **Resend rejects API edits to an enabled automation** ("This automation is enabled and cannot be edited"), so the working order is: disable the automation in the Resend dashboard, run the script (it republishes the template and updates the automation, leaving it disabled), send a real test email, then re-enable it. The script's event and template steps run before the automation step, so if it fails on an enabled automation the template has already been republished; disable and re-run. Verified 2026-08-16. The signup automation does not enrich contact names; that remains the responsibility of the `user.updated` repair path and the backfill script. Re-running the script intentionally disables the automation again as a safety guard while templates are being revised. Enable the automation in Resend only after the production webhook event path has been tested.
 
-The Resend automation template is currently hand-built in `web/scripts/setup-resend-welcome-automation.mjs` and must stay visually synchronized with `web/emails/welcome.tsx`. Shared action URLs live in `web/emails/flaim-email-links.json`. When changing the welcome email, update the React preview and setup-script HTML together, run `corepack pnpm --dir web run email:export`, rerun the setup script, and send a real test email before enabling or re-enabling the automation.
+The Resend automation setup script renders `web/emails/welcome.tsx` directly with `@react-email/render`, so the React template is the single source for both automation HTML and plain text. Shared action URLs live in `web/emails/flaim-email-links.json`. When changing the welcome email, update the React template, run `corepack pnpm --dir web run email:export`, rerun the setup script, and send a real test email before enabling or re-enabling the automation.
 
 Existing users are backfilled or repaired with a separate dry-run-first script. This is not part of the normal signup welcome path. Run it from the repo root:
 

@@ -2,12 +2,11 @@ import "server-only";
 import * as React from "react";
 import { emailBrand } from "@/emails/brand";
 import EspnSetupLinkEmail from "@/emails/espn-setup-link";
-import LeagueConnectedEmail from "@/emails/league-connected";
 import WelcomeEmail from "@/emails/welcome";
 import { logEmailOps } from "@/lib/server/email-ops";
 import { getResendClient, getResendErrorMessage } from "@/lib/server/resend-client";
 
-type ProductEmailTemplate = "welcome" | "league-connected" | "espn-setup-link";
+type ProductEmailTemplate = "welcome" | "espn-setup-link";
 
 interface ProductEmailResult {
   id?: string;
@@ -34,16 +33,6 @@ interface SendWelcomeEmailParams {
   firstName?: string;
   idempotencyKey?: string;
   leaguesUrl: string;
-  to: string;
-  unsubscribeUrl: string;
-  userId: string;
-}
-
-interface SendLeagueConnectedEmailParams {
-  aiDocsUrl: string;
-  idempotencyKey?: string;
-  leagueName?: string;
-  platform?: string;
   to: string;
   unsubscribeUrl: string;
   userId: string;
@@ -135,34 +124,6 @@ export function sendWelcomeEmail({
     ),
     subject: "Welcome to Flaim",
     template: "welcome",
-    to,
-    userId,
-  });
-}
-
-export function sendLeagueConnectedEmail({
-  aiDocsUrl,
-  idempotencyKey,
-  leagueName,
-  platform,
-  to,
-  unsubscribeUrl,
-  userId,
-}: SendLeagueConnectedEmailParams) {
-  const resolvedLeagueName = leagueName || "Your league";
-
-  return sendProductEmail({
-    idempotencyKey,
-    react: (
-      <LeagueConnectedEmail
-        aiDocsUrl={aiDocsUrl}
-        leagueName={resolvedLeagueName}
-        platform={platform}
-        unsubscribeUrl={unsubscribeUrl}
-      />
-    ),
-    subject: `${resolvedLeagueName} is ready in Flaim`,
-    template: "league-connected",
     to,
     userId,
   });
