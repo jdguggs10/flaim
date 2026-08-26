@@ -9,7 +9,6 @@ import emailLinks from "./flaim-email-links.json";
 interface WelcomeEmailProps {
   chatGptAppUrl?: string;
   claudeConnectorUrl?: string;
-  firstName?: string;
   leaguesUrl?: string;
   /** Must be a real unsubscribe or notification-preferences URL before connecting to a live sender. */
   unsubscribeUrl?: string;
@@ -123,7 +122,6 @@ function WelcomeSetupPath({
 export default function WelcomeEmail({
   chatGptAppUrl = emailLinks.chatGptAppUrl,
   claudeConnectorUrl = emailLinks.claudeConnectorUrl,
-  firstName = "Alex",
   leaguesUrl = emailLinks.leaguesUrl,
   unsubscribeUrl = "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20updates",
 }: WelcomeEmailProps) {
@@ -140,7 +138,7 @@ export default function WelcomeEmail({
       preview="Connect a league to start using Flaim with your AI assistant."
       title="Connect your first league"
     >
-      <FlaimText>{`Hi ${firstName},`}</FlaimText>
+      <FlaimText>Hi there,</FlaimText>
       <FlaimText>
         Flaim lets you ask fantasy questions using your actual, real league
         data. Once connected, you can ask about waiver adds, trade grades,
@@ -171,7 +169,6 @@ export default function WelcomeEmail({
 WelcomeEmail.PreviewProps = {
   chatGptAppUrl: emailLinks.chatGptAppUrl,
   claudeConnectorUrl: emailLinks.claudeConnectorUrl,
-  firstName: "Alex",
   leaguesUrl: emailLinks.leaguesUrl,
   unsubscribeUrl:
     "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20updates",

@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Welcome Email Name-Neutral (FLA-300)
+
+- **Changed**: The welcome template now uses the fixed greeting "Hi there," and the Resend event, template, and automation carry no given-name field or variable. Optional first/last-name contact enrichment remains limited to the `user.updated` repair path and contact backfill.
+
 ### Email Reliability and Delivery Feedback (FLA-295, FLA-298)
 
 - **Added**: Clerk-to-Resend welcome-event and contact-sync failures now emit stable, privacy-bounded structured email-operation logs and leave independent retry markers in Clerk private metadata. The flagged-only backfill mode can inspect or explicitly recover those markers without treating an unrelated contact-sync success as a welcome-event recovery.

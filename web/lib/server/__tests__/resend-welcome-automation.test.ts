@@ -57,7 +57,7 @@ describe("sendWelcomeAutomationEvent", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("sends the configured Resend event for the Clerk primary email", async () => {
+  it("sends the configured Resend event with only non-name metadata", async () => {
     const send = vi.fn(async () => ({
       data: { event: WELCOME_AUTOMATION_EVENT_NAME, object: "event" },
       error: null,
@@ -78,52 +78,9 @@ describe("sendWelcomeAutomationEvent", () => {
       event: WELCOME_AUTOMATION_EVENT_NAME,
       payload: {
         clerk_user_id: "user_123",
-        given_name: "Gerry",
         source: "clerk.user_created",
       },
     });
-  });
-
-  it("falls back to a plain greeting name when Clerk first name is blank", async () => {
-    const send = vi.fn(async () => ({
-      data: { event: WELCOME_AUTOMATION_EVENT_NAME, object: "event" },
-      error: null,
-    }));
-
-    await sendWelcomeAutomationEvent(
-      { ...clerkUser, first_name: " " },
-      {
-        client: { events: { send } },
-        enabled: true,
-      },
-    );
-
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({
-        given_name: "there",
-      }),
-    }));
-  });
-
-  it("removes markup from the greeting name before sending it to Resend", async () => {
-    const send = vi.fn(async () => ({
-      data: { event: WELCOME_AUTOMATION_EVENT_NAME, object: "event" },
-      error: null,
-    }));
-
-    await sendWelcomeAutomationEvent(
-      { ...clerkUser, first_name: " <b>Gerry</b>\n<svg/onload=alert(1)> " },
-      {
-        client: { events: { send } },
-        enabled: true,
-      },
-    );
-
-    expect(send).toHaveBeenCalledWith(expect.objectContaining({
-      payload: expect.objectContaining({
-        given_name: "Gerry",
-      }),
-    }));
   });
 
   it("skips explicitly unverified Clerk primary emails", async () => {

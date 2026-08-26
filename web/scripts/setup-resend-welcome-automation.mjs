@@ -12,7 +12,7 @@ const EVENT_NAME = "flaim.user_created";
 const TEMPLATE_ALIAS = "flaim-welcome-v1";
 const TEMPLATE_NAME = "Flaim Welcome";
 const AUTOMATION_NAME = "Flaim Welcome Email";
-const EVENT_SCHEMA_VERSION = "2026-06-09-given-name";
+const EVENT_SCHEMA_VERSION = "2026-08-25-no-given-name";
 const RESEND_PROPAGATION_DELAY_MS = 300;
 const MAX_TEMPLATE_LIST_PAGES = 20;
 function sleep(ms) {
@@ -34,7 +34,6 @@ async function ensureEvent(resend) {
   const existing = events.data.find((event) => event.name === EVENT_NAME);
   const schema = {
     clerk_user_id: "string",
-    given_name: "string",
     source: "string",
   };
 
@@ -55,7 +54,6 @@ async function ensureEvent(resend) {
 
 function createWelcomeAutomationEmail() {
   return React.createElement(WelcomeEmail, {
-    firstName: "{{{GIVEN_NAME}}}",
     unsubscribeUrl: "{{{RESEND_UNSUBSCRIBE_URL}}}",
   });
 }
@@ -68,8 +66,8 @@ export function buildWelcomeText() {
   return render(createWelcomeAutomationEmail(), { plainText: true });
 }
 
-async function ensureTemplate(resend) {
-  const payload = {
+export async function buildWelcomeTemplate() {
+  return {
     alias: TEMPLATE_ALIAS,
     from: "Flaim <updates@flaim.app>",
     html: await buildWelcomeHtml(),
@@ -77,14 +75,12 @@ async function ensureTemplate(resend) {
     replyTo: "support@flaim.app",
     subject: "Welcome to Flaim",
     text: await buildWelcomeText(),
-    variables: [
-      {
-        fallbackValue: "there",
-        key: "GIVEN_NAME",
-        type: "string",
-      },
-    ],
+    variables: [],
   };
+}
+
+async function ensureTemplate(resend) {
+  const payload = await buildWelcomeTemplate();
   const existing = await findTemplateByAlias(resend, TEMPLATE_ALIAS);
 
   if (existing) {
@@ -163,10 +159,6 @@ export function buildAutomation(templateId, contactSegmentId) {
           subject: "Welcome to Flaim",
           template: {
             id: templateId,
-            variables: {
-              // Coupled to the event payload in resend-welcome-automation.ts.
-              GIVEN_NAME: { var: "event.given_name" },
-            },
           },
         },
       },
