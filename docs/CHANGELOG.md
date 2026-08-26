@@ -12,6 +12,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 - **Added**: Clerk-to-Resend welcome-event and contact-sync failures now emit stable, privacy-bounded structured email-operation logs and leave independent retry markers in Clerk private metadata. The flagged-only backfill mode can inspect or explicitly recover those markers without treating an unrelated contact-sync success as a welcome-event recovery.
 - **Added**: A signature-verified Resend delivery-feedback route records bounced, complained, failed, and delayed delivery events from the exact raw Svix body; a read-only paginated suppression reconciliation script compares masked Resend suppression addresses to Clerk users and has no write mode.
+- **Fixed**: The production CSRF middleware now allows originless Resend delivery webhook POSTs through to the route's raw-body Svix signature verification. Only the exact `/api/webhooks/resend` path is exempt; other unauthenticated API mutations remain protected.
 - **Changed**: Direct Resend email sends accept a caller-supplied semantic idempotency key only for genuinely one-time events. Repeatable ESPN setup-link requests omit the key so a legitimate resend is not provider replay-cached. Flagged welcome recovery checks for the automation-created contact before resending and can be deliberately overridden with `--force-resend`; custom automation events remain outside Resend's email idempotency support.
 
 ### Sleeper Backfill Chain-Walk Depth Cap (FLA-303)
