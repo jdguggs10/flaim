@@ -1,5 +1,10 @@
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
 import { after, NextRequest, NextResponse } from "next/server";
+import { logEmailOps } from "@/lib/server/email-ops";
+import {
+  clearEmailRetry,
+  markEmailRetry,
+} from "@/lib/server/email-retry-marker";
 import {
   syncClerkUserToResendContact,
   type ClerkUserEmailSyncPayload,
@@ -49,10 +54,12 @@ export async function POST(request: NextRequest) {
 
   if (WELCOME_EVENTS.has(event.type)) {
     if (!isWelcomeAutomationEnabled()) {
-      console.warn(
-        "Resend welcome automation skipped for user.created; signup contact was not created:",
-        user.id,
-      );
+      logEmailOps("email.welcome_event_skipped", {
+        provider: "resend",
+        reason: "welcome_automation_disabled",
+        source: "clerk.user.created",
+        userId: user.id,
+      });
       return NextResponse.json({
         received: true,
         welcome: { skipped: true, error: "Resend welcome automation is disabled" },
@@ -60,13 +67,72 @@ export async function POST(request: NextRequest) {
     }
 
     after(async () => {
-      // Resend Automations identify contacts by email and create missing contacts
-      // before adding the segment and sending the welcome email.
-      // The feature flag was checked before queueing; keep the async call aligned
-      // with that already-made decision.
-      const welcome = await sendWelcomeAutomationEvent(user, { enabled: true });
-      if (!welcome.ok && !welcome.skipped) {
-        console.error("Resend welcome automation event failed:", welcome.error);
+      try {
+        // Resend Automations identify contacts by email and create missing contacts
+        // before adding the segment and sending the welcome email. The feature flag
+        // was checked before queueing; keep the async call aligned with that decision.
+        const welcome = await sendWelcomeAutomationEvent(user, { enabled: true });
+        if (!welcome.ok && !welcome.skipped) {
+          logEmailOps("email.welcome_event_failed", {
+            error: welcome.error,
+            provider: "resend",
+            reason: "welcome_event_send_failed",
+            source: "clerk.user.created",
+            userId: user.id,
+          });
+
+          const marker = await markEmailRetry(user.id, "welcomeEvent", {
+            metadata: user.private_metadata,
+          });
+          if (!marker.ok) {
+            logEmailOps("email.welcome_event_failed", {
+              error: marker.error,
+              provider: "clerk",
+              reason: "retry_marker_write_failed",
+              source: "clerk.user.created",
+              userId: user.id,
+            });
+          }
+          return;
+        }
+
+        if (welcome.ok) {
+          const marker = await clearEmailRetry(user.id, "welcomeEvent", {
+            metadata: user.private_metadata,
+          });
+          if (!marker.ok) {
+            logEmailOps("email.welcome_event_failed", {
+              error: marker.error,
+              provider: "clerk",
+              reason: "retry_marker_clear_failed",
+              source: "clerk.user.created",
+              userId: user.id,
+            });
+          }
+        }
+      } catch (error) {
+        // `after()` work must not create an unhandled rejection after Clerk has
+        // already received its acknowledgement.
+        logEmailOps("email.welcome_event_failed", {
+          error,
+          provider: "resend",
+          reason: "welcome_event_after_failed",
+          source: "clerk.user.created",
+          userId: user.id,
+        });
+
+        const marker = await markEmailRetry(user.id, "welcomeEvent", {
+          metadata: user.private_metadata,
+        });
+        if (!marker.ok) {
+          logEmailOps("email.welcome_event_failed", {
+            error: marker.error,
+            provider: "clerk",
+            reason: "retry_marker_write_failed",
+            source: "clerk.user.created",
+            userId: user.id,
+          });
+        }
       }
     });
 
@@ -76,9 +142,48 @@ export async function POST(request: NextRequest) {
   const result = await syncClerkUserToResendContact(user);
 
   if (!result.ok && !result.skipped) {
-    console.error("Clerk to Resend contact sync failed:", result.error);
+    logEmailOps("email.contact_sync_failed", {
+      error: result.error,
+      provider: "resend",
+      reason: "contact_sync_failed",
+      source: "clerk.user.updated",
+      userId: user.id,
+    });
+
+    after(async () => {
+      const marker = await markEmailRetry(user.id, "contactSync", {
+        metadata: user.private_metadata,
+      });
+      if (!marker.ok) {
+        logEmailOps("email.contact_sync_failed", {
+          error: marker.error,
+          provider: "clerk",
+          reason: "retry_marker_write_failed",
+          source: "clerk.user.updated",
+          userId: user.id,
+        });
+      }
+    });
+
     // Acknowledge verified Clerk events to avoid webhook retry storms for downstream Resend failures.
     return NextResponse.json({ error: "Contact sync failed", received: true, sync: result });
+  }
+
+  if (result.ok) {
+    after(async () => {
+      const marker = await clearEmailRetry(user.id, "contactSync", {
+        metadata: user.private_metadata,
+      });
+      if (!marker.ok) {
+        logEmailOps("email.contact_sync_failed", {
+          error: marker.error,
+          provider: "clerk",
+          reason: "retry_marker_clear_failed",
+          source: "clerk.user.updated",
+          userId: user.id,
+        });
+      }
+    });
   }
 
   return NextResponse.json({ received: true, sync: result });

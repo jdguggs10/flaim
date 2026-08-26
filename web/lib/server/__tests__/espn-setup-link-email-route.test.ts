@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   currentUser: vi.fn(),
+  logEmailOps: vi.fn(),
   sendEspnSetupLinkEmail: vi.fn(),
 }));
 
@@ -11,6 +12,10 @@ vi.mock('@clerk/nextjs/server', () => ({
 
 vi.mock('@/lib/server/product-email', () => ({
   sendEspnSetupLinkEmail: mocks.sendEspnSetupLinkEmail,
+}));
+
+vi.mock('@/lib/server/email-ops', () => ({
+  logEmailOps: mocks.logEmailOps,
 }));
 
 import { POST } from '../../../app/api/espn/setup-link-email/route';
@@ -58,11 +63,15 @@ describe('POST /api/espn/setup-link-email', () => {
       to: string;
       leaguesUrl: string;
       extensionUrl: string;
+      idempotencyKey?: string;
+      userId: string;
     };
     expect(params.to).toBe('fan@example.com');
+    expect(params.userId).toBe('user_2');
     expect(params.leaguesUrl).toBe('https://flaim.app/leagues?ref=email-espn-setup-link');
     expect(params.extensionUrl).toContain('chromewebstore.google.com');
     expect(params.extensionUrl).not.toContain('ref=');
+    expect(params).not.toHaveProperty('idempotencyKey');
   });
 
   it('returns 400 when the account has no email address', async () => {
@@ -94,6 +103,20 @@ describe('POST /api/espn/setup-link-email', () => {
 
     expect(response.status).toBe(502);
     expect(await response.json()).toMatchObject({ error: 'send_failed' });
+  });
+
+  it('logs thrown route failures through the sanitized structured email path', async () => {
+    mocks.currentUser.mockRejectedValue(new Error('Clerk returned sk_live_1234567890'));
+
+    const response = await POST();
+
+    expect(response.status).toBe(500);
+    expect(mocks.logEmailOps).toHaveBeenCalledWith('email.send_failed', {
+      error: expect.any(Error),
+      reason: 'setup_link_route_failed',
+      source: 'espn.setup_link_email',
+      userId: undefined,
+    });
   });
 
   it('rate-limits a second send from the same user within the cooldown', async () => {
