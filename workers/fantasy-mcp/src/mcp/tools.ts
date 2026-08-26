@@ -19,6 +19,8 @@ import {
 import { logEvalEvent } from '../logging';
 import { USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
 
+const AUTH_WORKER_REFRESH_TIMEOUT_MS = 60_000;
+
 // =============================================================================
 // MCP RESPONSE TYPES
 // =============================================================================
@@ -607,7 +609,7 @@ async function refreshUserLeagues(
   resource: string = 'https://api.flaim.app/mcp'
 ): Promise<McpToolResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), AUTH_WORKER_REFRESH_TIMEOUT_MS);
   const cid = correlationId || 'no-cid';
 
   try {
@@ -683,7 +685,7 @@ async function refreshUserLeagues(
       success: false,
       code: isTimeout ? 'AUTH_WORKER_TIMEOUT' : 'AUTH_WORKER_REFRESH_FAILED',
       error: isTimeout
-        ? 'League refresh timed out after 15 seconds'
+        ? `League refresh timed out after ${AUTH_WORKER_REFRESH_TIMEOUT_MS / 1000} seconds`
         : `League refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     };
     console.error(`[fantasy-mcp] ${cid} failed to refresh leagues:`, error);

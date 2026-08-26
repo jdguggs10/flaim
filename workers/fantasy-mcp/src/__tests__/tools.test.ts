@@ -620,6 +620,45 @@ describe('fantasy-mcp tools', () => {
     expect(await capturedRequest!.json()).toEqual({ platforms: ['espn'] });
   });
 
+  it('refresh_leagues allows 60 seconds before timing out auth-worker', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    let aborted = false;
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => new Promise<Response>((_resolve, reject) => {
+          req.signal.addEventListener('abort', () => {
+            aborted = true;
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        }),
+      },
+    } as unknown as Env;
+
+    const resultPromise = tool!.handler(
+      { platforms: ['espn'] },
+      env,
+      'Bearer user-token',
+      'corr-refresh-timeout'
+    );
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await resultPromise;
+
+    expect(aborted).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toEqual({
+      success: false,
+      code: 'AUTH_WORKER_TIMEOUT',
+      error: 'League refresh timed out after 60 seconds',
+    });
+  });
+
   it('refresh_leagues rejects invalid platforms instead of widening to all platforms', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
     expect(tool).toBeTruthy();
