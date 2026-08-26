@@ -30,7 +30,6 @@ interface SendProductEmailParams {
 }
 
 interface SendWelcomeEmailParams {
-  firstName?: string;
   idempotencyKey?: string;
   leaguesUrl: string;
   to: string;
@@ -106,7 +105,6 @@ async function sendProductEmail({
 }
 
 export function sendWelcomeEmail({
-  firstName,
   idempotencyKey,
   leaguesUrl,
   to,
@@ -117,7 +115,6 @@ export function sendWelcomeEmail({
     idempotencyKey,
     react: (
       <WelcomeEmail
-        firstName={firstName}
         leaguesUrl={leaguesUrl}
         unsubscribeUrl={unsubscribeUrl}
       />

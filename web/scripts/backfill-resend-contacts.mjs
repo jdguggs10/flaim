@@ -201,22 +201,6 @@ export function getEmailRetryMarkers(user) {
   };
 }
 
-function getWelcomeGivenName(value) {
-  const cleaned = cleanString(value);
-  if (!cleaned) return "there";
-
-  const safeName = cleaned
-    .replace(/<[^>]*>/g, "")
-    .replace(/[<>]/g, "")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 80)
-    .trim();
-
-  return safeName || "there";
-}
-
 async function listClerkUsers({ clerkSecretKey, limit, offset }) {
   const url = new URL(CLERK_USERS_URL);
   url.searchParams.set("limit", String(limit));
@@ -369,7 +353,6 @@ export async function sendWelcomeRetryEvent({ resend, user }) {
       event: WELCOME_AUTOMATION_EVENT_NAME,
       payload: {
         clerk_user_id: user.id,
-        given_name: getWelcomeGivenName(user.first_name),
         source: "backfill-resend-contacts.flagged-only",
       },
     });

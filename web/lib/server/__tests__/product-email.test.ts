@@ -42,6 +42,8 @@ describe("product email sends", () => {
     });
 
     expect(result).toEqual({ id: "email_123", ok: true });
+    const [message] = mocks.emailsSend.mock.calls[0];
+    expect(message.react.props).not.toHaveProperty("firstName");
     expect(mocks.emailsSend).toHaveBeenCalledWith(
       expect.objectContaining({
         subject: "Welcome to Flaim",

@@ -243,7 +243,6 @@ describe("backfill-resend-contacts script helpers", () => {
       event: "flaim.user_created",
       payload: {
         clerk_user_id: "user_123",
-        given_name: "Fan",
         source: "backfill-resend-contacts.flagged-only",
       },
     });

@@ -10,7 +10,6 @@ import {
 } from "@/lib/server/resend-contact-sync";
 
 export const WELCOME_AUTOMATION_EVENT_NAME = "flaim.user_created";
-const WELCOME_GIVEN_NAME_MAX_LENGTH = 80;
 
 export interface WelcomeAutomationEventResult {
   email?: string;
@@ -47,22 +46,6 @@ function cleanString(value: string | null | undefined) {
   return cleaned || null;
 }
 
-function getWelcomeGivenName(value: string | null | undefined) {
-  const cleaned = cleanString(value);
-  if (!cleaned) return "there";
-
-  const safeName = cleaned
-    .replace(/<[^>]*>/g, "")
-    .replace(/[<>]/g, "")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, WELCOME_GIVEN_NAME_MAX_LENGTH)
-    .trim();
-
-  return safeName || "there";
-}
-
 export function isWelcomeAutomationEnabled(options: SendWelcomeAutomationEventOptions = {}) {
   return options.enabled ?? process.env.RESEND_WELCOME_AUTOMATION_ENABLED === "true";
 }
@@ -92,7 +75,6 @@ export async function sendWelcomeAutomationEvent(
   const email = emailResult.email;
   const payload: Record<string, string> = {
     clerk_user_id: user.id,
-    given_name: getWelcomeGivenName(user.first_name),
     source: "clerk.user_created",
   };
 

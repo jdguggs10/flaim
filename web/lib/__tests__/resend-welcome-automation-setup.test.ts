@@ -6,12 +6,12 @@ import {
   buildAutomation,
   buildWelcomeHtml,
   buildWelcomeText,
+  buildWelcomeTemplate,
 } from "../../scripts/setup-resend-welcome-automation.mjs";
 
 describe("Resend welcome automation setup", () => {
   it("renders the HTML and plain text from the React welcome template", async () => {
     const automationMergeProps = {
-      firstName: "{{{GIVEN_NAME}}}",
       unsubscribeUrl: "{{{RESEND_UNSUBSCRIBE_URL}}}",
     };
     const [html, text, expectedHtml, expectedText] = await Promise.all([
@@ -25,9 +25,17 @@ describe("Resend welcome automation setup", () => {
 
     expect(html).toBe(expectedHtml);
     expect(text).toBe(expectedText);
-    expect(html).toContain("{{{GIVEN_NAME}}}");
-    expect(text).toContain("{{{GIVEN_NAME}}}");
+    expect(html).toContain("Hi there,");
+    expect(text).toContain("Hi there,");
+    expect(html).not.toContain("GIVEN_NAME");
+    expect(text).not.toContain("GIVEN_NAME");
     expect(html).toContain('href="{{{RESEND_UNSUBSCRIBE_URL}}}"');
+  });
+
+  it("clears template variables when updating the existing welcome template", async () => {
+    const template = await buildWelcomeTemplate();
+
+    expect(template.variables).toEqual([]);
   });
 
   it("always creates or updates the automation as disabled", () => {
@@ -39,5 +47,17 @@ describe("Resend welcome automation setup", () => {
       key: "segment",
       type: "add_to_segment",
     });
+    expect(automation.steps).toContainEqual({
+      config: {
+        from: "Flaim <updates@flaim.app>",
+        replyTo: "support@flaim.app",
+        subject: "Welcome to Flaim",
+        template: { id: "template_123" },
+      },
+      key: "welcome",
+      type: "send_email",
+    });
+    const welcomeStep = automation.steps.find((step) => step.key === "welcome");
+    expect(welcomeStep?.config.template).not.toHaveProperty("variables");
   });
 });
