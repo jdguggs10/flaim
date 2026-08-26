@@ -201,6 +201,13 @@ X-Fantasy-Platform: kona-web-2.0.0
 Note: The Chrome extension's league discovery uses ESPN's Fan API; MCP workers
 still call `lm-api-reads.fantasy.espn.com` for league data.
 
+Historical league reads use ESPN's `leagueHistory` route before ESPN-native
+season 2018. For later historical seasons, a 401 from the modern league route
+is retried once through `leagueHistory` before the response is classified as
+an authentication failure. Current-season requests do not use this fallback.
+The historical route's one-item JSON array is normalized to the same league
+object shape used by the modern route.
+
 Credentials are fetched from auth-worker per request; MCP workers don't store them locally.
 
 ## League Seasons

@@ -1,7 +1,7 @@
 // workers/espn-client/src/sports/football/handlers.ts
-import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
+import { isEspnLeagueResponse, type Env, type RoutedToolParams, type ExecuteResponse, type EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
-import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
+import { espnFetch, handleEspnError, readEspnLeagueJson, requireCredentials } from '../../shared/espn-api';
 import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
@@ -55,13 +55,21 @@ async function handleGetLeagueInfo(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
 
     if (!data || !data.settings) {
       return {
@@ -173,13 +181,21 @@ async function handleGetStandings(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mStandings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: season_year,
+        historical: season_year < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const teams = data?.teams || [];
 
@@ -196,7 +212,14 @@ async function handleGetStandings(
     // ESPN leaves final ranks at 0 for some historical seasons; fall back to the
     // playoff bracket to identify the champion and runner-up.
     const bracketFinal = seasonComplete && !hasExplicitFinalRanks(teams)
-      ? await fetchBracketFinal(GAME_ID, league_id, season_year, credentials, buildPlayoffSeedMap(teams))
+      ? await fetchBracketFinal(
+        GAME_ID,
+        league_id,
+        season_year,
+        credentials,
+        buildPlayoffSeedMap(teams),
+        season_year < getCurrentSeasonYear('football'),
+      )
       : null;
 
     // Transform and sort teams by standings
@@ -283,13 +306,21 @@ async function handleGetMatchups(
       path += `&scoringPeriodId=${week}&matchupPeriodId=${week}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: season_year,
+        historical: season_year < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const schedule = data?.schedule || [];
     const teamsById = Object.fromEntries(
@@ -373,13 +404,21 @@ async function handleGetRoster(
       path += `&scoringPeriodId=${snapshot.week}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: season_year,
+        historical: season_year < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse) ?? {};
     const teams = data.teams || [];
 
     // Find the requested team

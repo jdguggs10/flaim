@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Historical League Recovery (FLA-307)
+
+- **Fixed**: ESPN league discovery and historical league reads now use ESPN's `leagueHistory` route for seasons before 2018 and retry that route when the modern route incorrectly returns 401 for a later historical season. The alternate route's one-item array response is normalized before league info, standings, matchups, rosters, or past-season membership are processed. Current-season requests keep the existing route and authentication behavior.
+- **Changed**: ESPN setup guidance now explains that Sync or Re-sync in the Flaim Chrome extension refreshes connected leagues and looks for past seasons ESPN makes available. Your Leagues also provides Sync all for connected platforms.
+
 ### Welcome Email Name-Neutral (FLA-300)
 
 - **Changed**: The welcome template now uses the fixed greeting "Hi there," and the Resend event, template, and automation carry no given-name field or variable. Optional first/last-name contact enrichment remains limited to the `user.updated` repair path and contact backfill.

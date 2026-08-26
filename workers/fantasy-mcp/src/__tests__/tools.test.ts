@@ -946,6 +946,52 @@ describe('fantasy-mcp tools', () => {
     expect(bbOld?.seasonYear).toBe(2025);
   });
 
+  it('get_ancient_history preserves every stored ESPN baseball season through 2011', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+    expect(tool).toBeTruthy();
+
+    const espnLeagues = Array.from({ length: 16 }, (_, index) => ({
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 'bb-history',
+      leagueName: 'Long-Running League',
+      teamId: '7',
+      seasonYear: 2026 - index,
+    }));
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: espnLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platform: 'espn' }, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      oldSeasonsFromActiveLeagues: Record<string, Array<{ seasonYear: number }>>;
+      totalOldSeasons: number;
+    };
+    const seasons = Object.values(payload.oldSeasonsFromActiveLeagues)
+      .flat()
+      .map((season) => season.seasonYear);
+
+    expect(payload.totalOldSeasons).toBe(15);
+    expect(seasons).toContain(2011);
+    expect(seasons).toEqual(expect.arrayContaining(Array.from({ length: 15 }, (_, index) => 2025 - index)));
+  });
+
   it('get_ancient_history keeps recurring Yahoo seasons under active leagues', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
     expect(tool).toBeTruthy();

@@ -111,6 +111,71 @@ describe('discoverAndSaveLeagues', () => {
     errorSpy.mockRestore();
   });
 
+  it('discovers and persists baseball history through 2011', async () => {
+    const previousSeasons = Array.from({ length: 15 }, (_, index) => 2025 - index);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-baseball',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 7,
+                gameId: 2,
+                seasonId: 2026,
+                entryMetadata: { teamName: 'Current Team' },
+                groups: [{ groupId: 30201, groupName: 'Long-Running League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo.mockImplementation(async (_swid, _s2, _leagueId, season) => (
+      season === 2026
+        ? { status: { previousSeasons } } as any
+        : { leagueName: `Long-Running League ${season}` } as any
+    ));
+    mockGetLeagueTeams.mockImplementation(async (_swid, _s2, _leagueId, season) => ([
+      { teamId: '7', teamName: `Historical Team ${season}` },
+    ]));
+
+    const storage = {
+      leagueExists: vi.fn().mockResolvedValue(false),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    const result = await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(result.pastSeasons).toEqual({
+      found: 15,
+      added: 15,
+      alreadySaved: 0,
+      refreshed: 0,
+    });
+    expect(mockGetLeagueTeams).toHaveBeenCalledTimes(15);
+    expect(mockGetLeagueTeams).toHaveBeenLastCalledWith(
+      '{swid}',
+      's2token',
+      '30201',
+      2011,
+      'flb',
+    );
+    expect(storage.addLeague).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      leagueId: '30201',
+      sport: 'baseball',
+      seasonYear: 2011,
+      teamId: '7',
+      teamName: 'Historical Team 2011',
+    }));
+  });
+
   it('stores historical seasons with the season-specific team name', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

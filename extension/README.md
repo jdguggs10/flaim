@@ -14,8 +14,8 @@ Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and
 5. Manage leagues and set defaults at `flaim.app/leagues`
 
 **Automation boundaries**
-- The extension only runs discovery when you click **Sync / Re-sync**.
-- `/leagues` actions are manual and separate from the extension flow.
+- The extension runs ESPN discovery when you click **Sync / Re-sync**.
+- You can also use **Sync all** in Your Leagues to refresh connected platforms.
 
 ## Development
 

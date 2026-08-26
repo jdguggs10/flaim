@@ -20,6 +20,10 @@ export interface EspnLeagueResponse {
   schedule?: EspnMatchup[];
 }
 
+export function isEspnLeagueResponse(value: unknown): value is EspnLeagueResponse {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 export interface EspnLeagueStatus {
   currentMatchupPeriod?: number;
   isActive?: boolean;

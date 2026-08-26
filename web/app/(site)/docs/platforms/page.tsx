@@ -19,7 +19,7 @@ const CONNECTION_FAQS = [
   {
     question: "My leagues do not appear",
     answer:
-      "Make sure you connected the account that belongs to those leagues. Then open the platform in Your Leagues and sync or refresh it again.",
+      "Make sure you connected the account that belongs to those leagues. For ESPN, open the Flaim Chrome extension and choose Sync or Re-sync. This refreshes your connected leagues and looks for the past seasons ESPN makes available. Then confirm the league appears in Your Leagues.",
   },
   {
     question: "Do I need the Chrome extension?",
@@ -38,7 +38,7 @@ const HOW_TO_SCHEMAS = [
     "@context": "https://schema.org",
     "@type": "HowTo",
     name: "Connect ESPN fantasy leagues to Flaim",
-    dateModified: "2026-08-15",
+    dateModified: "2026-08-26",
     description:
       "Use the Flaim Chrome extension to connect and sync ESPN fantasy leagues.",
     step: [
