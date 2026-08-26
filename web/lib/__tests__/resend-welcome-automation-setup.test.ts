@@ -25,6 +25,8 @@ describe("Resend welcome automation setup", () => {
 
     expect(html).toBe(expectedHtml);
     expect(text).toBe(expectedText);
+    expect(html).toContain("{{{GIVEN_NAME}}}");
+    expect(text).toContain("{{{GIVEN_NAME}}}");
     expect(html).toContain('href="{{{RESEND_UNSUBSCRIBE_URL}}}"');
   });
 
