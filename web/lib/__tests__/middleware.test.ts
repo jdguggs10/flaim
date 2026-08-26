@@ -20,9 +20,9 @@ describe("normalizePathname", () => {
 });
 
 describe("shouldRejectForCsrf", () => {
-  it("allows Clerk webhooks without a browser origin", () => {
-    expect(shouldRejectForCsrf(request("/api/webhooks/clerk", { method: "POST" }))).toBe(false);
-    expect(shouldRejectForCsrf(request("/api/webhooks/clerk/", { method: "POST" }))).toBe(false);
+  it.each(["clerk", "resend"])("allows the %s webhook without a browser origin", webhook => {
+    expect(shouldRejectForCsrf(request(`/api/webhooks/${webhook}`, { method: "POST" }))).toBe(false);
+    expect(shouldRejectForCsrf(request(`/api/webhooks/${webhook}/`, { method: "POST" }))).toBe(false);
   });
 
   it("allows safe methods without a browser origin", () => {
@@ -34,8 +34,9 @@ describe("shouldRejectForCsrf", () => {
     expect(shouldRejectForCsrf(request("/api/user/preferences", { method: "POST" }))).toBe(true);
   });
 
-  it("rejects non-Clerk webhook paths without a browser origin", () => {
+  it("keeps webhook exemptions exact", () => {
     expect(shouldRejectForCsrf(request("/api/webhooks/stripe", { method: "POST" }))).toBe(true);
+    expect(shouldRejectForCsrf(request("/api/webhooks/resend/retry", { method: "POST" }))).toBe(true);
   });
 
   it("allows mutating API requests from allowed origins", () => {
