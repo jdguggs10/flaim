@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Resend API Key Hygiene (FLA-296)
+
+- **Changed**: The documented broadcast-draft workflow now requires an intentionally sourced `RESEND_BROADCASTS_API_KEY` with full access instead of reusing the sending-only `RESEND_API_KEY` from `web/.env.local`. Local visual preview remains the copy and layout editing surface, and the provider remains the audience, proof, and send surface.
+- **Clarified**: Resend does not offer a read-only API-key permission. A suppression-reconciliation credential therefore requires full access even though Flaim's reconciliation script itself remains report-only and must be run only from a trusted local shell.
+
 ### ESPN Refresh Timeout Alignment (FLA-122)
 
 - **Fixed**: The public `refresh_leagues` MCP path now gives auth-worker up to 60 seconds to complete league discovery, matching the Chrome extension's existing discovery timeout. This replaces the previous 15-second cutoff that could report failure after a long-history ESPN account had already saved only part of its available seasons. The timeout remains bounded so a stuck refresh still terminates.
