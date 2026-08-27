@@ -7,7 +7,7 @@ import YahooAccessBroadcastEmail from "../../../emails/broadcast-2026-08-yahoo-a
 import { htmlToText } from "../../../scripts/export-email-text.mjs";
 
 describe("email plain-text export", () => {
-  it("omits the visual linked logo header from the text fallback", () => {
+  it("omits the visual linked logo row from the text fallback", () => {
     const text = htmlToText(`
       <section data-skip-in-text="true">
         <a href="https://flaim.app"><img alt="" src="https://flaim.app/mark.png"></a>
@@ -36,8 +36,14 @@ describe("email plain-text export", () => {
     const html = await render(React.createElement(YahooAccessBroadcastEmail));
     const text = htmlToText(html);
 
-    expect(text).toContain("A QUICK YAHOO UPDATE");
-    expect(text).toContain("You do not need to reconnect or keep retrying.");
+    expect(html).toContain('src="https://flaim.app/icon-light-5kb.png"');
+    expect(text).toContain("YAHOO STATUS: STILL WAITING");
+    expect(text).toContain("This wait is... very frustrating.");
+    expect(text).not.toContain("The moment Yahoo turns Flaim's access back on");
+    expect(text).not.toContain("You will not need to reconnect or do anything else.");
+    expect(text).toContain(
+      "Manage ESPN & Sleeper leagues https://flaim.app/leagues?ref=email-yahoo-access-aug-2026",
+    );
     expect(text).toContain("Unsubscribe {{{RESEND_UNSUBSCRIBE_URL}}}");
   });
 });
