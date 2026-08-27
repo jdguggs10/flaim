@@ -73,10 +73,10 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
        --html-file .email-out/broadcast-2026-08-kickoff.html \
        --text-file .email-out/broadcast-2026-08-kickoff.txt
    )
-   unset RESEND_BROADCASTS_API_KEY RESEND_BROADCAST_SEGMENT_ID
+   unset RESEND_BROADCASTS_API_KEY
    ```
 
-   The subshell first clears any ambient `RESEND_API_KEY`, then passes the dedicated broadcast credential only to the downloaded CLI under the variable name it expects. The segment ID is passed as an argument. The final `unset` clears the two operator-supplied shell variables. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
+   The subshell first clears any ambient `RESEND_API_KEY`, then passes the dedicated broadcast credential only to the downloaded CLI under the variable name it expects. The segment ID exists only inside the subshell and is passed as an argument. The final `unset` clears the operator-supplied broadcast credential from the outer shell. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
 5. Use the Resend dashboard only to confirm the audience, send proof emails, and send after review. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
 6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
 
