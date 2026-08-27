@@ -54,13 +54,13 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
 1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
 2. Run `corepack pnpm --dir web run email:dev` for local iteration.
 3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
-4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and load a dedicated full-access broadcast credential into `RESEND_BROADCASTS_API_KEY` from the approved secret manager without printing it. An audience ID is not a segment ID; never substitute one for the other. Do not source this credential from `web/.env.local`: that file's `RESEND_API_KEY` is deliberately sending-only and cannot create broadcasts.
+4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and load a dedicated full-access broadcast credential into `RESEND_BROADCASTS_API_KEY` from Flaim's password manager (currently 1Password) without printing it. An audience ID is not a segment ID; never substitute one for the other. Do not source this credential from `web/.env.local`: that file's `RESEND_API_KEY` is deliberately sending-only and cannot create broadcasts.
 
    ```sh
    # From the repository root. Nothing here prints either credential.
    (
      unset RESEND_API_KEY
-     : "${RESEND_BROADCASTS_API_KEY:?Load the full-access broadcast key from the approved secret manager first}"
+     : "${RESEND_BROADCASTS_API_KEY:?Load the full-access broadcast key from Flaim's password manager first}"
      RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
 
      RESEND_API_KEY="$RESEND_BROADCASTS_API_KEY" corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
@@ -80,7 +80,7 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
 5. Use the Resend dashboard only to confirm the audience, send proof emails, and send after review. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
 6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
 
-Do not send a real email while developing this workflow. The local `RESEND_API_KEY` is sending-only and restricted to `flaim.app`; it must never be broadened for broadcast work. Keep the full-access broadcast credential out of `.env.local`, and do not change provider keys or feature flags as part of routine copy iteration.
+Do not send a real email while developing this workflow. The local `RESEND_API_KEY` is sending-only and restricted to `flaim.app`; it must never be broadened for broadcast work. Keep the full-access broadcast credential out of `.env.local`, and do not change provider keys or feature flags as part of routine copy iteration. The broadcast credential is loaded per use because its pinned first-party CLI consumer can create and modify provider resources. The suppression credential may be stored in a trusted local environment because Flaim's reconciliation script has no write mode, but it must never be deployed.
 
 The official [`resend-cli` v2 broadcast reference](https://github.com/resend/resend-cli/blob/main/skills/resend-cli/references/broadcasts.md) supports `--html-file`, `--text-file`, `--name`, `--reply-to`, and `--preview-text`, and saves a draft unless `--send` is supplied. It targets the current API's required `segment_id` contract and maps the CLI reply-to input to the API's `reply_to` array. The pinned CLI command above therefore replaces a custom draft creator.
 
