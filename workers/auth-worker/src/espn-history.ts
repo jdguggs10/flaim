@@ -163,30 +163,17 @@ export function publicHistoryStatus(job: EspnHistoryJob | null) {
 }
 
 export async function reconcileStaleRunningEspnHistoryJob(
-  storage: { terminal(
-    id: string,
-    status: Extract<EspnHistoryJobStatus, 'failed'>,
-    errorCode: string,
-    errorMessage: string
-  ): Promise<string> },
-  job: EspnHistoryJob | null,
+  storage: { failStaleRunning(id: string, staleBefore: string): Promise<boolean> },
+  job: Pick<EspnHistoryJob, 'id' | 'status' | 'updated_at'> | null,
   nowMs = Date.now()
 ): Promise<boolean> {
   if (job?.status !== 'running') return false;
   const updatedAtMs = Date.parse(job.updated_at);
-  if (!Number.isFinite(updatedAtMs) || nowMs - updatedAtMs < ESPN_HISTORY_RUNNING_STALE_MS) {
+  if (!Number.isFinite(updatedAtMs) || nowMs - updatedAtMs <= ESPN_HISTORY_RUNNING_STALE_MS) {
     return false;
   }
-  const outcome = await storage.terminal(
-    job.id,
-    'failed',
-    'workflow_runtime_stalled',
-    'ESPN history refresh stopped making progress. Run sync again.'
-  );
-  if (outcome !== 'finished' && outcome !== 'job_not_active') {
-    throw new Error(`ESPN history stale-job recovery rejected terminal state: ${outcome}`);
-  }
-  return true;
+  const staleBefore = new Date(nowMs - ESPN_HISTORY_RUNNING_STALE_MS).toISOString();
+  return storage.failStaleRunning(job.id, staleBefore);
 }
 
 export class EspnHistoryJobStorage {
@@ -261,7 +248,7 @@ export class EspnHistoryJobStorage {
   private async failStaleRunningJob(userId: string): Promise<void> {
     const { data, error } = await this.supabase
       .from('espn_history_jobs')
-      .select('*')
+      .select('id,status,updated_at')
       .eq('clerk_user_id', userId)
       .eq('status', 'running')
       .order('updated_at', { ascending: false })
@@ -269,7 +256,29 @@ export class EspnHistoryJobStorage {
       .maybeSingle();
     if (isMissingEspnHistoryTableError(error)) return;
     if (error) throw new Error('Unable to read stale ESPN history jobs');
-    await reconcileStaleRunningEspnHistoryJob(this, asJob(data));
+    await reconcileStaleRunningEspnHistoryJob(
+      this,
+      data ? data as Pick<EspnHistoryJob, 'id' | 'status' | 'updated_at'> : null
+    );
+  }
+
+  async failStaleRunning(id: string, staleBefore: string): Promise<boolean> {
+    const now = new Date().toISOString();
+    const { data, error } = await this.supabase
+      .from('espn_history_jobs')
+      .update({
+        status: 'failed',
+        last_error_code: 'workflow_runtime_stalled',
+        last_error_message: 'ESPN history refresh stopped making progress. Run sync again.',
+        finished_at: now,
+        updated_at: now,
+      })
+      .eq('id', id)
+      .eq('status', 'running')
+      .lt('updated_at', staleBefore)
+      .select('id');
+    if (error) throw new Error('Unable to recover a stale running ESPN history job');
+    return (data?.length ?? 0) === 1;
   }
 
   async createOrCoalesce(userId: string, credentialUpdatedAt: string, attempt = 0): Promise<{ job: EspnHistoryJob; created: boolean }> {
@@ -539,6 +548,8 @@ export async function recoverUnhandledEspnHistoryWorkflowFailure(
     }
     status = 'failed';
   }
+  const upstreamBackoff = errorCode === 'history_plan_failed'
+    || errorCode === 'history_chunk_retries_exhausted';
 
   await lease.settle(initial.clerk_user_id, 'espn', owner, {
     status: status === 'succeeded'
@@ -548,7 +559,9 @@ export async function recoverUnhandledEspnHistoryWorkflowFailure(
         : 'skipped',
     cooldownSeconds: status === 'superseded' || status === 'cancelled'
       ? 1
-      : NORMAL_REFRESH_COOLDOWN_SECONDS,
+      : upstreamBackoff
+        ? UPSTREAM_BACKOFF_COOLDOWN_SECONDS
+        : NORMAL_REFRESH_COOLDOWN_SECONDS,
     syncSource: 'web',
     errorCode,
     errorMessage,
@@ -556,6 +569,21 @@ export async function recoverUnhandledEspnHistoryWorkflowFailure(
       ? Math.max(0, Date.now() - new Date(initial.started_at).getTime())
       : undefined,
   }, { failOnError: true });
+}
+
+export async function rethrowAfterEspnHistoryWorkflowRecovery(
+  originalError: unknown,
+  recover: () => Promise<void>
+): Promise<never> {
+  try {
+    await recover();
+  } catch (recoveryError) {
+    throw new AggregateError(
+      [originalError, recoveryError],
+      'ESPN history workflow failed and its recovery also failed'
+    );
+  }
+  throw originalError;
 }
 
 export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEnv, { jobId: string }> {
@@ -903,12 +931,14 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
       }
       await finish('succeeded');
     } catch (error) {
-      await step.do(
-        'recover unhandled workflow failure',
-        { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
-        async () => recoverUnhandledEspnHistoryWorkflowFailure(storage, lease, initial, owner)
+      await rethrowAfterEspnHistoryWorkflowRecovery(
+        error,
+        async () => step.do(
+          'recover unhandled workflow failure',
+          { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
+          async () => recoverUnhandledEspnHistoryWorkflowFailure(storage, lease, initial, owner)
+        )
       );
-      throw error;
     }
   }
 }

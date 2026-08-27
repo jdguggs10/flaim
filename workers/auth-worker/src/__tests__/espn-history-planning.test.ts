@@ -20,11 +20,13 @@ import {
   isMissingEspnHistoryTableError,
   recoverUnhandledEspnHistoryWorkflowFailure,
   reconcileStaleRunningEspnHistoryJob,
+  rethrowAfterEspnHistoryWorkflowRecovery,
   stopForHistoryAdvanceOutcome,
   stopForHistoryTerminalOutcome,
   type EspnHistoryJob,
   type EspnHistoryPlanItem,
 } from '../espn-history';
+import { UPSTREAM_BACKOFF_COOLDOWN_SECONDS } from '../sync-state';
 
 const currentLeague = {
   leagueId: '123',
@@ -329,6 +331,37 @@ describe('recoverUnhandledEspnHistoryWorkflowFailure', () => {
     );
   });
 
+  it('preserves upstream backoff when retry exhaustion was already terminalized', async () => {
+    const storage = {
+      get: vi.fn().mockResolvedValue({
+        ...job('full'),
+        status: 'failed',
+        last_error_code: 'history_chunk_retries_exhausted',
+        last_error_message: 'ESPN history refresh failed after retries.',
+      }),
+      terminal: vi.fn(),
+    };
+    const lease = { settle: vi.fn().mockResolvedValue(true) };
+
+    await recoverUnhandledEspnHistoryWorkflowFailure(
+      storage as never,
+      lease as never,
+      job('full'),
+      'history:job-1'
+    );
+
+    expect(lease.settle).toHaveBeenCalledWith(
+      'user-1',
+      'espn',
+      'history:job-1',
+      expect.objectContaining({
+        cooldownSeconds: UPSTREAM_BACKOFF_COOLDOWN_SECONDS,
+        errorCode: 'history_chunk_retries_exhausted',
+      }),
+      { failOnError: true }
+    );
+  });
+
   it('does not report recovery when the terminal fence rejects it', async () => {
     const storage = {
       get: vi.fn().mockResolvedValue(job('full')),
@@ -348,45 +381,70 @@ describe('recoverUnhandledEspnHistoryWorkflowFailure', () => {
 
 describe('reconcileStaleRunningEspnHistoryJob', () => {
   it('leaves a fresh running job active', async () => {
-    const storage = { terminal: vi.fn() };
+    const storage = { failStaleRunning: vi.fn() };
     const nowMs = Date.parse('2026-08-27T08:00:00.000Z');
     const fresh = {
       ...job('full'),
-      updated_at: new Date(nowMs - ESPN_HISTORY_RUNNING_STALE_MS + 1).toISOString(),
+      updated_at: new Date(nowMs - ESPN_HISTORY_RUNNING_STALE_MS).toISOString(),
     };
 
     await expect(reconcileStaleRunningEspnHistoryJob(storage, fresh, nowMs))
       .resolves.toBe(false);
-    expect(storage.terminal).not.toHaveBeenCalled();
+    expect(storage.failStaleRunning).not.toHaveBeenCalled();
   });
 
   it('fails a stale running job so a later refresh can create a replacement', async () => {
-    const storage = { terminal: vi.fn().mockResolvedValue('finished') };
+    const storage = { failStaleRunning: vi.fn().mockResolvedValue(true) };
     const nowMs = Date.parse('2026-08-27T08:00:00.000Z');
     const stale = {
       ...job('full'),
-      updated_at: new Date(nowMs - ESPN_HISTORY_RUNNING_STALE_MS).toISOString(),
+      updated_at: new Date(nowMs - ESPN_HISTORY_RUNNING_STALE_MS - 1).toISOString(),
     };
 
     await expect(reconcileStaleRunningEspnHistoryJob(storage, stale, nowMs))
       .resolves.toBe(true);
-    expect(storage.terminal).toHaveBeenCalledWith(
+    expect(storage.failStaleRunning).toHaveBeenCalledWith(
       'job-1',
-      'failed',
-      'workflow_runtime_stalled',
-      expect.stringContaining('stopped making progress')
+      '2026-08-27T07:00:00.000Z'
     );
   });
 
-  it('treats a concurrently terminalized stale job as recovered', async () => {
-    const storage = { terminal: vi.fn().mockResolvedValue('job_not_active') };
+  it('does not fail a job that resumed before the conditional update', async () => {
+    const storage = { failStaleRunning: vi.fn().mockResolvedValue(false) };
     const nowMs = Date.parse('2026-08-27T08:00:00.000Z');
     const stale = {
       ...job('full'),
-      updated_at: new Date(nowMs - ESPN_HISTORY_RUNNING_STALE_MS).toISOString(),
+      updated_at: new Date(nowMs - ESPN_HISTORY_RUNNING_STALE_MS - 1).toISOString(),
     };
 
     await expect(reconcileStaleRunningEspnHistoryJob(storage, stale, nowMs))
-      .resolves.toBe(true);
+      .resolves.toBe(false);
+  });
+});
+
+describe('rethrowAfterEspnHistoryWorkflowRecovery', () => {
+  it('rethrows the original workflow failure after successful recovery', async () => {
+    const original = new Error('load step failed');
+
+    await expect(rethrowAfterEspnHistoryWorkflowRecovery(
+      original,
+      vi.fn().mockResolvedValue(undefined)
+    )).rejects.toBe(original);
+  });
+
+  it('preserves both failures when recovery also fails', async () => {
+    const original = new Error('load step failed');
+    const recovery = new Error('recovery storage failed');
+
+    try {
+      await rethrowAfterEspnHistoryWorkflowRecovery(
+        original,
+        vi.fn().mockRejectedValue(recovery)
+      );
+      throw new Error('Expected recovery to reject');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors).toEqual([original, recovery]);
+    }
   });
 });
