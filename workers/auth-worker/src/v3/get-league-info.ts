@@ -78,7 +78,8 @@ export async function getLeagueInfo(
   s2: string,
   leagueId: string,
   season?: number,
-  gameId: string = 'ffl'
+  gameId: string = 'ffl',
+  signal?: AbortSignal
 ): Promise<EspnLeagueInfo> {
   if (!swid || !s2) {
     throw new EspnCredentialsRequired('Both SWID and espn_s2 cookies are required');
@@ -109,7 +110,8 @@ export async function getLeagueInfo(
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
           'X-Fantasy-Source': 'kona',
           'X-Fantasy-Platform': 'kona-web-2.0.0'
-        }
+        },
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
       },
     ));
     
@@ -124,7 +126,7 @@ export async function getLeagueInfo(
       }
       const errorText = await response.text().catch(() => 'Failed to read error response');
       console.error('API error response:', errorText);
-      throw new EspnApiError(`ESPN API error: ${response.status} ${response.statusText}`);
+      throw new EspnApiError(`ESPN API error: ${response.status} ${response.statusText}`, response.status);
     }
 
     let parsed: unknown;
@@ -208,10 +210,11 @@ export async function getLeagueInfoSafe(
   s2: string,
   leagueId: string,
   season?: number,
-  gameId: string = 'ffl'
+  gameId: string = 'ffl',
+  signal?: AbortSignal
 ): Promise<EspnLeagueInfo | null> {
   try {
-    return await getLeagueInfo(swid, s2, leagueId, season, gameId);
+    return await getLeagueInfo(swid, s2, leagueId, season, gameId, signal);
   } catch (error) {
     console.error('Error in getLeagueInfoSafe:', error);
     return null;

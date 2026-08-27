@@ -42,6 +42,7 @@ import {
   parseYahooRetryAfterSeconds,
 } from '@/lib/yahoo-auth-errors';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
+import { shouldProbeEspnHistoryAfterRefreshFailure } from '@/lib/espn-history-refresh';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 import { getPreviousSeasonYear } from '@/lib/season-utils';
 import { getDeviceClass, type DeviceClass } from '@/lib/device';
@@ -102,6 +103,9 @@ interface LeagueRefreshProviderResult {
   error?: string;
   error_description?: string;
   retryAfter?: string;
+  details?: {
+    history?: EspnHistoryStatus | null;
+  };
 }
 
 interface LeagueRefreshResponse {
@@ -109,6 +113,18 @@ interface LeagueRefreshResponse {
   results?: Partial<Record<'espn' | 'yahoo' | 'sleeper', LeagueRefreshProviderResult>>;
   error?: string;
   error_description?: string;
+}
+
+interface EspnHistoryStatus {
+  jobId: string;
+  state: 'queued' | 'running' | 'succeeded' | 'partial' | 'failed' | 'superseded' | 'cancelled';
+  counts: {
+    planned: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
+  retryable: boolean;
 }
 
 type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
@@ -168,6 +184,27 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
 };
 const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 60;
 const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
+const ESPN_HISTORY_STATUS_POLL_MS = 5_000;
+
+function isEspnHistoryInProgress(history: EspnHistoryStatus | null): boolean {
+  return history?.state === 'queued' || history?.state === 'running';
+}
+
+function getEspnHistoryNotice(history: EspnHistoryStatus): string {
+  if (isEspnHistoryInProgress(history)) {
+    return 'Current leagues are synced. ESPN history is continuing in the background.';
+  }
+  if (history.state === 'partial') {
+    return 'Some ESPN history could not be indexed. Use Sync all later to retry it.';
+  }
+  if (history.state === 'failed') {
+    return 'ESPN history could not be indexed. Use Sync all later to retry it.';
+  }
+  if (history.state === 'superseded' || history.state === 'cancelled') {
+    return 'ESPN history refresh stopped after your connection changed. Use Sync all to start again.';
+  }
+  return 'ESPN history is up to date.';
+}
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -215,14 +252,15 @@ function canApplyState(shouldApply?: () => boolean): boolean {
 }
 
 function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
-  const results = data.results ? Object.values(data.results) : [];
-  const successful = results.filter((result) => result?.status === 'success').length;
-  const skipped = results.filter((result) => result?.status === 'skipped').length;
-  const failed = results.filter((result) => result?.status === 'error').length;
-  const retryAfter = results.find((result) => result?.status === 'error' && result.retryAfter)?.retryAfter;
-  const firstError = results.find(
-    (result) => result?.status === 'error' && (result.error_description || result.error)
-  );
+  const results = data.results ? Object.entries(data.results) : [];
+  const successful = results.filter(([, result]) => result?.status === 'success').length;
+  const skipped = results.filter(([, result]) => result?.status === 'skipped').length;
+  const failed = results.filter(([, result]) => result?.status === 'error').length;
+  const firstError = results.find(([, result]) => result?.status === 'error');
+  const [failedProvider, failedResult] = firstError ?? [];
+  const providerName = failedProvider ? capitalize(failedProvider) : 'A platform';
+  const errorMessage = failedResult?.error_description || failedResult?.error;
+  const retryAfter = failedResult?.retryAfter;
 
   if (successful > 0 && failed === 0) {
     return skipped > 0
@@ -230,19 +268,18 @@ function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
       : 'Synced connected platforms.';
   }
 
-  if (retryAfter) {
-    return `Some platforms are temporarily rate limited. Try again in ${retryAfter} seconds.`;
-  }
-
   if (successful > 0) {
-    return 'Synced some platforms. Check any platform warnings below.';
+    const retryGuidance = retryAfter
+      ? `Try Sync all again in ${retryAfter} seconds.`
+      : `Use Sync all to retry ${providerName}.`;
+    return `${providerName} could not be synced${errorMessage ? `: ${errorMessage}` : '.'} ${retryGuidance}`;
   }
 
   if (skipped > 0 && failed === 0) {
     return 'No connected platforms needed a sync.';
   }
 
-  return firstError?.error_description || firstError?.error || data.error_description || data.error || 'No platforms were synced.';
+  return errorMessage || data.error_description || data.error || 'No platforms were synced.';
 }
 
 function didEveryRefreshProviderError(data: LeagueRefreshResponse): boolean {
@@ -465,6 +502,7 @@ function LeaguesPageContent() {
   const [isLoadingLeagues, setIsLoadingLeagues] = useState(true);
   const [leagueError, setLeagueError] = useState<string | null>(null);
   const [leagueNotice, setLeagueNotice] = useState<string | null>(null);
+  const [espnHistory, setEspnHistory] = useState<EspnHistoryStatus | null>(null);
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const [isPlatformsSectionOpen, setIsPlatformsSectionOpen] = useState(true);
@@ -499,6 +537,7 @@ function LeaguesPageContent() {
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
+  const espnHistoryWasActiveRef = useRef(false);
   // Device class resolves after mount so SSR and hydration render identically.
   const [deviceClass, setDeviceClass] = useState<DeviceClass | null>(null);
   const [setupLinkState, setSetupLinkState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -603,6 +642,8 @@ function LeaguesPageContent() {
     setSleeperError(null);
     setLeagueError(null);
     setLeagueNotice(null);
+    setEspnHistory(null);
+    espnHistoryWasActiveRef.current = false;
     setIsDiscoveringYahoo(false);
     setIsReconnectingYahoo(false);
     setIsYahooDisconnecting(false);
@@ -750,6 +791,77 @@ function LeaguesPageContent() {
       if (showSpinner && canApplyState(shouldApply)) setIsLoadingLeagues(false);
     }
   }, []);
+
+  const loadEspnHistoryStatus = useCallback(async (shouldApply?: () => boolean) => {
+    try {
+      const response = await fetch('/api/espn/history', { cache: 'no-store' });
+      if (!response.ok) return undefined;
+      const data = await response.json().catch(() => null) as { history?: EspnHistoryStatus | null } | null;
+      if (!data) return undefined;
+      const history = data.history ?? null;
+      if (canApplyState(shouldApply)) {
+        setEspnHistory(history);
+      }
+      return history;
+    } catch (error) {
+      console.error('Failed to load ESPN history status:', error);
+      return undefined;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId) return;
+    let isActive = true;
+    let timer: number | undefined;
+    const retryDelays = [5_000, 10_000, 20_000];
+    let retryIndex = 0;
+    const loadInitialHistory = async () => {
+      const history = await loadEspnHistoryStatus(() => isActive);
+      // The initial read has no known job to follow, so failures recover only
+      // briefly instead of creating a permanent polling loop.
+      if (!isActive || history !== undefined || retryIndex >= retryDelays.length) return;
+      timer = window.setTimeout(() => void loadInitialHistory(), retryDelays[retryIndex]);
+      retryIndex += 1;
+    };
+    void loadInitialHistory();
+    return () => {
+      isActive = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [isLoaded, isSignedIn, loadEspnHistoryStatus, userId]);
+
+  useEffect(() => {
+    if (!espnHistory) return;
+    const active = isEspnHistoryInProgress(espnHistory);
+    if (active) {
+      espnHistoryWasActiveRef.current = true;
+      setLeagueNotice(getEspnHistoryNotice(espnHistory));
+      let isActive = true;
+      let timer: number | undefined;
+      const pollHistory = async () => {
+        const history = await loadEspnHistoryStatus(() => isActive);
+        // Retry failed/non-OK reads while the last known job is active. A known
+        // terminal or absent status stops the loop immediately.
+        if (!isActive || (history !== undefined && !isEspnHistoryInProgress(history))) return;
+        timer = window.setTimeout(() => void pollHistory(), ESPN_HISTORY_STATUS_POLL_MS);
+      };
+      timer = window.setTimeout(() => void pollHistory(), ESPN_HISTORY_STATUS_POLL_MS);
+      return () => {
+        isActive = false;
+        if (timer !== undefined) window.clearTimeout(timer);
+      };
+    }
+
+    const wasActive = espnHistoryWasActiveRef.current;
+    if (wasActive || espnHistory.state !== 'succeeded') {
+      setLeagueNotice(getEspnHistoryNotice(espnHistory));
+    }
+    if (wasActive) {
+      espnHistoryWasActiveRef.current = false;
+      const shouldApply = createAccountGuard();
+      void loadLeagues({ showSpinner: false, shouldApply });
+    }
+  }, [createAccountGuard, espnHistory, loadEspnHistoryStatus, loadLeagues]);
 
   const checkYahooStatus = useCallback(async (shouldApply?: () => boolean): Promise<ConnectionStatusResult> => {
     try {
@@ -916,17 +1028,27 @@ function LeaguesPageContent() {
     setLeagueNotice(null);
     setSleeperError(null);
 
+    let responseReceived = false;
+    let responseErrorCode: string | undefined;
     try {
       const res = await fetch('/api/leagues/refresh', { method: 'POST' });
+      responseReceived = true;
       const data = await res.json().catch(() => ({ error: 'Unknown error' })) as LeagueRefreshResponse;
       if (!shouldApply()) return;
 
       if (!res.ok) {
+        responseErrorCode = data.error;
         throw new Error(data.error_description || data.error || 'Failed to sync leagues');
       }
 
       if (data.success === false && didEveryRefreshProviderError(data)) {
         throw new Error(summarizeLeagueRefresh(data));
+      }
+
+      const history = data.results?.espn?.details?.history;
+      if (history) {
+        setEspnHistory(history);
+        espnHistoryWasActiveRef.current = isEspnHistoryInProgress(history);
       }
 
       setIsCheckingYahoo(true);
@@ -940,10 +1062,22 @@ function LeaguesPageContent() {
       ]);
 
       if (shouldApply()) {
-        setLeagueNotice(summarizeLeagueRefresh(data));
+        setLeagueNotice(history ? getEspnHistoryNotice(history) : summarizeLeagueRefresh(data));
       }
     } catch (err) {
       if (shouldApply()) {
+        if (shouldProbeEspnHistoryAfterRefreshFailure(responseReceived, responseErrorCode)) {
+          // A network failure or proxy deadline can occur after auth-worker has
+          // already queued the durable job. Probe before reporting failure.
+          const history = await loadEspnHistoryStatus(shouldApply);
+          if (!shouldApply()) return;
+          if (history && isEspnHistoryInProgress(history)) {
+            espnHistoryWasActiveRef.current = true;
+            setLeagueError(null);
+            setLeagueNotice(getEspnHistoryNotice(history));
+            return;
+          }
+        }
         setLeagueError(err instanceof Error ? err.message : 'Failed to sync leagues');
       }
     } finally {
@@ -958,6 +1092,7 @@ function LeaguesPageContent() {
     loadLeagues,
     loadSleeperLeagues,
     loadYahooLeagues,
+    loadEspnHistoryStatus,
   ]);
 
   const discoverSleeperLeagues = useCallback(async (username: string) => {

@@ -69,9 +69,13 @@ SUPABASE_SERVICE_KEY=sb_secret_...
 ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
 OAUTH_CLIENT_REGISTRATION_SIGNING_KEY=optional-stable-secret
+ESPN_DURABLE_HISTORY_ENABLED=false
+ESPN_DURABLE_HISTORY_USERS=user_...[,user_...]
 ```
 
 Use a dedicated stable `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` for preview and production before depending on confidential MCP clients. If it is omitted, auth-worker falls back to `SUPABASE_SERVICE_KEY`; rotating that key also invalidates existing confidential client registrations.
+
+Durable ESPN history is rollout-gated and default-off. Set `ESPN_DURABLE_HISTORY_ENABLED=true` only with `ESPN_DURABLE_HISTORY_USERS` populated by an exact, comma-separated Clerk user ID allowlist. Leaving either unset or false keeps web and extension ESPN refreshes on the synchronous path; MCP refresh remains synchronous regardless.
 
 ### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`, `sleeper-client`)
 
@@ -127,13 +131,13 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 
 ### Refresh cooldown envelope
 
-League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider.
+League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider. When durable ESPN history is enabled for an allowlisted user, web and extension refreshes transfer that lease to a Cloudflare Workflow after current leagues are stored; the workflow discovers historical league-seasons in restartable chunks and records progress in `espn_history_jobs`. Request-time league writes require the exact current lease owner. Changing or removing ESPN credentials, or deleting or replacing saved ESPN leagues, takes over that lease before changing rows. Other web and extension refreshes, and all MCP-triggered refreshes, remain synchronous.
 
 - When **every** requested provider is cooling down, refresh endpoints return `429 refresh_cooldown` with a `retry_after` field and a `Retry-After` header.
 - Partially blocked refreshes return `200` with per-provider results; a blocked provider carries `error: "refresh_cooldown"`, `httpStatus: 429`, and `retryAfter` (seconds, as a string).
 - Providers skipped for missing credentials do not incur a cooldown.
 - Each provider refresh emits one structured `provider_sync` log line (provider, masked user, source, status, duration, league count, error code, retry seconds, correlation id), queryable in Workers Logs by the `event` field.
-- The envelope fails open: storage errors never block a refresh.
+- The normal request envelope fails open on telemetry storage errors. Durable ESPN history job creation, lease transfer, and fenced progress writes fail closed so a background scan cannot continue without an owned job and lease.
 
 ### Scheduled rollover reconciliation (dry-run)
 

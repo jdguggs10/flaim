@@ -22,13 +22,13 @@ Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentio
 
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
 - **Next.js web app (`/web`)**: Site pages (discovery-first landing page, setup + management hub at `/leagues`, privacy policy), OAuth consent screens, and homepage live demo.
-- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
+- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs, and durable ESPN history workflows. Uses Hono for routing.
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings. For most tools the gateway is a pure conduit; where a tool's provider envelopes diverge enough to confuse consumers, the gateway may layer a canonical, additive normalization on the routed result (per-tool normalizer modules applied at the route seam — `get_free_agents` is the template). Canonical gateway fields use camelCase; the older provider-side `ownership_scope` fields emitted inside `get_players` predate this pattern and are a legacy variant to converge in a future reviewed version. Legacy provider fields are never removed or renamed by normalization — published clients pin old schemas.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `archived_leagues` (manual league archive), `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus deprecated `extension_tokens`/`extension_pairing_codes`.
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `espn_history_jobs`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `archived_leagues` (manual league archive), `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus deprecated `extension_tokens`/`extension_pairing_codes`.
 
 ## Runtime Choices (Next.js)
 
@@ -66,7 +66,7 @@ The public live showcase lives on the homepage, with `/chat` retained as a redir
 **Extension path (automatic on sync):**
 1. **Sign in** — Create an account at `flaim.app`
 2. **Connect ESPN** — Install extension → sync credentials
-3. **Auto-discover leagues + past seasons** — Runs during sync/re-sync
+3. **Auto-discover leagues + past seasons**: Current leagues save immediately; past seasons continue in the background
 4. **Set defaults** — Manage at `/leagues` (extension v1.4.0 no longer handles defaults)
 
 **Connect AI:**
@@ -116,7 +116,8 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
 | `POST /extension/sync` | Clerk JWT | Sync ESPN credentials |
-| `POST /extension/discover` | Clerk JWT | Discover leagues + historical seasons |
+| `POST /extension/discover` | Clerk JWT | Save current leagues and start historical discovery |
+| `GET /extension/history` | Clerk JWT | Read the latest historical discovery status |
 | `GET /extension/status` | Clerk JWT | Check connection status |
 | `GET /extension/connection` | Clerk | Web UI status check |
 
@@ -196,6 +197,8 @@ See `workers/README.md` for worker-to-worker communication requirements.
 2. User confirms and manages discovered leagues at `/leagues` (per-season rows) → stored in Supabase.
 3. User connects through ChatGPT, Claude, or an optional manual MCP client → OAuth flow → token stored in Supabase.
 4. ChatGPT, Claude, or the manual MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
+
+For allowlisted web and extension users, current ESPN leagues are discovered inside the request and historical seasons can be processed by a Cloudflare Workflow. This durable path is rollout-gated and disabled by default in every environment; it requires both `ESPN_DURABLE_HISTORY_ENABLED=true` and an exact Clerk user ID in `ESPN_DURABLE_HISTORY_USERS`. When enabled, the request and workflow share an exact ESPN sync lease, and every league write is checked against its current owner. Changing or removing ESPN credentials, or deleting or replacing saved ESPN leagues, takes over that lease before changing rows, so an in-flight refresh cannot restore stale data. The workflow checkpoints each historical league-season through a fenced Supabase RPC and can resume after worker retries. A versioned full-repair marker makes the first scan exhaustive; later scans skip existing historical rows. `get_ancient_history` remains a fast read-only index over the rows already committed by that workflow. MCP-triggered refresh remains synchronous until the separately gated MCP behavior change ships.
 
 ## Usage Analytics
 

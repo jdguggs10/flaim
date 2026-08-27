@@ -21,11 +21,13 @@ migration `20260805112500_add_platform_to_demo_tables.sql` raises the current
 contract to 23 public tables and 71 public indexes. The FLA-264 forward
 migration `20260813012740_split_analytics_snapshot_cadence.sql` raises it to 3
 analytics tables, 3 analytics indexes, and 5 analytics functions, and adds a
-sixth separately controlled cron job. Every other count is unchanged.
+sixth separately controlled cron job. The FLA-308 forward migration
+`20260827004306_add_espn_history_jobs.sql` raises the current contract to 24
+public tables and 75 public indexes. Every other count is unchanged.
 
 All public tables — the 22 baseline tables and the forward-added
-`demo_target_state` — have RLS enabled and no policies. The two public views
-use `security_invoker`. The analytics schema has three tables without RLS
+`demo_target_state` and `espn_history_jobs` have RLS enabled and no policies.
+The two public views use `security_invoker`. The analytics schema has three tables without RLS
 because it is outside the Data API and is read through the direct
 `analytics_readonly` database role.
 
@@ -58,7 +60,8 @@ Tables:
 `archived_leagues`, `chat_runs`, `demo_answer_cache`,
 `demo_antigravity_cache`, `demo_context_cache`, `demo_refresh_attempts`,
 `demo_refresh_runs`, `demo_target_state` (added by the FLA-247 forward
-migration), `espn_credentials`, `espn_leagues`, `mcp_tool_daily`,
+migration), `espn_credentials`, `espn_history_jobs` (added by the FLA-308
+forward migration), `espn_leagues`, `mcp_tool_daily`,
 `mcp_tool_events`, `mcp_user_daily`, `oauth_codes`, `oauth_states`,
 `oauth_tokens`, `platform_oauth_states`, `provider_sync_state`,
 `sleeper_connections`, `sleeper_leagues`, `user_preferences`,
@@ -177,6 +180,22 @@ the new functions are security invokers with a fixed empty search path and no
 non-owner `EXECUTE` grants. The migration adds no policy, index outside the new
 primary key, extension, or scheduled job. Its cron activation is the two-phase
 operation described in `README.md`.
+
+The FLA-308 forward migration
+`20260827004306_add_espn_history_jobs.sql` adds the service-role-only
+`espn_history_jobs` table, its primary/unique/indexed job access paths, and
+the `advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
+`persist_espn_league_with_lease(...)` RPCs. All three functions are security
+invokers with an empty search path. The advance RPC locks an active job before
+the exact credential snapshot and live
+`history:<job>` lease, then fences the plan identity through `teamId`. The
+finish RPC requires those two fences only for `succeeded` and `partial` repair
+markers; terminal failure, supersession, and cancellation remain possible
+after a handoff. The league-write RPC locks the exact live provider lease before
+changing a current or historical league row. Destructive league mutations take
+over that same lease before deleting or replacing saved rows. This migration is
+a repository rollout boundary only; hosted preview or production application
+needs separate approval and verification.
 
 The hosted-preview and production migration ledgers remain environment state,
 not repository truth. Applying this or any later migration to a hosted database

@@ -1,6 +1,18 @@
 import { EspnSupabaseStorage } from './supabase-storage';
 import { AutomaticLeagueDiscoveryFailed, EspnAuthenticationFailed } from './espn-types';
-import { discoverAndSaveLeagues, type DiscoveredLeague, type SeasonCounts } from './v3/league-discovery';
+import {
+  EspnHistoryJobStorage,
+  durableHistoryEnabledFor,
+  publicHistoryStatus,
+  startQueuedEspnHistoryJob,
+  type EspnHistoryEnv,
+} from './espn-history';
+import {
+  discoverAndSaveCurrentLeagues,
+  discoverAndSaveLeagues,
+  type DiscoveredLeague,
+  type SeasonCounts,
+} from './v3/league-discovery';
 import { handleYahooDiscover, type YahooConnectEnv } from './yahoo-connect-handlers';
 import {
   refreshSleeperLeaguesFromStoredConnection,
@@ -33,6 +45,19 @@ export interface LeagueRefreshResponse {
   success: boolean;
   requestedPlatforms: RefreshPlatform[];
   results: Partial<Record<RefreshPlatform, ProviderRefreshResult>>;
+}
+
+type LeagueRefreshEnv = {
+  SUPABASE_URL: string;
+  SUPABASE_SERVICE_KEY: string;
+  ESPN_DURABLE_HISTORY_ENABLED?: string;
+  ESPN_DURABLE_HISTORY_USERS?: string;
+  ESPN_HISTORY_REFRESH?: EspnHistoryEnv['ESPN_HISTORY_REFRESH'];
+};
+
+interface EspnRefreshExecution {
+  result: ProviderRefreshResult;
+  leaseTransferred: boolean;
 }
 
 export interface RefreshRequestValidation {
@@ -208,6 +233,152 @@ async function refreshEspnLeagues(env: { SUPABASE_URL: string; SUPABASE_SERVICE_
   }
 }
 
+async function savedCurrentEspnDetails(storage: EspnSupabaseStorage, userId: string) {
+  const savedLeagues = await storage.getCurrentSeasonLeagues(userId);
+  const discovered: DiscoveredLeague[] = savedLeagues.map((league) => ({
+    sport: league.sport,
+    leagueId: league.leagueId,
+    leagueName: league.leagueName || '',
+    teamId: league.teamId || '',
+    teamName: league.teamName || '',
+    seasonYear: league.seasonYear || 0,
+  }));
+  const currentSeason: SeasonCounts = {
+    found: discovered.length,
+    added: 0,
+    alreadySaved: discovered.length,
+    refreshed: 0,
+  };
+  return { discovered, currentSeason };
+}
+
+async function activeWebEspnHistoryResult(
+  env: LeagueRefreshEnv,
+  userId: string
+): Promise<ProviderRefreshResult | null> {
+  if (!durableHistoryEnabledFor(env, userId)) return null;
+  const job = await EspnHistoryJobStorage.fromEnvironment(env).activeForUser(userId);
+  if (!job) return null;
+  const storage = EspnSupabaseStorage.fromEnvironment(env);
+  const { discovered, currentSeason } = await savedCurrentEspnDetails(storage, userId);
+  return {
+    platform: 'espn',
+    status: 'success',
+    httpStatus: 200,
+    details: {
+      discovered,
+      currentSeason,
+      pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+      currentSeasonCount: currentSeason.found,
+      pastSeasonsCount: 0,
+      history: publicHistoryStatus(job),
+    },
+  };
+}
+
+async function refreshEspnLeaguesForWeb(
+  env: LeagueRefreshEnv,
+  userId: string,
+  ownerId: string,
+  syncState: SyncStateStorage
+): Promise<EspnRefreshExecution> {
+  if (!env.ESPN_HISTORY_REFRESH) {
+    throw new Error('ESPN history workflow binding is unavailable');
+  }
+  const historyEnv = env as EspnHistoryEnv;
+  const storage = EspnSupabaseStorage.fromEnvironment(env);
+  const historyStorage = EspnHistoryJobStorage.fromEnvironment(historyEnv);
+  const credentials = await historyStorage.credentials(userId);
+  if (!credentials) {
+    return {
+      leaseTransferred: false,
+      result: {
+        platform: 'espn',
+        status: 'skipped',
+        httpStatus: 400,
+        error: 'credentials_not_found',
+        error_description: 'ESPN credentials not found. Please sync credentials first.',
+      },
+    };
+  }
+
+  let historyOwner: string | null = null;
+  try {
+    const current = await discoverAndSaveCurrentLeagues(
+      userId,
+      credentials.swid,
+      credentials.s2,
+      storage,
+      ownerId
+    );
+    if (current.savedLeagues.length !== current.currentSeason.found) {
+      throw new Error('Unable to save every current ESPN league');
+    }
+
+    const credentialSnapshot = await historyStorage.credentials(userId);
+    if (!credentialSnapshot || credentialSnapshot.updatedAt !== credentials.updatedAt) {
+      throw new EspnAuthenticationFailed('ESPN credentials changed during refresh');
+    }
+    const queued = await historyStorage.createOrCoalesce(userId, credentialSnapshot.updatedAt);
+    if (queued.created) {
+      if (!await historyStorage.setCurrentLeagues(queued.job.id, current.savedLeagues)) {
+        await historyStorage.terminal(
+          queued.job.id,
+          'failed',
+          'job_context_failed',
+          'Unable to store current ESPN leagues for history refresh'
+        );
+        throw new Error('Unable to store ESPN history job context');
+      }
+      historyOwner = `history:${queued.job.id}`;
+      if (!await syncState.transferLease(userId, 'espn', ownerId, historyOwner)) {
+        await historyStorage.terminal(
+          queued.job.id,
+          'failed',
+          'history_lease_transfer_failed',
+          'Unable to transfer the ESPN history lease'
+        );
+        historyOwner = null;
+        throw new Error('Unable to transfer ESPN history lease');
+      }
+    }
+
+    const started = await startQueuedEspnHistoryJob(historyEnv, queued);
+    return {
+      leaseTransferred: queued.created,
+      result: {
+        platform: 'espn',
+        status: 'success',
+        httpStatus: 200,
+        details: {
+          discovered: current.discovered,
+          currentSeason: current.currentSeason,
+          pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+          currentSeasonCount: current.currentSeason.found,
+          pastSeasonsCount: 0,
+          history: publicHistoryStatus(started.job),
+        },
+      },
+    };
+  } catch (error) {
+    if (historyOwner) {
+      await syncState.settle(userId, 'espn', historyOwner, {
+        status: 'error',
+        cooldownSeconds: cooldownSecondsForResult({
+          platform: 'espn',
+          status: 'error',
+          httpStatus: 500,
+          error_description: errorDescription(error, 'ESPN history refresh failed'),
+        }),
+        syncSource: 'web',
+        errorCode: 'history_start_failed',
+        errorMessage: errorDescription(error, 'ESPN history refresh failed'),
+      });
+    }
+    throw error;
+  }
+}
+
 async function parseResponseBody(response: Response): Promise<unknown> {
   const text = await response.text();
   if (!text.trim()) return null;
@@ -309,7 +480,7 @@ function leagueCountFromResult(result: ProviderRefreshResult): number | undefine
 }
 
 export async function refreshLeaguesForUser(
-  env: { SUPABASE_URL: string; SUPABASE_SERVICE_KEY: string },
+  env: LeagueRefreshEnv,
   userId: string,
   platforms: RefreshPlatform[],
   corsHeaders: Record<string, string>,
@@ -319,6 +490,14 @@ export async function refreshLeaguesForUser(
   const syncState = SyncStateStorage.fromEnvironment(env);
 
   const refreshOne = async (platform: RefreshPlatform): Promise<[RefreshPlatform, ProviderRefreshResult]> => {
+    const useDurableWebHistory = platform === 'espn'
+      && syncSource === 'web'
+      && durableHistoryEnabledFor(env, userId);
+    if (useDurableWebHistory) {
+      const active = await activeWebEspnHistoryResult(env, userId);
+      if (active) return [platform, active];
+    }
+
     const ownerId = crypto.randomUUID();
     const lease = await syncState.acquireLease(userId, platform, ownerId);
     if (!lease.acquired) {
@@ -337,9 +516,16 @@ export async function refreshLeaguesForUser(
 
     const startedAt = Date.now();
     let result: ProviderRefreshResult;
+    let leaseTransferred = false;
     try {
       if (platform === 'espn') {
-        result = await refreshEspnLeagues(env, userId);
+        if (useDurableWebHistory) {
+          const execution = await refreshEspnLeaguesForWeb(env, userId, ownerId, syncState);
+          result = execution.result;
+          leaseTransferred = execution.leaseTransferred;
+        } else {
+          result = await refreshEspnLeagues(env, userId);
+        }
       } else if (platform === 'yahoo') {
         result = await refreshYahooLeagues(env as YahooConnectEnv, userId, corsHeaders, correlationId);
       } else {
@@ -357,17 +543,19 @@ export async function refreshLeaguesForUser(
 
     const durationMs = Date.now() - startedAt;
     const leagueCount = leagueCountFromResult(result);
-    await syncState.settle(userId, platform, ownerId, {
-      status: result.status,
-      // Skipped providers (no credentials) did no upstream work; don't make a
-      // user who connects a platform right after a sync wait out a cooldown.
-      cooldownSeconds: result.status === 'skipped' ? 1 : cooldownSecondsForResult(result),
-      syncSource,
-      errorCode: result.error,
-      errorMessage: result.error_description,
-      leagueCount,
-      durationMs,
-    });
+    if (!leaseTransferred) {
+      await syncState.settle(userId, platform, ownerId, {
+        status: result.status,
+        // Skipped providers (no credentials) did no upstream work; don't make a
+        // user who connects a platform right after a sync wait out a cooldown.
+        cooldownSeconds: result.status === 'skipped' ? 1 : cooldownSecondsForResult(result),
+        syncSource,
+        errorCode: result.error,
+        errorMessage: result.error_description,
+        leagueCount,
+        durationMs,
+      });
+    }
     logSyncEnvelope({
       provider: platform,
       userId,

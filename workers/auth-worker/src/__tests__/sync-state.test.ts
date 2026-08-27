@@ -21,7 +21,7 @@ function fakeSupabase(results: unknown[]) {
     const recorded: Record<string, unknown[][]> = {};
     calls.push(recorded);
     const chain: Record<string, unknown> = {};
-    for (const method of ['upsert', 'update', 'delete', 'eq', 'or', 'is', 'select', 'single']) {
+    for (const method of ['upsert', 'update', 'delete', 'eq', 'gt', 'or', 'is', 'select', 'single']) {
       chain[method] = vi.fn((...args: unknown[]) => {
         (recorded[method] ??= []).push(args);
         return chain;
@@ -365,6 +365,7 @@ describe('SyncStateStorage.extendLease', () => {
     expect(expiresAtMs).toBeLessThanOrEqual(after + SYNC_LEASE_TTL_MS + 1000);
     // Owner guard: only the current lease holder may renew it.
     expect(calls[0].eq?.map((args) => args)).toContainEqual(['sync_lease_owner', 'owner-1']);
+    expect(calls[0].gt?.[0]?.[0]).toBe('sync_lease_expires_at');
   });
 
   it('returns false when the lease already expired and was taken by a new owner', async () => {
@@ -387,6 +388,62 @@ describe('SyncStateStorage.extendLease', () => {
     const result = await storage.extendLease('__backfill__', 'sleeper', 'owner-1');
 
     expect(result).toBe(false);
+  });
+});
+
+describe('SyncStateStorage.transferLease', () => {
+  it('moves only a live exact-owner lease to the history owner', async () => {
+    const { client, calls } = fakeSupabase([
+      { data: [{ clerk_user_id: 'user_1' }], error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    const result = await storage.transferLease('user_1', 'espn', 'request-owner', 'history:job-1');
+
+    expect(result).toBe(true);
+    expect(calls[0].update?.[0]?.[0]).toMatchObject({ sync_lease_owner: 'history:job-1' });
+    expect(calls[0].eq?.map((args) => args)).toContainEqual(['sync_lease_owner', 'request-owner']);
+    expect(calls[0].gt?.[0]?.[0]).toBe('sync_lease_expires_at');
+  });
+
+  it('returns false when the owner is wrong or the lease is expired', async () => {
+    const { client } = fakeSupabase([{ data: [], error: null }]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.transferLease('user_1', 'espn', 'wrong', 'history:job-1')).resolves.toBe(false);
+  });
+
+  it('fails closed when storage cannot prove the transfer', async () => {
+    const { client } = fakeSupabase([{ error: new Error('supabase down') }]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.transferLease('user_1', 'espn', 'request-owner', 'history:job-1')).resolves.toBe(false);
+  });
+});
+
+describe('SyncStateStorage.takeoverLeaseForMutation', () => {
+  it('unconditionally replaces the provider owner after ensuring the row exists', async () => {
+    const { client, calls } = fakeSupabase([
+      { error: null },
+      { data: [{ clerk_user_id: 'user_1' }], error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.takeoverLeaseForMutation('user_1', 'espn', 'league-mutation:1'))
+      .resolves.toBe(true);
+
+    expect(calls[1].update?.[0]?.[0]).toMatchObject({ sync_lease_owner: 'league-mutation:1' });
+    expect(calls[1].eq?.map((args) => args)).toContainEqual(['clerk_user_id', 'user_1']);
+    expect(calls[1].eq?.map((args) => args)).toContainEqual(['provider', 'espn']);
+    expect(calls[1].eq?.map((args) => args)).not.toContainEqual(['sync_lease_owner', expect.anything()]);
+  });
+
+  it('fails closed when takeover cannot be proven', async () => {
+    const { client } = fakeSupabase([{ error: new Error('supabase down') }]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.takeoverLeaseForMutation('user_1', 'espn', 'league-mutation:1'))
+      .resolves.toBe(false);
   });
 });
 
@@ -496,6 +553,19 @@ describe('SyncStateStorage.settle', () => {
       cooldownSeconds: 75,
       syncSource: 'web',
     })).resolves.toBeUndefined();
+  });
+
+  it('surfaces storage errors when a durable workflow requests retryable settlement', async () => {
+    const { client } = fakeSupabase([
+      { error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.settle('user_1', 'espn', 'history:job-1', {
+      status: 'success',
+      cooldownSeconds: 75,
+      syncSource: 'web',
+    }, { failOnError: true })).rejects.toThrow('supabase down');
   });
 });
 

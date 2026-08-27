@@ -11,6 +11,8 @@ import {
   getSetupState,
   setSetupState,
   clearSetupState,
+  getEspnHistoryState,
+  setEspnHistoryState,
   type SeasonCounts,
 } from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
@@ -19,7 +21,9 @@ import {
   checkStatus,
   getSiteBase,
   discoverLeagues,
+  getEspnHistoryStatus,
   type DiscoveredLeague,
+  type EspnHistoryStatus,
 } from '../lib/api';
 
 // Simplified state machine
@@ -108,6 +112,21 @@ function checkmark(value: boolean | null): string {
   return value ? '✓' : '–';
 }
 
+function isHistoryInProgress(history: EspnHistoryStatus | null): boolean {
+  return history?.state === 'queued' || history?.state === 'running';
+}
+
+function getHistoryMessage(history: EspnHistoryStatus): string {
+  if (history.state === 'queued') return 'Current leagues are synced. ESPN history is queued.';
+  if (history.state === 'running') return 'Current leagues are synced. ESPN history is continuing.';
+  if (history.state === 'partial') return 'Some ESPN history could not be indexed. Re-sync later to retry it.';
+  if (history.state === 'failed') return 'ESPN history could not be indexed. Re-sync later to retry it.';
+  if (history.state === 'superseded' || history.state === 'cancelled') {
+    return 'ESPN history stopped after your connection changed. Re-sync to start again.';
+  }
+  return 'ESPN history is up to date.';
+}
+
 export default function Popup() {
   // Clerk auth hooks
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -117,6 +136,7 @@ export default function Popup() {
   // Stable ref for getToken to avoid re-running init effect on every render
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
+  const espnHistoryOwnerRef = useRef<string | null>(null);
 
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? null;
@@ -134,8 +154,11 @@ export default function Popup() {
   const [supportCopied, setSupportCopied] = useState(false);
   const [hasEspnCookies, setHasEspnCookies] = useState<boolean | null>(null);
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
+  const [espnHistory, setEspnHistory] = useState<EspnHistoryStatus | null>(null);
+  const [espnHistoryStatusNeedsRetry, setEspnHistoryStatusNeedsRetry] = useState(false);
 
   const userId = user?.id ?? null;
+  const currentEspnHistory = espnHistoryOwnerRef.current === userId ? espnHistory : null;
 
   const supportInfo = useMemo(() => {
     const truncatedUserId = userId ? `${userId.slice(0, 12)}…` : 'unknown';
@@ -158,15 +181,29 @@ export default function Popup() {
   // Initialize on Clerk load
   useEffect(() => {
     if (!isLoaded) return;
+    let isActive = true;
 
     const init = async () => {
       // Check for saved setup state (popup close recovery)
       const savedSetup = await getSetupState();
+      if (!isActive) return;
+      // Never show a prior account's persisted job while this account's status loads.
+      espnHistoryOwnerRef.current = null;
+      setEspnHistory(null);
+      setEspnHistoryStatusNeedsRetry(false);
+      const savedHistory = await getEspnHistoryState(isSignedIn ? userId : null);
+      if (!isActive) return;
+      if (savedHistory && userId) {
+        espnHistoryOwnerRef.current = userId;
+        setEspnHistory(savedHistory);
+      }
 
       try {
         const info = await chrome.management.getSelf();
+        if (!isActive) return;
         setExtensionVersion(info.version);
       } catch {
+        if (!isActive) return;
         setExtensionVersion(null);
       }
 
@@ -199,20 +236,79 @@ export default function Popup() {
       // Check status with server using Clerk token
       try {
         const token = await getTokenRef.current();
+        if (!isActive) return;
         if (token) {
           const status = await checkStatus(token);
+          if (!isActive) return;
           setHasCredentials(status.hasCredentials);
           setLastSync(status.lastSync ?? null);
+          const history = await getEspnHistoryStatus(token);
+          if (!isActive) return;
+          espnHistoryOwnerRef.current = userId;
+          setEspnHistory(history);
+          setEspnHistoryStatusNeedsRetry(false);
+          await setEspnHistoryState(userId, history);
+        } else {
+          setEspnHistoryStatusNeedsRetry(true);
         }
         setState('ready');
       } catch {
-        // Token might be invalid - still show ready state
+        // Token or status reads may be transient; retry while the popup stays open.
+        setEspnHistoryStatusNeedsRetry(true);
         setState('ready');
       }
     };
 
-    init();
-  }, [isLoaded, isSignedIn]);
+    void init();
+    return () => {
+      isActive = false;
+    };
+  }, [isLoaded, isSignedIn, userId]);
+
+  useEffect(() => {
+    if ((!isHistoryInProgress(currentEspnHistory) && !espnHistoryStatusNeedsRetry) || !isLoaded || !isSignedIn || !userId) return;
+    let isActive = true;
+    let timer: number | undefined;
+    const hasKnownActiveJob = isHistoryInProgress(currentEspnHistory);
+    const retryDelays = [5_000, 10_000, 20_000];
+    let retryIndex = 0;
+    const pollHistory = async () => {
+      let receivedHistory = false;
+      let shouldPollActiveJob = hasKnownActiveJob;
+      try {
+        const token = await getTokenRef.current();
+        if (!token || !isActive) return;
+        const history = await getEspnHistoryStatus(token);
+        if (!isActive) return;
+        receivedHistory = true;
+        shouldPollActiveJob = isHistoryInProgress(history);
+        espnHistoryOwnerRef.current = userId;
+        setEspnHistory(history);
+        setEspnHistoryStatusNeedsRetry(false);
+        await setEspnHistoryState(userId, history);
+      } catch {
+        // A confirmed queued/running job keeps polling. An unknown initial
+        // status gets only the bounded recovery sequence below.
+      } finally {
+        if (!isActive) return;
+        if (shouldPollActiveJob) {
+          timer = window.setTimeout(() => void pollHistory(), 5_000);
+          return;
+        }
+        if (!receivedHistory && retryIndex < retryDelays.length) {
+          timer = window.setTimeout(() => void pollHistory(), retryDelays[retryIndex]);
+          retryIndex += 1;
+        }
+      }
+    };
+    const initialDelay = hasKnownActiveJob ? 5_000 : retryDelays[retryIndex];
+    if (!hasKnownActiveJob) retryIndex += 1;
+    timer = window.setTimeout(() => void pollHistory(), initialDelay);
+    return () => {
+      isActive = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [currentEspnHistory, espnHistoryStatusNeedsRetry, isLoaded, isSignedIn, userId]);
 
   // Handle full setup flow (sync + discover)
   const handleFullSetup = async () => {
@@ -270,6 +366,10 @@ export default function Popup() {
         currentSeason: result.currentSeason,
         pastSeasons: result.pastSeasons,
       });
+      espnHistoryOwnerRef.current = userId;
+      setEspnHistory(result.history ?? null);
+      setEspnHistoryStatusNeedsRetry(false);
+      await setEspnHistoryState(userId, result.history ?? null);
 
       // Complete setup
       setState('setup_complete');
@@ -312,6 +412,11 @@ export default function Popup() {
         const status = await checkStatus(token);
         setHasCredentials(status.hasCredentials);
         setLastSync(status.lastSync ?? null);
+        const history = await getEspnHistoryStatus(token);
+        espnHistoryOwnerRef.current = userId;
+        setEspnHistory(history);
+        setEspnHistoryStatusNeedsRetry(false);
+        await setEspnHistoryState(userId, history);
       }
       setState('ready');
     } catch (err) {
@@ -495,6 +600,7 @@ export default function Popup() {
             ) : (
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
+            {currentEspnHistory && <div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
             <button
               className="button primary full-width"
               onClick={handleFullSetup}
@@ -541,6 +647,7 @@ export default function Popup() {
 
         {state === 'setup_complete' && (
           <div className="content">
+            {currentEspnHistory && <div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
             {discoveredLeagues.length > 0 && (
               <>
                 <div className="message info">

@@ -55,7 +55,8 @@ export async function getLeagueTeams(
   s2: string,
   leagueId: string,
   season: number,
-  gameId: string
+  gameId: string,
+  signal?: AbortSignal
 ): Promise<LeagueTeam[]> {
   if (!swid || !s2) {
     throw new EspnCredentialsRequired('Both SWID and espn_s2 cookies are required');
@@ -85,7 +86,7 @@ export async function getLeagueTeams(
         'X-Fantasy-Source': 'kona',
         'X-Fantasy-Platform': 'kona-web-2.0.0'
       },
-      signal: AbortSignal.timeout(7000) // 7 second timeout
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(7_000)]) : AbortSignal.timeout(7_000),
     },
   ));
 
@@ -93,7 +94,7 @@ export async function getLeagueTeams(
     if (response.status === 401 || response.status === 403) {
       throw new EspnAuthenticationFailed('ESPN authentication failed');
     }
-    throw new EspnApiError(`ESPN API error: ${response.status} ${response.statusText}`);
+    throw new EspnApiError(`ESPN API error: ${response.status} ${response.statusText}`, response.status);
   }
 
   let parsed: unknown;

@@ -78,7 +78,7 @@ const NUMERIC_TO_GAME_ID: Record<number, string> = {
  * @param s2 - ESPN espn_s2 cookie value
  * @returns Array of discovered leagues
  */
-export async function discoverLeaguesV3(swid: string, s2: string): Promise<DiscoveredEspnLeague[]> {
+export async function discoverLeaguesV3(swid: string, s2: string, signal?: AbortSignal): Promise<DiscoveredEspnLeague[]> {
   if (!swid || !s2) {
     throw new EspnCredentialsRequired('Both SWID and espn_s2 cookies are required');
   }
@@ -105,7 +105,7 @@ export async function discoverLeaguesV3(swid: string, s2: string): Promise<Disco
         'X-Personalization-Source': 'ESPN.com - FAM',
         Accept: 'application/json',
       },
-      signal: AbortSignal.timeout(10000), // 10 second timeout
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
     });
 
     console.log(`📡 Fan API Response: ${res.status} ${res.statusText}`);
@@ -234,6 +234,116 @@ export interface DiscoverAndSaveResult {
   discovered: DiscoveredLeague[];
   currentSeason: SeasonCounts;
   pastSeasons: SeasonCounts;
+  savedLeagues?: DiscoveredEspnLeague[];
+}
+
+/**
+ * Current-season discovery is deliberately separate from history planning.
+ * The request path can safely return this result while a durable workflow
+ * later decides which historical seasons still need work.
+ */
+export interface DiscoverAndSaveCurrentResult {
+  discovered: DiscoveredLeague[];
+  currentSeason: SeasonCounts;
+  savedLeagues: DiscoveredEspnLeague[];
+}
+
+class EspnLeagueWriteLeaseLostError extends Error {}
+
+export async function discoverAndSaveCurrentLeagues(
+  userId: string,
+  swid: string,
+  s2: string,
+  storage: EspnSupabaseStorage,
+  leaseOwner?: string
+): Promise<DiscoverAndSaveCurrentResult> {
+  const leagues = await discoverLeaguesV3(swid, s2);
+
+  const discovered: DiscoveredLeague[] = [];
+  const currentSeason: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+  const savedLeagues: DiscoveredEspnLeague[] = [];
+
+  for (const league of leagues) {
+    try {
+      const sport = gameIdToSport(league.gameId);
+      if (!sport) {
+        console.warn(`Unknown gameId: ${league.gameId}`);
+        continue;
+      }
+
+      const canonicalSeasonYear = toCanonicalYear(league.seasonId, sport, 'espn');
+      currentSeason.found++;
+      const updates = {
+        leagueName: league.leagueName,
+        teamId: String(league.teamId),
+        teamName: league.teamName,
+      };
+      let saved = false;
+
+      if (leaseOwner) {
+        const outcome = await storage.persistLeagueWithLease(userId, leaseOwner, {
+          leagueId: league.leagueId,
+          sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+          leagueName: league.leagueName,
+          teamId: String(league.teamId),
+          teamName: league.teamName,
+          seasonYear: canonicalSeasonYear,
+        });
+        if (outcome === 'lease_lost') throw new EspnLeagueWriteLeaseLostError('ESPN refresh lease lost');
+        if (outcome === 'added') {
+          saved = true;
+          currentSeason.added++;
+        } else if (outcome === 'refreshed') {
+          saved = true;
+          currentSeason.refreshed++;
+          currentSeason.alreadySaved++;
+        }
+      } else if (await storage.leagueExists(userId, sport, league.leagueId, canonicalSeasonYear)) {
+        saved = await storage.updateLeague(userId, league.leagueId, sport, canonicalSeasonYear, updates);
+        if (saved) currentSeason.refreshed++;
+        currentSeason.alreadySaved++;
+      } else {
+        const added = await storage.addLeague(userId, {
+          leagueId: league.leagueId,
+          sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+          leagueName: league.leagueName,
+          teamId: String(league.teamId),
+          teamName: league.teamName,
+          seasonYear: canonicalSeasonYear,
+        });
+        if (added.success) {
+          saved = true;
+          currentSeason.added++;
+        } else if (added.code === 'DUPLICATE') {
+          // A concurrent request won the insert race. Treat it as an existing
+          // current row only after the targeted refresh succeeds.
+          saved = await storage.updateLeague(userId, league.leagueId, sport, canonicalSeasonYear, updates);
+          currentSeason.alreadySaved++;
+          if (saved) currentSeason.refreshed++;
+        } else {
+          console.error(`Failed to add league ${league.leagueId}:`, added.error);
+        }
+      }
+
+      // A current-row write is the prerequisite for history. Do not leak a
+      // failed write into the durable plan or the immediate UI response.
+      if (!saved) continue;
+      discovered.push({
+        sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+        leagueId: league.leagueId,
+        leagueName: league.leagueName,
+        teamId: String(league.teamId),
+        teamName: league.teamName,
+        seasonYear: canonicalSeasonYear,
+      });
+      savedLeagues.push(league);
+    } catch (error) {
+      if (error instanceof EspnLeagueWriteLeaseLostError) throw error;
+      console.error(`Error processing league ${league.leagueId}:`, error);
+    }
+  }
+
+  return { discovered, currentSeason, savedLeagues };
 }
 
 /**
@@ -250,89 +360,13 @@ export async function discoverAndSaveLeagues(
   userId: string,
   swid: string,
   s2: string,
-  storage: EspnSupabaseStorage
+  storage: EspnSupabaseStorage,
+  leaseOwner?: string
 ): Promise<DiscoverAndSaveResult> {
-  // 1. Discover current season leagues
-  const leagues = await discoverLeaguesV3(swid, s2);
-
-  const discovered: DiscoveredLeague[] = [];
-  const currentSeason: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+  const { discovered, currentSeason, savedLeagues } = await discoverAndSaveCurrentLeagues(
+    userId, swid, s2, storage, leaseOwner
+  );
   const pastSeasons: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
-
-  // 2. Save the current season for every league first. Historical backfill
-  // runs afterwards (step 3) so old seasons can never consume the per-user
-  // league budget ahead of a new season — the failure mode that silently
-  // blocked season rollover for multi-season users.
-  const savedLeagues: DiscoveredEspnLeague[] = [];
-  for (const league of leagues) {
-    try {
-      const sport = gameIdToSport(league.gameId);
-      if (!sport) {
-        console.warn(`Unknown gameId: ${league.gameId}`);
-        continue;
-      }
-
-      // Normalize ESPN-native seasonId to canonical start year for DB operations.
-      // ESPN uses end-year for NBA/NHL (e.g., 2025 for the 2024-25 season).
-      // For baseball/football this is a no-op.
-      const canonicalSeasonYear = toCanonicalYear(league.seasonId, sport, 'espn');
-
-      // Count this league as found
-      currentSeason.found++;
-
-      // Check if league already exists (DB stores canonical year)
-      const exists = await storage.leagueExists(
-        userId,
-        sport,
-        league.leagueId,
-        canonicalSeasonYear
-      );
-
-      if (exists) {
-        const refreshed = await storage.updateLeague(userId, league.leagueId, sport, canonicalSeasonYear, {
-          leagueName: league.leagueName,
-          teamId: String(league.teamId),
-          teamName: league.teamName,
-        });
-        if (refreshed) {
-          currentSeason.refreshed++;
-        }
-        currentSeason.alreadySaved++;
-      } else {
-        // Add the league with canonical year
-        const result = await storage.addLeague(userId, {
-          leagueId: league.leagueId,
-          sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
-          leagueName: league.leagueName,
-          teamId: String(league.teamId),
-          teamName: league.teamName,
-          seasonYear: canonicalSeasonYear,
-        });
-
-        if (result.success) {
-          currentSeason.added++;
-        } else {
-          console.error(`Failed to add league ${league.leagueId}:`, result.error);
-        }
-      }
-
-      // Add to discovered list for UI (canonical year)
-      discovered.push({
-        sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
-        leagueId: league.leagueId,
-        leagueName: league.leagueName,
-        teamId: String(league.teamId),
-        teamName: league.teamName,
-        seasonYear: canonicalSeasonYear,
-      });
-
-      savedLeagues.push(league);
-    } catch (error) {
-      // Per-league error handling - continue with other leagues
-      console.error(`Error processing league ${league.leagueId}:`, error);
-      continue;
-    }
-  }
 
   // 3. Discover historical seasons only after every current season is saved
   for (const league of savedLeagues) {
@@ -342,7 +376,8 @@ export async function discoverAndSaveLeagues(
         league,
         swid,
         s2,
-        storage
+        storage,
+        leaseOwner
       );
       pastSeasons.found += histResult.found;
       pastSeasons.added += histResult.added;
@@ -358,6 +393,7 @@ export async function discoverAndSaveLeagues(
     discovered,
     currentSeason,
     pastSeasons,
+    savedLeagues,
   };
 }
 
@@ -378,7 +414,8 @@ async function discoverHistoricalSeasons(
   league: DiscoveredEspnLeague,
   swid: string,
   s2: string,
-  storage: EspnSupabaseStorage
+  storage: EspnSupabaseStorage,
+  leaseOwner?: string
 ): Promise<HistoricalResult> {
   const result: HistoricalResult = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
   const sport = gameIdToSport(league.gameId);
@@ -412,6 +449,25 @@ async function discoverHistoricalSeasons(
         // User was a member - count it as found
         result.found++;
 
+        if (leaseOwner) {
+          const historicalInfo = await getLeagueInfoSafe(swid, s2, league.leagueId, espnYear, league.gameId);
+          const outcome = await storage.persistLeagueWithLease(userId, leaseOwner, {
+            leagueId: league.leagueId,
+            sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+            leagueName: historicalInfo?.leagueName || league.leagueName,
+            teamId: historicalTeam.teamId,
+            teamName: historicalTeam.teamName || league.teamName,
+            seasonYear: canonicalYear,
+          });
+          if (outcome === 'lease_lost') throw new EspnLeagueWriteLeaseLostError('ESPN refresh lease lost');
+          if (outcome === 'added') result.added++;
+          if (outcome === 'refreshed') {
+            result.alreadySaved++;
+            result.refreshed++;
+          }
+          continue;
+        }
+
         // Check if already saved (DB stores canonical year)
         const exists = await storage.leagueExists(userId, sport, league.leagueId, canonicalYear);
         if (exists) {
@@ -444,16 +500,12 @@ async function discoverHistoricalSeasons(
 
         if (addResult.success) {
           result.added++;
-        } else if (addResult.code === 'LIMIT_EXCEEDED') {
-          // Every further add for this league is guaranteed to fail the same
-          // way — stop probing ESPN for seasons we cannot save.
-          console.error(`League cap reached; stopping historical backfill for league ${league.leagueId}:`, addResult.error);
-          break;
         } else if (addResult.code !== 'DUPLICATE') {
           console.error(`Failed to add historical season ${canonicalYear} for league ${league.leagueId}:`, addResult.error);
         }
 
       } catch (seasonError) {
+        if (seasonError instanceof EspnLeagueWriteLeaseLostError) throw seasonError;
         // Per-season error handling - continue with other seasons
         console.error(`Error fetching season ${canonicalYear} for league ${league.leagueId}:`, seasonError);
         continue;
@@ -461,6 +513,7 @@ async function discoverHistoricalSeasons(
     }
 
   } catch (error) {
+    if (error instanceof EspnLeagueWriteLeaseLostError) throw error;
     // If we can't get league info at all, just log and return
     console.error(`Failed to discover history for league ${league.leagueId}:`, error);
   }

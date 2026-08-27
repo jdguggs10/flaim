@@ -11,6 +11,9 @@
       "head_sampling_rate": 1
     }
   },
+  "workflows": [
+    { "name": "espn-history-refresh", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+  ],
   // Required secrets (set via `wrangler secret put` or Cloudflare dashboard):
   // - SUPABASE_URL
   // - SUPABASE_SERVICE_KEY
@@ -27,6 +30,9 @@
     // Production environment
     "prod": {
       "name": "auth-worker",
+      "workflows": [
+        { "name": "espn-history-refresh", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+      ],
       "workers_dev": true, // Enable .workers.dev URL for worker-to-worker calls
       "observability": {
         "enabled": true,
@@ -85,6 +91,7 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
         "FRONTEND_URL": "https://flaim.app",
+        "ESPN_DURABLE_HISTORY_ENABLED": "false",
         // Dry-run evidence collection enabled 2026-07-17 (FLA-161). Caps stay
         // at code defaults: 5 users/run, espn+sleeper, football, 45s budget.
         "RECONCILIATION_ENABLED": "true",
@@ -94,6 +101,9 @@
     // Preview environment (remote dev/staging)
     "preview": {
       "name": "auth-worker-preview",
+      "workflows": [
+        { "name": "espn-history-refresh-preview", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+      ],
       "workers_dev": true, // Also keep workers.dev URL available
       "observability": {
         "enabled": true,
@@ -130,6 +140,7 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
         "FRONTEND_URL": "https://preview.flaim.app",
+        "ESPN_DURABLE_HISTORY_ENABLED": "false",
         "RECONCILIATION_ENABLED": "false",
         "RECONCILIATION_DRY_RUN": "true"
       }
@@ -137,6 +148,9 @@
     // Development environment (local)
     "dev": {
       "name": "auth-worker-dev",
+      "workflows": [
+        { "name": "espn-history-refresh-dev", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+      ],
       "workers_dev": true, // Use workers.dev URL for development
       "ratelimits": [
         {
@@ -155,7 +169,8 @@
       "vars": {
         "NODE_ENV": "development",
         "ENVIRONMENT": "dev",
-        "FRONTEND_URL": "http://localhost:3000"
+        "FRONTEND_URL": "http://localhost:3000",
+        "ESPN_DURABLE_HISTORY_ENABLED": "false"
       }
     }
   }

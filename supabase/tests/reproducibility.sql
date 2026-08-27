@@ -14,8 +14,8 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'r';
-  if actual_count <> 23 then
-    raise exception 'expected 23 public tables, found %', actual_count;
+  if actual_count <> 24 then
+    raise exception 'expected 24 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -46,8 +46,8 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.prokind = 'f';
-  if actual_count <> 18 then
-    raise exception 'expected 18 public functions, found %', actual_count;
+  if actual_count <> 21 then
+    raise exception 'expected 21 public functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -65,8 +65,8 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
-  if actual_count <> 71 then
-    raise exception 'expected 71 public indexes, found %', actual_count;
+  if actual_count <> 75 then
+    raise exception 'expected 75 public indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -91,8 +91,8 @@ begin
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relrowsecurity;
-  if actual_count <> 23 then
-    raise exception 'expected RLS on all 23 public tables, found %', actual_count;
+  if actual_count <> 24 then
+    raise exception 'expected RLS on all 24 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -614,6 +614,13 @@ begin
   where version = '20260813012740';
   if actual_count <> 1 then
     raise exception 'snapshot cadence migration history row is missing';
+  end if;
+
+  select count(*) into actual_count
+  from supabase_migrations.schema_migrations
+  where version = '20260827004306';
+  if actual_count <> 1 then
+    raise exception 'ESPN history jobs migration history row is missing';
   end if;
 end
 $proof$;

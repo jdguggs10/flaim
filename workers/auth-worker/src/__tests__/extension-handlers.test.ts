@@ -7,9 +7,31 @@ import {
 } from '../extension-handlers';
 import { EspnSupabaseStorage } from '../supabase-storage';
 
+const mutationMocks = vi.hoisted(() => ({
+  begin: vi.fn(),
+  durableEnabled: vi.fn(),
+  historyFromEnvironment: vi.fn(),
+  settle: vi.fn(),
+  syncFromEnvironment: vi.fn(),
+}));
+
 vi.mock('../supabase-storage', () => ({
   EspnSupabaseStorage: {
     fromEnvironment: vi.fn(),
+  },
+}));
+
+vi.mock('../espn-history', () => ({
+  beginEspnLeagueMutation: mutationMocks.begin,
+  durableHistoryEnabledFor: mutationMocks.durableEnabled,
+  EspnHistoryJobStorage: {
+    fromEnvironment: mutationMocks.historyFromEnvironment,
+  },
+}));
+
+vi.mock('../sync-state', () => ({
+  SyncStateStorage: {
+    fromEnvironment: mutationMocks.syncFromEnvironment,
   },
 }));
 
@@ -34,6 +56,10 @@ describe('handleSyncCredentials', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStorage = { setCredentials: vi.fn().mockResolvedValue(true) };
+    mutationMocks.durableEnabled.mockReturnValue(false);
+    mutationMocks.begin.mockResolvedValue({ jobId: null, ownerId: 'league-mutation:test' });
+    mutationMocks.settle.mockResolvedValue(undefined);
+    mutationMocks.syncFromEnvironment.mockReturnValue({ settle: mutationMocks.settle });
     vi.mocked(EspnSupabaseStorage.fromEnvironment).mockReturnValue(
       mockStorage as unknown as EspnSupabaseStorage
     );
@@ -55,7 +81,17 @@ describe('handleSyncCredentials', () => {
 
     const body = await res.json() as { success?: boolean };
     expect(body.success).toBe(true);
+    expect(mutationMocks.begin).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ settle: mutationMocks.settle }),
+      userId
+    );
     expect(mockStorage.setCredentials).toHaveBeenCalledWith(userId, VALID_SWID, VALID_S2);
+    expect(mutationMocks.settle).toHaveBeenCalledWith(userId, 'espn', 'league-mutation:test', {
+      status: 'skipped',
+      cooldownSeconds: 0,
+      syncSource: 'extension',
+    });
   });
 
   it('returns 400 when swid is missing', async () => {
@@ -69,6 +105,7 @@ describe('handleSyncCredentials', () => {
     expect(res.status).toBe(400);
     const body = await res.json() as { error?: string };
     expect(body.error).toBe('invalid_request');
+    expect(mutationMocks.begin).not.toHaveBeenCalled();
   });
 
   it('returns 400 when s2 is missing', async () => {
@@ -123,6 +160,22 @@ describe('handleSyncCredentials', () => {
     expect(res.status).toBe(500);
     const body = await res.json() as { error?: string };
     expect(body.error).toBe('server_error');
+    expect(mutationMocks.settle).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed before storing when the provider mutation fence cannot be taken', async () => {
+    mutationMocks.begin.mockRejectedValueOnce(new Error('lease unavailable'));
+
+    const req = new Request('https://api.flaim.app/extension/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ swid: VALID_SWID, s2: VALID_S2 }),
+    });
+
+    const res = await handleSyncCredentials(req, env, userId, corsHeaders);
+    expect(res.status).toBe(500);
+    expect(mockStorage.setCredentials).not.toHaveBeenCalled();
+    expect(mutationMocks.settle).not.toHaveBeenCalled();
   });
 
   it('returns 400 when request body is invalid JSON', async () => {

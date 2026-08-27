@@ -4,14 +4,42 @@ const mockStorage = vi.hoisted(() => ({
   getCredentials: vi.fn(),
   getCredentialMetadata: vi.fn(),
   getSetupStatus: vi.fn(),
+  getLeagues: vi.fn(),
+  setLeagues: vi.fn(),
+  addLeague: vi.fn(),
+  updateLeague: vi.fn(),
   deleteCredentials: vi.fn(),
   setCredentials: vi.fn(),
+}));
+
+const mutationMocks = vi.hoisted(() => ({
+  begin: vi.fn(),
+  settle: vi.fn(),
+  syncFromEnvironment: vi.fn(),
 }));
 
 vi.mock('../supabase-storage', () => {
   return {
     EspnSupabaseStorage: {
       fromEnvironment: vi.fn().mockReturnValue(mockStorage),
+    },
+  };
+});
+
+vi.mock('../espn-history', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../espn-history')>();
+  return {
+    ...actual,
+    beginEspnLeagueMutation: mutationMocks.begin,
+  };
+});
+
+vi.mock('../sync-state', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../sync-state')>();
+  return {
+    ...actual,
+    SyncStateStorage: {
+      fromEnvironment: mutationMocks.syncFromEnvironment,
     },
   };
 });
@@ -115,6 +143,17 @@ function makeRequest(path: string, token: string): Request {
   });
 }
 
+function makeMutationRequest(path: string, token: string, method: 'POST' | 'PATCH' | 'DELETE', body?: unknown): Request {
+  return new Request(`https://api.flaim.app${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 beforeAll(async () => {
   const keyPair = await crypto.subtle.generateKey(
     {
@@ -154,6 +193,15 @@ beforeEach(() => {
     hasLeagues: false,
     hasDefaultTeam: false,
   });
+  mockStorage.setCredentials.mockResolvedValue(true);
+  mockStorage.deleteCredentials.mockResolvedValue(true);
+  mockStorage.getLeagues.mockResolvedValue([]);
+  mockStorage.setLeagues.mockResolvedValue(true);
+  mockStorage.addLeague.mockResolvedValue({ success: true });
+  mockStorage.updateLeague.mockResolvedValue(true);
+  mutationMocks.begin.mockResolvedValue({ jobId: null, ownerId: 'league-mutation:test' });
+  mutationMocks.settle.mockResolvedValue(undefined);
+  mutationMocks.syncFromEnvironment.mockReturnValue({ settle: mutationMocks.settle });
 });
 
 afterEach(() => {
@@ -202,5 +250,143 @@ describe('GET /auth/credentials/espn?forEdit=true', () => {
     expect(body).not.toHaveProperty('swid');
     expect(body).not.toHaveProperty('s2');
     expect(mockStorage.getCredentials).not.toHaveBeenCalled();
+  });
+});
+
+describe('ESPN credential mutations', () => {
+  it('takes and settles the provider mutation fence around credential replacement', async () => {
+    const token = await signedClerkToken();
+    const res = await app.fetch(makeMutationRequest('/auth/credentials/espn', token, 'POST', {
+      swid: RAW_SWID,
+      s2: RAW_S2,
+      email: 'new@example.com',
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(mutationMocks.begin).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ settle: mutationMocks.settle }),
+      'user_public_route_test'
+    );
+    expect(mockStorage.setCredentials).toHaveBeenCalledWith(
+      'user_public_route_test', RAW_SWID, RAW_S2, 'new@example.com'
+    );
+    expect(mutationMocks.settle).toHaveBeenCalledWith(
+      'user_public_route_test', 'espn', 'league-mutation:test', {
+        status: 'skipped',
+        cooldownSeconds: 0,
+        syncSource: 'web',
+      }
+    );
+  });
+
+  it('takes and settles the provider mutation fence around credential and league deletion', async () => {
+    const token = await signedClerkToken();
+    const res = await app.fetch(
+      makeMutationRequest('/auth/credentials/espn', token, 'DELETE'),
+      baseEnv
+    );
+
+    expect(res.status).toBe(200);
+    expect(mutationMocks.begin).toHaveBeenCalledOnce();
+    expect(mockStorage.deleteCredentials).toHaveBeenCalledWith('user_public_route_test');
+    expect(mutationMocks.settle).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed without changing credentials when the mutation fence cannot be taken', async () => {
+    mutationMocks.begin.mockRejectedValueOnce(new Error('lease unavailable'));
+    const token = await signedClerkToken();
+    const res = await app.fetch(makeMutationRequest('/auth/credentials/espn', token, 'POST', {
+      swid: RAW_SWID,
+      s2: RAW_S2,
+    }), baseEnv);
+
+    expect(res.status).toBe(500);
+    expect(mockStorage.setCredentials).not.toHaveBeenCalled();
+    expect(mutationMocks.settle).not.toHaveBeenCalled();
+  });
+});
+
+describe('caller-supplied ESPN league mutations', () => {
+  it('rejects a bulk replacement above the manual abuse boundary before taking the lease', async () => {
+    const token = await signedClerkToken();
+    const leagues = Array.from({ length: 1001 }, (_, index) => ({
+      leagueId: `league-${index}`,
+      sport: 'football',
+      seasonYear: 2026,
+      teamId: '1',
+    }));
+
+    const res = await app.fetch(
+      makeMutationRequest('/auth/leagues', token, 'POST', { leagues }),
+      baseEnv
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: expect.stringContaining('1000') });
+    expect(mutationMocks.begin).not.toHaveBeenCalled();
+    expect(mockStorage.setLeagues).not.toHaveBeenCalled();
+  });
+
+  it('blocks sequential manual additions at the boundary and still settles the lease', async () => {
+    mockStorage.getLeagues.mockResolvedValueOnce(Array.from({ length: 1000 }, (_, index) => ({
+      leagueId: `league-${index}`,
+      sport: 'football',
+      seasonYear: 2026,
+    })));
+    const token = await signedClerkToken();
+
+    const res = await app.fetch(
+      makeMutationRequest('/auth/leagues/add', token, 'POST', {
+        leagueId: 'league-overflow',
+        sport: 'football',
+        seasonYear: 2026,
+      }),
+      baseEnv
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'LIMIT_EXCEEDED' });
+    expect(mutationMocks.begin).toHaveBeenCalledOnce();
+    expect(mockStorage.addLeague).not.toHaveBeenCalled();
+    expect(mutationMocks.settle).toHaveBeenCalledOnce();
+  });
+
+  it('takes and settles the mutation fence around team selection', async () => {
+    mockStorage.getLeagues.mockResolvedValue([{
+      leagueId: 'league-1',
+      sport: 'baseball',
+      seasonYear: 2026,
+      teamId: 'old-team',
+      teamName: 'Old Team',
+    }]);
+    const token = await signedClerkToken();
+
+    const res = await app.fetch(
+      makeMutationRequest('/auth/leagues/league-1/team', token, 'PATCH', {
+        teamId: 'new-team',
+        teamName: 'New Team',
+        sport: 'baseball',
+        seasonYear: 2026,
+      }),
+      baseEnv
+    );
+
+    expect(res.status).toBe(200);
+    expect(mutationMocks.begin).toHaveBeenCalledOnce();
+    expect(mockStorage.updateLeague).toHaveBeenCalledWith(
+      'user_public_route_test',
+      'league-1',
+      'baseball',
+      2026,
+      { teamId: 'new-team', teamName: 'New Team' }
+    );
+    expect(mutationMocks.settle).toHaveBeenCalledWith(
+      'user_public_route_test', 'espn', 'league-mutation:test', {
+        status: 'skipped',
+        cooldownSeconds: 1,
+        syncSource: 'web',
+      }
+    );
   });
 });

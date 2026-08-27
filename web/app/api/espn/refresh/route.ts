@@ -57,6 +57,7 @@ export async function POST() {
     const data = await workerRes.json().catch(() => null) as {
       currentSeason?: unknown;
       pastSeasons?: unknown;
+      history?: unknown;
     } | null;
 
     if (!data) {
@@ -79,6 +80,7 @@ export async function POST() {
     return NextResponse.json({
       currentSeason,
       pastSeasons,
+      ...(data.history === undefined ? {} : { history: data.history }),
     });
   } catch (error) {
     console.error('ESPN refresh route error:', error);

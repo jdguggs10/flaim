@@ -13,6 +13,16 @@ migrations.
 The [reconciliation manifest](./reconciliation.md) records the live objects
 represented by this baseline and its one intentional omission.
 
+The current forward contract has 24 public tables and 75 public indexes. Its
+FLA-308 migration adds service-role-only `espn_history_jobs` and the
+`advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
+`persist_espn_league_with_lease(...)` RPCs. Those security-invoker RPCs use an
+empty search path. History progress and success/partial repair markers preserve
+the job's credential and lease fences, while request-time league writes require
+the exact live ESPN lease owner.
+The local proof covers this behavior, but hosted preview or production rollout
+remains a separate approval and verification boundary.
+
 ## Safety boundary
 
 - The repository contains no database passwords, tokens, connection strings, or
@@ -65,6 +75,8 @@ docker cp supabase/tests/token_rpc.sql supabase_db_flaim:/tmp/token_rpc.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/token_rpc.sql
 docker cp supabase/tests/provider_flags.sql supabase_db_flaim:/tmp/provider_flags.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/provider_flags.sql
+docker cp supabase/tests/espn_history_jobs.sql supabase_db_flaim:/tmp/espn_history_jobs.sql
+docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/espn_history_jobs.sql
 bash supabase/tests/cutover_guard.sh
 corepack pnpm exec supabase db lint --local --schema public,analytics --level warning --fail-on error
 corepack pnpm exec supabase db advisors --local --type security --level warn --fail-on error
