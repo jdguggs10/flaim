@@ -12,8 +12,10 @@ import {
   parseArgs,
   parseInternalUserHashes,
   planSegmentAdditions,
+  populateSegmentAdditions,
   selectYahooCohort,
   validateApplyGuards,
+  verifyFinalSegmentState,
 } from "../../../scripts/prepare-yahoo-broadcast-segment.mjs";
 
 function hash(value: string) {
@@ -212,6 +214,22 @@ describe("prepare Yahoo Broadcast Segment script helpers", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("reports when a provider remains rate limited after all retries", async () => {
+    const delayFn = vi.fn(async () => undefined);
+    const fetcher = vi.fn(async () => jsonResponse({}, 429));
+
+    await expect(listSupabaseRows({
+      delayFn,
+      fetcher,
+      headers: { Authorization: "Bearer test" },
+      limit: 2,
+      url: new URL("https://example.supabase.co/rest/v1/yahoo_leagues"),
+    })).rejects.toThrow("Supabase list remained rate limited");
+
+    expect(delayFn).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
   it("paginates Clerk users by offset", async () => {
     const offsets: string[] = [];
     const fetcher = vi.fn(async (input: URL | RequestInfo) => {
@@ -248,6 +266,42 @@ describe("prepare Yahoo Broadcast Segment script helpers", () => {
 
     expect(rows).toHaveLength(3);
     expect(cursors).toEqual([null, "2"]);
+  });
+
+  it("invalidates a Segment after an ambiguous population write failure", async () => {
+    const addContact = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("request failed"));
+
+    await expect(populateSegmentAdditions({
+      additions: [
+        { contactId: "contact-1", email: "first@example.com" },
+        { contactId: "contact-2", email: "second@example.com" },
+      ],
+      addContact,
+      delayMs: 0,
+    })).rejects.toThrow(
+      "do not use this Segment. Create a new empty campaign Segment, review a fresh dry run, and retry.",
+    );
+
+    expect(addContact).toHaveBeenCalledTimes(2);
+  });
+
+  it("invalidates a populated Segment when its final read fails", async () => {
+    const addContact = vi.fn(async () => undefined);
+    await populateSegmentAdditions({
+      additions: [{ contactId: "contact-1", email: "fan@example.com" }],
+      addContact,
+      delayMs: 0,
+    });
+
+    await expect(verifyFinalSegmentState(async () => {
+      throw new Error("Resend list remained rate limited");
+    })).rejects.toThrow(
+      "Final Resend verification failed (Resend list remained rate limited); do not use this Segment.",
+    );
+
+    expect(addContact).toHaveBeenCalledTimes(1);
   });
 
   it("builds an aggregate-only report", () => {

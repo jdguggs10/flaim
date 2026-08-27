@@ -380,22 +380,24 @@ export function buildSummary({ cohort, clerk, resend, segment = null }) {
 }
 
 async function fetchJson(fetcher, url, options, label, delayFn = delay) {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
+  let attempt = 0;
+
+  while (true) {
     const response = await fetcher(url, options);
     const body = await response.json().catch(() => null);
-    if (response.status === 429 && attempt < 3) {
+    if (response.status === 429) {
+      if (attempt >= 3) throw new Error(`${label} remained rate limited`);
       const retryAfterSeconds = Number(response.headers?.get?.("retry-after"));
       const retryDelay = Number.isFinite(retryAfterSeconds)
         ? Math.max(retryAfterSeconds * 1000, DEFAULT_DELAY_MS)
         : DEFAULT_DELAY_MS * (attempt + 1);
       await delayFn(retryDelay);
+      attempt += 1;
       continue;
     }
     if (!response.ok) throw new Error(`${label} failed with status ${response.status}`);
     return { body, response };
   }
-
-  throw new Error(`${label} remained rate limited`);
 }
 
 export async function listSupabaseRows({
@@ -495,6 +497,41 @@ async function addContactToSegment({ apiKey, contactId, fetcher = fetch, segment
     headers: { Authorization: `Bearer ${apiKey}` },
     method: "POST",
   }, "Resend Segment add");
+}
+
+function segmentAbandonmentError(stage, error) {
+  const reason = error instanceof Error ? error.message : "unknown failure";
+  return new Error(
+    `${stage} (${reason}); do not use this Segment. ` +
+    "Create a new empty campaign Segment, review a fresh dry run, and retry.",
+  );
+}
+
+export async function populateSegmentAdditions({
+  additions,
+  addContact,
+  delayFn = delay,
+  delayMs,
+}) {
+  try {
+    for (let index = 0; index < additions.length; index += 1) {
+      await addContact(additions[index]);
+      if (delayMs > 0 && index < additions.length - 1) await delayFn(delayMs);
+    }
+  } catch (error) {
+    throw segmentAbandonmentError(
+      "Resend Segment population failed after a write was attempted",
+      error,
+    );
+  }
+}
+
+export async function verifyFinalSegmentState(verify) {
+  try {
+    return await verify();
+  } catch (error) {
+    throw segmentAbandonmentError("Final Resend verification failed", error);
+  }
 }
 
 function requireEnvironment(name) {
@@ -607,44 +644,47 @@ async function main() {
     validateApplyGuards(args, eligibleContacts.length);
     const plan = planSegmentAdditions({ eligibleContacts, segmentContacts });
 
-    for (let index = 0; index < plan.additions.length; index += 1) {
-      await addContactToSegment({
+    await populateSegmentAdditions({
+      additions: plan.additions,
+      addContact: ({ contactId }) => addContactToSegment({
         apiKey: resendApiKey,
-        contactId: plan.additions[index].contactId,
+        contactId,
         segmentId: args.segmentId,
-      });
-      if (args.delayMs > 0 && index < plan.additions.length - 1) await delay(args.delayMs);
-    }
-
-    const finalContacts = await listResendRows({
-      apiKey: resendApiKey,
+      }),
       delayMs: args.delayMs,
-      limit: args.resendLimit,
-      path: `/segments/${encodeURIComponent(args.segmentId)}/contacts`,
     });
-    ({ eligibleContacts, stats: resendStats } = await getResendEligibility({
-      apiKey: resendApiKey,
-      candidates,
-      delayMs: args.delayMs,
-      limit: args.resendLimit,
-    }));
 
-    try {
-      validateApplyGuards(args, eligibleContacts.length);
-      const finalPlan = planSegmentAdditions({
-        eligibleContacts,
-        segmentContacts: finalContacts,
+    let finalContacts;
+    ({ eligibleContacts, finalContacts, resendStats } = await verifyFinalSegmentState(async () => {
+      const refreshedContacts = await listResendRows({
+        apiKey: resendApiKey,
+        delayMs: args.delayMs,
+        limit: args.resendLimit,
+        path: `/segments/${encodeURIComponent(args.segmentId)}/contacts`,
       });
-      if (finalPlan.additions.length !== 0 || finalContacts.length !== eligibleContacts.length) {
+      const finalEligibility = await getResendEligibility({
+        apiKey: resendApiKey,
+        candidates,
+        delayMs: args.delayMs,
+        limit: args.resendLimit,
+      });
+      validateApplyGuards(args, finalEligibility.eligibleContacts.length);
+      const finalPlan = planSegmentAdditions({
+        eligibleContacts: finalEligibility.eligibleContacts,
+        segmentContacts: refreshedContacts,
+      });
+      if (
+        finalPlan.additions.length !== 0 ||
+        refreshedContacts.length !== finalEligibility.eligibleContacts.length
+      ) {
         throw new Error("membership mismatch");
       }
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "unknown verification failure";
-      throw new Error(
-        `Final Resend verification failed (${reason}); do not use this Segment. ` +
-        "Create a new empty campaign Segment, review a fresh dry run, and retry.",
-      );
-    }
+      return {
+        eligibleContacts: finalEligibility.eligibleContacts,
+        finalContacts: refreshedContacts,
+        resendStats: finalEligibility.stats,
+      };
+    }));
 
     segmentStats = {
       added: plan.additions.length,
