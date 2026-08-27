@@ -153,6 +153,11 @@ const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
 const INTERNAL_SERVICE_TOKEN_HEADER = 'X-Flaim-Internal-Token';
 const MASKED_ESPN_SWID = '{********-****-****-****-************}';
 const MASKED_ESPN_S2 = '************';
+// Abuse boundary for caller-supplied league rows only. Server-controlled ESPN
+// discovery and the durable history Workflow use verified storage paths and do
+// not inherit this limit. This remains well above a heavy user's expected
+// multi-sport, multi-season history.
+export const MAX_MANUAL_ESPN_LEAGUE_ROWS = 1000;
 
 async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, userId: string) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `refresh:${userId}` });
@@ -2189,6 +2194,30 @@ api.get('/internal/leagues', async (c) => {
   });
 });
 
+async function beginLeagueMutationForUser(env: Env, clerkUserId: string) {
+  const syncState = SyncStateStorage.fromEnvironment(env);
+  const mutation = await beginEspnLeagueMutation(
+    durableHistoryEnabledFor(env, clerkUserId)
+      ? EspnHistoryJobStorage.fromEnvironment(env)
+      : null,
+    syncState,
+    clerkUserId
+  );
+  return { syncState, mutation };
+}
+
+async function settleLeagueMutationForUser(
+  syncState: SyncStateStorage,
+  clerkUserId: string,
+  ownerId: string
+): Promise<void> {
+  await syncState.settle(clerkUserId, 'espn', ownerId, {
+    status: 'skipped',
+    cooldownSeconds: 1,
+    syncSource: 'web',
+  });
+}
+
 async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Promise<Response> {
   const env = c.env;
   const url = new URL(c.req.url);
@@ -2202,27 +2231,6 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
 
   const storage = EspnSupabaseStorage.fromEnvironment(env);
 
-  const beginLeagueMutation = async () => {
-    const syncState = SyncStateStorage.fromEnvironment(env);
-    const mutation = await beginEspnLeagueMutation(
-      durableHistoryEnabledFor(env, clerkUserId)
-        ? EspnHistoryJobStorage.fromEnvironment(env)
-        : null,
-      syncState,
-      clerkUserId
-    );
-    return { syncState, mutation };
-  };
-
-  const settleLeagueMutation = async (
-    syncState: SyncStateStorage,
-    ownerId: string
-  ) => syncState.settle(clerkUserId, 'espn', ownerId, {
-    status: 'skipped',
-    cooldownSeconds: 1,
-    syncSource: 'web',
-  });
-
   if (method === 'POST' || method === 'PUT') {
     const body = (await c.req.json()) as { leagues?: EspnLeague[] };
     const leagues = body?.leagues;
@@ -2233,9 +2241,15 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       }, 400);
     }
 
-    let mutation: Awaited<ReturnType<typeof beginLeagueMutation>>;
+    if (leagues.length > MAX_MANUAL_ESPN_LEAGUE_ROWS) {
+      return c.json({
+        error: `Caller-supplied league replacement is limited to ${MAX_MANUAL_ESPN_LEAGUE_ROWS} rows`
+      }, 400);
+    }
+
+    let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
     try {
-      mutation = await beginLeagueMutation();
+      mutation = await beginLeagueMutationForUser(env, clerkUserId);
     } catch {
       return c.json({ error: 'Failed to fence league replacement' }, 500);
     }
@@ -2243,7 +2257,7 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
     try {
       success = await storage.setLeagues(clerkUserId, leagues);
     } finally {
-      await settleLeagueMutation(mutation.syncState, mutation.mutation.ownerId);
+      await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
     }
 
     if (!success) {
@@ -2301,9 +2315,9 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
     // User deletion wins before, during, and after Workflow handoff. The
     // mutation owner replaces any request/history lease before rows are
     // removed, so every exact-owner refresh write after this point is rejected.
-    let mutation: Awaited<ReturnType<typeof beginLeagueMutation>>;
+    let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
     try {
-      mutation = await beginLeagueMutation();
+      mutation = await beginLeagueMutationForUser(env, clerkUserId);
     } catch {
       return c.json({ error: 'Failed to fence league deletion' }, 500);
     }
@@ -2311,7 +2325,7 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
     try {
       success = await storage.removeLeague(clerkUserId, leagueId, sport);
     } finally {
-      await settleLeagueMutation(mutation.syncState, mutation.mutation.ownerId);
+      await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
     }
 
     if (!success) {
@@ -2450,7 +2464,26 @@ api.post('/leagues/add', async (c) => {
   }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  const result = await storage.addLeague(clerkUserId, body);
+  let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
+  try {
+    mutation = await beginLeagueMutationForUser(c.env, clerkUserId);
+  } catch {
+    return c.json({ error: 'Failed to fence league addition' }, 500);
+  }
+
+  let result: Awaited<ReturnType<typeof storage.addLeague>>;
+  try {
+    const existingLeagues = await storage.getLeagues(clerkUserId);
+    if (existingLeagues.length >= MAX_MANUAL_ESPN_LEAGUE_ROWS) {
+      return c.json({
+        error: `Caller-supplied league storage is limited to ${MAX_MANUAL_ESPN_LEAGUE_ROWS} rows`,
+        code: 'LIMIT_EXCEEDED',
+      }, 400);
+    }
+    result = await storage.addLeague(clerkUserId, body);
+  } finally {
+    await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
+  }
 
   if (!result.success) {
     const statusMap: Record<string, 400 | 409 | 500> = {
@@ -2522,7 +2555,19 @@ api.patch('/leagues/:leagueId/team', async (c) => {
   if (teamName) updates.teamName = teamName;
   if (leagueName) updates.leagueName = leagueName;
 
-  const success = await storage.updateLeague(clerkUserId, leagueId, targetSport, targetSeasonYear, updates);
+  let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
+  try {
+    mutation = await beginLeagueMutationForUser(c.env, clerkUserId);
+  } catch {
+    return c.json({ error: 'Failed to fence team selection' }, 500);
+  }
+
+  let success: boolean;
+  try {
+    success = await storage.updateLeague(clerkUserId, leagueId, targetSport, targetSeasonYear, updates);
+  } finally {
+    await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
+  }
 
   if (!success) {
     return c.json({ error: 'Failed to update team selection' }, 500);
