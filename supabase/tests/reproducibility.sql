@@ -65,8 +65,8 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
-  if actual_count <> 75 then
-    raise exception 'expected 75 public indexes, found %', actual_count;
+  if actual_count <> 76 then
+    raise exception 'expected 76 public indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
