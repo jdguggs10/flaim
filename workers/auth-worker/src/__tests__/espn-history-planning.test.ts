@@ -296,6 +296,39 @@ describe('recoverUnhandledEspnHistoryWorkflowFailure', () => {
     );
   });
 
+  it('preserves a terminal job\'s specific failure metadata while settling its lease', async () => {
+    const storage = {
+      get: vi.fn().mockResolvedValue({
+        ...job('full'),
+        status: 'partial',
+        last_error_code: 'history_partial',
+        last_error_message: 'Some unavailable seasons were skipped.',
+      }),
+      terminal: vi.fn(),
+    };
+    const lease = { settle: vi.fn().mockResolvedValue(true) };
+
+    await recoverUnhandledEspnHistoryWorkflowFailure(
+      storage as never,
+      lease as never,
+      job('full'),
+      'history:job-1'
+    );
+
+    expect(storage.terminal).not.toHaveBeenCalled();
+    expect(lease.settle).toHaveBeenCalledWith(
+      'user-1',
+      'espn',
+      'history:job-1',
+      expect.objectContaining({
+        status: 'error',
+        errorCode: 'history_partial',
+        errorMessage: 'Some unavailable seasons were skipped.',
+      }),
+      { failOnError: true }
+    );
+  });
+
   it('does not report recovery when the terminal fence rejects it', async () => {
     const storage = {
       get: vi.fn().mockResolvedValue(job('full')),

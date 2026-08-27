@@ -523,12 +523,16 @@ export async function recoverUnhandledEspnHistoryWorkflowFailure(
   if (!current) return;
 
   let status = current.status;
+  let errorCode = current.last_error_code ?? undefined;
+  let errorMessage = current.last_error_message ?? undefined;
   if (status === 'queued' || status === 'running') {
+    errorCode = 'workflow_runtime_failed';
+    errorMessage = 'ESPN history refresh stopped unexpectedly. Run sync again.';
     const outcome = await storage.terminal(
       initial.id,
       'failed',
-      'workflow_runtime_failed',
-      'ESPN history refresh stopped unexpectedly. Run sync again.'
+      errorCode,
+      errorMessage
     );
     if (outcome !== 'finished' && outcome !== 'job_not_active') {
       throw new Error(`ESPN history workflow recovery rejected terminal state: ${outcome}`);
@@ -546,10 +550,8 @@ export async function recoverUnhandledEspnHistoryWorkflowFailure(
       ? 1
       : NORMAL_REFRESH_COOLDOWN_SECONDS,
     syncSource: 'web',
-    errorCode: status === 'failed' ? 'workflow_runtime_failed' : undefined,
-    errorMessage: status === 'failed'
-      ? 'ESPN history refresh stopped unexpectedly. Run sync again.'
-      : undefined,
+    errorCode,
+    errorMessage,
     durationMs: initial.started_at
       ? Math.max(0, Date.now() - new Date(initial.started_at).getTime())
       : undefined,
@@ -647,258 +649,258 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
       );
       if (!started) return;
 
-    const job = await step.do(
-      'load started job',
-      { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
-      async () => storage.get(initial.id)
-    );
-    if (!job) return;
-    const credentialsMatch = await step.do(
-      'verify credential snapshot',
-      async () => {
-        const candidate = await storage.credentials(job.clerk_user_id);
-        return candidate?.updatedAt === job.credential_updated_at;
-      }
-    );
-    if (!credentialsMatch) {
-      await finish(
-        'superseded',
-        'credentials_changed',
-        'ESPN credentials changed before history refresh started. Run sync again.'
+      const job = await step.do(
+        'load started job',
+        { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
+        async () => storage.get(initial.id)
       );
-      return;
-    }
-    if (!await lease.extendLease(job.clerk_user_id, 'espn', owner)) {
-      await finish(
-        'cancelled',
-        'history_lease_lost',
-        'The history refresh lost its ownership fence. Run sync again.'
-      );
-      return;
-    }
-
-    // The request writes current rows first. Its current leagues are all that
-    // need history planning; the compact plan remains server-side.
-    const current = await step.do(
-      'load current leagues',
-      async () => Array.isArray(job.current_leagues)
-        ? job.current_leagues
-        : [] as DiscoveredEspnLeague[]
-    );
-
-    let plan: EspnHistoryPlanItem[];
-    try {
-      plan = await step.do(
-        'plan history',
-        { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' }, timeout: '10 minutes' },
+      if (!job) return;
+      const credentialsMatch = await step.do(
+        'verify credential snapshot',
         async () => {
-          const planCredentials = await storage.credentials(job.clerk_user_id);
-          if (!planCredentials || planCredentials.updatedAt !== job.credential_updated_at) {
-            throw new EspnAuthenticationFailed('ESPN credentials changed during history planning');
-          }
-          return buildPlan(
-            storage,
-            job,
-            planCredentials,
-            current,
-            async () => {
-              if (!await lease.extendLease(job.clerk_user_id, 'espn', owner)) return false;
-              const candidate = await storage.credentials(job.clerk_user_id);
-              if (!candidate || candidate.updatedAt !== job.credential_updated_at) {
-                throw new EspnAuthenticationFailed('ESPN credentials changed during history planning');
-              }
-              return true;
-            }
-          );
+          const candidate = await storage.credentials(job.clerk_user_id);
+          return candidate?.updatedAt === job.credential_updated_at;
         }
       );
-    } catch (error) {
-      if (error instanceof HistoryLeaseLostError) {
+      if (!credentialsMatch) {
+        await finish(
+          'superseded',
+          'credentials_changed',
+          'ESPN credentials changed before history refresh started. Run sync again.'
+        );
+        return;
+      }
+      if (!await lease.extendLease(job.clerk_user_id, 'espn', owner)) {
         await finish(
           'cancelled',
           'history_lease_lost',
           'The history refresh lost its ownership fence. Run sync again.'
         );
-      } else if (classifyEspnHistoryUpstreamError(error) === 'auth') {
-        await finish(
-          'superseded',
-          'espn_auth_failed',
-          'ESPN credentials need to be refreshed. Reconnect ESPN and sync again.'
-        );
-      } else {
-        await finish(
-          'failed',
-          'history_plan_failed',
-          'ESPN history planning failed after retries. Run sync again.',
-          true
-        );
-      }
-      return;
-    }
-
-    const storedPlan = await step.do(
-      'store history plan',
-      { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
-      async () => storage.setPlan(job.id, plan)
-    );
-    if (!storedPlan) {
-      await finish(
-        'failed',
-        'history_plan_store_failed',
-        'Unable to store the ESPN history plan. Run sync again.'
-      );
-      return;
-    }
-
-    for (let start = 0; start < plan.length; start += 5) {
-      if (!durableHistoryEnabledFor(this.env, job.clerk_user_id)) {
-        await finish('cancelled', 'history_disabled', 'ESPN history refresh was disabled');
         return;
       }
 
-      let result: HistoryChunkResult;
+      // The request writes current rows first. Its current leagues are all that
+      // need history planning; the compact plan remains server-side.
+      const current = await step.do(
+        'load current leagues',
+        async () => Array.isArray(job.current_leagues)
+          ? job.current_leagues
+          : [] as DiscoveredEspnLeague[]
+      );
+
+      let plan: EspnHistoryPlanItem[];
       try {
-        result = await step.do(
-          `history chunk ${start / 5 + 1}`,
-          { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' }, timeout: '2 minutes' },
-          async (): Promise<HistoryChunkResult> => {
-            const currentCredentials = await storage.credentials(job.clerk_user_id);
-            if (!currentCredentials || currentCredentials.updatedAt !== job.credential_updated_at) {
-              return {
-                stop: {
-                  status: 'superseded',
-                  code: 'credentials_changed',
-                  message: 'ESPN credentials changed during history refresh. Run sync again.',
-                },
-              };
+        plan = await step.do(
+          'plan history',
+          { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' }, timeout: '10 minutes' },
+          async () => {
+            const planCredentials = await storage.credentials(job.clerk_user_id);
+            if (!planCredentials || planCredentials.updatedAt !== job.credential_updated_at) {
+              throw new EspnAuthenticationFailed('ESPN credentials changed during history planning');
             }
+            return buildPlan(
+              storage,
+              job,
+              planCredentials,
+              current,
+              async () => {
+                if (!await lease.extendLease(job.clerk_user_id, 'espn', owner)) return false;
+                const candidate = await storage.credentials(job.clerk_user_id);
+                if (!candidate || candidate.updatedAt !== job.credential_updated_at) {
+                  throw new EspnAuthenticationFailed('ESPN credentials changed during history planning');
+                }
+                return true;
+              }
+            );
+          }
+        );
+      } catch (error) {
+        if (error instanceof HistoryLeaseLostError) {
+          await finish(
+            'cancelled',
+            'history_lease_lost',
+            'The history refresh lost its ownership fence. Run sync again.'
+          );
+        } else if (classifyEspnHistoryUpstreamError(error) === 'auth') {
+          await finish(
+            'superseded',
+            'espn_auth_failed',
+            'ESPN credentials need to be refreshed. Reconnect ESPN and sync again.'
+          );
+        } else {
+          await finish(
+            'failed',
+            'history_plan_failed',
+            'ESPN history planning failed after retries. Run sync again.',
+            true
+          );
+        }
+        return;
+      }
 
-            for (let index = start; index < Math.min(start + 5, plan.length); index++) {
-              const progress = await storage.progress(job.id);
-              if (!progress) throw new Error('Unable to read ESPN history progress');
-              if (progress.status !== 'running') {
+      const storedPlan = await step.do(
+        'store history plan',
+        { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
+        async () => storage.setPlan(job.id, plan)
+      );
+      if (!storedPlan) {
+        await finish(
+          'failed',
+          'history_plan_store_failed',
+          'Unable to store the ESPN history plan. Run sync again.'
+        );
+        return;
+      }
+
+      for (let start = 0; start < plan.length; start += 5) {
+        if (!durableHistoryEnabledFor(this.env, job.clerk_user_id)) {
+          await finish('cancelled', 'history_disabled', 'ESPN history refresh was disabled');
+          return;
+        }
+
+        let result: HistoryChunkResult;
+        try {
+          result = await step.do(
+            `history chunk ${start / 5 + 1}`,
+            { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' }, timeout: '2 minutes' },
+            async (): Promise<HistoryChunkResult> => {
+              const currentCredentials = await storage.credentials(job.clerk_user_id);
+              if (!currentCredentials || currentCredentials.updatedAt !== job.credential_updated_at) {
                 return {
                   stop: {
-                    status: 'cancelled',
-                    code: 'history_job_not_active',
-                    message: 'The ESPN history job is no longer active.',
-                  },
-                };
-              }
-              // A Workflow step may retry after the RPC committed but before
-              // the runtime observed the response. Never refetch that season.
-              if (progress.cursor > index) continue;
-              if (progress.cursor < index) {
-                return {
-                  stop: {
-                    status: 'failed',
-                    code: 'history_cursor_out_of_order',
-                    message: 'The ESPN history cursor is out of order.',
-                  },
-                };
-              }
-              if (!await lease.extendLease(job.clerk_user_id, 'espn', owner)) {
-                return {
-                  stop: {
-                    status: 'cancelled',
-                    code: 'history_lease_lost',
-                    message: 'The history refresh lost its ownership fence. Run sync again.',
+                    status: 'superseded',
+                    code: 'credentials_changed',
+                    message: 'ESPN credentials changed during history refresh. Run sync again.',
                   },
                 };
               }
 
-              const item = plan[index];
-              let historicalInfo;
-              let teams;
-              try {
-                const platformYear = toPlatformYear(item.seasonYear, item.sport, 'espn');
-                historicalInfo = await getLeagueInfo(
-                  currentCredentials.swid,
-                  currentCredentials.s2,
-                  item.leagueId,
-                  platformYear,
-                  item.gameId
-                );
-                teams = await getLeagueTeams(
-                  currentCredentials.swid,
-                  currentCredentials.s2,
-                  item.leagueId,
-                  platformYear,
-                  item.gameId
-                );
-              } catch (error) {
-                const failureClass = classifyEspnHistoryUpstreamError(error);
-                if (failureClass === 'auth') {
+              for (let index = start; index < Math.min(start + 5, plan.length); index++) {
+                const progress = await storage.progress(job.id);
+                if (!progress) throw new Error('Unable to read ESPN history progress');
+                if (progress.status !== 'running') {
                   return {
                     stop: {
-                      status: 'superseded',
-                      code: 'espn_auth_failed',
-                      message: 'ESPN credentials need to be refreshed. Reconnect ESPN and sync again.',
+                      status: 'cancelled',
+                      code: 'history_job_not_active',
+                      message: 'The ESPN history job is no longer active.',
                     },
                   };
                 }
-                if (failureClass === 'retryable') throw error;
-                const outcome = await storage.advance(index, job, 'fail', undefined, {
-                  code: 'season_unavailable',
-                  message: error instanceof Error ? error.message : 'Historical season is unavailable',
+                // A Workflow step may retry after the RPC committed but before
+                // the runtime observed the response. Never refetch that season.
+                if (progress.cursor > index) continue;
+                if (progress.cursor < index) {
+                  return {
+                    stop: {
+                      status: 'failed',
+                      code: 'history_cursor_out_of_order',
+                      message: 'The ESPN history cursor is out of order.',
+                    },
+                  };
+                }
+                if (!await lease.extendLease(job.clerk_user_id, 'espn', owner)) {
+                  return {
+                    stop: {
+                      status: 'cancelled',
+                      code: 'history_lease_lost',
+                      message: 'The history refresh lost its ownership fence. Run sync again.',
+                    },
+                  };
+                }
+
+                const item = plan[index];
+                let historicalInfo;
+                let teams;
+                try {
+                  const platformYear = toPlatformYear(item.seasonYear, item.sport, 'espn');
+                  historicalInfo = await getLeagueInfo(
+                    currentCredentials.swid,
+                    currentCredentials.s2,
+                    item.leagueId,
+                    platformYear,
+                    item.gameId
+                  );
+                  teams = await getLeagueTeams(
+                    currentCredentials.swid,
+                    currentCredentials.s2,
+                    item.leagueId,
+                    platformYear,
+                    item.gameId
+                  );
+                } catch (error) {
+                  const failureClass = classifyEspnHistoryUpstreamError(error);
+                  if (failureClass === 'auth') {
+                    return {
+                      stop: {
+                        status: 'superseded',
+                        code: 'espn_auth_failed',
+                        message: 'ESPN credentials need to be refreshed. Reconnect ESPN and sync again.',
+                      },
+                    };
+                  }
+                  if (failureClass === 'retryable') throw error;
+                  const outcome = await storage.advance(index, job, 'fail', undefined, {
+                    code: 'season_unavailable',
+                    message: error instanceof Error ? error.message : 'Historical season is unavailable',
+                  });
+                  const stop = stopForHistoryAdvanceOutcome(outcome);
+                  if (stop) return { stop };
+                  continue;
+                }
+
+                const team = teams.find(candidate => candidate.teamId === item.teamId);
+                if (!team) {
+                  const outcome = await storage.advance(index, job, 'skip');
+                  const stop = stopForHistoryAdvanceOutcome(outcome);
+                  if (stop) return { stop };
+                  continue;
+                }
+
+                const outcome = await storage.advance(index, job, 'persist', {
+                  ...item,
+                  leagueName: historicalInfo.leagueName || item.leagueName,
+                  teamName: team.teamName || item.teamName,
                 });
                 const stop = stopForHistoryAdvanceOutcome(outcome);
                 if (stop) return { stop };
-                continue;
               }
-
-              const team = teams.find(candidate => candidate.teamId === item.teamId);
-              if (!team) {
-                const outcome = await storage.advance(index, job, 'skip');
-                const stop = stopForHistoryAdvanceOutcome(outcome);
-                if (stop) return { stop };
-                continue;
-              }
-
-              const outcome = await storage.advance(index, job, 'persist', {
-                ...item,
-                leagueName: historicalInfo.leagueName || item.leagueName,
-                teamName: team.teamName || item.teamName,
-              });
-              const stop = stopForHistoryAdvanceOutcome(outcome);
-              if (stop) return { stop };
+              return {};
             }
-            return {};
-          }
-        );
-      } catch {
+          );
+        } catch {
+          await finish(
+            'failed',
+            'history_chunk_retries_exhausted',
+            'ESPN history refresh failed after retries. Run sync again.',
+            true
+          );
+          return;
+        }
+
+        if (result.stop) {
+          await finish(result.stop.status, result.stop.code, result.stop.message);
+          return;
+        }
+      }
+
+      const completed = await step.do('load completed job', async () => storage.progress(job.id));
+      if (!completed || completed.cursor !== plan.length || completed.planned_count !== plan.length) {
         await finish(
           'failed',
-          'history_chunk_retries_exhausted',
-          'ESPN history refresh failed after retries. Run sync again.',
-          true
+          'history_incomplete',
+          'ESPN history refresh stopped before all planned seasons were processed.'
         );
         return;
       }
-
-      if (result.stop) {
-        await finish(result.stop.status, result.stop.code, result.stop.message);
+      if (completed.failed_count > 0) {
+        await finish(
+          'partial',
+          'history_partial',
+          'ESPN history refreshed, but some unavailable seasons were skipped.'
+        );
         return;
       }
-    }
-
-    const completed = await step.do('load completed job', async () => storage.progress(job.id));
-    if (!completed || completed.cursor !== plan.length || completed.planned_count !== plan.length) {
-      await finish(
-        'failed',
-        'history_incomplete',
-        'ESPN history refresh stopped before all planned seasons were processed.'
-      );
-      return;
-    }
-    if (completed.failed_count > 0) {
-      await finish(
-        'partial',
-        'history_partial',
-        'ESPN history refreshed, but some unavailable seasons were skipped.'
-      );
-      return;
-    }
       await finish('succeeded');
     } catch (error) {
       await step.do(
