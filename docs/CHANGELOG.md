@@ -10,6 +10,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: The first background scan repairs all historical seasons ESPN still makes available. Later refreshes use the same button but skip league-season rows already stored, so routine team-name and current-season updates do not re-fetch immutable history.
 - **Changed**: ESPN league storage now uses keyset pagination instead of a fixed 100-row read, so accounts with more than 100 league-season rows are not silently truncated. The public MCP `refresh_leagues` path remains synchronous while its advertised contract is under directory review.
 - **Changed**: Server-verified discovery can store complete ESPN history, while caller-supplied league replacement and addition routes retain a separate 1,000-row abuse boundary. Team selection, manual addition, replacement, deletion, and credential changes all take over the ESPN write lease before changing saved rows.
+- **Fixed**: Unexpected background workflow failures now mark the affected history job failed and release its ESPN refresh lease, so a rare infrastructure error cannot leave future syncs blocked behind a permanently running job.
 
 ### Resend API Key Hygiene (FLA-296)
 
