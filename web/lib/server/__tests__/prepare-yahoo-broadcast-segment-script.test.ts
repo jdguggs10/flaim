@@ -15,6 +15,7 @@ import {
   populateSegmentAdditions,
   selectYahooCohort,
   validateApplyGuards,
+  validateFinalSegmentMembership,
   verifyFinalSegmentState,
 } from "../../../scripts/prepare-yahoo-broadcast-segment.mjs";
 
@@ -170,6 +171,26 @@ describe("prepare Yahoo Broadcast Segment script helpers", () => {
       eligibleContacts: [{ contactId: "eligible", email: "fan@example.com" }],
       segmentContacts: [{ id: "foreign" }],
     })).toThrow("outside the reviewed eligible cohort");
+  });
+
+  it("requires final Segment membership to match the eligible cohort exactly", () => {
+    const eligibleContacts = [
+      { contactId: "contact-1", email: "first@example.com" },
+      { contactId: "contact-2", email: "second@example.com" },
+    ];
+
+    expect(() => validateFinalSegmentMembership({
+      eligibleContacts,
+      segmentContacts: [{ id: "contact-1" }, { id: "contact-2" }],
+    })).not.toThrow();
+    expect(() => validateFinalSegmentMembership({
+      eligibleContacts,
+      segmentContacts: [{ id: "contact-1" }],
+    })).toThrow("membership mismatch");
+    expect(() => validateFinalSegmentMembership({
+      eligibleContacts,
+      segmentContacts: [{ id: "contact-1" }, { id: "contact-2" }, { id: "contact-2" }],
+    })).toThrow("membership mismatch");
   });
 
   it("paginates Supabase through an exact page-size boundary", async () => {

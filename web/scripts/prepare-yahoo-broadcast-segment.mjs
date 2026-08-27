@@ -370,6 +370,13 @@ export function planSegmentAdditions({ eligibleContacts, segmentContacts }) {
   };
 }
 
+export function validateFinalSegmentMembership({ eligibleContacts, segmentContacts }) {
+  const plan = planSegmentAdditions({ eligibleContacts, segmentContacts });
+  if (plan.additions.length !== 0 || segmentContacts.length !== eligibleContacts.length) {
+    throw new Error("membership mismatch");
+  }
+}
+
 export function buildSummary({ cohort, clerk, resend, segment = null }) {
   return {
     cohort: { ...cohort },
@@ -669,16 +676,10 @@ async function main() {
         limit: args.resendLimit,
       });
       validateApplyGuards(args, finalEligibility.eligibleContacts.length);
-      const finalPlan = planSegmentAdditions({
+      validateFinalSegmentMembership({
         eligibleContacts: finalEligibility.eligibleContacts,
         segmentContacts: refreshedContacts,
       });
-      if (
-        finalPlan.additions.length !== 0 ||
-        refreshedContacts.length !== finalEligibility.eligibleContacts.length
-      ) {
-        throw new Error("membership mismatch");
-      }
       return {
         eligibleContacts: finalEligibility.eligibleContacts,
         finalContacts: refreshedContacts,
