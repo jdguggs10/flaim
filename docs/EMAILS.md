@@ -245,10 +245,12 @@ either provider:
 corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
 ```
 
-It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`, where the
-Resend key has read access to Suppressions. The command is always read-only,
-and has no write mode. Any suppression removal must be reviewed and performed
-manually in Resend after the underlying delivery problem is resolved.
+It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`. Resend does
+not offer a read-only API-key permission, so this dedicated credential requires
+Full access even though it is restricted in practice to this trusted local
+workflow. The command itself is always read-only and has no write mode. Any
+suppression removal must be reviewed and performed manually in Resend after the
+underlying delivery problem is resolved.
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 
