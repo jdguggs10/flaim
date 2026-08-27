@@ -121,14 +121,14 @@ describe('POST /api/leagues/refresh', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const responsePromise = POST(makeRequest({ platforms: ['espn'] }));
-    await vi.advanceTimersByTimeAsync(15_000);
+    await vi.advanceTimersByTimeAsync(30_000);
     const response = await responsePromise;
     const body = await response.json();
 
     expect(response.status).toBe(504);
     expect(body).toEqual({
       error: 'refresh_timeout',
-      error_description: 'League refresh timed out after 15 seconds',
+      error_description: 'League refresh timed out after 30 seconds',
     });
   });
 });

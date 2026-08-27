@@ -127,13 +127,13 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 
 ### Refresh cooldown envelope
 
-League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider.
+League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider. Web and extension ESPN refreshes transfer that lease to a Cloudflare Workflow after current leagues are stored; the workflow discovers historical league-seasons in restartable chunks and records progress in `espn_history_jobs`. MCP-triggered refresh remains synchronous.
 
 - When **every** requested provider is cooling down, refresh endpoints return `429 refresh_cooldown` with a `retry_after` field and a `Retry-After` header.
 - Partially blocked refreshes return `200` with per-provider results; a blocked provider carries `error: "refresh_cooldown"`, `httpStatus: 429`, and `retryAfter` (seconds, as a string).
 - Providers skipped for missing credentials do not incur a cooldown.
 - Each provider refresh emits one structured `provider_sync` log line (provider, masked user, source, status, duration, league count, error code, retry seconds, correlation id), queryable in Workers Logs by the `event` field.
-- The envelope fails open: storage errors never block a refresh.
+- The normal request envelope fails open on telemetry storage errors. Durable ESPN history job creation, lease transfer, and fenced progress writes fail closed so a background scan cannot continue without an owned job and lease.
 
 ### Scheduled rollover reconciliation (dry-run)
 

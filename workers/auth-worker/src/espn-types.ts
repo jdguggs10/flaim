@@ -248,7 +248,7 @@ export class EspnLeagueNotFound extends Error {
 }
 
 export class EspnApiError extends Error {
-  constructor(message: string = 'ESPN API error') {
+  constructor(message: string = 'ESPN API error', public readonly status?: number) {
     super(message);
     this.name = 'EspnApiError';
   }

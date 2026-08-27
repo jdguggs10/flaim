@@ -11,6 +11,8 @@ import {
   getSetupState,
   setSetupState,
   clearSetupState,
+  getEspnHistoryState,
+  setEspnHistoryState,
   type SeasonCounts,
 } from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
@@ -19,7 +21,9 @@ import {
   checkStatus,
   getSiteBase,
   discoverLeagues,
+  getEspnHistoryStatus,
   type DiscoveredLeague,
+  type EspnHistoryStatus,
 } from '../lib/api';
 
 // Simplified state machine
@@ -108,6 +112,21 @@ function checkmark(value: boolean | null): string {
   return value ? '✓' : '–';
 }
 
+function isHistoryInProgress(history: EspnHistoryStatus | null): boolean {
+  return history?.state === 'queued' || history?.state === 'running';
+}
+
+function getHistoryMessage(history: EspnHistoryStatus): string {
+  if (history.state === 'queued') return 'Current leagues are synced. ESPN history is queued.';
+  if (history.state === 'running') return 'Current leagues are synced. ESPN history is continuing.';
+  if (history.state === 'partial') return 'Some ESPN history could not be indexed. Re-sync later to retry it.';
+  if (history.state === 'failed') return 'ESPN history could not be indexed. Re-sync later to retry it.';
+  if (history.state === 'superseded' || history.state === 'cancelled') {
+    return 'ESPN history stopped after your connection changed. Re-sync to start again.';
+  }
+  return 'ESPN history is up to date.';
+}
+
 export default function Popup() {
   // Clerk auth hooks
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -134,6 +153,7 @@ export default function Popup() {
   const [supportCopied, setSupportCopied] = useState(false);
   const [hasEspnCookies, setHasEspnCookies] = useState<boolean | null>(null);
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
+  const [espnHistory, setEspnHistory] = useState<EspnHistoryStatus | null>(null);
 
   const userId = user?.id ?? null;
 
@@ -162,6 +182,8 @@ export default function Popup() {
     const init = async () => {
       // Check for saved setup state (popup close recovery)
       const savedSetup = await getSetupState();
+      const savedHistory = await getEspnHistoryState();
+      setEspnHistory(savedHistory);
 
       try {
         const info = await chrome.management.getSelf();
@@ -203,6 +225,9 @@ export default function Popup() {
           const status = await checkStatus(token);
           setHasCredentials(status.hasCredentials);
           setLastSync(status.lastSync ?? null);
+          const history = await getEspnHistoryStatus(token);
+          setEspnHistory(history);
+          await setEspnHistoryState(history);
         }
         setState('ready');
       } catch {
@@ -213,6 +238,27 @@ export default function Popup() {
 
     init();
   }, [isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    if (!isHistoryInProgress(espnHistory) || !isLoaded || !isSignedIn) return;
+    let isActive = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token) return;
+        const history = await getEspnHistoryStatus(token);
+        if (!isActive) return;
+        setEspnHistory(history);
+        await setEspnHistoryState(history);
+      } catch {
+        // Keep the last persisted status and retry next time the popup opens.
+      }
+    }, 5_000);
+    return () => {
+      isActive = false;
+      window.clearTimeout(timer);
+    };
+  }, [espnHistory, isLoaded, isSignedIn]);
 
   // Handle full setup flow (sync + discover)
   const handleFullSetup = async () => {
@@ -270,6 +316,8 @@ export default function Popup() {
         currentSeason: result.currentSeason,
         pastSeasons: result.pastSeasons,
       });
+      setEspnHistory(result.history ?? null);
+      await setEspnHistoryState(result.history ?? null);
 
       // Complete setup
       setState('setup_complete');
@@ -312,6 +360,9 @@ export default function Popup() {
         const status = await checkStatus(token);
         setHasCredentials(status.hasCredentials);
         setLastSync(status.lastSync ?? null);
+        const history = await getEspnHistoryStatus(token);
+        setEspnHistory(history);
+        await setEspnHistoryState(history);
       }
       setState('ready');
     } catch (err) {
@@ -495,6 +546,7 @@ export default function Popup() {
             ) : (
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
+            {espnHistory && <div className="message info">{getHistoryMessage(espnHistory)}</div>}
             <button
               className="button primary full-width"
               onClick={handleFullSetup}
@@ -541,6 +593,7 @@ export default function Popup() {
 
         {state === 'setup_complete' && (
           <div className="content">
+            {espnHistory && <div className="message info">{getHistoryMessage(espnHistory)}</div>}
             {discoveredLeagues.length > 0 && (
               <>
                 <div className="message info">

@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       discovered?: unknown[];
       currentSeason?: unknown;
       pastSeasons?: unknown;
+      history?: unknown;
     } | null;
 
     if (
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
       discovered: data.discovered,
       currentSeason: data.currentSeason,
       pastSeasons: data.pastSeasons,
+      ...(data.history !== undefined ? { history: data.history } : {}),
     });
   } catch (error) {
     console.error('Extension discover route error:', error);

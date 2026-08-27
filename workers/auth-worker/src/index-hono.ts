@@ -22,7 +22,7 @@
  */
 
 import { Hono, Context } from 'hono';
-import { EspnSupabaseStorage, MAX_LEAGUES_PER_USER } from './supabase-storage';
+import { EspnSupabaseStorage } from './supabase-storage';
 import { EspnCredentials, EspnLeague, AutomaticLeagueDiscoveryFailed } from './espn-types';
 import {
   handleMetadataDiscovery,
@@ -47,9 +47,13 @@ import {
 } from './extension-handlers';
 import {
   discoverAndSaveLeagues,
+  discoverAndSaveCurrentLeagues,
   type DiscoveredLeague,
   type CurrentSeasonLeague,
 } from './v3/league-discovery';
+import { EspnHistoryRefreshWorkflow as EspnHistoryRefreshWorkflowBase, EspnHistoryJobStorage, durableHistoryEnabledFor, publicHistoryStatus, startQueuedEspnHistoryJob } from './espn-history';
+// Wrangler resolves Workflow named entrypoints from this module itself.
+export class EspnHistoryRefreshWorkflow extends EspnHistoryRefreshWorkflowBase {}
 import {
   handleYahooAuthorize,
   handleYahooCallback,
@@ -120,6 +124,9 @@ export interface Env {
   RECONCILIATION_PROVIDERS?: string;        // csv allowlist, default 'espn,sleeper'
   RECONCILIATION_SPORTS?: string;           // csv allowlist, default 'football'
   RECONCILIATION_TIMEOUT_BUDGET_MS?: string;
+  ESPN_DURABLE_HISTORY_ENABLED?: string;
+  ESPN_DURABLE_HISTORY_USERS?: string;
+  ESPN_HISTORY_REFRESH: { create(options: { id: string; params: { jobId: string } }): Promise<{ id: string }> };
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
@@ -1053,6 +1060,15 @@ api.get('/extension/connection', async (c) => {
   return handleGetConnection(c.env as ExtensionEnv, userId, getCorsHeaders(c.req.raw));
 });
 
+// Narrow caller-owned durable-history status. The plan, credentials, and
+// rollout allowlist never leave the worker.
+api.get('/history/espn', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  const job = await EspnHistoryJobStorage.fromEnvironment(c.env).latestForUser(userId);
+  return c.json({ history: publicHistoryStatus(job) });
+});
+
 // Discover and save leagues (requires Clerk JWT)
 api.post('/extension/discover', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
@@ -1096,6 +1112,26 @@ api.post('/extension/discover', async (c) => {
     });
   }
 
+  // A duplicate extension click must surface the caller-owned durable job,
+  // not the provider lease's generic 429. MCP never reaches this branch.
+  if (durableHistoryEnabledFor(c.env, userId)) {
+    const activeJob = await EspnHistoryJobStorage.fromEnvironment(c.env).activeForUser(userId);
+    if (activeJob) {
+      const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
+      const currentSeasonWithDefault: CurrentSeasonLeague[] = currentSeasonLeagues.map(l => ({
+        sport: l.sport, leagueId: l.leagueId, leagueName: l.leagueName || '', teamId: l.teamId || '', teamName: l.teamName || '', seasonYear: l.seasonYear || 0,
+      }));
+      return c.json({
+        discovered: currentSeasonWithDefault,
+        currentSeasonLeagues: currentSeasonWithDefault,
+        currentSeason: { found: currentSeasonWithDefault.length, added: 0, alreadySaved: currentSeasonWithDefault.length, refreshed: 0 },
+        pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+        added: 0, skipped: currentSeasonWithDefault.length, refreshed: 0, historical: 0, historicalRefreshed: 0,
+        history: publicHistoryStatus(activeJob),
+      });
+    }
+  }
+
   // Single-flight + cooldown envelope (FLA-121). Acquired after the
   // credentials check so credential-less calls never burn a cooldown.
   const syncState = SyncStateStorage.fromEnvironment(c.env);
@@ -1120,6 +1156,7 @@ api.post('/extension/discover', async (c) => {
     }, 429, { 'Retry-After': String(lease.retryAfterSeconds) });
   }
   const startedAt = Date.now();
+  let transferredHistoryOwner: string | null = null;
 
   const settleDiscover = async (
     status: 'success' | 'error',
@@ -1154,13 +1191,49 @@ api.post('/extension/discover', async (c) => {
   };
 
   try {
-    // Run discovery (includes historical seasons, fully synchronous)
-    const result = await discoverAndSaveLeagues(
-      userId,
-      credentials.swid,
-      credentials.s2,
-      storage
-    );
+    const useDurableHistory = durableHistoryEnabledFor(c.env, userId);
+    const result = useDurableHistory
+      ? await discoverAndSaveCurrentLeagues(userId, credentials.swid, credentials.s2, storage)
+      : await discoverAndSaveLeagues(userId, credentials.swid, credentials.s2, storage);
+
+    const savedLeagues = result.savedLeagues ?? [];
+    const pastSeasons = 'pastSeasons' in result ? result.pastSeasons : { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+    if (useDurableHistory && savedLeagues.length !== result.currentSeason.found) {
+      await settleDiscover('error', { errorCode: 'current_league_save_failed', errorMessage: 'Unable to save current ESPN leagues', httpStatus: 500 });
+      return c.json({ error: 'current_league_save_failed', error_description: 'Unable to save current ESPN leagues' }, 500);
+    }
+
+    let history = null;
+    if (useDurableHistory && savedLeagues.length > 0) {
+      const historyStorage = EspnHistoryJobStorage.fromEnvironment(c.env);
+      const credentialSnapshot = await historyStorage.credentials(userId);
+      if (!credentialSnapshot) throw new Error('ESPN credentials changed during refresh');
+      const queued = await historyStorage.createOrCoalesce(userId, credentialSnapshot.updatedAt);
+      if (queued.created) {
+        if (!await historyStorage.setCurrentLeagues(queued.job.id, savedLeagues)) {
+          await historyStorage.terminal(
+            queued.job.id,
+            'failed',
+            'job_context_failed',
+            'Unable to store current ESPN leagues for history refresh'
+          );
+          throw new Error('Unable to store ESPN history job context');
+        }
+        const historyOwner = `history:${queued.job.id}`;
+        if (!await syncState.transferLease(userId, 'espn', ownerId, historyOwner)) {
+          await historyStorage.terminal(
+            queued.job.id,
+            'failed',
+            'history_lease_transfer_failed',
+            'Unable to transfer the ESPN history lease'
+          );
+          throw new Error('Unable to transfer ESPN history lease');
+        }
+        transferredHistoryOwner = historyOwner;
+      }
+      const started = await startQueuedEspnHistoryJob(c.env, queued);
+      history = publicHistoryStatus(started.job);
+    }
 
     // Get current season leagues for default dropdown
     const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
@@ -1179,12 +1252,13 @@ api.post('/extension/discover', async (c) => {
       discovered: result.discovered,
       currentSeasonLeagues: currentSeasonWithDefault,
       currentSeason: result.currentSeason,
-      pastSeasons: result.pastSeasons,
+      pastSeasons,
       added: result.currentSeason.added,
       skipped: result.currentSeason.alreadySaved,
       refreshed: result.currentSeason.refreshed,
-      historical: result.pastSeasons.added,
-      historicalRefreshed: result.pastSeasons.refreshed,
+      historical: pastSeasons.added,
+      historicalRefreshed: pastSeasons.refreshed,
+      ...(history ? { history } : {}),
     });
 
   } catch (error) {
@@ -1242,6 +1316,21 @@ api.post('/extension/discover', async (c) => {
       auth_type: 'clerk',
     });
 
+    if (transferredHistoryOwner) {
+      await syncState.settle(userId, 'espn', transferredHistoryOwner, {
+        status: 'error',
+        cooldownSeconds: cooldownSecondsForResult({
+          platform: 'espn',
+          status: 'error',
+          httpStatus: isAuthError ? 401 : 500,
+          error_description: errorMessage,
+        }),
+        syncSource: 'extension',
+        errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
+        errorMessage,
+        durationMs: Date.now() - startedAt,
+      });
+    }
     await settleDiscover('error', {
       errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
       errorMessage,
@@ -2088,12 +2177,6 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       }, 400);
     }
 
-    if (leagues.length > MAX_LEAGUES_PER_USER) {
-      return c.json({
-        error: `Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`
-      }, 400);
-    }
-
     const success = await storage.setLeagues(clerkUserId, leagues);
 
     if (!success) {
@@ -2291,7 +2374,6 @@ api.post('/leagues/add', async (c) => {
   if (!result.success) {
     const statusMap: Record<string, 400 | 409 | 500> = {
       'DUPLICATE': 409,
-      'LIMIT_EXCEEDED': 400,
       'DB_ERROR': 500
     };
     const status = result.code ? statusMap[result.code] || 500 : 500;

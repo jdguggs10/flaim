@@ -102,6 +102,9 @@ interface LeagueRefreshProviderResult {
   error?: string;
   error_description?: string;
   retryAfter?: string;
+  details?: {
+    history?: EspnHistoryStatus | null;
+  };
 }
 
 interface LeagueRefreshResponse {
@@ -109,6 +112,18 @@ interface LeagueRefreshResponse {
   results?: Partial<Record<'espn' | 'yahoo' | 'sleeper', LeagueRefreshProviderResult>>;
   error?: string;
   error_description?: string;
+}
+
+interface EspnHistoryStatus {
+  jobId: string;
+  state: 'queued' | 'running' | 'succeeded' | 'partial' | 'failed' | 'superseded' | 'cancelled';
+  counts: {
+    planned: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
+  retryable: boolean;
 }
 
 type Sport = 'football' | 'baseball' | 'basketball' | 'hockey';
@@ -168,6 +183,27 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
 };
 const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 60;
 const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
+const ESPN_HISTORY_STATUS_POLL_MS = 5_000;
+
+function isEspnHistoryInProgress(history: EspnHistoryStatus | null): boolean {
+  return history?.state === 'queued' || history?.state === 'running';
+}
+
+function getEspnHistoryNotice(history: EspnHistoryStatus): string {
+  if (isEspnHistoryInProgress(history)) {
+    return 'Current leagues are synced. ESPN history is continuing in the background.';
+  }
+  if (history.state === 'partial') {
+    return 'Some ESPN history could not be indexed. Use Sync all later to retry it.';
+  }
+  if (history.state === 'failed') {
+    return 'ESPN history could not be indexed. Use Sync all later to retry it.';
+  }
+  if (history.state === 'superseded' || history.state === 'cancelled') {
+    return 'ESPN history refresh stopped after your connection changed. Use Sync all to start again.';
+  }
+  return 'ESPN history is up to date.';
+}
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -465,6 +501,7 @@ function LeaguesPageContent() {
   const [isLoadingLeagues, setIsLoadingLeagues] = useState(true);
   const [leagueError, setLeagueError] = useState<string | null>(null);
   const [leagueNotice, setLeagueNotice] = useState<string | null>(null);
+  const [espnHistory, setEspnHistory] = useState<EspnHistoryStatus | null>(null);
   const [deletingLeagueKey, setDeletingLeagueKey] = useState<string | null>(null);
   const [settingDefaultKey, setSettingDefaultKey] = useState<string | null>(null);
   const [isPlatformsSectionOpen, setIsPlatformsSectionOpen] = useState(true);
@@ -499,6 +536,7 @@ function LeaguesPageContent() {
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
   const currentUserIdRef = useRef<string | null>(null);
+  const espnHistoryWasActiveRef = useRef(false);
   // Device class resolves after mount so SSR and hydration render identically.
   const [deviceClass, setDeviceClass] = useState<DeviceClass | null>(null);
   const [setupLinkState, setSetupLinkState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
@@ -603,6 +641,8 @@ function LeaguesPageContent() {
     setSleeperError(null);
     setLeagueError(null);
     setLeagueNotice(null);
+    setEspnHistory(null);
+    espnHistoryWasActiveRef.current = false;
     setIsDiscoveringYahoo(false);
     setIsReconnectingYahoo(false);
     setIsYahooDisconnecting(false);
@@ -750,6 +790,55 @@ function LeaguesPageContent() {
       if (showSpinner && canApplyState(shouldApply)) setIsLoadingLeagues(false);
     }
   }, []);
+
+  const loadEspnHistoryStatus = useCallback(async (shouldApply?: () => boolean) => {
+    try {
+      const response = await fetch('/api/espn/history', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json().catch(() => null) as { history?: EspnHistoryStatus | null } | null;
+      if (data && canApplyState(shouldApply)) {
+        setEspnHistory(data.history ?? null);
+      }
+    } catch (error) {
+      console.error('Failed to load ESPN history status:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId) return;
+    let isActive = true;
+    void loadEspnHistoryStatus(() => isActive);
+    return () => {
+      isActive = false;
+    };
+  }, [isLoaded, isSignedIn, loadEspnHistoryStatus, userId]);
+
+  useEffect(() => {
+    if (!espnHistory) return;
+    const active = isEspnHistoryInProgress(espnHistory);
+    if (active) {
+      espnHistoryWasActiveRef.current = true;
+      setLeagueNotice(getEspnHistoryNotice(espnHistory));
+      let isActive = true;
+      const timer = window.setTimeout(() => {
+        void loadEspnHistoryStatus(() => isActive);
+      }, ESPN_HISTORY_STATUS_POLL_MS);
+      return () => {
+        isActive = false;
+        window.clearTimeout(timer);
+      };
+    }
+
+    const wasActive = espnHistoryWasActiveRef.current;
+    if (wasActive || espnHistory.state !== 'succeeded') {
+      setLeagueNotice(getEspnHistoryNotice(espnHistory));
+    }
+    if (wasActive) {
+      espnHistoryWasActiveRef.current = false;
+      const shouldApply = createAccountGuard();
+      void loadLeagues({ showSpinner: false, shouldApply });
+    }
+  }, [createAccountGuard, espnHistory, loadEspnHistoryStatus, loadLeagues]);
 
   const checkYahooStatus = useCallback(async (shouldApply?: () => boolean): Promise<ConnectionStatusResult> => {
     try {
@@ -929,6 +1018,12 @@ function LeaguesPageContent() {
         throw new Error(summarizeLeagueRefresh(data));
       }
 
+      const history = data.results?.espn?.details?.history;
+      if (history) {
+        setEspnHistory(history);
+        espnHistoryWasActiveRef.current = isEspnHistoryInProgress(history);
+      }
+
       setIsCheckingYahoo(true);
       setIsCheckingSleeper(true);
       await Promise.allSettled([
@@ -940,7 +1035,7 @@ function LeaguesPageContent() {
       ]);
 
       if (shouldApply()) {
-        setLeagueNotice(summarizeLeagueRefresh(data));
+        setLeagueNotice(history ? getEspnHistoryNotice(history) : summarizeLeagueRefresh(data));
       }
     } catch (err) {
       if (shouldApply()) {

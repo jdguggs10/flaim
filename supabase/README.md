@@ -65,6 +65,8 @@ docker cp supabase/tests/token_rpc.sql supabase_db_flaim:/tmp/token_rpc.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/token_rpc.sql
 docker cp supabase/tests/provider_flags.sql supabase_db_flaim:/tmp/provider_flags.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/provider_flags.sql
+docker cp supabase/tests/espn_history_jobs.sql supabase_db_flaim:/tmp/espn_history_jobs.sql
+docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/espn_history_jobs.sql
 bash supabase/tests/cutover_guard.sh
 corepack pnpm exec supabase db lint --local --schema public,analytics --level warning --fail-on error
 corepack pnpm exec supabase db advisors --local --type security --level warn --fail-on error

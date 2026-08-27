@@ -4,7 +4,7 @@
  * Wrapper for chrome.storage.local API to persist setup state.
  */
 
-import type { DiscoveredLeague, SeasonCounts } from './api';
+import type { DiscoveredLeague, EspnHistoryStatus, SeasonCounts } from './api';
 export type { SeasonCounts };
 
 // =============================================================================
@@ -12,6 +12,7 @@ export type { SeasonCounts };
 // =============================================================================
 
 const SETUP_STATE_KEY = 'flaim_setup_state';
+const ESPN_HISTORY_STATE_KEY = 'flaim_espn_history_state';
 
 export type SetupStep =
   | 'idle'
@@ -49,4 +50,17 @@ export async function setSetupState(state: SetupState): Promise<void> {
  */
 export async function clearSetupState(): Promise<void> {
   await chrome.storage.local.remove(SETUP_STATE_KEY);
+}
+
+export async function getEspnHistoryState(): Promise<EspnHistoryStatus | null> {
+  const result = await chrome.storage.local.get(ESPN_HISTORY_STATE_KEY);
+  return result[ESPN_HISTORY_STATE_KEY] || null;
+}
+
+export async function setEspnHistoryState(history: EspnHistoryStatus | null): Promise<void> {
+  if (history) {
+    await chrome.storage.local.set({ [ESPN_HISTORY_STATE_KEY]: history });
+  } else {
+    await chrome.storage.local.remove(ESPN_HISTORY_STATE_KEY);
+  }
 }

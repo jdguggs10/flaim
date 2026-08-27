@@ -9,13 +9,15 @@ Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and
 3. Log into ESPN.com (if not already)
 4. Click "Sync to Flaim" - the extension will:
    - Sync your ESPN credentials
-   - Auto-discover all your leagues (including past seasons) via ESPN Fan API
-   - Show discovery results with granular counts (new vs already saved)
+   - Auto-discover current leagues via ESPN Fan API
+   - Continue past-season discovery in the background, even after the popup closes
+   - Show current discovery results and background history status
 5. Manage leagues and set defaults at `flaim.app/leagues`
 
 **Automation boundaries**
 - The extension runs ESPN discovery when you click **Sync / Re-sync**.
 - You can also use **Sync all** in Your Leagues to refresh connected platforms.
+- The first history scan repairs every available past season. Later refreshes skip league-season rows that are already stored.
 
 ## Development
 
@@ -69,8 +71,9 @@ Extension Popup → Clerk Sync Host → POST /api/extension/sync → Auth Worker
 ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 ```
 
-**Discovery note**: League discovery uses ESPN's Fan API with a normalized
-`{SWID}` and ESPN-recommended headers; this reduces calls to a single request.
+**Discovery note**: Current league discovery uses ESPN's Fan API with a normalized
+`{SWID}` and ESPN-recommended headers; this reduces the initial discovery to a
+single request. Historical seasons then continue in a durable background workflow.
 
 ### Sync Host Flow
 
@@ -85,7 +88,8 @@ All routes go through Next.js proxy (`/api/extension/*`) to auth-worker:
 | Endpoint | Auth | Rate Limit | Purpose |
 |----------|------|------------|---------|
 | `POST /extension/sync` | Clerk JWT | None | Sync ESPN credentials |
-| `POST /extension/discover` | Clerk JWT | None | Discover and save leagues (v1.1) |
+| `POST /extension/discover` | Clerk JWT | None | Save current leagues and start historical discovery |
+| `GET /extension/history` | Clerk JWT | None | Read historical discovery status |
 | `GET /extension/status` | Clerk JWT | None | Check connection status |
 | `GET /extension/connection` | Clerk | None | Web UI status check |
 

@@ -18,14 +18,7 @@ import { isCurrentSeason, type SeasonSport } from './season-utils';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
 
-/**
- * Per-user cap on stored league rows. Each league-season is one row, so a
- * user with a few leagues and several seasons of history accumulates rows
- * quickly — this is a runaway-sync guard, not a product limit. Raised from
- * 10 (July 2026) after season rollover silently failed for multi-season
- * users whose historical rows had consumed the cap.
- */
-export const MAX_LEAGUES_PER_USER = 100;
+const LEAGUE_PAGE_SIZE = 500;
 
 /**
  * Mask user ID for logging to avoid PII exposure
@@ -104,6 +97,21 @@ export class EspnSupabaseStorage {
         throw new Error('Missing required parameters: clerkUserId, swid, s2');
       }
 
+      // A durable history job fences every write to the credential snapshot's
+      // updated_at. Re-syncing identical cookies must not invalidate that job.
+      // Email metadata is allowed to change without rotating the ESPN cookie
+      // snapshot; only a real cookie change advances updated_at.
+      const { data: existing, error: readError } = await this.supabase
+        .from('espn_credentials')
+        .select('swid, s2, updated_at')
+        .eq('clerk_user_id', clerkUserId)
+        .maybeSingle();
+      if (readError) {
+        console.error('Supabase error reading existing credentials:', readError);
+        return false;
+      }
+
+      const credentialsUnchanged = existing?.swid === swid && existing?.s2 === s2;
       const { error } = await this.supabase
         .from('espn_credentials')
         .upsert(
@@ -112,7 +120,9 @@ export class EspnSupabaseStorage {
             swid,
             s2,
             email,
-            updated_at: new Date().toISOString()
+            updated_at: credentialsUnchanged && existing.updated_at
+              ? existing.updated_at
+              : new Date().toISOString()
           },
           { onConflict: 'clerk_user_id' }
         );
@@ -312,10 +322,6 @@ export class EspnSupabaseStorage {
     try {
       if (!clerkUserId) return false;
 
-      if (leagues.length > MAX_LEAGUES_PER_USER) {
-        throw new Error(`Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`);
-      }
-
       // First, delete existing leagues for this user
       await this.supabase
         .from('espn_leagues')
@@ -363,17 +369,24 @@ export class EspnSupabaseStorage {
    *   'exclude-hidden'   — drop only 'hidden' (get_ancient_history view)
    */
   async getLeagues(clerkUserId: string, archived: ArchivedFilter = 'include-all'): Promise<EspnLeague[]> {
-    let rawRows: { league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[] = [];
+    let rawRows: { id: number; league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[] = [];
     try {
       if (!clerkUserId) return [];
 
-      const { data, error } = await this.supabase
-        .from('espn_leagues')
-        .select('league_id, sport, team_id, team_name, league_name, season_year')
-        .eq('clerk_user_id', clerkUserId);
-
-      if (error || !data) return [];
-      rawRows = data;
+      let afterId = 0;
+      while (true) {
+        const { data, error } = await this.supabase
+          .from('espn_leagues')
+          .select('id, league_id, sport, team_id, team_name, league_name, season_year')
+          .eq('clerk_user_id', clerkUserId)
+          .gt('id', afterId)
+          .order('id', { ascending: true })
+          .limit(LEAGUE_PAGE_SIZE);
+        if (error || !data) return [];
+        rawRows.push(...data);
+        if (data.length < LEAGUE_PAGE_SIZE) break;
+        afterId = data[data.length - 1].id;
+      }
     } catch (error) {
       console.error('Failed to retrieve ESPN leagues:', error);
       return [];
@@ -461,34 +474,8 @@ export class EspnSupabaseStorage {
    * Add a single league to user's collection
    * Returns result object with success flag and optional error code
    */
-  async addLeague(clerkUserId: string, league: EspnLeague): Promise<{ success: boolean; code?: 'DUPLICATE' | 'LIMIT_EXCEEDED' | 'DB_ERROR'; error?: string }> {
+  async addLeague(clerkUserId: string, league: EspnLeague): Promise<{ success: boolean; code?: 'DUPLICATE' | 'DB_ERROR'; error?: string }> {
     try {
-      const existingLeagues = await this.getLeagues(clerkUserId);
-
-      // Check for duplicates (including seasonYear for multi-season support)
-      const isDuplicate = existingLeagues.some(
-        existing => existing.leagueId === league.leagueId
-          && existing.sport === league.sport
-          && existing.seasonYear === league.seasonYear
-      );
-
-      if (isDuplicate) {
-        return {
-          success: false,
-          code: 'DUPLICATE',
-          error: `League ${league.leagueId} for ${league.sport} season ${league.seasonYear} already exists`
-        };
-      }
-
-      // Check league limit
-      if (existingLeagues.length >= MAX_LEAGUES_PER_USER) {
-        return {
-          success: false,
-          code: 'LIMIT_EXCEEDED',
-          error: `Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`
-        };
-      }
-
       const { error } = await this.supabase
         .from('espn_leagues')
         .insert({
@@ -502,6 +489,15 @@ export class EspnSupabaseStorage {
         });
 
       if (error) {
+        // PostgreSQL unique_violation. Supabase/PostgREST returns this stable
+        // code without requiring an unbounded pre-read of the user's history.
+        if (error.code === '23505') {
+          return {
+            success: false,
+            code: 'DUPLICATE',
+            error: `League ${league.leagueId} for ${league.sport} season ${league.seasonYear} already exists`,
+          };
+        }
         console.error('Supabase error adding league:', error);
         return { success: false, code: 'DB_ERROR', error: 'Database error' };
       }

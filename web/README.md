@@ -64,6 +64,8 @@ Note: `/chat` redirects to `/#live-demo` (legacy URL support).
 
 Most API routes proxy to auth-worker. See `docs/ARCHITECTURE.md` for the full flow.
 
+`/api/leagues/refresh` saves current ESPN league metadata before returning and starts historical season discovery in the auth-worker's durable background workflow. `/api/espn/history` exposes the signed-in user's latest background status so Your Leagues can poll without keeping the original refresh request open.
+
 ## Season Years
 
 Leagues are stored per season year. The `/leagues` UI defaults the season year based on America/New_York time:

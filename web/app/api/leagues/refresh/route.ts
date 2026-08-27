@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
-const LEAGUE_REFRESH_TIMEOUT_MS = 15_000;
+const LEAGUE_REFRESH_TIMEOUT_MS = 30_000;
 
 /**
  * POST /api/leagues/refresh
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Error && error.name === 'AbortError') {
       return NextResponse.json({
         error: 'refresh_timeout',
-        error_description: 'League refresh timed out after 15 seconds',
+        error_description: 'League refresh timed out after 30 seconds',
       }, { status: 504 });
     }
     console.error('League refresh route error:', error);
