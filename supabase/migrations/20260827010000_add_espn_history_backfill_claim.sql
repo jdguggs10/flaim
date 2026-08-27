@@ -36,16 +36,16 @@ begin
 
   -- Release only the history lease belonging to a stale scheduled job.
   with stale as (
-    update public.espn_history_jobs
+    update public.espn_history_jobs as jobs
     set status = 'failed', last_error_code = 'scheduled_backfill_stalled',
         last_error_message = 'Scheduled ESPN history claim did not start or renew.',
         finished_at = now(), updated_at = now()
-    where trigger_source = 'scheduled_backfill'
+    where jobs.trigger_source = 'scheduled_backfill'
       and (
-        (status = 'queued' and updated_at < now() - interval '10 minutes')
-        or (status = 'running' and updated_at < now() - interval '1 hour')
+        (jobs.status = 'queued' and jobs.updated_at < now() - interval '10 minutes')
+        or (jobs.status = 'running' and jobs.updated_at < now() - interval '1 hour')
       )
-    returning id, clerk_user_id
+    returning jobs.id, jobs.clerk_user_id
   )
   update public.provider_sync_state state
   set sync_lease_owner = null, sync_lease_expires_at = null, updated_at = now()
@@ -178,7 +178,7 @@ begin
     ) values (
       v_candidate.clerk_user_id, 'espn', 'history:' || v_job_id::text,
       now() + interval '120 seconds', now(), 'scheduled', now()
-    ) on conflict (clerk_user_id, provider) do nothing;
+    ) on conflict on constraint provider_sync_state_pkey do nothing;
     if not found then
       perform 1 from public.provider_sync_state state
       where state.clerk_user_id = v_candidate.clerk_user_id and state.provider = 'espn'
@@ -190,11 +190,11 @@ begin
       ) then
         raise exception using errcode = 'P0001', message = 'lease_busy';
       end if;
-      update public.provider_sync_state
+      update public.provider_sync_state as state
       set sync_lease_owner = 'history:' || v_job_id::text,
           sync_lease_expires_at = now() + interval '120 seconds', last_attempt_at = now(),
           last_sync_source = 'scheduled', updated_at = now()
-      where clerk_user_id = v_candidate.clerk_user_id and provider = 'espn';
+      where state.clerk_user_id = v_candidate.clerk_user_id and state.provider = 'espn';
     end if;
     insert into public.espn_history_jobs (
       id, clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, current_leagues
