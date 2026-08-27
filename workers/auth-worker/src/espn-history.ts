@@ -15,6 +15,8 @@ export const ESPN_HISTORY_RUNNING_STALE_MS = 60 * 60_000;
 
 export type EspnHistoryJobStatus = 'queued' | 'running' | 'succeeded' | 'partial' | 'failed' | 'superseded' | 'cancelled';
 export type EspnHistoryMode = 'full' | 'incremental';
+export type EspnHistoryTriggerSource = 'user' | 'scheduled_backfill';
+export type EspnHistoryBackfillMode = 'off' | 'allowlist' | 'all';
 export type EspnHistoryUpstreamClass = 'auth' | 'permanent' | 'retryable';
 
 export function classifyEspnHistoryUpstreamError(error: unknown): EspnHistoryUpstreamClass {
@@ -69,6 +71,7 @@ export interface EspnHistoryJob {
   credential_updated_at: string;
   scan_version: number;
   mode: EspnHistoryMode;
+  trigger_source: EspnHistoryTriggerSource;
   current_leagues: DiscoveredEspnLeague[];
   plan: EspnHistoryPlanItem[];
   cursor: number;
@@ -85,11 +88,26 @@ export interface EspnHistoryJob {
   updated_at: string;
 }
 
+export type EspnHistoryClaimedJob = Pick<
+  EspnHistoryJob,
+  'id' | 'clerk_user_id' | 'workflow_instance_id'
+>;
+
+class EspnHistoryBackfillClaimError extends Error {
+  constructor(readonly code: string | undefined, message: string | undefined) {
+    super(message || 'Unable to claim an ESPN history backfill job');
+    this.name = 'EspnHistoryBackfillClaimError';
+  }
+}
+
 export interface EspnHistoryEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
   ESPN_DURABLE_HISTORY_ENABLED?: string;
   ESPN_DURABLE_HISTORY_USERS?: string;
+  ESPN_HISTORY_BACKFILL_MODE?: string;
+  ESPN_HISTORY_BACKFILL_USERS?: string;
+  ESPN_HISTORY_BACKFILL_LEGACY_CUTOFF?: string;
   ESPN_HISTORY_REFRESH: { create(options: { id: string; params: { jobId: string } }): Promise<{ id: string }> };
 }
 
@@ -139,6 +157,40 @@ export function durableHistoryEnabledFor(env: Pick<EspnHistoryEnv, 'ESPN_DURABLE
   if (env.ESPN_DURABLE_HISTORY_ENABLED !== 'true') return false;
   // The allowlist is a private environment value. Do not log it or its size.
   return (env.ESPN_DURABLE_HISTORY_USERS ?? '').split(',').map(value => value.trim()).includes(userId);
+}
+
+export function parseEspnHistoryBackfillMode(value: string | undefined): EspnHistoryBackfillMode {
+  return value === 'allowlist' || value === 'all' ? value : 'off';
+}
+
+export function parseEspnHistoryBackfillUsers(value: string | undefined): string[] {
+  return [...new Set((value ?? '').split(',').map(entry => entry.trim()).filter(Boolean))];
+}
+
+export function scheduledBackfillEnabledFor(
+  env: Pick<EspnHistoryEnv, 'ESPN_HISTORY_BACKFILL_MODE' | 'ESPN_HISTORY_BACKFILL_USERS'>,
+  userId: string
+): boolean {
+  const mode = parseEspnHistoryBackfillMode(env.ESPN_HISTORY_BACKFILL_MODE);
+  if (mode === 'all') return true;
+  if (mode !== 'allowlist') return false;
+  return parseEspnHistoryBackfillUsers(env.ESPN_HISTORY_BACKFILL_USERS).includes(userId);
+}
+
+export function historyJobExecutionEnabled(
+  env: Pick<
+    EspnHistoryEnv,
+    'ESPN_DURABLE_HISTORY_ENABLED' | 'ESPN_DURABLE_HISTORY_USERS' | 'ESPN_HISTORY_BACKFILL_MODE' | 'ESPN_HISTORY_BACKFILL_USERS'
+  >,
+  job: Pick<EspnHistoryJob, 'clerk_user_id' | 'trigger_source'>
+): boolean {
+  return job.trigger_source === 'scheduled_backfill'
+    ? scheduledBackfillEnabledFor(env, job.clerk_user_id)
+    : durableHistoryEnabledFor(env, job.clerk_user_id);
+}
+
+function historyJobSyncSource(job: Pick<EspnHistoryJob, 'trigger_source'>): 'web' | 'scheduled' {
+  return job.trigger_source === 'scheduled_backfill' ? 'scheduled' : 'web';
 }
 
 export function publicHistoryStatus(job: EspnHistoryJob | null) {
@@ -307,6 +359,41 @@ export class EspnHistoryJobStorage {
     throw new Error('Unable to coalesce ESPN history job');
   }
 
+  async claimNextBackfill(legacyCutoff: string, allowedUsers: string[] | null): Promise<EspnHistoryClaimedJob | null> {
+    const { data, error } = await this.supabase.rpc('claim_next_espn_history_backfill_job', {
+      p_scan_version: ESPN_HISTORY_SCAN_VERSION,
+      p_legacy_cutoff: legacyCutoff,
+      p_allowed_users: allowedUsers,
+    });
+    if (error) throw new EspnHistoryBackfillClaimError(error.code, error.message);
+    const row = (Array.isArray(data) ? data[0] : data) as {
+      outcome?: unknown;
+      job_id?: unknown;
+      clerk_user_id?: unknown;
+      current_leagues?: unknown;
+    } | null;
+    if (!row || typeof row.outcome !== 'string') {
+      throw new Error('Invalid ESPN history backfill claim response');
+    }
+    if (row.outcome === 'none' || row.outcome === 'busy' || row.outcome === 'lease_busy') {
+      return null;
+    }
+    if (
+      row.outcome !== 'claimed'
+      || typeof row.job_id !== 'string'
+      || typeof row.clerk_user_id !== 'string'
+      || !Array.isArray(row.current_leagues)
+      || row.current_leagues.length === 0
+    ) {
+      throw new Error(`ESPN history backfill claim refused: ${row.outcome}`);
+    }
+    return {
+      id: row.job_id,
+      clerk_user_id: row.clerk_user_id,
+      workflow_instance_id: null,
+    };
+  }
+
   async setWorkflowInstance(id: string, workflowInstanceId: string): Promise<boolean> {
     const { data, error } = await this.supabase.from('espn_history_jobs').update({ workflow_instance_id: workflowInstanceId, updated_at: new Date().toISOString() })
       .eq('id', id).is('workflow_instance_id', null).select('id');
@@ -393,7 +480,10 @@ export class EspnHistoryJobStorage {
   }
 }
 
-export async function startQueuedEspnHistoryJob(env: EspnHistoryEnv, result: { job: EspnHistoryJob; created: boolean }): Promise<{ job: EspnHistoryJob; created: boolean }> {
+export async function startQueuedEspnHistoryJob<T extends Pick<EspnHistoryJob, 'id' | 'workflow_instance_id'>>(
+  env: EspnHistoryEnv,
+  result: { job: T; created: boolean }
+): Promise<{ job: T; created: boolean }> {
   const storage = EspnHistoryJobStorage.fromEnvironment(env);
   if (!result.created || result.job.workflow_instance_id) return result;
   const workflowId = `espn-history-${result.job.id}`;
@@ -525,7 +615,7 @@ export async function beginEspnLeagueMutation(
 export async function recoverUnhandledEspnHistoryWorkflowFailure(
   storage: Pick<EspnHistoryJobStorage, 'get' | 'terminal'>,
   lease: Pick<SyncStateStorage, 'settle'>,
-  initial: Pick<EspnHistoryJob, 'id' | 'clerk_user_id' | 'started_at'>,
+  initial: Pick<EspnHistoryJob, 'id' | 'clerk_user_id' | 'started_at' | 'trigger_source'>,
   owner: string
 ): Promise<void> {
   const current = await storage.get(initial.id);
@@ -562,7 +652,7 @@ export async function recoverUnhandledEspnHistoryWorkflowFailure(
       : upstreamBackoff
         ? UPSTREAM_BACKOFF_COOLDOWN_SECONDS
         : NORMAL_REFRESH_COOLDOWN_SECONDS,
-    syncSource: 'web',
+    syncSource: historyJobSyncSource(initial),
     errorCode,
     errorMessage,
     durationMs: initial.started_at
@@ -655,7 +745,7 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
             : upstreamBackoff
               ? UPSTREAM_BACKOFF_COOLDOWN_SECONDS
               : NORMAL_REFRESH_COOLDOWN_SECONDS,
-          syncSource: 'web',
+          syncSource: historyJobSyncSource(initial),
           errorCode: effectiveCode,
           errorMessage: effectiveMessage,
           durationMs: initial.started_at
@@ -666,7 +756,7 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
     };
 
     try {
-      if (!durableHistoryEnabledFor(this.env, initial.clerk_user_id)) {
+      if (!historyJobExecutionEnabled(this.env, initial)) {
         await finish('cancelled', 'history_disabled', 'ESPN history refresh is disabled');
         return;
       }
@@ -781,7 +871,7 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
       }
 
       for (let start = 0; start < plan.length; start += 5) {
-        if (!durableHistoryEnabledFor(this.env, job.clerk_user_id)) {
+        if (!historyJobExecutionEnabled(this.env, job)) {
           await finish('cancelled', 'history_disabled', 'ESPN history refresh was disabled');
           return;
         }

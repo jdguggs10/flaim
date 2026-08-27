@@ -89,6 +89,7 @@ import { logSyncEnvelope, SyncStateStorage } from './sync-state';
 import { handleWebSetupSignal } from './signal-handlers';
 import { runReconciliation } from './reconciliation';
 import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } from './sleeper-recurring-backfill';
+import { runEspnHistoryBackfill } from './espn-history-backfill';
 
 // =============================================================================
 // TYPES
@@ -126,6 +127,9 @@ export interface Env {
   RECONCILIATION_TIMEOUT_BUDGET_MS?: string;
   ESPN_DURABLE_HISTORY_ENABLED?: string;
   ESPN_DURABLE_HISTORY_USERS?: string;
+  ESPN_HISTORY_BACKFILL_MODE?: string;
+  ESPN_HISTORY_BACKFILL_USERS?: string;
+  ESPN_HISTORY_BACKFILL_LEGACY_CUTOFF?: string;
   ESPN_HISTORY_REFRESH: { create(options: { id: string; params: { jobId: string } }): Promise<{ id: string }> };
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
@@ -907,6 +911,20 @@ api.post('/internal/reconciliation/run', async (c) => {
   const summary = await runReconciliation(c.env, 'manual');
   const refused = summary.outcome === 'disabled' || summary.outcome === 'refused_not_dry_run';
   return c.json(summary, refused ? 409 : 200);
+});
+
+// Manual trigger for the paced legacy ESPN history migration. This uses the
+// same default-off mode, fixed cohort cutoff, atomic claim, and global pacing
+// as the cron path. It can start at most one prepared Workflow job.
+api.post('/internal/backfill/espn-history', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const summary = await runEspnHistoryBackfill(c.env, 'manual');
+  const refused = summary.outcome === 'disabled' || summary.outcome === 'refused';
+  return c.json(summary, summary.outcome === 'failed' ? 500 : refused ? 409 : 200);
 });
 
 // One-off backfill for Sleeper recurring_league_id (FLA-168). Service-token
@@ -2668,11 +2686,30 @@ app.route('/', api);
 app.route('/auth', api);
 app.route('/auth-preview', api);
 
+export async function runScheduledAuthWorkerTask(
+  controller: { cron?: string },
+  env: Env
+): Promise<unknown> {
+  if (controller.cron === '17 10 * * *') {
+    return runReconciliation(env, 'cron');
+  }
+  if (controller.cron === '*/5 * * * *') {
+    return runEspnHistoryBackfill(env, 'cron');
+  }
+  console.log(JSON.stringify({
+    event: 'auth_worker_scheduled_task',
+    service: 'auth-worker',
+    status: 'ignored',
+    reason: 'unknown_cron',
+  }));
+  return undefined;
+}
+
 // Module-worker export: keep `fetch` behavior identical to the bare Hono app
-// and add the cron entry point for scheduled reconciliation (FLA-161).
+// and explicitly route each cron to its own default-off task.
 export default {
   fetch: app.fetch,
-  scheduled(_controller: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): void {
-    ctx.waitUntil(runReconciliation(env, 'cron'));
+  scheduled(controller: { cron?: string }, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): void {
+    ctx.waitUntil(runScheduledAuthWorkerTask(controller, env));
   },
 };

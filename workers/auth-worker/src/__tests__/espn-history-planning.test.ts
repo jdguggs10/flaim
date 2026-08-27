@@ -17,6 +17,7 @@ import {
   ESPN_HISTORY_RUNNING_STALE_MS,
   ensureEspnHistoryJobStarted,
   historyKey,
+  historyJobExecutionEnabled,
   isMissingEspnHistoryTableError,
   recoverUnhandledEspnHistoryWorkflowFailure,
   reconcileStaleRunningEspnHistoryJob,
@@ -46,6 +47,7 @@ function job(mode: 'full' | 'incremental'): EspnHistoryJob {
     credential_updated_at: '2026-08-26T20:00:00.000Z',
     scan_version: 1,
     mode,
+    trigger_source: 'user',
     current_leagues: [currentLeague],
     plan: [],
     cursor: 0,
@@ -125,6 +127,35 @@ describe('ESPN history planning', () => {
       vi.fn().mockResolvedValue(false),
     )).rejects.toThrow('lease lost during planning');
     expect(mockGetLeagueInfo).not.toHaveBeenCalled();
+  });
+});
+
+describe('ESPN history execution gates', () => {
+  it('keeps interactive and scheduled rollout controls independent', () => {
+    const interactive = job('full');
+    const scheduled = { ...interactive, trigger_source: 'scheduled_backfill' as const };
+
+    expect(historyJobExecutionEnabled({
+      ESPN_DURABLE_HISTORY_ENABLED: 'true',
+      ESPN_DURABLE_HISTORY_USERS: 'user-1',
+      ESPN_HISTORY_BACKFILL_MODE: 'off',
+    }, interactive)).toBe(true);
+    expect(historyJobExecutionEnabled({
+      ESPN_DURABLE_HISTORY_ENABLED: 'true',
+      ESPN_DURABLE_HISTORY_USERS: 'user-1',
+      ESPN_HISTORY_BACKFILL_MODE: 'off',
+    }, scheduled)).toBe(false);
+
+    expect(historyJobExecutionEnabled({
+      ESPN_DURABLE_HISTORY_ENABLED: 'false',
+      ESPN_HISTORY_BACKFILL_MODE: 'allowlist',
+      ESPN_HISTORY_BACKFILL_USERS: 'user-1',
+    }, scheduled)).toBe(true);
+    expect(historyJobExecutionEnabled({
+      ESPN_DURABLE_HISTORY_ENABLED: 'false',
+      ESPN_HISTORY_BACKFILL_MODE: 'allowlist',
+      ESPN_HISTORY_BACKFILL_USERS: 'user-2',
+    }, scheduled)).toBe(false);
   });
 });
 
@@ -241,6 +272,30 @@ describe('beginEspnLeagueMutation', () => {
 });
 
 describe('recoverUnhandledEspnHistoryWorkflowFailure', () => {
+  it('reports scheduled telemetry for a proactive job', async () => {
+    const scheduled = { ...job('full'), trigger_source: 'scheduled_backfill' as const };
+    const storage = {
+      get: vi.fn().mockResolvedValue(scheduled),
+      terminal: vi.fn().mockResolvedValue('finished'),
+    };
+    const lease = { settle: vi.fn().mockResolvedValue(true) };
+
+    await recoverUnhandledEspnHistoryWorkflowFailure(
+      storage as never,
+      lease as never,
+      scheduled,
+      'history:job-1'
+    );
+
+    expect(lease.settle).toHaveBeenCalledWith(
+      'user-1',
+      'espn',
+      'history:job-1',
+      expect.objectContaining({ syncSource: 'scheduled' }),
+      { failOnError: true }
+    );
+  });
+
   it('terminalizes an active job and releases its provider lease', async () => {
     const storage = {
       get: vi.fn().mockResolvedValue(job('full')),

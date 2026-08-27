@@ -71,11 +71,16 @@ NODE_ENV=production|development
 OAUTH_CLIENT_REGISTRATION_SIGNING_KEY=optional-stable-secret
 ESPN_DURABLE_HISTORY_ENABLED=false
 ESPN_DURABLE_HISTORY_USERS=user_...[,user_...]
+ESPN_HISTORY_BACKFILL_MODE=off|allowlist|all
+ESPN_HISTORY_BACKFILL_USERS=user_...[,user_...]
+ESPN_HISTORY_BACKFILL_LEGACY_CUTOFF=2026-08-27T12:00:00.000Z
 ```
 
 Use a dedicated stable `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` for preview and production before depending on confidential MCP clients. If it is omitted, auth-worker falls back to `SUPABASE_SERVICE_KEY`; rotating that key also invalidates existing confidential client registrations.
 
 Durable ESPN history is rollout-gated and default-off. Set `ESPN_DURABLE_HISTORY_ENABLED=true` only with `ESPN_DURABLE_HISTORY_USERS` populated by an exact, comma-separated Clerk user ID allowlist. Leaving either unset or false keeps web and extension ESPN refreshes on the synchronous path; MCP refresh remains synchronous regardless.
+
+The separate legacy-account migration is also default-off. `ESPN_HISTORY_BACKFILL_MODE=allowlist` limits claims to `ESPN_HISTORY_BACKFILL_USERS`; `all` covers the fixed legacy cohort. Either enabled mode also requires `ESPN_HISTORY_BACKFILL_LEGACY_CUTOFF`, which selects only accounts with saved ESPN league roots created on or before that timestamp. Do not reuse the interactive durable-history allowlist for this migration.
 
 ### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`, `sleeper-client`)
 
@@ -132,6 +137,23 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 ### Refresh cooldown envelope
 
 League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider. When durable ESPN history is enabled for an allowlisted user, web and extension refreshes transfer that lease to a Cloudflare Workflow after current leagues are stored; the workflow discovers historical league-seasons in restartable chunks and records progress in `espn_history_jobs`. Request-time league writes require the exact current lease owner. Changing or removing ESPN credentials, or deleting or replacing saved ESPN leagues, takes over that lease before changing rows. Other web and extension refreshes, and all MCP-triggered refreshes, remain synchronous.
+
+### Paced legacy ESPN history backfill
+
+The auth worker can proactively repair legacy ESPN accounts without waiting for
+a user to revisit Flaim. A five-minute cron invokes an atomic service-role
+claim that prepares at most one eligible `scheduled_backfill` job. The database
+enforces one globally active scheduled job, minimum spacing, retry limits,
+credential-version fencing, provider cooldowns, and a fixed legacy cutoff.
+Accounts without saved ESPN league roots are not claimed because Flaim cannot
+safely infer which leagues belong to them.
+
+The committed configuration stays `off`. Roll out with `allowlist` first, then
+switch to `all` only after inspecting job and provider-error aggregates. Turning
+the mode back to `off` stops new claims and cancels scheduled jobs at the next
+workflow checkpoint without changing interactive refresh behavior. A manual
+service-token trigger is available at `POST /auth/internal/backfill/espn-history`;
+it uses the same gates and can start no more than one job.
 
 - When **every** requested provider is cooling down, refresh endpoints return `429 refresh_cooldown` with a `retry_after` field and a `Retry-After` header.
 - Partially blocked refreshes return `200` with per-provider results; a blocked provider carries `error: "refresh_cooldown"`, `httpStatus: 429`, and `retryAfter` (seconds, as a string).
