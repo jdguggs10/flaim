@@ -394,7 +394,10 @@ async function fetchJson(fetcher, url, options, label, delayFn = delay) {
     const body = await response.json().catch(() => null);
     if (response.status === 429) {
       if (attempt >= 3) throw new Error(`${label} remained rate limited`);
-      const retryAfterSeconds = Number(response.headers?.get?.("retry-after"));
+      const retryAfterHeader = response.headers?.get?.("retry-after");
+      const retryAfterSeconds = typeof retryAfterHeader === "string" && retryAfterHeader.trim()
+        ? Number(retryAfterHeader)
+        : Number.NaN;
       const retryDelay = Number.isFinite(retryAfterSeconds)
         ? Math.max(retryAfterSeconds * 1000, DEFAULT_DELAY_MS)
         : DEFAULT_DELAY_MS * (attempt + 1);

@@ -247,7 +247,7 @@ describe("prepare Yahoo Broadcast Segment script helpers", () => {
       url: new URL("https://example.supabase.co/rest/v1/yahoo_leagues"),
     })).rejects.toThrow("Supabase list remained rate limited");
 
-    expect(delayFn).toHaveBeenCalledTimes(3);
+    expect(delayFn.mock.calls).toEqual([[550], [1100], [1650]]);
     expect(fetcher).toHaveBeenCalledTimes(4);
   });
 
