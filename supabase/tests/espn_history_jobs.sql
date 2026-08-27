@@ -38,6 +38,11 @@ begin
     raise exception 'anon league persist RPC unexpectedly succeeded';
   exception when insufficient_privilege then null;
   end;
+  begin
+    perform public.claim_next_espn_history_backfill_job(1, now(), null);
+    raise exception 'anon scheduled claim RPC unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
 end $anon_denials$;
 
 reset role;
@@ -72,6 +77,11 @@ begin
       null, null, null, null, null, null, null, null
     );
     raise exception 'authenticated RPC unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.claim_next_espn_history_backfill_job(1, now(), null);
+    raise exception 'authenticated scheduled claim RPC unexpectedly succeeded';
   exception when insufficient_privilege then null;
   end;
 end $authenticated_denials$;
@@ -115,6 +125,17 @@ begin
     'execute'
   ) then
     raise exception 'service role advance RPC access missing';
+  end if;
+  if has_function_privilege(
+    'anon',
+    'public.claim_next_espn_history_backfill_job(integer,timestamp with time zone,text[])',
+    'execute'
+  ) or not has_function_privilege(
+    'service_role',
+    'public.claim_next_espn_history_backfill_job(integer,timestamp with time zone,text[])',
+    'execute'
+  ) then
+    raise exception 'scheduled claim RPC ACL invalid';
   end if;
   if has_function_privilege(
     'anon',
@@ -572,6 +593,139 @@ begin
   end if;
 end $proof$;
 
+do $scheduled_claim_guards$
+declare
+  v_outcome text;
+  v_job uuid;
+  v_snapshot timestamptz;
+begin
+  -- Malformed-only roots do not enter the cohort or overflow season conversion.
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_invalid_year', 'swid', 's2', now());
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_invalid_year', '400', 'basketball', '1', 2147483647, now() - interval '2 days');
+  select outcome into v_outcome
+  from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_invalid_year']);
+  if v_outcome <> 'none' then raise exception 'invalid-only season root was eligible: %', v_outcome; end if;
+
+  -- A completed full marker excludes the account even after credentials rotate.
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_marker', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_marker', '401', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, status, finished_at)
+  values ('claim_marker', v_snapshot, 41, 'full', 'succeeded', now() - interval '2 days');
+  update public.espn_credentials set updated_at = now() + interval '1 second'
+  where clerk_user_id = 'claim_marker';
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_marker']);
+  if v_outcome <> 'none' then raise exception 'completed marker was not excluded: %', v_outcome; end if;
+
+  -- A live provider lease excludes an otherwise valid candidate.
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_live_lease', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_live_lease', '402', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.provider_sync_state (clerk_user_id, provider, sync_lease_owner, sync_lease_expires_at)
+  values ('claim_live_lease', 'espn', 'refresh:other', now() + interval '1 hour');
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_live_lease']);
+  if v_outcome <> 'none' then raise exception 'active provider lease was not excluded: %', v_outcome; end if;
+
+  -- Three non-control scheduled attempts exhaust this exact credential version.
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_attempt_cap', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_attempt_cap', '403', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
+  select 'claim_attempt_cap', v_snapshot, 41, 'full', 'scheduled_backfill', 'failed', 'season_failed', now() - interval '2 days', now() - interval '2 days'
+  from generate_series(1, 3);
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_attempt_cap']);
+  if v_outcome <> 'none' then raise exception 'three-attempt cap was not enforced: %', v_outcome; end if;
+
+  -- Auth failures and supersession park the snapshot even after their normal retry window.
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_auth_parked', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_auth_parked', '404', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
+  values ('claim_auth_parked', v_snapshot, 41, 'full', 'scheduled_backfill', 'failed', 'auth_failed', now() - interval '2 days', now() - interval '2 days');
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_auth_parked']);
+  if v_outcome <> 'none' then raise exception 'auth failure did not park snapshot: %', v_outcome; end if;
+
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_superseded', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_superseded', '405', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, created_at, finished_at)
+  values ('claim_superseded', v_snapshot, 41, 'full', 'scheduled_backfill', 'superseded', now() - interval '2 days', now() - interval '2 days');
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_superseded']);
+  if v_outcome <> 'none' then raise exception 'supersession did not park snapshot: %', v_outcome; end if;
+
+  -- Ordinary terminal failures wait 24h; history_disabled cancellations are controls, not retries.
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_recent_failure', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_recent_failure', '406', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
+  values ('claim_recent_failure', v_snapshot, 41, 'full', 'scheduled_backfill', 'failed', 'season_failed', now() - interval '2 days', now() - interval '1 hour');
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_recent_failure']);
+  if v_outcome <> 'none' then raise exception 'recent ordinary failure was retried: %', v_outcome; end if;
+
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_disabled_control', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_disabled_control', '407', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
+  select 'claim_disabled_control', v_snapshot, 41, 'full', 'scheduled_backfill', 'cancelled', 'history_disabled', now() - interval '2 days', now() - interval '1 hour'
+  from generate_series(1, 3);
+  select outcome, job_id into v_outcome, v_job from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_disabled_control']);
+  if v_outcome <> 'claimed' then raise exception 'history_disabled controls exhausted retries: %', v_outcome; end if;
+  update public.espn_history_jobs set status = 'cancelled', last_error_code = 'history_disabled', created_at = now() - interval '6 minutes', finished_at = now() - interval '6 minutes' where id = v_job;
+  update public.provider_sync_state set sync_lease_expires_at = now() - interval '1 second' where clerk_user_id = 'claim_disabled_control' and provider = 'espn';
+
+  -- The global active job and five-minute creation spacing stop concurrent dispatch.
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source)
+  values ('claim_global_active', now() - interval '2 days', 41, 'full', 'scheduled_backfill') returning id into v_job;
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['no_candidate']);
+  if v_outcome <> 'busy' then raise exception 'global active serialization missing: %', v_outcome; end if;
+  update public.espn_history_jobs set status = 'cancelled', last_error_code = 'history_disabled', created_at = now() - interval '6 minutes', finished_at = now() - interval '6 minutes' where id = v_job;
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
+  values ('claim_spacing', now() - interval '2 days', 41, 'full', 'scheduled_backfill', 'cancelled', 'history_disabled', now() - interval '1 minute', now() - interval '1 minute') returning id into v_job;
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['no_candidate']);
+  if v_outcome <> 'busy' then raise exception 'five-minute claim spacing missing: %', v_outcome; end if;
+  update public.espn_history_jobs set created_at = now() - interval '6 minutes', finished_at = now() - interval '6 minutes' where id = v_job;
+
+  -- A recent upstream planning/chunk failure pauses every new scheduled claim for 15 minutes.
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
+  values ('claim_global_pause', now() - interval '2 days', 41, 'full', 'scheduled_backfill', 'failed', 'history_plan_failed', now() - interval '6 minutes', now()) returning id into v_job;
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['no_candidate']);
+  if v_outcome <> 'busy' then raise exception 'global upstream pause missing: %', v_outcome; end if;
+  update public.espn_history_jobs set finished_at = now() - interval '16 minutes' where id = v_job;
+
+  -- Queued jobs recover after 10m; running jobs remain protected until 1h.
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, updated_at)
+  values ('claim_stale_queued', now() - interval '2 days', 41, 'full', 'scheduled_backfill', now() - interval '11 minutes') returning id into v_job;
+  insert into public.provider_sync_state (clerk_user_id, provider, sync_lease_owner, sync_lease_expires_at)
+  values ('claim_stale_queued', 'espn', 'history:' || v_job::text, now() + interval '1 hour');
+  perform public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['no_candidate']);
+  if (select status from public.espn_history_jobs where id = v_job) <> 'failed'
+    or exists (select 1 from public.provider_sync_state where clerk_user_id = 'claim_stale_queued' and sync_lease_owner is not null) then
+    raise exception 'stale queued recovery threshold or lease release failed';
+  end if;
+  update public.espn_history_jobs set created_at = now() - interval '6 minutes', finished_at = now() - interval '6 minutes' where id = v_job;
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, updated_at)
+  values ('claim_running_threshold', now() - interval '2 days', 41, 'full', 'scheduled_backfill', 'running', now() - interval '59 minutes') returning id into v_job;
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['no_candidate']);
+  if v_outcome <> 'busy' then raise exception 'running job recovered before one-hour threshold: %', v_outcome; end if;
+  update public.espn_history_jobs set updated_at = now() - interval '61 minutes' where id = v_job;
+  perform public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['no_candidate']);
+  if (select status from public.espn_history_jobs where id = v_job) <> 'failed' then
+    raise exception 'stale running job was not recovered after one hour';
+  end if;
+  update public.espn_history_jobs
+  set created_at = now() - interval '6 minutes', finished_at = now() - interval '6 minutes'
+  where id = v_job;
+end $scheduled_claim_guards$;
+
 -- The deployed workers invoke these invoker functions as service_role. Use
 -- named arguments for a real, state-changing call to prove that contract.
 set local role service_role;
@@ -580,6 +734,8 @@ declare
   v_job uuid := gen_random_uuid();
   v_credential_updated_at timestamptz;
   v_outcome text;
+  v_claimed_job uuid;
+  v_claimed_leagues jsonb;
 begin
   insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
   values ('history_service_role_test', 'swid', 's2', now())
@@ -635,6 +791,41 @@ begin
   );
   if v_outcome <> 'added' then
     raise exception 'service_role named league persist failed: %', v_outcome;
+  end if;
+
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('history_scheduled_claim_test', 'swid', 's2', now());
+  insert into public.espn_leagues (
+    clerk_user_id, league_id, sport, team_id, league_name, season_year, created_at
+  ) values
+    ('history_scheduled_claim_test', '100', 'football', '12', 'Older', 2023, now() - interval '2 days'),
+    ('history_scheduled_claim_test', '100', 'football', '12', 'Newest pre-cutoff', 2024, now() - interval '1 day'),
+    ('history_scheduled_claim_test', '100', 'football', '12', 'Post-cutoff', 2025, now()),
+    ('history_scheduled_claim_test', '200', 'basketball', '34', 'Hoops', 2024, now() - interval '1 day'),
+    ('history_scheduled_claim_test', '300', 'hockey', '56', 'Hidden', 2024, now() - interval '1 day'),
+    ('history_scheduled_claim_test', '400', 'basketball', '78', 'Invalid Year', 2147483647, now() - interval '1 day');
+  insert into public.archived_leagues (clerk_user_id, platform, sport, recurring_league_id, mode)
+  values ('history_scheduled_claim_test', 'espn', 'hockey', '300', 'hidden');
+
+  select outcome, job_id, current_leagues into v_outcome, v_claimed_job, v_claimed_leagues
+  from public.claim_next_espn_history_backfill_job(
+    p_scan_version => 19,
+    p_legacy_cutoff => now() - interval '1 hour',
+    p_allowed_users => array['history_scheduled_claim_test']
+  );
+  if v_outcome <> 'claimed'
+    or v_claimed_job is null
+    or jsonb_array_length(v_claimed_leagues) <> 2
+    or v_claimed_leagues @> '[{"gameId":"fhl"}]'::jsonb
+    or not v_claimed_leagues @> '[{"gameId":"fba","seasonId":2025,"leagueId":"200","teamId":34}]'::jsonb
+    or not v_claimed_leagues @> '[{"gameId":"ffl","seasonId":2024,"leagueId":"100","leagueName":"Newest pre-cutoff","teamId":12}]'::jsonb
+    or v_claimed_leagues @> '[{"leagueId":"100","seasonId":2025}]'::jsonb
+    or v_claimed_leagues @> '[{"leagueId":"400"}]'::jsonb then
+    raise exception 'scheduled claim root conversion, dedupe, or hidden exclusion failed: %, %', v_outcome, v_claimed_leagues;
+  end if;
+  if (select trigger_source from public.espn_history_jobs where id = v_claimed_job) <> 'scheduled_backfill'
+    or (select sync_lease_owner from public.provider_sync_state where clerk_user_id = 'history_scheduled_claim_test' and provider = 'espn') <> 'history:' || v_claimed_job::text then
+    raise exception 'scheduled claim job source or exact lease missing';
   end if;
 end $service_role_proof$;
 reset role;

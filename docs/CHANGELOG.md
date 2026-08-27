@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Paced Legacy ESPN Backfill (FLA-310)
+
+- **Added**: A default-off backend migration can proactively repair legacy ESPN history one account at a time without waiting for a user refresh. A fixed cohort cutoff and an optional private allowlist make staged rollout explicit.
+- **Added**: An atomic service-role claim enforces one globally active scheduled job, five-minute minimum spacing, exact ESPN lease ownership, credential-version fencing, nonempty saved league roots, bounded retries, and global pause behavior after upstream planning or chunk exhaustion failures.
+- **Changed**: Auth-worker now routes its daily reconciliation and five-minute ESPN migration crons explicitly. Unknown schedules fail closed, and disabling the migration stops scheduled work without changing interactive web, extension, or MCP refresh behavior.
+
 ### Durable ESPN History Refresh (FLA-308)
 
 - **Added**: Sync all on Your Leagues and Sync or Re-sync in the Chrome extension save current ESPN leagues first. Durable historical discovery is rollout-gated and default-off; when enabled for an allowlisted account, it continues in a background workflow after the web page or extension closes, and both surfaces show the latest queued, running, completed, partial, or failed status.

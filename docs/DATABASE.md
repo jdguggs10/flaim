@@ -83,6 +83,15 @@ requires the request's exact live ESPN lease owner before changing any row.
 This FLA-308 rollout boundary is repository contract only: applying the
 migration to preview or production requires separate approval and verification.
 
+Scheduled legacy repairs are distinguished by
+`espn_history_jobs.trigger_source = 'scheduled_backfill'`. A partial unique
+index permits only one queued or running scheduled job. The service-role-only
+`claim_next_espn_history_backfill_job` RPC serializes candidate selection,
+stale-job recovery, pacing, retry eligibility, nonempty league-root seeding,
+provider-lease acquisition, and job insertion in one transaction. The public
+roles cannot execute it. Its additive migration must be applied before the
+default-off producer is enabled in a deployed auth worker.
+
 ## Analytics
 
 The `analytics` schema contains the `internal_users` exclusion list, two

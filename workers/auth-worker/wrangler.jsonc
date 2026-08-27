@@ -79,11 +79,11 @@
           "zone_name": "flaim.app"
         }
       ],
-      // Scheduled league rollover reconciliation (FLA-161). The cron is inert
-      // until RECONCILIATION_ENABLED is set to "true": the handler logs a
-      // single `disabled` line and exits.
+      // Each scheduled task has its own default-off gate. The five-minute ESPN
+      // tick can claim at most one legacy backfill job and does no work while
+      // ESPN_HISTORY_BACKFILL_MODE remains "off".
       "triggers": {
-        "crons": ["17 10 * * *"]
+        "crons": ["17 10 * * *", "*/5 * * * *"]
       },
       // Environment variables for production
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
@@ -92,6 +92,7 @@
         "ENVIRONMENT": "prod",
         "FRONTEND_URL": "https://flaim.app",
         "ESPN_DURABLE_HISTORY_ENABLED": "false",
+        "ESPN_HISTORY_BACKFILL_MODE": "off",
         // Dry-run evidence collection enabled 2026-07-17 (FLA-161). Caps stay
         // at code defaults: 5 users/run, espn+sleeper, football, 45s budget.
         "RECONCILIATION_ENABLED": "true",
@@ -130,9 +131,10 @@
           "zone_name": "flaim.app"
         }
       ],
-      // FLA-161 reconciliation cron — inert until RECONCILIATION_ENABLED="true".
+      // Default-off scheduled tasks mirror production routing for safe preview
+      // verification without selecting any ESPN accounts.
       "triggers": {
-        "crons": ["17 10 * * *"]
+        "crons": ["17 10 * * *", "*/5 * * * *"]
       },
       // Environment variables for preview
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
@@ -141,6 +143,7 @@
         "ENVIRONMENT": "preview",
         "FRONTEND_URL": "https://preview.flaim.app",
         "ESPN_DURABLE_HISTORY_ENABLED": "false",
+        "ESPN_HISTORY_BACKFILL_MODE": "off",
         "RECONCILIATION_ENABLED": "false",
         "RECONCILIATION_DRY_RUN": "true"
       }
@@ -170,7 +173,8 @@
         "NODE_ENV": "development",
         "ENVIRONMENT": "dev",
         "FRONTEND_URL": "http://localhost:3000",
-        "ESPN_DURABLE_HISTORY_ENABLED": "false"
+        "ESPN_DURABLE_HISTORY_ENABLED": "false",
+        "ESPN_HISTORY_BACKFILL_MODE": "off"
       }
     }
   }

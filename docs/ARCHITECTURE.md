@@ -200,6 +200,16 @@ See `workers/README.md` for worker-to-worker communication requirements.
 
 For allowlisted web and extension users, current ESPN leagues are discovered inside the request and historical seasons can be processed by a Cloudflare Workflow. This durable path is rollout-gated and disabled by default in every environment; it requires both `ESPN_DURABLE_HISTORY_ENABLED=true` and an exact Clerk user ID in `ESPN_DURABLE_HISTORY_USERS`. When enabled, the request and workflow share an exact ESPN sync lease, and every league write is checked against its current owner. Changing or removing ESPN credentials, or deleting or replacing saved ESPN leagues, takes over that lease before changing rows, so an in-flight refresh cannot restore stale data. The workflow checkpoints each historical league-season through a fenced Supabase RPC and can resume after worker retries. A versioned full-repair marker makes the first scan exhaustive; later scans skip existing historical rows. `get_ancient_history` remains a fast read-only index over the rows already committed by that workflow. MCP-triggered refresh remains synchronous until the separately gated MCP behavior change ships.
 
+Legacy ESPN repair uses a separate, default-off backend migration lane. Every
+five minutes, auth-worker may atomically claim one account from a fixed
+pre-deployment cohort, seed the durable job from the newest saved row for each
+league root, and transfer that account's exact ESPN lease to the same Workflow.
+Database constraints allow only one active scheduled job globally. Candidate
+selection excludes completed full repairs, hidden roots, active leases, recent
+failed attempts, exhausted credential snapshots, and accounts with no saved
+league roots. The interactive rollout gate does not enable or select these
+scheduled jobs.
+
 ## Usage Analytics
 
 The gateway emits one best-effort telemetry event per MCP tool call (FLA-156), independent of the tool-call path — it cannot slow or break a tool call.
