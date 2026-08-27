@@ -9,10 +9,16 @@ Flaim uses a small, restrained email system so product emails, auth emails, and 
 | Zoho | Real inboxes, aliases, and replies | `support@flaim.app` |
 | Clerk | Authentication and security emails | `Flaim <accounts@flaim.app>` |
 | Resend | Product and lifecycle emails | `Flaim <updates@flaim.app>` |
+| Resend | Broadcasts | `Flaim <updates@news.flaim.app>` |
 
 Use `support@flaim.app` as the reply-to address for product email.
 
-Resend's verified domain is `flaim.app`. The `send.flaim.app` DNS records are for Resend's bounce / MAIL FROM infrastructure, not the visible From address.
+Resend uses separate verified US East sending domains for the two lanes:
+
+- `flaim.app` carries product and lifecycle email. Open and click tracking are off; Flaim-owned links use first-party `ref=` attribution instead.
+- `news.flaim.app` carries Broadcasts. Open tracking is off and click tracking is on through `links.news.flaim.app`.
+
+The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses. Root DMARC remains at `p=quarantine` while aggregate reports are observed; moving to `p=reject` is a later provider-level decision, not a template change.
 
 ## Visual rules
 
@@ -64,7 +70,7 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
      RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
 
      RESEND_API_KEY="$RESEND_BROADCASTS_API_KEY" corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
-       --from "Flaim <updates@flaim.app>" \
+       --from "Flaim <updates@news.flaim.app>" \
        --reply-to support@flaim.app \
        --subject "Keepers, draft details, and more" \
        --preview-text "Keeper costs, dynasty draft picks, and sharper trade detail for your connected leagues." \
@@ -88,9 +94,52 @@ The first product templates are:
 
 - `web/emails/welcome.tsx`
 - `web/emails/broadcast-2026-08-kickoff.tsx`
+- `web/emails/broadcast-2026-08-yahoo-access.tsx`
 - `web/emails/espn-setup-link.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
+
+### Yahoo operational Broadcast Segment
+
+`web/scripts/prepare-yahoo-broadcast-segment.mjs` prepares the one-off Yahoo
+access-update Segment. It is campaign-specific rather than a durable platform
+property sync. Every selected user must have a current Yahoo credential. Among
+those users, the default cohort includes credentials created on or after
+`2026-07-27T18:15:36Z` or users with a stored 2026 Yahoo league. Users in
+`analytics.internal_users` are excluded by SHA-256 hash before Clerk or Resend
+eligibility is evaluated.
+
+The script requires production `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and
+`CLERK_SECRET_KEY`; an operator-only Full access Resend credential loaded into
+`RESEND_BROADCASTS_API_KEY`; and the current internal-user hashes in
+`FLAIM_INTERNAL_USER_HASHES`. Load credentials per command from the password
+manager without printing them, and unset them afterward. Do not store them in
+`.env.local`. Hash each exact Clerk user ID as UTF-8 with SHA-256, without a
+trailing newline, and pass the lowercase hex digests as a comma-separated list.
+
+The default command is read-only and prints aggregate counts only:
+
+```sh
+corepack pnpm --dir web exec node scripts/prepare-yahoo-broadcast-segment.mjs
+```
+
+After reviewing that count, manually create an empty, campaign-specific Resend
+Segment. Apply mode requires its exact ID and name plus the reviewed eligible
+count:
+
+```sh
+corepack pnpm --dir web exec node scripts/prepare-yahoo-broadcast-segment.mjs \
+  --apply \
+  --segment-id "..." \
+  --segment-name "Yahoo access update - 2026-08" \
+  --expected-eligible-count "..."
+```
+
+Apply mode verifies that any existing Segment members belong to the current
+eligible cohort, adds only missing eligible contacts, and re-reads the Segment
+to prove the final membership. It never creates contacts, changes an unsubscribe
+state, removes a suppression, creates a Broadcast, or sends email. A changed
+eligible count fails closed and requires a new reviewed dry run.
 
 ## Link attribution
 

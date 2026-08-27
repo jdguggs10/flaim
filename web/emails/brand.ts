@@ -8,6 +8,7 @@ export const emailBrand = {
     // Dashboard-only auth sender. Product templates should use senders.product.
     clerk: "Flaim <accounts@flaim.app>",
     product: "Flaim <updates@flaim.app>",
+    broadcast: "Flaim <updates@news.flaim.app>",
     replyTo: "support@flaim.app",
   },
   colors: {

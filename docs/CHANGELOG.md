@@ -11,6 +11,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: ESPN league storage now uses keyset pagination instead of a fixed 100-row read, so accounts with more than 100 league-season rows are not silently truncated. The public MCP `refresh_leagues` path remains synchronous while its advertised contract is under directory review.
 - **Changed**: Server-verified discovery can store complete ESPN history, while caller-supplied league replacement and addition routes retain a separate 1,000-row abuse boundary. Team selection, manual addition, replacement, deletion, and credential changes all take over the ESPN write lease before changing saved rows.
 
+### Broadcast Deliverability and Yahoo Update (FLA-299)
+
+- **Added**: A concise, name-neutral Yahoo access-status Broadcast template uses the verified `news.flaim.app` marketing sender, first-party campaign attribution, and Resend's unsubscribe placeholder.
+- **Added**: A dry-run-first, pagination-safe Yahoo Segment preparation script derives the approved outage-era/current-season cohort without selecting OAuth tokens, excludes internal users by hash, and applies Clerk verification plus Resend contact, unsubscribe, and suppression gates. Its default output contains aggregate counts only. Apply mode requires the exact Segment identity and reviewed eligible count, adds only existing eligible contacts, rejects foreign Segment members, and cannot create contacts, resubscribe, remove suppressions, create a Broadcast, or send.
+- **Changed**: Broadcasts use `Flaim <updates@news.flaim.app>` with click tracking isolated to the marketing subdomain. Product and lifecycle email remains on `flaim.app` with provider click tracking off and first-party `ref=` attribution retained.
+
 ### Resend API Key Hygiene (FLA-296)
 
 - **Changed**: The documented broadcast-draft workflow now requires an intentionally sourced `RESEND_BROADCASTS_API_KEY` with full access instead of reusing the sending-only `RESEND_API_KEY` from `web/.env.local`. Local visual preview remains the copy and layout editing surface, and the provider remains the audience, proof, and send surface.
