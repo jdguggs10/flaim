@@ -29,63 +29,59 @@ export function parseArgs(argv) {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const next = argv[index + 1];
+    const readValue = () => {
+      if (!next || next.startsWith("--")) throw new Error(`${arg} requires a value`);
+      index += 1;
+      return next;
+    };
 
     if (arg === "--apply") {
       args.apply = true;
       continue;
     }
 
-    if (arg === "--expected-eligible-count" && next) {
-      args.expectedEligibleCount = Number(next);
-      index += 1;
+    if (arg === "--expected-eligible-count") {
+      args.expectedEligibleCount = Number(readValue());
       continue;
     }
 
-    if (arg === "--segment-id" && next) {
-      args.segmentId = next.trim() || null;
-      index += 1;
+    if (arg === "--segment-id") {
+      args.segmentId = readValue().trim() || null;
       continue;
     }
 
-    if (arg === "--segment-name" && next) {
-      args.segmentName = next.trim() || null;
-      index += 1;
+    if (arg === "--segment-name") {
+      args.segmentName = readValue().trim() || null;
       continue;
     }
 
-    if (arg === "--outage-start" && next) {
-      args.outageStart = next;
-      index += 1;
+    if (arg === "--outage-start") {
+      args.outageStart = readValue();
       continue;
     }
 
-    if (arg === "--season-year" && next) {
-      args.seasonYear = Number(next);
-      index += 1;
+    if (arg === "--season-year") {
+      args.seasonYear = Number(readValue());
       continue;
     }
 
-    if (arg === "--supabase-limit" && next) {
-      args.supabaseLimit = Number(next);
-      index += 1;
+    if (arg === "--supabase-limit") {
+      args.supabaseLimit = Number(readValue());
       continue;
     }
 
-    if (arg === "--clerk-limit" && next) {
-      args.clerkLimit = Number(next);
-      index += 1;
+    if (arg === "--clerk-limit") {
+      args.clerkLimit = Number(readValue());
       continue;
     }
 
-    if (arg === "--resend-limit" && next) {
-      args.resendLimit = Number(next);
-      index += 1;
+    if (arg === "--resend-limit") {
+      args.resendLimit = Number(readValue());
       continue;
     }
 
-    if (arg === "--delay-ms" && next) {
-      args.delayMs = Number(next);
-      index += 1;
+    if (arg === "--delay-ms") {
+      args.delayMs = Number(readValue());
       continue;
     }
 
@@ -383,7 +379,7 @@ export function buildSummary({ cohort, clerk, resend, segment = null }) {
   };
 }
 
-async function fetchJson(fetcher, url, options, label) {
+async function fetchJson(fetcher, url, options, label, delayFn = delay) {
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const response = await fetcher(url, options);
     const body = await response.json().catch(() => null);
@@ -392,7 +388,7 @@ async function fetchJson(fetcher, url, options, label) {
       const retryDelay = Number.isFinite(retryAfterSeconds)
         ? Math.max(retryAfterSeconds * 1000, DEFAULT_DELAY_MS)
         : DEFAULT_DELAY_MS * (attempt + 1);
-      await delay(retryDelay);
+      await delayFn(retryDelay);
       continue;
     }
     if (!response.ok) throw new Error(`${label} failed with status ${response.status}`);
@@ -402,7 +398,13 @@ async function fetchJson(fetcher, url, options, label) {
   throw new Error(`${label} remained rate limited`);
 }
 
-export async function listSupabaseRows({ fetcher = fetch, headers, limit, url }) {
+export async function listSupabaseRows({
+  delayFn = delay,
+  fetcher = fetch,
+  headers,
+  limit,
+  url,
+}) {
   const rows = [];
 
   for (let offset = 0; ; offset += limit) {
@@ -411,7 +413,7 @@ export async function listSupabaseRows({ fetcher = fetch, headers, limit, url })
         ...headers,
         Range: `${offset}-${offset + limit - 1}`,
       },
-    }, "Supabase list");
+    }, "Supabase list", delayFn);
 
     if (!Array.isArray(body)) throw new Error("Supabase list returned an unexpected response");
     rows.push(...body);
@@ -421,7 +423,12 @@ export async function listSupabaseRows({ fetcher = fetch, headers, limit, url })
   return rows;
 }
 
-async function listClerkUsers({ fetcher = fetch, secretKey, limit }) {
+export async function listClerkUsers({
+  delayFn = delay,
+  fetcher = fetch,
+  secretKey,
+  limit,
+}) {
   const users = [];
 
   for (let offset = 0; ; offset += limit) {
@@ -430,7 +437,7 @@ async function listClerkUsers({ fetcher = fetch, secretKey, limit }) {
     url.searchParams.set("offset", String(offset));
     const { body } = await fetchJson(fetcher, url, {
       headers: { Authorization: `Bearer ${secretKey}` },
-    }, "Clerk user list");
+    }, "Clerk user list", delayFn);
 
     if (!Array.isArray(body)) throw new Error("Clerk user list returned an unexpected response");
     users.push(...body);
@@ -440,7 +447,14 @@ async function listClerkUsers({ fetcher = fetch, secretKey, limit }) {
   return users;
 }
 
-async function listResendRows({ apiKey, delayMs = DEFAULT_DELAY_MS, fetcher = fetch, limit, path }) {
+export async function listResendRows({
+  apiKey,
+  delayFn = delay,
+  delayMs = DEFAULT_DELAY_MS,
+  fetcher = fetch,
+  limit,
+  path,
+}) {
   const rows = [];
   let after = null;
 
@@ -450,7 +464,7 @@ async function listResendRows({ apiKey, delayMs = DEFAULT_DELAY_MS, fetcher = fe
     if (after) url.searchParams.set("after", after);
     const { body } = await fetchJson(fetcher, url, {
       headers: { Authorization: `Bearer ${apiKey}` },
-    }, "Resend list");
+    }, "Resend list", delayFn);
 
     const page = Array.isArray(body?.data) ? body.data : null;
     if (!page) throw new Error("Resend list returned an unexpected response");
@@ -458,7 +472,7 @@ async function listResendRows({ apiKey, delayMs = DEFAULT_DELAY_MS, fetcher = fe
     if (body.has_more !== true || page.length === 0) break;
     after = cleanString(page.at(-1)?.id);
     if (!after) throw new Error("Resend list pagination cursor was missing");
-    if (delayMs > 0) await delay(delayMs);
+    if (delayMs > 0) await delayFn(delayMs);
   }
 
   return rows;
@@ -493,6 +507,37 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+export function buildYahooDataUrls(supabaseUrl) {
+  const credentialsUrl = new URL("/rest/v1/yahoo_credentials", supabaseUrl);
+  credentialsUrl.searchParams.set("select", "clerk_user_id,created_at");
+  credentialsUrl.searchParams.set("order", "clerk_user_id.asc");
+  const leaguesUrl = new URL("/rest/v1/yahoo_leagues", supabaseUrl);
+  leaguesUrl.searchParams.set("select", "clerk_user_id,season_year,id");
+  leaguesUrl.searchParams.set("order", "clerk_user_id.asc,id.asc");
+  return { credentialsUrl, leaguesUrl };
+}
+
+async function getResendEligibility({
+  apiKey,
+  candidates,
+  delayMs,
+  limit,
+}) {
+  const contacts = await listResendRows({
+    apiKey,
+    delayMs,
+    limit,
+    path: "/contacts",
+  });
+  const suppressions = await listResendRows({
+    apiKey,
+    delayMs,
+    limit,
+    path: "/suppressions",
+  });
+  return classifyResendEligibility({ candidates, contacts, suppressions });
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const supabaseUrl = requireEnvironment("SUPABASE_URL");
@@ -507,12 +552,7 @@ async function main() {
     Authorization: `Bearer ${supabaseServiceKey}`,
   };
 
-  const credentialsUrl = new URL("/rest/v1/yahoo_credentials", supabaseUrl);
-  credentialsUrl.searchParams.set("select", "clerk_user_id,created_at");
-  credentialsUrl.searchParams.set("order", "clerk_user_id.asc");
-  const leaguesUrl = new URL("/rest/v1/yahoo_leagues", supabaseUrl);
-  leaguesUrl.searchParams.set("select", "clerk_user_id,season_year");
-  leaguesUrl.searchParams.set("order", "clerk_user_id.asc");
+  const { credentialsUrl, leaguesUrl } = buildYahooDataUrls(supabaseUrl);
 
   const [credentials, leagueRows, users] = await Promise.all([
     listSupabaseRows({
@@ -527,18 +567,6 @@ async function main() {
     }),
     listClerkUsers({ limit: args.clerkLimit, secretKey: clerkSecretKey }),
   ]);
-  const contacts = await listResendRows({
-    apiKey: resendApiKey,
-    delayMs: args.delayMs,
-    limit: args.resendLimit,
-    path: "/contacts",
-  });
-  const suppressions = await listResendRows({
-    apiKey: resendApiKey,
-    delayMs: args.delayMs,
-    limit: args.resendLimit,
-    path: "/suppressions",
-  });
   const { cohortIds, stats: cohortStats } = selectYahooCohort({
     credentials,
     internalUserHashes,
@@ -547,10 +575,11 @@ async function main() {
     seasonYear: args.seasonYear,
   });
   const { candidates, stats: clerkStats } = classifyClerkUsers({ cohortIds, users });
-  const { eligibleContacts, stats: resendStats } = classifyResendEligibility({
+  let { eligibleContacts, stats: resendStats } = await getResendEligibility({
+    apiKey: resendApiKey,
     candidates,
-    contacts,
-    suppressions,
+    delayMs: args.delayMs,
+    limit: args.resendLimit,
   });
   validateApplyGuards(args, eligibleContacts.length);
 
@@ -567,6 +596,15 @@ async function main() {
       limit: args.resendLimit,
       path: `/segments/${encodeURIComponent(args.segmentId)}/contacts`,
     });
+    planSegmentAdditions({ eligibleContacts, segmentContacts });
+
+    ({ eligibleContacts, stats: resendStats } = await getResendEligibility({
+      apiKey: resendApiKey,
+      candidates,
+      delayMs: args.delayMs,
+      limit: args.resendLimit,
+    }));
+    validateApplyGuards(args, eligibleContacts.length);
     const plan = planSegmentAdditions({ eligibleContacts, segmentContacts });
 
     for (let index = 0; index < plan.additions.length; index += 1) {
@@ -584,9 +622,28 @@ async function main() {
       limit: args.resendLimit,
       path: `/segments/${encodeURIComponent(args.segmentId)}/contacts`,
     });
-    const finalPlan = planSegmentAdditions({ eligibleContacts, segmentContacts: finalContacts });
-    if (finalPlan.additions.length !== 0 || finalContacts.length !== eligibleContacts.length) {
-      throw new Error("Resend Segment verification did not match the eligible cohort");
+    ({ eligibleContacts, stats: resendStats } = await getResendEligibility({
+      apiKey: resendApiKey,
+      candidates,
+      delayMs: args.delayMs,
+      limit: args.resendLimit,
+    }));
+
+    try {
+      validateApplyGuards(args, eligibleContacts.length);
+      const finalPlan = planSegmentAdditions({
+        eligibleContacts,
+        segmentContacts: finalContacts,
+      });
+      if (finalPlan.additions.length !== 0 || finalContacts.length !== eligibleContacts.length) {
+        throw new Error("membership mismatch");
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown verification failure";
+      throw new Error(
+        `Final Resend verification failed (${reason}); do not use this Segment. ` +
+        "Create a new empty campaign Segment, review a fresh dry run, and retry.",
+      );
     }
 
     segmentStats = {

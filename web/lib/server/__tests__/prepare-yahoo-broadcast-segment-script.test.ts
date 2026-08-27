@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildYahooDataUrls,
   buildSummary,
   classifyClerkUsers,
   classifyResendEligibility,
+  listClerkUsers,
+  listResendRows,
+  listSupabaseRows,
   parseArgs,
   parseInternalUserHashes,
   planSegmentAdditions,
@@ -16,6 +20,10 @@ function hash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function jsonResponse(body: unknown, status = 200, headers?: HeadersInit) {
+  return new Response(JSON.stringify(body), { headers, status });
+}
+
 describe("prepare Yahoo Broadcast Segment script helpers", () => {
   it("defaults to a read-only, campaign-specific cohort", () => {
     expect(parseArgs([])).toMatchObject({
@@ -24,6 +32,21 @@ describe("prepare Yahoo Broadcast Segment script helpers", () => {
       seasonYear: 2026,
       segmentId: null,
     });
+  });
+
+  it("reports a missing value for value-taking flags", () => {
+    expect(() => parseArgs(["--segment-id"])).toThrow("--segment-id requires a value");
+    expect(() => parseArgs(["--segment-name", "--apply"])).toThrow(
+      "--segment-name requires a value",
+    );
+  });
+
+  it("orders Yahoo league pages by user and unique row id", () => {
+    const { credentialsUrl, leaguesUrl } = buildYahooDataUrls("https://example.supabase.co");
+
+    expect(credentialsUrl.searchParams.get("order")).toBe("clerk_user_id.asc");
+    expect(leaguesUrl.searchParams.get("select")).toBe("clerk_user_id,season_year,id");
+    expect(leaguesUrl.searchParams.get("order")).toBe("clerk_user_id.asc,id.asc");
   });
 
   it("requires valid internal-user hashes", () => {
@@ -145,6 +168,86 @@ describe("prepare Yahoo Broadcast Segment script helpers", () => {
       eligibleContacts: [{ contactId: "eligible", email: "fan@example.com" }],
       segmentContacts: [{ id: "foreign" }],
     })).toThrow("outside the reviewed eligible cohort");
+  });
+
+  it("paginates Supabase through an exact page-size boundary", async () => {
+    const pages = [
+      [{ id: "1" }, { id: "2" }],
+      [{ id: "3" }, { id: "4" }],
+      [],
+    ];
+    const ranges: string[] = [];
+    const fetcher = vi.fn(async (_input: URL | RequestInfo, options?: RequestInit) => {
+      ranges.push((options?.headers as Record<string, string>).Range);
+      return jsonResponse(pages.shift());
+    });
+
+    const rows = await listSupabaseRows({
+      fetcher,
+      headers: { Authorization: "Bearer test" },
+      limit: 2,
+      url: new URL("https://example.supabase.co/rest/v1/yahoo_leagues"),
+    });
+
+    expect(rows).toHaveLength(4);
+    expect(ranges).toEqual(["0-1", "2-3", "4-5"]);
+  });
+
+  it("retries a rate-limited Supabase page without sleeping in tests", async () => {
+    const delayFn = vi.fn(async () => undefined);
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({}, 429, { "retry-after": "0" }))
+      .mockResolvedValueOnce(jsonResponse([{ id: "1" }]));
+
+    const rows = await listSupabaseRows({
+      delayFn,
+      fetcher,
+      headers: { Authorization: "Bearer test" },
+      limit: 2,
+      url: new URL("https://example.supabase.co/rest/v1/yahoo_leagues"),
+    });
+
+    expect(rows).toEqual([{ id: "1" }]);
+    expect(delayFn).toHaveBeenCalledWith(550);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("paginates Clerk users by offset", async () => {
+    const offsets: string[] = [];
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      offsets.push(url.searchParams.get("offset") ?? "");
+      if (offsets.length === 1) return jsonResponse([{ id: "1" }, { id: "2" }]);
+      return jsonResponse([{ id: "3" }]);
+    });
+
+    const users = await listClerkUsers({ fetcher, limit: 2, secretKey: "test" });
+
+    expect(users).toHaveLength(3);
+    expect(offsets).toEqual(["0", "2"]);
+  });
+
+  it("paginates Resend rows with the last returned id as its cursor", async () => {
+    const cursors: Array<string | null> = [];
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = new URL(String(input));
+      cursors.push(url.searchParams.get("after"));
+      if (cursors.length === 1) {
+        return jsonResponse({ data: [{ id: "1" }, { id: "2" }], has_more: true });
+      }
+      return jsonResponse({ data: [{ id: "3" }], has_more: false });
+    });
+
+    const rows = await listResendRows({
+      apiKey: "test",
+      delayMs: 0,
+      fetcher,
+      limit: 2,
+      path: "/contacts",
+    });
+
+    expect(rows).toHaveLength(3);
+    expect(cursors).toEqual([null, "2"]);
   });
 
   it("builds an aggregate-only report", () => {

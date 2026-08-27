@@ -136,10 +136,17 @@ corepack pnpm --dir web exec node scripts/prepare-yahoo-broadcast-segment.mjs \
 ```
 
 Apply mode verifies that any existing Segment members belong to the current
-eligible cohort, adds only missing eligible contacts, and re-reads the Segment
-to prove the final membership. It never creates contacts, changes an unsubscribe
-state, removes a suppression, creates a Broadcast, or sends email. A changed
-eligible count fails closed and requires a new reviewed dry run.
+eligible cohort, refreshes Resend contact and suppression state immediately
+before its first write, adds only missing eligible contacts, then refreshes
+eligibility and re-reads the Segment again to prove the final membership. Any
+count or membership drift fails closed. If final verification fails after
+population begins, do not use that Segment: create a new empty campaign Segment,
+review a fresh dry run, and retry. It never creates contacts, changes an
+unsubscribe state, removes a suppression, creates a Broadcast, or sends email.
+
+Run one final read-only dry run immediately before creating the provider draft
+or sending. Segment membership is not a substitute for current unsubscribe and
+suppression checks, and any changed count requires renewed review.
 
 ## Link attribution
 
