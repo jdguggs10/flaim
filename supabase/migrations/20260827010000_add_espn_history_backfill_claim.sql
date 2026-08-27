@@ -114,8 +114,8 @@ begin
       select 1 from public.espn_history_jobs parked
       where parked.clerk_user_id = c.clerk_user_id and parked.credential_updated_at = c.updated_at
         and parked.trigger_source = 'scheduled_backfill'
-        and (parked.status = 'superseded' or parked.last_error_code = 'credential_changed'
-             or parked.last_error_code like 'auth_%')
+        and (parked.status = 'superseded' or parked.last_error_code = 'credentials_changed'
+             or parked.last_error_code = 'espn_auth_failed')
     )
     and not exists (
       select 1 from public.espn_history_jobs recent_failure
@@ -123,9 +123,9 @@ begin
         and recent_failure.credential_updated_at = c.updated_at
         and recent_failure.trigger_source = 'scheduled_backfill'
         and recent_failure.status in ('failed', 'cancelled')
-        and recent_failure.last_error_code is distinct from 'credential_changed'
+        and recent_failure.last_error_code is distinct from 'credentials_changed'
         and recent_failure.last_error_code is distinct from 'history_disabled'
-        and coalesce(recent_failure.last_error_code, '') not like 'auth_%'
+        and recent_failure.last_error_code is distinct from 'espn_auth_failed'
         and recent_failure.finished_at > now() - interval '24 hours'
     )
     and not exists (

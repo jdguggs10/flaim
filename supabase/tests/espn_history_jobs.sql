@@ -647,9 +647,18 @@ begin
   insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
   values ('claim_auth_parked', '404', 'football', '1', 2024, now() - interval '2 days');
   insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
-  values ('claim_auth_parked', v_snapshot, 41, 'full', 'scheduled_backfill', 'failed', 'auth_failed', now() - interval '2 days', now() - interval '2 days');
+  values ('claim_auth_parked', v_snapshot, 41, 'full', 'scheduled_backfill', 'failed', 'espn_auth_failed', now() - interval '2 days', now() - interval '2 days');
   select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_auth_parked']);
   if v_outcome <> 'none' then raise exception 'auth failure did not park snapshot: %', v_outcome; end if;
+
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('claim_credentials_parked', 'swid', 's2', now()) returning updated_at into v_snapshot;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year, created_at)
+  values ('claim_credentials_parked', '408', 'football', '1', 2024, now() - interval '2 days');
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode, trigger_source, status, last_error_code, created_at, finished_at)
+  values ('claim_credentials_parked', v_snapshot, 41, 'full', 'scheduled_backfill', 'failed', 'credentials_changed', now() - interval '2 days', now() - interval '2 days');
+  select outcome into v_outcome from public.claim_next_espn_history_backfill_job(41, now() - interval '1 hour', array['claim_credentials_parked']);
+  if v_outcome <> 'none' then raise exception 'credential rotation failure did not park snapshot: %', v_outcome; end if;
 
   insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
   values ('claim_superseded', 'swid', 's2', now()) returning updated_at into v_snapshot;
