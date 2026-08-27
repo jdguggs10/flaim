@@ -56,6 +56,41 @@ export interface EspnHistoryBackfillDependencies {
 
 const WORKFLOW_START_FAILURE_COOLDOWN_SECONDS = 1;
 const LEASE_SETTLE_ATTEMPTS = 3;
+const DIAGNOSTIC_CODE_MAX_LENGTH = 64;
+const DIAGNOSTIC_MESSAGE_MAX_LENGTH = 240;
+
+function sanitizeDiagnosticMessage(value: string): string {
+  return value
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
+    .replace(/(["']?)(clerk_user_id|user_id|job_id|workflow_instance_id|swid|espn_s2|s2|authorization|cookie|token|secret|password)\1\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/gi, '$2=[redacted]')
+    .replace(/\buser_[A-Za-z0-9_-]+\b/gi, '[redacted-user]')
+    .replace(/\b(?:espn-history-|job-)[A-Za-z0-9_-]+\b/gi, '[redacted-job]')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[redacted-id]')
+    .replace(/\b[A-Za-z0-9+/_=-]{48,}\b/g, '[redacted-token]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, DIAGNOSTIC_MESSAGE_MAX_LENGTH);
+}
+
+function backfillErrorDiagnostic(
+  error: unknown,
+  fallbackCode: string,
+  fallbackMessage: string
+): { error_code: string; error_message: string } {
+  const candidate = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : null;
+  const rawCode = typeof candidate?.code === 'string' ? candidate.code : fallbackCode;
+  const safeCode = rawCode.trim().slice(0, DIAGNOSTIC_CODE_MAX_LENGTH);
+  const errorCode = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(safeCode) ? safeCode : fallbackCode;
+  const rawMessage = typeof candidate?.message === 'string'
+    ? candidate.message
+    : typeof error === 'string'
+      ? error
+      : fallbackMessage;
+  return {
+    error_code: errorCode,
+    error_message: sanitizeDiagnosticMessage(rawMessage) || fallbackMessage,
+  };
+}
 
 function logBackfill(fields: Record<string, unknown>): void {
   console.log(JSON.stringify({ event: 'espn_history_backfill', service: 'auth-worker', ...fields }));
@@ -121,8 +156,15 @@ export async function runEspnHistoryBackfill(
       config.legacyCutoff,
       config.allowedUsers
     );
-  } catch {
-    dependencies.log({ trigger, status: 'failed', mode: config.mode, selected_users: 0, stage: 'claim' });
+  } catch (error) {
+    dependencies.log({
+      trigger,
+      status: 'failed',
+      mode: config.mode,
+      selected_users: 0,
+      stage: 'claim',
+      ...backfillErrorDiagnostic(error, 'history_backfill_claim_failed', 'Unable to claim an ESPN history backfill job'),
+    });
     return { trigger, outcome: 'failed', mode: config.mode, selectedUsers: 0 };
   }
 
@@ -140,7 +182,12 @@ export async function runEspnHistoryBackfill(
       selected_users: 1,
     });
     return { trigger, outcome: 'queued', mode: config.mode, selectedUsers: 1 };
-  } catch {
+  } catch (error) {
+    const diagnostic = backfillErrorDiagnostic(
+      error,
+      'history_workflow_start_failed',
+      'Unable to start scheduled ESPN history backfill'
+    );
     let leaseCleanup: 'settled' | 'failed' = 'failed';
     const syncState = dependencies.syncState(env);
     for (let attempt = 1; attempt <= LEASE_SETTLE_ATTEMPTS; attempt++) {
@@ -166,6 +213,7 @@ export async function runEspnHistoryBackfill(
       selected_users: 1,
       stage: 'workflow_start',
       lease_cleanup: leaseCleanup,
+      ...diagnostic,
     });
     return { trigger, outcome: 'failed', mode: config.mode, selectedUsers: 1 };
   }

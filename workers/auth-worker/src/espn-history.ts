@@ -93,6 +93,13 @@ export type EspnHistoryClaimedJob = Pick<
   'id' | 'clerk_user_id' | 'workflow_instance_id'
 >;
 
+class EspnHistoryBackfillClaimError extends Error {
+  constructor(readonly code: string | undefined, message: string | undefined) {
+    super(message || 'Unable to claim an ESPN history backfill job');
+    this.name = 'EspnHistoryBackfillClaimError';
+  }
+}
+
 export interface EspnHistoryEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
@@ -358,7 +365,7 @@ export class EspnHistoryJobStorage {
       p_legacy_cutoff: legacyCutoff,
       p_allowed_users: allowedUsers,
     });
-    if (error) throw new Error('Unable to claim an ESPN history backfill job');
+    if (error) throw new EspnHistoryBackfillClaimError(error.code, error.message);
     const row = (Array.isArray(data) ? data[0] : data) as {
       outcome?: unknown;
       job_id?: unknown;

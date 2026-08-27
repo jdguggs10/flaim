@@ -111,6 +111,27 @@ describe('ESPN history backfill dispatcher', () => {
     expect(refused.claimNextBackfill).not.toHaveBeenCalled();
   });
 
+  it('logs bounded sanitized diagnostics when the atomic claim fails', async () => {
+    const test = dependencies();
+    test.claimNextBackfill.mockRejectedValue(Object.assign(new Error(
+      `RPC failed for clerk_user_id=user_private job_id=job-123 token=${'x'.repeat(80)}\n${'detail '.repeat(80)}`
+    ), { code: 'PGRST202' }));
+
+    await expect(runEspnHistoryBackfill({
+      ...baseEnv,
+      ESPN_HISTORY_BACKFILL_MODE: 'all',
+    }, 'cron', test.dependencies)).resolves.toMatchObject({ outcome: 'failed' });
+
+    const fields = test.log.mock.calls[0][0] as Record<string, unknown>;
+    expect(fields).toMatchObject({
+      status: 'failed',
+      stage: 'claim',
+      error_code: 'PGRST202',
+    });
+    expect(String(fields.error_message).length).toBeLessThanOrEqual(240);
+    expect(JSON.stringify(fields)).not.toMatch(/user_private|job-123|x{48}|[\n\r]/);
+  });
+
   it('claims at most one allowlisted job and starts its workflow', async () => {
     const claimed = job();
     const test = dependencies(claimed);
@@ -138,7 +159,10 @@ describe('ESPN history backfill dispatcher', () => {
   it('settles only the exact history lease when workflow startup fails', async () => {
     const claimed = job();
     const test = dependencies(claimed);
-    test.startQueued.mockRejectedValue(new Error('workflow binding unavailable'));
+    test.startQueued.mockRejectedValue(Object.assign(
+      new Error('workflow binding unavailable for user_private and espn-history-job-123\u0000'),
+      { code: 'WORKFLOW_CREATE_FAILED' }
+    ));
 
     await expect(runEspnHistoryBackfill({
       ...baseEnv,
@@ -155,8 +179,13 @@ describe('ESPN history backfill dispatcher', () => {
       errorMessage: 'Unable to start scheduled ESPN history backfill',
     }, { failOnError: true });
     expect(test.log).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'failed', stage: 'workflow_start', lease_cleanup: 'settled',
+      status: 'failed',
+      stage: 'workflow_start',
+      lease_cleanup: 'settled',
+      error_code: 'WORKFLOW_CREATE_FAILED',
     }));
+    const fields = test.log.mock.calls[0][0] as Record<string, unknown>;
+    expect(JSON.stringify(fields)).not.toMatch(/user_private|job-123|\u0000/);
   });
 
   it('retries and reports an exact-lease cleanup failure', async () => {

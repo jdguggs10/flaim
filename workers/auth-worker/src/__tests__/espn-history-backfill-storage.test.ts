@@ -55,6 +55,34 @@ beforeEach(() => {
 });
 
 describe('EspnHistoryJobStorage.claimNextBackfill', () => {
+  it('preserves only the claim RPC diagnostic code and message', async () => {
+    mockSupabase.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'PGRST202',
+        message: 'Could not find claim_next_espn_history_backfill_job',
+        details: '{"clerk_user_id":"user_private"}',
+        hint: 'Reload the schema cache',
+      },
+    });
+    const storage = EspnHistoryJobStorage.fromEnvironment(env);
+
+    await expect(storage.claimNextBackfill(
+      '2026-08-27T12:00:00.000Z',
+      null
+    )).rejects.toMatchObject({
+      code: 'PGRST202',
+      message: 'Could not find claim_next_espn_history_backfill_job',
+    });
+
+    try {
+      await storage.claimNextBackfill('2026-08-27T12:00:00.000Z', null);
+    } catch (error) {
+      expect(error).not.toHaveProperty('details');
+      expect(error).not.toHaveProperty('hint');
+    }
+  });
+
   it.each(['none', 'busy', 'lease_busy'])('treats %s as an idle claim', async (outcome) => {
     mockSupabase.rpc.mockResolvedValue({ data: [{ outcome, job_id: null }], error: null });
     const storage = EspnHistoryJobStorage.fromEnvironment(env);
