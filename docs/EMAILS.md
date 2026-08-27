@@ -35,6 +35,10 @@ Run the local preview server:
 corepack pnpm --dir web run email:dev
 ```
 
+Use this browser preview as the visual editing surface. It refreshes while the
+React Email template changes, so copy length, spacing, hierarchy, and mobile
+layout can be judged before anything is created in Resend.
+
 Export static HTML previews:
 
 ```sh
@@ -50,19 +54,16 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
 1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
 2. Run `corepack pnpm --dir web run email:dev` for local iteration.
 3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
-4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and set it in the subshell below. An audience ID is not a segment ID; never substitute one for the other.
+4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and load a dedicated full-access broadcast credential into `RESEND_BROADCASTS_API_KEY` from Flaim's password manager (currently 1Password) without printing it. An audience ID is not a segment ID; never substitute one for the other. Do not source this credential from `web/.env.local`: that file's `RESEND_API_KEY` is deliberately sending-only and cannot create broadcasts.
 
    ```sh
-   # From the repository root. Nothing here prints RESEND_API_KEY.
+   # From the repository root. Nothing here prints either credential.
    (
      unset RESEND_API_KEY
-     RESEND_API_KEY="$(
-       node --env-file=web/.env.local -e 'process.stdout.write(process.env.RESEND_API_KEY ?? "")'
-     )"
-     : "${RESEND_API_KEY:?Set RESEND_API_KEY in web/.env.local first}"
+     : "${RESEND_BROADCASTS_API_KEY:?Load the full-access broadcast key from Flaim's password manager first}"
      RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
 
-     RESEND_API_KEY="$RESEND_API_KEY" corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
+     RESEND_API_KEY="$RESEND_BROADCASTS_API_KEY" corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
        --from "Flaim <updates@flaim.app>" \
        --reply-to support@flaim.app \
        --subject "Keepers, draft details, and more" \
@@ -72,13 +73,14 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
        --html-file .email-out/broadcast-2026-08-kickoff.html \
        --text-file .email-out/broadcast-2026-08-kickoff.txt
    )
+   unset RESEND_BROADCASTS_API_KEY
    ```
 
-   The subshell first clears any ambient `RESEND_API_KEY`, then Node's built-in dotenv loader reads that key from `web/.env.local`. The key is passed only to `pnpm` and the downloaded CLI; no other `web/.env.local` values are exported. `RESEND_BROADCAST_SEGMENT_ID` exists only in that subshell and is passed as an argument. Both disappear when it exits. If using the same commands directly in an interactive shell instead, run `unset RESEND_API_KEY RESEND_BROADCAST_SEGMENT_ID` afterward. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
+   The subshell first clears any ambient `RESEND_API_KEY`, then passes the dedicated broadcast credential only to the downloaded CLI under the variable name it expects. The segment ID exists only inside the subshell and is passed as an argument. The final `unset` clears the operator-supplied broadcast credential from the outer shell. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
 5. Use the Resend dashboard only to confirm the audience, send proof emails, and send after review. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
 6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
 
-Do not send a real email while developing this workflow. FLA-296 will scope a local key later; do not change current keys or feature flags as part of broadcast work.
+Do not send a real email while developing this workflow. The local `RESEND_API_KEY` is sending-only and restricted to `flaim.app`; it must never be broadened for broadcast work. Keep full-access operator credentials out of `.env.local`, and do not change provider keys or feature flags as part of routine copy iteration. Load the broadcast credential per use because its pinned first-party CLI consumer can create and modify provider resources. Load the suppression credential per use as well: the reconciliation script has no write mode, but the raw credential still has Full access outside that script.
 
 The official [`resend-cli` v2 broadcast reference](https://github.com/resend/resend-cli/blob/main/skills/resend-cli/references/broadcasts.md) supports `--html-file`, `--text-file`, `--name`, `--reply-to`, and `--preview-text`, and saves a draft unless `--send` is supplied. It targets the current API's required `segment_id` contract and maps the CLI reply-to input to the API's `reply_to` array. The pinned CLI command above therefore replaces a custom draft creator.
 
@@ -240,13 +242,20 @@ addresses with Clerk primary emails, and reports matches without writing to
 either provider:
 
 ```sh
-corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
+(
+  : "${RESEND_SUPPRESSIONS_API_KEY:?Load a Full access Resend maintenance key from Flaim's password manager first}"
+  RESEND_SUPPRESSIONS_API_KEY="$RESEND_SUPPRESSIONS_API_KEY" corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
+)
+unset RESEND_SUPPRESSIONS_API_KEY
 ```
 
-It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`, where the
-Resend key has read access to Suppressions. The command is always read-only,
-and has no write mode. Any suppression removal must be reviewed and performed
-manually in Resend after the underlying delivery problem is resolved.
+It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`. Resend does
+not offer a read-only API-key permission, so load an existing Full access
+maintenance credential into the suppression-specific shell alias without
+printing it. Keep it out of `.env.local` and deployed environments, and unset it
+after the command. The command itself is always read-only and has no write mode.
+Any suppression removal must be reviewed and performed manually in Resend after
+the underlying delivery problem is resolved.
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 
