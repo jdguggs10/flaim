@@ -7,7 +7,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Resend API Key Hygiene (FLA-296)
 
 - **Changed**: The documented broadcast-draft workflow now requires an intentionally sourced `RESEND_BROADCASTS_API_KEY` with full access instead of reusing the sending-only `RESEND_API_KEY` from `web/.env.local`. Local visual preview remains the copy and layout editing surface, and the provider remains the audience, proof, and send surface.
-- **Clarified**: Resend does not offer a read-only API-key permission. A suppression-reconciliation credential therefore requires full access even though Flaim's reconciliation script itself remains report-only and must be run only from a trusted local shell.
+- **Clarified**: Resend does not offer a read-only API-key permission. A suppression-reconciliation credential therefore requires full access even though Flaim's reconciliation script itself remains report-only; the credential is loaded from the password manager only for that command and is not stored in `.env.local` or deployed environments.
 
 ### ESPN Refresh Timeout Alignment (FLA-122)
 

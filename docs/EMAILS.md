@@ -80,7 +80,7 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
 5. Use the Resend dashboard only to confirm the audience, send proof emails, and send after review. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
 6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
 
-Do not send a real email while developing this workflow. The local `RESEND_API_KEY` is sending-only and restricted to `flaim.app`; it must never be broadened for broadcast work. Keep the full-access broadcast credential out of `.env.local`, and do not change provider keys or feature flags as part of routine copy iteration. The broadcast credential is loaded per use because its pinned first-party CLI consumer can create and modify provider resources. The suppression credential may be stored in a trusted local environment because Flaim's reconciliation script has no write mode, but it must never be deployed.
+Do not send a real email while developing this workflow. The local `RESEND_API_KEY` is sending-only and restricted to `flaim.app`; it must never be broadened for broadcast work. Keep full-access operator credentials out of `.env.local`, and do not change provider keys or feature flags as part of routine copy iteration. Load the broadcast credential per use because its pinned first-party CLI consumer can create and modify provider resources. Load the suppression credential per use as well: the reconciliation script has no write mode, but the raw credential still has Full access outside that script.
 
 The official [`resend-cli` v2 broadcast reference](https://github.com/resend/resend-cli/blob/main/skills/resend-cli/references/broadcasts.md) supports `--html-file`, `--text-file`, `--name`, `--reply-to`, and `--preview-text`, and saves a draft unless `--send` is supplied. It targets the current API's required `segment_id` contract and maps the CLI reply-to input to the API's `reply_to` array. The pinned CLI command above therefore replaces a custom draft creator.
 
@@ -242,15 +242,20 @@ addresses with Clerk primary emails, and reports matches without writing to
 either provider:
 
 ```sh
-corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
+(
+  : "${RESEND_SUPPRESSIONS_API_KEY:?Load a Full access Resend maintenance key from Flaim's password manager first}"
+  RESEND_SUPPRESSIONS_API_KEY="$RESEND_SUPPRESSIONS_API_KEY" corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
+)
+unset RESEND_SUPPRESSIONS_API_KEY
 ```
 
 It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`. Resend does
-not offer a read-only API-key permission, so this dedicated credential requires
-Full access even though it is restricted in practice to this trusted local
-workflow. The command itself is always read-only and has no write mode. Any
-suppression removal must be reviewed and performed manually in Resend after the
-underlying delivery problem is resolved.
+not offer a read-only API-key permission, so load an existing Full access
+maintenance credential into the suppression-specific shell alias without
+printing it. Keep it out of `.env.local` and deployed environments, and unset it
+after the command. The command itself is always read-only and has no write mode.
+Any suppression removal must be reviewed and performed manually in Resend after
+the underlying delivery problem is resolved.
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 
