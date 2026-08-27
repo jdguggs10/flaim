@@ -421,6 +421,32 @@ describe('SyncStateStorage.transferLease', () => {
   });
 });
 
+describe('SyncStateStorage.takeoverLeaseForMutation', () => {
+  it('unconditionally replaces the provider owner after ensuring the row exists', async () => {
+    const { client, calls } = fakeSupabase([
+      { error: null },
+      { data: [{ clerk_user_id: 'user_1' }], error: null },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.takeoverLeaseForMutation('user_1', 'espn', 'league-mutation:1'))
+      .resolves.toBe(true);
+
+    expect(calls[1].update?.[0]?.[0]).toMatchObject({ sync_lease_owner: 'league-mutation:1' });
+    expect(calls[1].eq?.map((args) => args)).toContainEqual(['clerk_user_id', 'user_1']);
+    expect(calls[1].eq?.map((args) => args)).toContainEqual(['provider', 'espn']);
+    expect(calls[1].eq?.map((args) => args)).not.toContainEqual(['sync_lease_owner', expect.anything()]);
+  });
+
+  it('fails closed when takeover cannot be proven', async () => {
+    const { client } = fakeSupabase([{ error: new Error('supabase down') }]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.takeoverLeaseForMutation('user_1', 'espn', 'league-mutation:1'))
+      .resolves.toBe(false);
+  });
+});
+
 describe('SyncStateStorage.deleteLeaseRow', () => {
   it('deletes the owner-guarded row outright and reports success', async () => {
     const { client, calls } = fakeSupabase([
@@ -527,6 +553,19 @@ describe('SyncStateStorage.settle', () => {
       cooldownSeconds: 75,
       syncSource: 'web',
     })).resolves.toBeUndefined();
+  });
+
+  it('surfaces storage errors when a durable workflow requests retryable settlement', async () => {
+    const { client } = fakeSupabase([
+      { error: new Error('supabase down') },
+    ]);
+    const storage = new SyncStateStorage(client);
+
+    await expect(storage.settle('user_1', 'espn', 'history:job-1', {
+      status: 'success',
+      cooldownSeconds: 75,
+      syncSource: 'web',
+    }, { failOnError: true })).rejects.toThrow('supabase down');
   });
 });
 

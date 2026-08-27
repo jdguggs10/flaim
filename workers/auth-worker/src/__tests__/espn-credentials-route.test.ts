@@ -8,10 +8,34 @@ const mockStorage = vi.hoisted(() => ({
   setCredentials: vi.fn(),
 }));
 
+const mutationMocks = vi.hoisted(() => ({
+  begin: vi.fn(),
+  settle: vi.fn(),
+  syncFromEnvironment: vi.fn(),
+}));
+
 vi.mock('../supabase-storage', () => {
   return {
     EspnSupabaseStorage: {
       fromEnvironment: vi.fn().mockReturnValue(mockStorage),
+    },
+  };
+});
+
+vi.mock('../espn-history', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../espn-history')>();
+  return {
+    ...actual,
+    beginEspnLeagueMutation: mutationMocks.begin,
+  };
+});
+
+vi.mock('../sync-state', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../sync-state')>();
+  return {
+    ...actual,
+    SyncStateStorage: {
+      fromEnvironment: mutationMocks.syncFromEnvironment,
     },
   };
 });
@@ -115,6 +139,17 @@ function makeRequest(path: string, token: string): Request {
   });
 }
 
+function makeMutationRequest(path: string, token: string, method: 'POST' | 'DELETE', body?: unknown): Request {
+  return new Request(`https://api.flaim.app${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 beforeAll(async () => {
   const keyPair = await crypto.subtle.generateKey(
     {
@@ -154,6 +189,11 @@ beforeEach(() => {
     hasLeagues: false,
     hasDefaultTeam: false,
   });
+  mockStorage.setCredentials.mockResolvedValue(true);
+  mockStorage.deleteCredentials.mockResolvedValue(true);
+  mutationMocks.begin.mockResolvedValue({ jobId: null, ownerId: 'league-mutation:test' });
+  mutationMocks.settle.mockResolvedValue(undefined);
+  mutationMocks.syncFromEnvironment.mockReturnValue({ settle: mutationMocks.settle });
 });
 
 afterEach(() => {
@@ -202,5 +242,59 @@ describe('GET /auth/credentials/espn?forEdit=true', () => {
     expect(body).not.toHaveProperty('swid');
     expect(body).not.toHaveProperty('s2');
     expect(mockStorage.getCredentials).not.toHaveBeenCalled();
+  });
+});
+
+describe('ESPN credential mutations', () => {
+  it('takes and settles the provider mutation fence around credential replacement', async () => {
+    const token = await signedClerkToken();
+    const res = await app.fetch(makeMutationRequest('/auth/credentials/espn', token, 'POST', {
+      swid: RAW_SWID,
+      s2: RAW_S2,
+      email: 'new@example.com',
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(mutationMocks.begin).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({ settle: mutationMocks.settle }),
+      'user_public_route_test'
+    );
+    expect(mockStorage.setCredentials).toHaveBeenCalledWith(
+      'user_public_route_test', RAW_SWID, RAW_S2, 'new@example.com'
+    );
+    expect(mutationMocks.settle).toHaveBeenCalledWith(
+      'user_public_route_test', 'espn', 'league-mutation:test', {
+        status: 'skipped',
+        cooldownSeconds: 0,
+        syncSource: 'web',
+      }
+    );
+  });
+
+  it('takes and settles the provider mutation fence around credential and league deletion', async () => {
+    const token = await signedClerkToken();
+    const res = await app.fetch(
+      makeMutationRequest('/auth/credentials/espn', token, 'DELETE'),
+      baseEnv
+    );
+
+    expect(res.status).toBe(200);
+    expect(mutationMocks.begin).toHaveBeenCalledOnce();
+    expect(mockStorage.deleteCredentials).toHaveBeenCalledWith('user_public_route_test');
+    expect(mutationMocks.settle).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed without changing credentials when the mutation fence cannot be taken', async () => {
+    mutationMocks.begin.mockRejectedValueOnce(new Error('lease unavailable'));
+    const token = await signedClerkToken();
+    const res = await app.fetch(makeMutationRequest('/auth/credentials/espn', token, 'POST', {
+      swid: RAW_SWID,
+      s2: RAW_S2,
+    }), baseEnv);
+
+    expect(res.status).toBe(500);
+    expect(mockStorage.setCredentials).not.toHaveBeenCalled();
+    expect(mutationMocks.settle).not.toHaveBeenCalled();
   });
 });

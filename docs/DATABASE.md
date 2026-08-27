@@ -22,7 +22,7 @@ preview creation, and production DDL require separate approval and verification.
 Cloudflare Workers and server-side web paths use the Data API as
 `service_role`. Browser clients do not query Supabase directly.
 
-All 23 public tables currently have RLS enabled and no policies. The baseline
+All 24 public tables currently have RLS enabled and no policies. The baseline
 also reproduces the existing broad object grants and future-object defaults so
 permission hardening can be performed later as an isolated, reversible
 forward-only migration. Those before-state grants are not the desired final
@@ -40,7 +40,7 @@ read-only access to the analytics tables and views.
 
 Connected-provider state:
 
-- ESPN: `espn_credentials`, `espn_leagues`
+- ESPN: `espn_credentials`, `espn_leagues`, `espn_history_jobs`
 - Yahoo: `yahoo_credentials`, `yahoo_leagues`,
   `platform_oauth_states`
 - Sleeper: `sleeper_connections`, `sleeper_leagues`
@@ -73,6 +73,15 @@ service-role-only.
 
 `demo_antigravity_cache` is intentionally service-role-only in the reproduced
 before-state; `anon` and `authenticated` do not have table privileges on it.
+
+`espn_history_jobs` is also service-role-only. Its `advance_espn_history_job`,
+`finish_espn_history_job`, and `persist_espn_league_with_lease` RPCs are
+security invokers with an empty search path. The history RPCs lock the job
+before its credential snapshot and history lease, and the success/partial
+terminal marker requires both fences to remain valid. The league-write RPC
+requires the request's exact live ESPN lease owner before changing any row.
+This FLA-308 rollout boundary is repository contract only: applying the
+migration to preview or production requires separate approval and verification.
 
 ## Analytics
 

@@ -31,6 +31,13 @@ begin
     raise exception 'anon RPC unexpectedly succeeded';
   exception when insufficient_privilege then null;
   end;
+  begin
+    perform public.persist_espn_league_with_lease(
+      'denied', 'history:denied', 'league', 'football', 2024, 'team'
+    );
+    raise exception 'anon league persist RPC unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
 end $anon_denials$;
 
 reset role;
@@ -75,6 +82,8 @@ do $proof$
 declare
   v_job uuid := gen_random_uuid();
   v_incremental uuid := gen_random_uuid();
+  v_terminal uuid := gen_random_uuid();
+  v_lease_write_user text := 'history_lease_write_test';
   v_credential_updated_at timestamptz;
   v_outcome text;
   v_count integer;
@@ -118,6 +127,34 @@ begin
   ) then
     raise exception 'finish RPC ACL';
   end if;
+  if has_function_privilege(
+    'anon',
+    'public.persist_espn_league_with_lease(text,text,text,text,integer,text,text,text)',
+    'execute'
+  ) or has_function_privilege(
+    'authenticated',
+    'public.persist_espn_league_with_lease(text,text,text,text,integer,text,text,text)',
+    'execute'
+  ) or not has_function_privilege(
+    'service_role',
+    'public.persist_espn_league_with_lease(text,text,text,text,integer,text,text,text)',
+    'execute'
+  ) then
+    raise exception 'league persist RPC ACL';
+  end if;
+  select count(*) into v_count
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in (
+      'advance_espn_history_job',
+      'finish_espn_history_job',
+      'persist_espn_league_with_lease'
+    )
+    and (p.prosecdef or not p.proconfig @> array['search_path=""']);
+  if v_count <> 0 then
+    raise exception 'history RPC security invoker or empty search path missing';
+  end if;
 
   insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
   values ('history_test', 'swid', 's2', now())
@@ -135,7 +172,7 @@ begin
     v_credential_updated_at,
     1,
     'full',
-    '[{"leagueId":"league","sport":"football","seasonYear":2024}]',
+    '[{"leagueId":"league","sport":"football","seasonYear":2024,"teamId":"team"}]',
     1
   );
 
@@ -181,6 +218,15 @@ begin
   );
   if v_outcome <> 'plan_identity_mismatch' then
     raise exception 'plan identity mismatch accepted: %', v_outcome;
+  end if;
+
+  select outcome into v_outcome
+  from public.advance_espn_history_job(
+    v_job, v_credential_updated_at, 0, 'persist',
+    'league', 'football', 2024, 'wrong-team', 'Name', 'League', null, null
+  );
+  if v_outcome <> 'plan_identity_mismatch' then
+    raise exception 'plan team identity mismatch accepted: %', v_outcome;
   end if;
 
   update public.espn_credentials
@@ -259,6 +305,30 @@ begin
   if v_outcome <> 'already_processed' then
     raise exception 'replay failed: %', v_outcome;
   end if;
+  update public.espn_credentials
+  set updated_at = v_credential_updated_at + interval '1 second'
+  where clerk_user_id = 'history_test';
+  select outcome into v_outcome
+  from public.finish_espn_history_job(v_job, 'succeeded', null, null);
+  if v_outcome <> 'credential_changed' then
+    raise exception 'terminal credential fence failed: %', v_outcome;
+  end if;
+  update public.espn_credentials
+  set updated_at = v_credential_updated_at
+  where clerk_user_id = 'history_test';
+
+  update public.provider_sync_state
+  set sync_lease_owner = 'wrong-owner'
+  where clerk_user_id = 'history_test' and provider = 'espn';
+  select outcome into v_outcome
+  from public.finish_espn_history_job(v_job, 'succeeded', null, null);
+  if v_outcome <> 'lease_lost' then
+    raise exception 'terminal lease fence failed: %', v_outcome;
+  end if;
+  update public.provider_sync_state
+  set sync_lease_owner = 'history:' || v_job::text
+  where clerk_user_id = 'history_test' and provider = 'espn';
+
   select outcome into v_outcome
   from public.finish_espn_history_job(v_job, 'succeeded', null, null);
   if v_outcome <> 'finished' then
@@ -275,6 +345,16 @@ begin
   ) then
     raise exception 'full completion marker invalid';
   end if;
+  select outcome into v_outcome
+  from public.finish_espn_history_job(v_job, 'succeeded', null, null);
+  if v_outcome <> 'finished' then
+    raise exception 'lost terminal response replay was not idempotent: %', v_outcome;
+  end if;
+  select outcome into v_outcome
+  from public.finish_espn_history_job(v_job, 'cancelled', 'other_actor', 'Different terminal tuple');
+  if v_outcome <> 'job_not_active' then
+    raise exception 'different terminal actor was mistaken for replay: %', v_outcome;
+  end if;
 
   insert into public.espn_history_jobs (
     id, clerk_user_id, credential_updated_at, scan_version, mode, plan, planned_count
@@ -285,10 +365,10 @@ begin
     1,
     'incremental',
     jsonb_build_array(jsonb_build_object(
-      'leagueId', 'league', 'sport', 'football', 'seasonYear', 2024
+      'leagueId', 'league', 'sport', 'football', 'seasonYear', 2024, 'teamId', 'team'
     )) || (
       select jsonb_agg(jsonb_build_object(
-        'leagueId', 'x', 'sport', 'football', 'seasonYear', g
+        'leagueId', 'x', 'sport', 'football', 'seasonYear', g, 'teamId', 'team'
       ))
       from generate_series(1, 28) g
     ),
@@ -408,6 +488,155 @@ begin
   ) then
     raise exception 'partial completion marker invalid';
   end if;
+
+  insert into public.espn_history_jobs (
+    id, clerk_user_id, credential_updated_at, scan_version, mode
+  ) values (
+    v_terminal, 'history_test', v_credential_updated_at, 1, 'full'
+  );
+  update public.espn_credentials
+  set updated_at = v_credential_updated_at + interval '1 second'
+  where clerk_user_id = 'history_test';
+  update public.provider_sync_state
+  set sync_lease_owner = 'wrong-owner',
+      sync_lease_expires_at = now() - interval '1 second'
+  where clerk_user_id = 'history_test' and provider = 'espn';
+  select outcome into v_outcome
+  from public.finish_espn_history_job(v_terminal, 'failed', 'handoff_failed', 'Fence lost');
+  if v_outcome <> 'finished' then
+    raise exception 'failed job was not terminalizable after fence loss: %', v_outcome;
+  end if;
+
+  insert into public.provider_sync_state (
+    clerk_user_id, provider, sync_lease_owner, sync_lease_expires_at
+  ) values (
+    v_lease_write_user, 'espn', 'history:valid', now() + interval '1 hour'
+  );
+  select outcome into v_outcome
+  from public.persist_espn_league_with_lease(
+    v_lease_write_user, 'history:valid', 'lease-league', 'football', null,
+    'lease-team', 'Lease Team', 'Lease League'
+  );
+  if v_outcome <> 'invalid_identity' then
+    raise exception 'null season identity was accepted: %', v_outcome;
+  end if;
+  select outcome into v_outcome
+  from public.persist_espn_league_with_lease(
+    v_lease_write_user, 'history:wrong', 'lease-league', 'football', 2024,
+    'lease-team', 'Lease Team', 'Lease League'
+  );
+  if v_outcome <> 'lease_lost' then
+    raise exception 'exact lease owner was not required: %', v_outcome;
+  end if;
+  update public.provider_sync_state
+  set sync_lease_expires_at = now() - interval '1 second'
+  where clerk_user_id = v_lease_write_user and provider = 'espn';
+  select outcome into v_outcome
+  from public.persist_espn_league_with_lease(
+    v_lease_write_user, 'history:valid', 'lease-league', 'football', 2024,
+    'lease-team', 'Lease Team', 'Lease League'
+  );
+  if v_outcome <> 'lease_lost' then
+    raise exception 'expired lease owner was accepted: %', v_outcome;
+  end if;
+  update public.provider_sync_state
+  set sync_lease_expires_at = now() + interval '1 hour'
+  where clerk_user_id = v_lease_write_user and provider = 'espn';
+  select outcome into v_outcome
+  from public.persist_espn_league_with_lease(
+    v_lease_write_user, 'history:valid', 'lease-league', 'football', 2024,
+    'lease-team', 'Lease Team', 'Lease League'
+  );
+  if v_outcome <> 'added' then
+    raise exception 'lease-fenced add failed: %', v_outcome;
+  end if;
+  select outcome into v_outcome
+  from public.persist_espn_league_with_lease(
+    v_lease_write_user, 'history:valid', 'lease-league', 'football', 2024,
+    'lease-team-2', 'Lease Team 2', 'Lease League 2'
+  );
+  if v_outcome <> 'refreshed' then
+    raise exception 'lease-fenced refresh failed: %', v_outcome;
+  end if;
+  if not exists (
+    select 1
+    from public.espn_leagues
+    where clerk_user_id = v_lease_write_user
+      and league_id = 'lease-league'
+      and sport = 'football'
+      and season_year = 2024
+      and team_id = 'lease-team-2'
+      and league_name = 'Lease League 2'
+  ) then
+    raise exception 'lease-fenced refresh did not persist the new league values';
+  end if;
 end $proof$;
+
+-- The deployed workers invoke these invoker functions as service_role. Use
+-- named arguments for a real, state-changing call to prove that contract.
+set local role service_role;
+do $service_role_proof$
+declare
+  v_job uuid := gen_random_uuid();
+  v_credential_updated_at timestamptz;
+  v_outcome text;
+begin
+  insert into public.espn_credentials (clerk_user_id, swid, s2, updated_at)
+  values ('history_service_role_test', 'swid', 's2', now())
+  returning updated_at into v_credential_updated_at;
+  insert into public.provider_sync_state (
+    clerk_user_id, provider, sync_lease_owner, sync_lease_expires_at
+  ) values (
+    'history_service_role_test', 'espn', 'history:' || v_job::text,
+    now() + interval '1 hour'
+  );
+  insert into public.espn_history_jobs (
+    id, clerk_user_id, credential_updated_at, scan_version, mode, plan, planned_count
+  ) values (
+    v_job,
+    'history_service_role_test',
+    v_credential_updated_at,
+    1,
+    'full',
+    '[{"leagueId":"service-league","sport":"football","seasonYear":2024,"teamId":"service-team"}]',
+    1
+  );
+
+  select outcome into v_outcome
+  from public.advance_espn_history_job(
+    p_job_id => v_job,
+    p_credential_updated_at => v_credential_updated_at,
+    p_plan_index => 0,
+    p_action => 'skip'
+  );
+  if v_outcome <> 'skipped' then
+    raise exception 'service_role named advance failed: %', v_outcome;
+  end if;
+
+  select outcome into v_outcome
+  from public.finish_espn_history_job(
+    p_job_id => v_job,
+    p_status => 'succeeded'
+  );
+  if v_outcome <> 'finished' then
+    raise exception 'service_role named finish failed: %', v_outcome;
+  end if;
+
+  select outcome into v_outcome
+  from public.persist_espn_league_with_lease(
+    p_clerk_user_id => 'history_service_role_test',
+    p_lease_owner => 'history:' || v_job::text,
+    p_league_id => 'service-league',
+    p_sport => 'football',
+    p_season_year => 2024,
+    p_team_id => 'service-team',
+    p_team_name => 'Service Team',
+    p_league_name => 'Service League'
+  );
+  if v_outcome <> 'added' then
+    raise exception 'service_role named league persist failed: %', v_outcome;
+  end if;
+end $service_role_proof$;
+reset role;
 
 rollback;

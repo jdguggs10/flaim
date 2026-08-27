@@ -51,7 +51,7 @@ import {
   type DiscoveredLeague,
   type CurrentSeasonLeague,
 } from './v3/league-discovery';
-import { EspnHistoryRefreshWorkflow as EspnHistoryRefreshWorkflowBase, EspnHistoryJobStorage, durableHistoryEnabledFor, publicHistoryStatus, startQueuedEspnHistoryJob } from './espn-history';
+import { beginEspnLeagueMutation, EspnHistoryRefreshWorkflow as EspnHistoryRefreshWorkflowBase, EspnHistoryJobStorage, durableHistoryEnabledFor, publicHistoryStatus, startQueuedEspnHistoryJob } from './espn-history';
 // Wrangler resolves Workflow named entrypoints from this module itself.
 export class EspnHistoryRefreshWorkflow extends EspnHistoryRefreshWorkflowBase {}
 import {
@@ -1065,6 +1065,7 @@ api.get('/extension/connection', async (c) => {
 api.get('/history/espn', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
   if (!userId) return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  if (!durableHistoryEnabledFor(c.env, userId)) return c.json({ history: null });
   const job = await EspnHistoryJobStorage.fromEnvironment(c.env).latestForUser(userId);
   return c.json({ history: publicHistoryStatus(job) });
 });
@@ -1193,7 +1194,7 @@ api.post('/extension/discover', async (c) => {
   try {
     const useDurableHistory = durableHistoryEnabledFor(c.env, userId);
     const result = useDurableHistory
-      ? await discoverAndSaveCurrentLeagues(userId, credentials.swid, credentials.s2, storage)
+      ? await discoverAndSaveCurrentLeagues(userId, credentials.swid, credentials.s2, storage, ownerId)
       : await discoverAndSaveLeagues(userId, credentials.swid, credentials.s2, storage);
 
     const savedLeagues = result.savedLeagues ?? [];
@@ -1966,6 +1967,28 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
 
   const storage = EspnSupabaseStorage.fromEnvironment(env);
 
+  const runCredentialMutation = async (operation: () => Promise<boolean>): Promise<boolean> => {
+    const syncState = SyncStateStorage.fromEnvironment(env);
+    const mutation = await beginEspnLeagueMutation(
+      durableHistoryEnabledFor(env, clerkUserId)
+        ? EspnHistoryJobStorage.fromEnvironment(env)
+        : null,
+      syncState,
+      clerkUserId
+    );
+    try {
+      return await operation();
+    } finally {
+      // Credential save is commonly followed immediately by discovery.
+      // Keep the old owner fenced without imposing a new-user cooldown.
+      await syncState.settle(clerkUserId, 'espn', mutation.ownerId, {
+        status: 'skipped',
+        cooldownSeconds: 0,
+        syncSource: 'web',
+      });
+    }
+  };
+
   if (method === 'POST' || method === 'PUT') {
     const body = await c.req.json() as { swid?: string; s2?: string; email?: string };
     const validation = validateEspnCredentials(body);
@@ -1986,7 +2009,14 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
       }, 400);
     }
 
-    const success = await storage.setCredentials(clerkUserId, body.swid!, body.s2!, body.email);
+    let success: boolean;
+    try {
+      success = await runCredentialMutation(
+        () => storage.setCredentials(clerkUserId, body.swid!, body.s2!, body.email)
+      );
+    } catch {
+      return c.json({ error: 'Failed to fence credential replacement' }, 500);
+    }
 
     if (!success) {
       logAuthWorkerFailure(c.req.raw, env, 'onboarding_failed', {
@@ -2055,7 +2085,12 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
     });
 
   } else if (method === 'DELETE') {
-    const success = await storage.deleteCredentials(clerkUserId);
+    let success: boolean;
+    try {
+      success = await runCredentialMutation(() => storage.deleteCredentials(clerkUserId));
+    } catch {
+      return c.json({ error: 'Failed to fence credential deletion' }, 500);
+    }
 
     if (!success) {
       return c.json({ error: 'Failed to delete credentials' }, 500);
@@ -2167,6 +2202,27 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
 
   const storage = EspnSupabaseStorage.fromEnvironment(env);
 
+  const beginLeagueMutation = async () => {
+    const syncState = SyncStateStorage.fromEnvironment(env);
+    const mutation = await beginEspnLeagueMutation(
+      durableHistoryEnabledFor(env, clerkUserId)
+        ? EspnHistoryJobStorage.fromEnvironment(env)
+        : null,
+      syncState,
+      clerkUserId
+    );
+    return { syncState, mutation };
+  };
+
+  const settleLeagueMutation = async (
+    syncState: SyncStateStorage,
+    ownerId: string
+  ) => syncState.settle(clerkUserId, 'espn', ownerId, {
+    status: 'skipped',
+    cooldownSeconds: 1,
+    syncSource: 'web',
+  });
+
   if (method === 'POST' || method === 'PUT') {
     const body = (await c.req.json()) as { leagues?: EspnLeague[] };
     const leagues = body?.leagues;
@@ -2177,7 +2233,18 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       }, 400);
     }
 
-    const success = await storage.setLeagues(clerkUserId, leagues);
+    let mutation: Awaited<ReturnType<typeof beginLeagueMutation>>;
+    try {
+      mutation = await beginLeagueMutation();
+    } catch {
+      return c.json({ error: 'Failed to fence league replacement' }, 500);
+    }
+    let success: boolean;
+    try {
+      success = await storage.setLeagues(clerkUserId, leagues);
+    } finally {
+      await settleLeagueMutation(mutation.syncState, mutation.mutation.ownerId);
+    }
 
     if (!success) {
       return c.json({ error: 'Failed to store leagues' }, 500);
@@ -2231,7 +2298,21 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       }, 400);
     }
 
-    const success = await storage.removeLeague(clerkUserId, leagueId, sport);
+    // User deletion wins before, during, and after Workflow handoff. The
+    // mutation owner replaces any request/history lease before rows are
+    // removed, so every exact-owner refresh write after this point is rejected.
+    let mutation: Awaited<ReturnType<typeof beginLeagueMutation>>;
+    try {
+      mutation = await beginLeagueMutation();
+    } catch {
+      return c.json({ error: 'Failed to fence league deletion' }, 500);
+    }
+    let success: boolean;
+    try {
+      success = await storage.removeLeague(clerkUserId, leagueId, sport);
+    } finally {
+      await settleLeagueMutation(mutation.syncState, mutation.mutation.ownerId);
+    }
 
     if (!success) {
       return c.json({ error: 'Failed to remove league' }, 500);

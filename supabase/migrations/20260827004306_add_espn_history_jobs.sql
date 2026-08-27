@@ -96,22 +96,29 @@ begin
     return query select 'out_of_order'::text;
     return;
   end if;
-  if not exists (
-    select 1 from public.espn_credentials c
-    where c.clerk_user_id = v_job.clerk_user_id
-      and c.updated_at = p_credential_updated_at
-  ) then
+  -- Lock the exact credential snapshot before league DML. A concurrent
+  -- credential refresh either commits before this read (and fails the fence)
+  -- or waits until this step is complete.
+  perform 1
+  from public.espn_credentials
+  where clerk_user_id = v_job.clerk_user_id
+    and updated_at = p_credential_updated_at
+  for update;
+  if not found then
     return query select 'credential_changed'::text;
     return;
   end if;
 
-  if not exists (
-    select 1 from public.provider_sync_state s
-    where s.clerk_user_id = v_job.clerk_user_id
-      and s.provider = 'espn'
-      and s.sync_lease_owner = ('history:' || p_job_id::text)
-      and s.sync_lease_expires_at > now()
-  ) then
+  -- Keep the job-first lock order, then lock the exact live history lease so
+  -- a lease mutation cannot pass between its validation and the league write.
+  perform 1
+  from public.provider_sync_state
+  where clerk_user_id = v_job.clerk_user_id
+    and provider = 'espn'
+    and sync_lease_owner = ('history:' || p_job_id::text)
+    and sync_lease_expires_at > now()
+  for update;
+  if not found then
     return query select 'lease_lost'::text;
     return;
   end if;
@@ -130,7 +137,8 @@ begin
   if p_league_id is null or btrim(p_league_id)='' or p_sport not in ('football','baseball','basketball','hockey') or p_season_year is null or p_team_id is null or btrim(p_team_id)='' then return query select 'invalid_persist_identity'::text; return; end if;
   if coalesce(v_job.plan -> p_plan_index ->> 'leagueId','') <> p_league_id
      or coalesce(v_job.plan -> p_plan_index ->> 'sport','') <> p_sport
-     or coalesce((v_job.plan -> p_plan_index ->> 'seasonYear')::integer,-1) <> p_season_year then
+     or coalesce((v_job.plan -> p_plan_index ->> 'seasonYear')::integer,-1) <> p_season_year
+     or coalesce(v_job.plan -> p_plan_index ->> 'teamId','') <> p_team_id then
     return query select 'plan_identity_mismatch'::text;
     return;
   end if;
@@ -190,7 +198,6 @@ begin
   select * into v_job
   from public.espn_history_jobs
   where id = p_job_id
-    and status in ('queued', 'running')
   for update;
 
   if not found then
@@ -199,6 +206,18 @@ begin
   end if;
   if p_status not in ('succeeded', 'partial', 'failed', 'superseded', 'cancelled') then
     return query select 'invalid_status'::text;
+    return;
+  end if;
+  -- A Workflow step can retry after this transaction committed but before its
+  -- result was checkpointed. Recover only an exact replay of the stored
+  -- terminal tuple; a different actor's terminal state remains a rejection.
+  if v_job.status not in ('queued', 'running') then
+    if v_job.status = p_status
+      and v_job.last_error_code is not distinct from left(p_error_code, 64)
+      and v_job.last_error_message is not distinct from left(p_error_message, 240) then
+      return query select 'finished'::text;
+    end if;
+    return query select 'job_not_active'::text;
     return;
   end if;
   if p_status = 'succeeded'
@@ -210,6 +229,33 @@ begin
     and (v_job.cursor <> v_job.planned_count or v_job.failed_count = 0) then
     return query select 'completion_incomplete'::text;
     return;
+  end if;
+
+  -- Only successful repair markers need the credential and lease fences.
+  -- Failed, superseded, and cancelled jobs must still be terminalizable after
+  -- a handoff or credential rotation so they cannot remain active forever.
+  if p_status in ('succeeded', 'partial') then
+    perform 1
+    from public.espn_credentials
+    where clerk_user_id = v_job.clerk_user_id
+      and updated_at = v_job.credential_updated_at
+    for update;
+    if not found then
+      return query select 'credential_changed'::text;
+      return;
+    end if;
+
+    perform 1
+    from public.provider_sync_state
+    where clerk_user_id = v_job.clerk_user_id
+      and provider = 'espn'
+      and sync_lease_owner = ('history:' || p_job_id::text)
+      and sync_lease_expires_at > now()
+    for update;
+    if not found then
+      return query select 'lease_lost'::text;
+      return;
+    end if;
   end if;
 
   update public.espn_history_jobs
@@ -225,3 +271,89 @@ $$;
 
 revoke all on function public.finish_espn_history_job(uuid, text, text, text) from public, anon, authenticated;
 grant execute on function public.finish_espn_history_job(uuid, text, text, text) to service_role;
+
+-- A narrow write RPC for callers that already hold the ESPN synchronization
+-- lease. It is separate from job advancement so ordinary lease-fenced refresh
+-- paths cannot write a league after a lease handoff.
+create function public.persist_espn_league_with_lease(
+  p_clerk_user_id text,
+  p_lease_owner text,
+  p_league_id text,
+  p_sport text,
+  p_season_year integer,
+  p_team_id text,
+  p_team_name text default null,
+  p_league_name text default null
+)
+returns table(outcome text)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if p_clerk_user_id is null or btrim(p_clerk_user_id) = ''
+     or p_lease_owner is null or btrim(p_lease_owner) = ''
+     or p_league_id is null or btrim(p_league_id) = ''
+     or p_sport is null
+     or p_sport not in ('football', 'baseball', 'basketball', 'hockey')
+     or p_season_year is null
+     or p_team_id is null or btrim(p_team_id) = '' then
+    return query select 'invalid_identity'::text;
+    return;
+  end if;
+
+  -- This lock remains held through every league DML statement below. If a
+  -- handoff committed first, the exact-owner predicate returns lease_lost;
+  -- otherwise the handoff waits for this write to finish.
+  perform 1
+  from public.provider_sync_state
+  where clerk_user_id = p_clerk_user_id
+    and provider = 'espn'
+    and sync_lease_owner = p_lease_owner
+    and sync_lease_expires_at > now()
+  for update;
+  if not found then
+    return query select 'lease_lost'::text;
+    return;
+  end if;
+
+  update public.espn_leagues
+  set team_id = p_team_id,
+      team_name = p_team_name,
+      league_name = p_league_name
+  where clerk_user_id = p_clerk_user_id
+    and league_id = p_league_id
+    and sport = p_sport
+    and season_year = p_season_year;
+  if found then
+    return query select 'refreshed'::text;
+    return;
+  end if;
+
+  -- The uniqueness key is an expression index, so it cannot be named by a
+  -- simple conflict target. The second update repairs a concurrent winner.
+  insert into public.espn_leagues (
+    clerk_user_id, league_id, sport, team_id, team_name, league_name, season_year
+  ) values (
+    p_clerk_user_id, p_league_id, p_sport, p_team_id, p_team_name, p_league_name,
+    p_season_year
+  ) on conflict do nothing;
+  if found then
+    return query select 'added'::text;
+    return;
+  end if;
+
+  update public.espn_leagues
+  set team_id = p_team_id,
+      team_name = p_team_name,
+      league_name = p_league_name
+  where clerk_user_id = p_clerk_user_id
+    and league_id = p_league_id
+    and sport = p_sport
+    and season_year = p_season_year;
+  return query select 'refreshed'::text;
+end;
+$$;
+
+revoke all on function public.persist_espn_league_with_lease(text, text, text, text, integer, text, text, text) from public, anon, authenticated;
+grant execute on function public.persist_espn_league_with_lease(text, text, text, text, integer, text, text, text) to service_role;

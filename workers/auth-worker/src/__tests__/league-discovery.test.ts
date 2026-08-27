@@ -9,6 +9,7 @@ vi.mock('../v3/get-league-teams', () => ({
 
 import {
   discoverLeaguesV3,
+  discoverAndSaveCurrentLeagues,
   discoverAndSaveLeagues,
 } from '../v3/league-discovery';
 import { EspnCredentialsRequired, AutomaticLeagueDiscoveryFailed } from '../espn-types';
@@ -109,6 +110,48 @@ describe('discoverAndSaveLeagues', () => {
   afterEach(() => {
     logSpy.mockRestore();
     errorSpy.mockRestore();
+  });
+
+  it('uses the exact request owner for current-row writes and stops after lease takeover', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [{
+          id: 'pref-1',
+          type: { code: 'fantasy' },
+          metaData: {
+            entry: {
+              entryId: 8,
+              gameId: 1,
+              seasonId: 2026,
+              entryMetadata: { teamName: 'Team' },
+              groups: [{ groupId: 12345, groupName: 'League' }],
+            },
+          },
+        }],
+      }),
+    } as Response);
+    const storage = {
+      persistLeagueWithLease: vi.fn().mockResolvedValue('lease_lost'),
+      leagueExists: vi.fn(),
+      addLeague: vi.fn(),
+      updateLeague: vi.fn(),
+    } as any;
+
+    await expect(discoverAndSaveCurrentLeagues(
+      'user_123', '{swid}', 's2token', storage, 'request-owner'
+    )).rejects.toThrow('lease lost');
+
+    expect(storage.persistLeagueWithLease).toHaveBeenCalledWith(
+      'user_123',
+      'request-owner',
+      expect.objectContaining({ leagueId: '12345', seasonYear: 2026, teamId: '8' })
+    );
+    expect(storage.leagueExists).not.toHaveBeenCalled();
+    expect(storage.addLeague).not.toHaveBeenCalled();
+    expect(storage.updateLeague).not.toHaveBeenCalled();
   });
 
   it('discovers and persists baseball history through 2011', async () => {

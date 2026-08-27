@@ -248,11 +248,14 @@ export interface DiscoverAndSaveCurrentResult {
   savedLeagues: DiscoveredEspnLeague[];
 }
 
+class EspnLeagueWriteLeaseLostError extends Error {}
+
 export async function discoverAndSaveCurrentLeagues(
   userId: string,
   swid: string,
   s2: string,
-  storage: EspnSupabaseStorage
+  storage: EspnSupabaseStorage,
+  leaseOwner?: string
 ): Promise<DiscoverAndSaveCurrentResult> {
   const leagues = await discoverLeaguesV3(swid, s2);
 
@@ -275,10 +278,27 @@ export async function discoverAndSaveCurrentLeagues(
         teamId: String(league.teamId),
         teamName: league.teamName,
       };
-      const exists = await storage.leagueExists(userId, sport, league.leagueId, canonicalSeasonYear);
       let saved = false;
 
-      if (exists) {
+      if (leaseOwner) {
+        const outcome = await storage.persistLeagueWithLease(userId, leaseOwner, {
+          leagueId: league.leagueId,
+          sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+          leagueName: league.leagueName,
+          teamId: String(league.teamId),
+          teamName: league.teamName,
+          seasonYear: canonicalSeasonYear,
+        });
+        if (outcome === 'lease_lost') throw new EspnLeagueWriteLeaseLostError('ESPN refresh lease lost');
+        if (outcome === 'added') {
+          saved = true;
+          currentSeason.added++;
+        } else if (outcome === 'refreshed') {
+          saved = true;
+          currentSeason.refreshed++;
+          currentSeason.alreadySaved++;
+        }
+      } else if (await storage.leagueExists(userId, sport, league.leagueId, canonicalSeasonYear)) {
         saved = await storage.updateLeague(userId, league.leagueId, sport, canonicalSeasonYear, updates);
         if (saved) currentSeason.refreshed++;
         currentSeason.alreadySaved++;
@@ -318,6 +338,7 @@ export async function discoverAndSaveCurrentLeagues(
       });
       savedLeagues.push(league);
     } catch (error) {
+      if (error instanceof EspnLeagueWriteLeaseLostError) throw error;
       console.error(`Error processing league ${league.leagueId}:`, error);
     }
   }
@@ -339,10 +360,11 @@ export async function discoverAndSaveLeagues(
   userId: string,
   swid: string,
   s2: string,
-  storage: EspnSupabaseStorage
+  storage: EspnSupabaseStorage,
+  leaseOwner?: string
 ): Promise<DiscoverAndSaveResult> {
   const { discovered, currentSeason, savedLeagues } = await discoverAndSaveCurrentLeagues(
-    userId, swid, s2, storage
+    userId, swid, s2, storage, leaseOwner
   );
   const pastSeasons: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
 
@@ -354,7 +376,8 @@ export async function discoverAndSaveLeagues(
         league,
         swid,
         s2,
-        storage
+        storage,
+        leaseOwner
       );
       pastSeasons.found += histResult.found;
       pastSeasons.added += histResult.added;
@@ -391,7 +414,8 @@ async function discoverHistoricalSeasons(
   league: DiscoveredEspnLeague,
   swid: string,
   s2: string,
-  storage: EspnSupabaseStorage
+  storage: EspnSupabaseStorage,
+  leaseOwner?: string
 ): Promise<HistoricalResult> {
   const result: HistoricalResult = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
   const sport = gameIdToSport(league.gameId);
@@ -424,6 +448,25 @@ async function discoverHistoricalSeasons(
 
         // User was a member - count it as found
         result.found++;
+
+        if (leaseOwner) {
+          const historicalInfo = await getLeagueInfoSafe(swid, s2, league.leagueId, espnYear, league.gameId);
+          const outcome = await storage.persistLeagueWithLease(userId, leaseOwner, {
+            leagueId: league.leagueId,
+            sport: sport as 'football' | 'baseball' | 'basketball' | 'hockey',
+            leagueName: historicalInfo?.leagueName || league.leagueName,
+            teamId: historicalTeam.teamId,
+            teamName: historicalTeam.teamName || league.teamName,
+            seasonYear: canonicalYear,
+          });
+          if (outcome === 'lease_lost') throw new EspnLeagueWriteLeaseLostError('ESPN refresh lease lost');
+          if (outcome === 'added') result.added++;
+          if (outcome === 'refreshed') {
+            result.alreadySaved++;
+            result.refreshed++;
+          }
+          continue;
+        }
 
         // Check if already saved (DB stores canonical year)
         const exists = await storage.leagueExists(userId, sport, league.leagueId, canonicalYear);
@@ -462,6 +505,7 @@ async function discoverHistoricalSeasons(
         }
 
       } catch (seasonError) {
+        if (seasonError instanceof EspnLeagueWriteLeaseLostError) throw seasonError;
         // Per-season error handling - continue with other seasons
         console.error(`Error fetching season ${canonicalYear} for league ${league.leagueId}:`, seasonError);
         continue;
@@ -469,6 +513,7 @@ async function discoverHistoricalSeasons(
     }
 
   } catch (error) {
+    if (error instanceof EspnLeagueWriteLeaseLostError) throw error;
     // If we can't get league info at all, just log and return
     console.error(`Failed to discover history for league ${league.leagueId}:`, error);
   }

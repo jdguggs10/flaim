@@ -6,6 +6,12 @@
  */
 
 import { EspnSupabaseStorage } from './supabase-storage';
+import {
+  beginEspnLeagueMutation,
+  durableHistoryEnabledFor,
+  EspnHistoryJobStorage,
+} from './espn-history';
+import { SyncStateStorage } from './sync-state';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 
 // =============================================================================
@@ -17,6 +23,8 @@ export interface ExtensionEnv {
   SUPABASE_SERVICE_KEY: string;
   NODE_ENV?: string;
   ENVIRONMENT?: string;
+  ESPN_DURABLE_HISTORY_ENABLED?: string;
+  ESPN_DURABLE_HISTORY_USERS?: string;
 }
 
 interface ExtensionSyncBody {
@@ -165,9 +173,43 @@ export async function handleSyncCredentials(
     }
     const body = parsedBody.body!;
 
-    // Store credentials
+    // Credential replacement takes over the provider lease before storage.
+    // This prevents an older current-league scan from writing rows after the
+    // account's cookies change, even before a history job exists.
     const credStorage = EspnSupabaseStorage.fromEnvironment(env);
-    const success = await credStorage.setCredentials(userId, body.swid, body.s2);
+    const syncState = SyncStateStorage.fromEnvironment(env);
+    let mutation: Awaited<ReturnType<typeof beginEspnLeagueMutation>>;
+    try {
+      mutation = await beginEspnLeagueMutation(
+        durableHistoryEnabledFor(env, userId)
+          ? EspnHistoryJobStorage.fromEnvironment(env)
+          : null,
+        syncState,
+        userId
+      );
+    } catch {
+      logExtensionFailure(request, env, {
+        stage: 'credential_storage',
+        failure_kind: 'storage',
+        error_code: 'credential_mutation_fence_failed',
+        http_status: 500,
+      });
+      return jsonResponse({
+        error: 'server_error',
+        error_description: 'Failed to fence credential replacement',
+      }, 500, corsHeaders);
+    }
+
+    let success: boolean;
+    try {
+      success = await credStorage.setCredentials(userId, body.swid, body.s2);
+    } finally {
+      await syncState.settle(userId, 'espn', mutation.ownerId, {
+        status: 'skipped',
+        cooldownSeconds: 0,
+        syncSource: 'extension',
+      });
+    }
 
     if (!success) {
       logExtensionFailure(request, env, {

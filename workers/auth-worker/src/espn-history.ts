@@ -2,7 +2,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { getLeagueInfo } from './v3/get-league-info';
 import { getLeagueTeams } from './v3/get-league-teams';
-import { EspnApiError, EspnAuthenticationFailed, EspnLeagueNotFound, gameIdToSport, type DiscoveredEspnLeague } from './espn-types';
+import { EspnApiError, EspnAuthenticationFailed, EspnCredentialsRequired, EspnLeagueNotFound, gameIdToSport, type DiscoveredEspnLeague } from './espn-types';
 import { toPlatformYear } from './season-utils';
 import {
   NORMAL_REFRESH_COOLDOWN_SECONDS,
@@ -17,16 +17,18 @@ export type EspnHistoryMode = 'full' | 'incremental';
 export type EspnHistoryUpstreamClass = 'auth' | 'permanent' | 'retryable';
 
 export function classifyEspnHistoryUpstreamError(error: unknown): EspnHistoryUpstreamClass {
+  const message = error instanceof Error ? error.message : '';
   if (
     error instanceof EspnAuthenticationFailed
-    || /credential|authentication|unauthori[sz]ed/i.test(error instanceof Error ? error.message : '')
+    || error instanceof EspnCredentialsRequired
+    || /authentication|unauthori[sz]ed|forbidden|credentials? (?:changed|required|expired|need)/i.test(message)
   ) {
     return 'auth';
   }
   if (error instanceof EspnLeagueNotFound) return 'permanent';
   if (error instanceof EspnApiError) {
     if (error.status === 401 || error.status === 403) return 'auth';
-    if (error.status === undefined || error.status === 429 || error.status >= 500) return 'retryable';
+    if (error.status === undefined || error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500) return 'retryable';
     return error.status >= 400 && error.status < 500 ? 'permanent' : 'retryable';
   }
   return 'retryable';
@@ -123,6 +125,15 @@ function isUniqueViolation(error: { code?: string } | null): boolean {
   return error?.code === '23505';
 }
 
+export function isMissingEspnHistoryTableError(
+  error: { code?: string; message?: string } | null
+): boolean {
+  if (!error) return false;
+  if (error.code === '42P01' || error.code === 'PGRST205') return true;
+  return /espn_history_jobs/i.test(error.message ?? '')
+    && /(does not exist|schema cache|could not find)/i.test(error.message ?? '');
+}
+
 export function durableHistoryEnabledFor(env: Pick<EspnHistoryEnv, 'ESPN_DURABLE_HISTORY_ENABLED' | 'ESPN_DURABLE_HISTORY_USERS'>, userId: string): boolean {
   if (env.ESPN_DURABLE_HISTORY_ENABLED !== 'true') return false;
   // The allowlist is a private environment value. Do not log it or its size.
@@ -166,20 +177,26 @@ export class EspnHistoryJobStorage {
   }
 
   async activeForUser(userId: string): Promise<EspnHistoryJob | null> {
+    await this.failStaleQueuedJob(userId);
     const { data, error } = await this.supabase.from('espn_history_jobs').select('*')
       .eq('clerk_user_id', userId).in('status', ['queued', 'running']).order('created_at', { ascending: false }).limit(1).maybeSingle();
-    return error ? null : asJob(data);
+    if (error) throw new Error('Unable to read active ESPN history job');
+    return asJob(data);
   }
 
   async latestForUser(userId: string): Promise<EspnHistoryJob | null> {
+    await this.failStaleQueuedJob(userId);
     const { data, error } = await this.supabase.from('espn_history_jobs').select('*')
       .eq('clerk_user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle();
-    return error ? null : asJob(data);
+    if (isMissingEspnHistoryTableError(error)) return null;
+    if (error) throw new Error('Unable to read latest ESPN history job');
+    return asJob(data);
   }
 
   async get(id: string): Promise<EspnHistoryJob | null> {
     const { data, error } = await this.supabase.from('espn_history_jobs').select('*').eq('id', id).maybeSingle();
-    return error ? null : asJob(data);
+    if (error) throw new Error('Unable to read ESPN history job');
+    return asJob(data);
   }
 
   async progress(id: string): Promise<EspnHistoryProgress | null> {
@@ -188,7 +205,8 @@ export class EspnHistoryJobStorage {
       .select('status,cursor,planned_count,failed_count')
       .eq('id', id)
       .maybeSingle();
-    return error || !data ? null : data as EspnHistoryProgress;
+    if (error) throw new Error('Unable to read ESPN history progress');
+    return data ? data as EspnHistoryProgress : null;
   }
 
   private async failStaleQueuedJob(userId: string): Promise<void> {
@@ -205,14 +223,14 @@ export class EspnHistoryJobStorage {
       })
       .eq('clerk_user_id', userId)
       .eq('status', 'queued')
-      .is('workflow_instance_id', null)
       .lt('updated_at', staleBefore);
+    if (isMissingEspnHistoryTableError(error)) return;
     if (error) throw new Error('Unable to recover a stale ESPN history job');
   }
 
   async createOrCoalesce(userId: string, credentialUpdatedAt: string, attempt = 0): Promise<{ job: EspnHistoryJob; created: boolean }> {
     await this.failStaleQueuedJob(userId);
-    const { data: repaired } = await this.supabase
+    const { data: repaired, error: repairedError } = await this.supabase
       .from('espn_history_jobs')
       .select('id')
       .eq('clerk_user_id', userId)
@@ -222,6 +240,7 @@ export class EspnHistoryJobStorage {
       .not('finished_at', 'is', null)
       .limit(1)
       .maybeSingle();
+    if (repairedError) throw new Error('Unable to read ESPN history repair marker');
     const mode: EspnHistoryMode = repaired ? 'incremental' : 'full';
     const { data, error } = await this.supabase.from('espn_history_jobs').insert({
       clerk_user_id: userId, credential_updated_at: credentialUpdatedAt, scan_version: ESPN_HISTORY_SCAN_VERSION, mode,
@@ -269,7 +288,7 @@ export class EspnHistoryJobStorage {
     status: Extract<EspnHistoryJobStatus, 'succeeded' | 'partial' | 'failed' | 'superseded' | 'cancelled'>,
     errorCode?: string,
     errorMessage?: string
-  ): Promise<void> {
+  ): Promise<string> {
     const { data, error } = await this.supabase.rpc('finish_espn_history_job', {
       p_job_id: id,
       p_status: status,
@@ -278,9 +297,11 @@ export class EspnHistoryJobStorage {
     });
     if (error) throw new Error('Unable to finish ESPN history job');
     const row = Array.isArray(data) ? data[0] : data;
-    if (row?.outcome !== 'finished' && row?.outcome !== 'job_not_active') {
-      throw new Error(`ESPN history job rejected terminal state: ${String(row?.outcome ?? 'unknown')}`);
+    const outcome = typeof row?.outcome === 'string' ? row.outcome : 'unknown';
+    if (!['finished', 'job_not_active', 'credential_changed', 'lease_lost'].includes(outcome)) {
+      throw new Error(`ESPN history job rejected terminal state: ${outcome}`);
     }
+    return outcome;
   }
 
   async advance(index: number, job: EspnHistoryJob, action: 'persist' | 'skip' | 'fail', item?: EspnHistoryPlanItem, failure?: { code: string; message: string }): Promise<string> {
@@ -393,10 +414,68 @@ export function stopForHistoryAdvanceOutcome(outcome: string): HistoryStop | nul
   };
 }
 
+export function stopForHistoryTerminalOutcome(outcome: string): HistoryStop | null {
+  if (outcome === 'finished') return null;
+  if (outcome === 'credential_changed') {
+    return {
+      status: 'superseded',
+      code: 'credentials_changed',
+      message: 'ESPN credentials changed before history completion. Run sync again.',
+    };
+  }
+  if (outcome === 'lease_lost' || outcome === 'job_not_active') {
+    return {
+      status: 'cancelled',
+      code: outcome === 'job_not_active' ? 'history_job_not_active' : 'history_lease_lost',
+      message: outcome === 'job_not_active'
+        ? 'The ESPN history job is no longer active.'
+        : 'The history refresh lost its ownership fence. Run sync again.',
+    };
+  }
+  return {
+    status: 'failed',
+    code: 'history_terminal_fence_rejected',
+    message: `The history refresh rejected an unsafe terminal state (${outcome}).`,
+  };
+}
+
+export async function ensureEspnHistoryJobStarted(
+  storage: Pick<EspnHistoryJobStorage, 'start' | 'get'>,
+  jobId: string
+): Promise<boolean> {
+  if (await storage.start(jobId)) return true;
+  return (await storage.get(jobId))?.status === 'running';
+}
+
+export async function beginEspnLeagueMutation(
+  storage: Pick<EspnHistoryJobStorage, 'activeForUser' | 'terminal'> | null,
+  lease: Pick<SyncStateStorage, 'takeoverLeaseForMutation'>,
+  userId: string
+): Promise<{ jobId: string | null; ownerId: string }> {
+  const active = storage ? await storage.activeForUser(userId) : null;
+  if (active) {
+    await storage!.terminal(
+      active.id,
+      'cancelled',
+      'league_data_changed',
+      'History refresh cancelled because saved ESPN leagues changed.'
+    );
+  }
+  const ownerId = `league-mutation:${crypto.randomUUID()}`;
+  if (!await lease.takeoverLeaseForMutation(userId, 'espn', ownerId)) {
+    throw new Error('Unable to fence ESPN league mutation');
+  }
+  return { jobId: active?.id ?? null, ownerId };
+}
+
 export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEnv, { jobId: string }> {
   async run(event: Readonly<WorkflowEvent<{ jobId: string }>>, step: WorkflowStep): Promise<void> {
     const storage = EspnHistoryJobStorage.fromEnvironment(this.env);
-    const initial = await step.do('load job', async () => storage.get(event.payload.jobId));
+    const initial = await step.do(
+      'load job',
+      { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
+      async () => storage.get(event.payload.jobId)
+    );
     if (!initial) return;
 
     const lease = SyncStateStorage.fromEnvironment(this.env);
@@ -407,30 +486,64 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
       message?: string,
       upstreamBackoff = false
     ): Promise<void> => {
-      await step.do(
+      let effectiveStatus = status;
+      let effectiveCode = code;
+      let effectiveMessage = message;
+
+      if (status === 'succeeded' || status === 'partial') {
+        const renewed = await step.do(
+          'renew history lease before completion',
+          async () => lease.extendLease(initial.clerk_user_id, 'espn', owner)
+        );
+        if (!renewed) {
+          effectiveStatus = 'cancelled';
+          effectiveCode = 'history_lease_lost';
+          effectiveMessage = 'The history refresh lost its ownership fence. Run sync again.';
+        }
+      }
+
+      const outcome = await step.do(
         'finish history job',
         { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
-        async () => storage.terminal(initial.id, status, code, message)
+        async () => storage.terminal(initial.id, effectiveStatus, effectiveCode, effectiveMessage)
       );
+      const stop = stopForHistoryTerminalOutcome(outcome);
+      if (stop && outcome !== 'job_not_active') {
+        effectiveStatus = stop.status;
+        effectiveCode = stop.code;
+        effectiveMessage = stop.message;
+        const recoveryOutcome = await step.do(
+          'finish history job after completion fence rejection',
+          { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
+          async () => storage.terminal(initial.id, stop.status, stop.code, stop.message)
+        );
+        if (recoveryOutcome !== 'finished' && recoveryOutcome !== 'job_not_active') {
+          throw new Error(`ESPN history job rejected terminal recovery: ${recoveryOutcome}`);
+        }
+      } else if (stop) {
+        effectiveStatus = stop.status;
+        effectiveCode = stop.code;
+        effectiveMessage = stop.message;
+      }
       await step.do(
         'settle history lease',
         { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
         async () => lease.settle(initial.clerk_user_id, 'espn', owner, {
-          status: status === 'succeeded' ? 'success'
-            : status === 'failed' || status === 'partial' ? 'error'
+          status: effectiveStatus === 'succeeded' ? 'success'
+            : effectiveStatus === 'failed' || effectiveStatus === 'partial' ? 'error'
               : 'skipped',
-          cooldownSeconds: status === 'superseded' || status === 'cancelled'
+          cooldownSeconds: effectiveStatus === 'superseded' || effectiveStatus === 'cancelled'
             ? 1
             : upstreamBackoff
               ? UPSTREAM_BACKOFF_COOLDOWN_SECONDS
               : NORMAL_REFRESH_COOLDOWN_SECONDS,
           syncSource: 'web',
-          errorCode: code,
-          errorMessage: message,
+          errorCode: effectiveCode,
+          errorMessage: effectiveMessage,
           durationMs: initial.started_at
             ? Math.max(0, Date.now() - new Date(initial.started_at).getTime())
             : undefined,
-        })
+        }, { failOnError: true })
       );
     };
 
@@ -438,9 +551,18 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
       await finish('cancelled', 'history_disabled', 'ESPN history refresh is disabled');
       return;
     }
-    if (!await storage.start(initial.id) && initial.status !== 'running') return;
+    const started = await step.do(
+      'start job',
+      { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
+      async () => ensureEspnHistoryJobStarted(storage, initial.id)
+    );
+    if (!started) return;
 
-    const job = await step.do('load started job', async () => storage.get(initial.id));
+    const job = await step.do(
+      'load started job',
+      { retries: { limit: 3, delay: '5 seconds', backoff: 'exponential' } },
+      async () => storage.get(initial.id)
+    );
     if (!job) return;
     const credentialsMatch = await step.do(
       'verify credential snapshot',
@@ -479,7 +601,7 @@ export class EspnHistoryRefreshWorkflow extends WorkflowEntrypoint<EspnHistoryEn
     try {
       plan = await step.do(
         'plan history',
-        { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' }, timeout: '2 minutes' },
+        { retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' }, timeout: '10 minutes' },
         async () => {
           const planCredentials = await storage.credentials(job.clerk_user_id);
           if (!planCredentials || planCredentials.updatedAt !== job.credential_updated_at) {

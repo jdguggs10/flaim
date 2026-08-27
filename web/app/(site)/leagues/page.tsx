@@ -42,6 +42,7 @@ import {
   parseYahooRetryAfterSeconds,
 } from '@/lib/yahoo-auth-errors';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
+import { shouldProbeEspnHistoryAfterRefreshFailure } from '@/lib/espn-history-refresh';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 import { getPreviousSeasonYear } from '@/lib/season-utils';
 import { getDeviceClass, type DeviceClass } from '@/lib/device';
@@ -251,14 +252,15 @@ function canApplyState(shouldApply?: () => boolean): boolean {
 }
 
 function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
-  const results = data.results ? Object.values(data.results) : [];
-  const successful = results.filter((result) => result?.status === 'success').length;
-  const skipped = results.filter((result) => result?.status === 'skipped').length;
-  const failed = results.filter((result) => result?.status === 'error').length;
-  const retryAfter = results.find((result) => result?.status === 'error' && result.retryAfter)?.retryAfter;
-  const firstError = results.find(
-    (result) => result?.status === 'error' && (result.error_description || result.error)
-  );
+  const results = data.results ? Object.entries(data.results) : [];
+  const successful = results.filter(([, result]) => result?.status === 'success').length;
+  const skipped = results.filter(([, result]) => result?.status === 'skipped').length;
+  const failed = results.filter(([, result]) => result?.status === 'error').length;
+  const firstError = results.find(([, result]) => result?.status === 'error');
+  const [failedProvider, failedResult] = firstError ?? [];
+  const providerName = failedProvider ? capitalize(failedProvider) : 'A platform';
+  const errorMessage = failedResult?.error_description || failedResult?.error;
+  const retryAfter = failedResult?.retryAfter;
 
   if (successful > 0 && failed === 0) {
     return skipped > 0
@@ -266,19 +268,18 @@ function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
       : 'Synced connected platforms.';
   }
 
-  if (retryAfter) {
-    return `Some platforms are temporarily rate limited. Try again in ${retryAfter} seconds.`;
-  }
-
   if (successful > 0) {
-    return 'Synced some platforms. Check any platform warnings below.';
+    const retryGuidance = retryAfter
+      ? `Try Sync all again in ${retryAfter} seconds.`
+      : `Use Sync all to retry ${providerName}.`;
+    return `${providerName} could not be synced${errorMessage ? `: ${errorMessage}` : '.'} ${retryGuidance}`;
   }
 
   if (skipped > 0 && failed === 0) {
     return 'No connected platforms needed a sync.';
   }
 
-  return firstError?.error_description || firstError?.error || data.error_description || data.error || 'No platforms were synced.';
+  return errorMessage || data.error_description || data.error || 'No platforms were synced.';
 }
 
 function didEveryRefreshProviderError(data: LeagueRefreshResponse): boolean {
@@ -794,22 +795,38 @@ function LeaguesPageContent() {
   const loadEspnHistoryStatus = useCallback(async (shouldApply?: () => boolean) => {
     try {
       const response = await fetch('/api/espn/history', { cache: 'no-store' });
-      if (!response.ok) return;
+      if (!response.ok) return undefined;
       const data = await response.json().catch(() => null) as { history?: EspnHistoryStatus | null } | null;
-      if (data && canApplyState(shouldApply)) {
-        setEspnHistory(data.history ?? null);
+      if (!data) return undefined;
+      const history = data.history ?? null;
+      if (canApplyState(shouldApply)) {
+        setEspnHistory(history);
       }
+      return history;
     } catch (error) {
       console.error('Failed to load ESPN history status:', error);
+      return undefined;
     }
   }, []);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !userId) return;
     let isActive = true;
-    void loadEspnHistoryStatus(() => isActive);
+    let timer: number | undefined;
+    const retryDelays = [5_000, 10_000, 20_000];
+    let retryIndex = 0;
+    const loadInitialHistory = async () => {
+      const history = await loadEspnHistoryStatus(() => isActive);
+      // The initial read has no known job to follow, so failures recover only
+      // briefly instead of creating a permanent polling loop.
+      if (!isActive || history !== undefined || retryIndex >= retryDelays.length) return;
+      timer = window.setTimeout(() => void loadInitialHistory(), retryDelays[retryIndex]);
+      retryIndex += 1;
+    };
+    void loadInitialHistory();
     return () => {
       isActive = false;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [isLoaded, isSignedIn, loadEspnHistoryStatus, userId]);
 
@@ -820,12 +837,18 @@ function LeaguesPageContent() {
       espnHistoryWasActiveRef.current = true;
       setLeagueNotice(getEspnHistoryNotice(espnHistory));
       let isActive = true;
-      const timer = window.setTimeout(() => {
-        void loadEspnHistoryStatus(() => isActive);
-      }, ESPN_HISTORY_STATUS_POLL_MS);
+      let timer: number | undefined;
+      const pollHistory = async () => {
+        const history = await loadEspnHistoryStatus(() => isActive);
+        // Retry failed/non-OK reads while the last known job is active. A known
+        // terminal or absent status stops the loop immediately.
+        if (!isActive || (history !== undefined && !isEspnHistoryInProgress(history))) return;
+        timer = window.setTimeout(() => void pollHistory(), ESPN_HISTORY_STATUS_POLL_MS);
+      };
+      timer = window.setTimeout(() => void pollHistory(), ESPN_HISTORY_STATUS_POLL_MS);
       return () => {
         isActive = false;
-        window.clearTimeout(timer);
+        if (timer !== undefined) window.clearTimeout(timer);
       };
     }
 
@@ -1005,12 +1028,16 @@ function LeaguesPageContent() {
     setLeagueNotice(null);
     setSleeperError(null);
 
+    let responseReceived = false;
+    let responseErrorCode: string | undefined;
     try {
       const res = await fetch('/api/leagues/refresh', { method: 'POST' });
+      responseReceived = true;
       const data = await res.json().catch(() => ({ error: 'Unknown error' })) as LeagueRefreshResponse;
       if (!shouldApply()) return;
 
       if (!res.ok) {
+        responseErrorCode = data.error;
         throw new Error(data.error_description || data.error || 'Failed to sync leagues');
       }
 
@@ -1039,6 +1066,18 @@ function LeaguesPageContent() {
       }
     } catch (err) {
       if (shouldApply()) {
+        if (shouldProbeEspnHistoryAfterRefreshFailure(responseReceived, responseErrorCode)) {
+          // A network failure or proxy deadline can occur after auth-worker has
+          // already queued the durable job. Probe before reporting failure.
+          const history = await loadEspnHistoryStatus(shouldApply);
+          if (!shouldApply()) return;
+          if (history && isEspnHistoryInProgress(history)) {
+            espnHistoryWasActiveRef.current = true;
+            setLeagueError(null);
+            setLeagueNotice(getEspnHistoryNotice(history));
+            return;
+          }
+        }
         setLeagueError(err instanceof Error ? err.message : 'Failed to sync leagues');
       }
     } finally {
@@ -1053,6 +1092,7 @@ function LeaguesPageContent() {
     loadLeagues,
     loadSleeperLeagues,
     loadYahooLeagues,
+    loadEspnHistoryStatus,
   ]);
 
   const discoverSleeperLeagues = useCallback(async (username: string) => {

@@ -403,15 +403,59 @@ export class SyncStateStorage {
   }
 
   /**
+   * Give an explicit league mutation exclusive ownership of the provider row.
+   * This deliberately replaces any request/history owner: subsequent fenced
+   * refresh writes fail, while writes that already hold the row lock finish
+   * before the mutation continues and are then removed by the mutation.
+   */
+  async takeoverLeaseForMutation(
+    clerkUserId: string,
+    provider: SyncProvider,
+    ownerId: string,
+    ttlMs: number = SYNC_LEASE_TTL_MS
+  ): Promise<boolean> {
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+    try {
+      const { error: upsertError } = await this.supabase
+        .from('provider_sync_state')
+        .upsert(
+          { clerk_user_id: clerkUserId, provider },
+          { onConflict: 'clerk_user_id,provider', ignoreDuplicates: true }
+        );
+      if (upsertError) throw upsertError;
+
+      const { data, error } = await this.supabase
+        .from('provider_sync_state')
+        .update({
+          sync_lease_owner: ownerId,
+          sync_lease_expires_at: expiresAt,
+          updated_at: now,
+        })
+        .eq('clerk_user_id', clerkUserId)
+        .eq('provider', provider)
+        .select('clerk_user_id');
+      if (error) throw error;
+      return (data?.length ?? 0) === 1;
+    } catch (error) {
+      console.error(`[sync-state] Mutation lease takeover failed closed for ${provider}:`, error);
+      return false;
+    }
+  }
+
+  /**
    * Settle a finished refresh: convert this owner's lease into a cooldown
    * marker and record last-run telemetry. Owner-guarded so a stale caller
-   * cannot extend another request's cooldown. Storage errors fail open.
+   * cannot extend another request's cooldown. Request paths fail open on
+   * storage errors by default; durable workflows opt into failOnError so a
+   * Workflow step can apply its configured retries.
    */
   async settle(
     clerkUserId: string,
     provider: SyncProvider,
     ownerId: string,
-    outcome: SyncSettleOutcome
+    outcome: SyncSettleOutcome,
+    options: { failOnError?: boolean } = {}
   ): Promise<void> {
     const now = new Date().toISOString();
     const cooldownExpiresAt = new Date(Date.now() + outcome.cooldownSeconds * 1000).toISOString();
@@ -441,6 +485,7 @@ export class SyncStateStorage {
         .eq('sync_lease_owner', ownerId);
       if (error) throw error;
     } catch (error) {
+      if (options.failOnError) throw error;
       console.error(`[sync-state] Settle failed open for ${provider}:`, error);
     }
   }

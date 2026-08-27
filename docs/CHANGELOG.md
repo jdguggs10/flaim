@@ -6,7 +6,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Durable ESPN History Refresh (FLA-308)
 
-- **Added**: Sync all on Your Leagues and Sync or Re-sync in the Chrome extension now save current ESPN leagues first, then continue historical season discovery in a durable background workflow. The web page or extension can be closed without cancelling the history scan, and both surfaces show the latest queued, running, completed, partial, or failed status.
+- **Added**: Sync all on Your Leagues and Sync or Re-sync in the Chrome extension save current ESPN leagues first. Durable historical discovery is rollout-gated and default-off; when enabled for an allowlisted account, it continues in a background workflow after the web page or extension closes, and both surfaces show the latest queued, running, completed, partial, or failed status.
 - **Changed**: The first background scan repairs all historical seasons ESPN still makes available. Later refreshes use the same button but skip league-season rows already stored, so routine team-name and current-season updates do not re-fetch immutable history.
 - **Changed**: ESPN league storage now uses keyset pagination instead of a fixed 100-row read, so accounts with more than 100 league-season rows are not silently truncated. The public MCP `refresh_leagues` path remains synchronous while its advertised contract is under directory review.
 

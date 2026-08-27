@@ -12,9 +12,13 @@ vi.mock('../v3/get-league-teams', () => ({
 
 import {
   buildPlan,
+  beginEspnLeagueMutation,
   dedupeHistoryPlan,
+  ensureEspnHistoryJobStarted,
   historyKey,
+  isMissingEspnHistoryTableError,
   stopForHistoryAdvanceOutcome,
+  stopForHistoryTerminalOutcome,
   type EspnHistoryJob,
   type EspnHistoryPlanItem,
 } from '../espn-history';
@@ -119,6 +123,20 @@ describe('ESPN history planning', () => {
   });
 });
 
+describe('isMissingEspnHistoryTableError', () => {
+  it('recognizes Postgres and PostgREST pre-migration responses', () => {
+    expect(isMissingEspnHistoryTableError({ code: '42P01' })).toBe(true);
+    expect(isMissingEspnHistoryTableError({ code: 'PGRST205' })).toBe(true);
+    expect(isMissingEspnHistoryTableError({
+      message: "Could not find the table 'public.espn_history_jobs' in the schema cache",
+    })).toBe(true);
+  });
+
+  it('does not hide unrelated storage failures', () => {
+    expect(isMissingEspnHistoryTableError({ code: '08006', message: 'connection failed' })).toBe(false);
+  });
+});
+
 describe('stopForHistoryAdvanceOutcome', () => {
   it.each(['persisted', 'skipped', 'failed', 'already_processed'])(
     'continues after %s',
@@ -129,5 +147,90 @@ describe('stopForHistoryAdvanceOutcome', () => {
     expect(stopForHistoryAdvanceOutcome('credential_changed')).toMatchObject({ status: 'superseded' });
     expect(stopForHistoryAdvanceOutcome('lease_lost')).toMatchObject({ status: 'cancelled' });
     expect(stopForHistoryAdvanceOutcome('out_of_order')).toMatchObject({ status: 'failed' });
+  });
+});
+
+describe('stopForHistoryTerminalOutcome', () => {
+  it('accepts a fenced completion', () => {
+    expect(stopForHistoryTerminalOutcome('finished')).toBeNull();
+  });
+
+  it('downgrades rejected completion markers to safe terminal states', () => {
+    expect(stopForHistoryTerminalOutcome('credential_changed')).toMatchObject({
+      status: 'superseded',
+      code: 'credentials_changed',
+    });
+    expect(stopForHistoryTerminalOutcome('lease_lost')).toMatchObject({
+      status: 'cancelled',
+      code: 'history_lease_lost',
+    });
+    expect(stopForHistoryTerminalOutcome('job_not_active')).toMatchObject({
+      status: 'cancelled',
+      code: 'history_job_not_active',
+    });
+  });
+});
+
+describe('ensureEspnHistoryJobStarted', () => {
+  it('treats a replayed queued-to-running transition as started', async () => {
+    const storage = {
+      start: vi.fn().mockResolvedValue(false),
+      get: vi.fn().mockResolvedValue(job('full')),
+    };
+    storage.get.mockResolvedValue({ ...job('full'), status: 'running' });
+
+    await expect(ensureEspnHistoryJobStarted(storage as never, 'job-1')).resolves.toBe(true);
+  });
+
+  it('does not revive a terminal job', async () => {
+    const storage = {
+      start: vi.fn().mockResolvedValue(false),
+      get: vi.fn().mockResolvedValue({ ...job('full'), status: 'cancelled' }),
+    };
+
+    await expect(ensureEspnHistoryJobStarted(storage as never, 'job-1')).resolves.toBe(false);
+  });
+});
+
+describe('beginEspnLeagueMutation', () => {
+  it('terminalizes an active job before taking over the provider lease', async () => {
+    const calls: string[] = [];
+    const storage = {
+      activeForUser: vi.fn().mockResolvedValue(job('full')),
+      terminal: vi.fn().mockImplementation(async () => { calls.push('terminal'); }),
+    };
+    const lease = {
+      takeoverLeaseForMutation: vi.fn().mockImplementation(async () => {
+        calls.push('takeover');
+        return true;
+      }),
+    };
+
+    await expect(beginEspnLeagueMutation(storage as never, lease as never, 'user-1'))
+      .resolves.toMatchObject({ jobId: 'job-1', ownerId: expect.stringMatching(/^league-mutation:/) });
+
+    expect(calls).toEqual(['terminal', 'takeover']);
+    expect(storage.terminal).toHaveBeenCalledWith(
+      'job-1',
+      'cancelled',
+      'league_data_changed',
+      expect.stringContaining('changed')
+    );
+    expect(lease.takeoverLeaseForMutation).toHaveBeenCalledWith(
+      'user-1', 'espn', expect.stringMatching(/^league-mutation:/)
+    );
+  });
+
+  it('takes over the request lease even before a history job exists', async () => {
+    const storage = {
+      activeForUser: vi.fn().mockResolvedValue(null),
+      terminal: vi.fn(),
+    };
+    const lease = { takeoverLeaseForMutation: vi.fn().mockResolvedValue(true) };
+
+    await expect(beginEspnLeagueMutation(storage as never, lease as never, 'user-1'))
+      .resolves.toMatchObject({ jobId: null });
+    expect(storage.terminal).not.toHaveBeenCalled();
+    expect(lease.takeoverLeaseForMutation).toHaveBeenCalledOnce();
   });
 });

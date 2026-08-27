@@ -10,14 +10,14 @@ Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and
 4. Click "Sync to Flaim" - the extension will:
    - Sync your ESPN credentials
    - Auto-discover current leagues via ESPN Fan API
-   - Continue past-season discovery in the background, even after the popup closes
-   - Show current discovery results and background history status
+   - For users enabled in the durable-history rollout, continue past-season discovery in the background, even after the popup closes
+   - Show current discovery results and, when enabled, background history status
 5. Manage leagues and set defaults at `flaim.app/leagues`
 
 **Automation boundaries**
 - The extension runs ESPN discovery when you click **Sync / Re-sync**.
 - You can also use **Sync all** in Your Leagues to refresh connected platforms.
-- The first history scan repairs every available past season. Later refreshes skip league-season rows that are already stored.
+- The durable history path is rollout-gated and default-off. When enabled for an allowlisted account, the first history scan repairs every available past season; later refreshes skip league-season rows that are already stored.
 
 ## Development
 
@@ -73,7 +73,8 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 
 **Discovery note**: Current league discovery uses ESPN's Fan API with a normalized
 `{SWID}` and ESPN-recommended headers; this reduces the initial discovery to a
-single request. Historical seasons then continue in a durable background workflow.
+single request. For allowlisted accounts while the rollout flag is enabled, historical
+seasons then continue in a durable background workflow.
 
 ### Sync Host Flow
 

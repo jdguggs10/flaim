@@ -13,6 +13,16 @@ migrations.
 The [reconciliation manifest](./reconciliation.md) records the live objects
 represented by this baseline and its one intentional omission.
 
+The current forward contract has 24 public tables and 75 public indexes. Its
+FLA-308 migration adds service-role-only `espn_history_jobs` and the
+`advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
+`persist_espn_league_with_lease(...)` RPCs. Those security-invoker RPCs use an
+empty search path. History progress and success/partial repair markers preserve
+the job's credential and lease fences, while request-time league writes require
+the exact live ESPN lease owner.
+The local proof covers this behavior, but hosted preview or production rollout
+remains a separate approval and verification boundary.
+
 ## Safety boundary
 
 - The repository contains no database passwords, tokens, connection strings, or

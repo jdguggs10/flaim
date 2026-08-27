@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { EspnSupabaseStorage } from '../supabase-storage';
+import { EspnSupabaseStorage, nextCredentialUpdatedAt } from '../supabase-storage';
 
 const mockFrom = vi.fn();
 const mockDelete = vi.fn();
@@ -7,6 +7,7 @@ const mockSelect = vi.fn();
 const mockEq = vi.fn();
 const mockMaybeSingle = vi.fn();
 const mockUpsert = vi.fn();
+const mockRpc = vi.fn();
 
 function makeMaybeSingleChain(result: { data: unknown; error: unknown }) {
   const maybeSingle = vi.fn().mockResolvedValue(result);
@@ -33,9 +34,18 @@ function makeLeagueRead(rows: Array<Record<string, unknown>>) {
   return { select: vi.fn().mockReturnValue(chain) };
 }
 
+function makeCredentialUpdate(result: { data: unknown[]; error: unknown }) {
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+  chain.eq = vi.fn().mockImplementation(() => chain);
+  chain.is = vi.fn().mockImplementation(() => chain);
+  chain.select = vi.fn().mockResolvedValue(result);
+  return { update: vi.fn().mockReturnValue(chain), chain };
+}
+
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: mockFrom,
+    rpc: mockRpc,
   }),
 }));
 
@@ -116,21 +126,21 @@ describe('EspnSupabaseStorage', () => {
         data: { swid: '{same}', s2: 'same-s2', updated_at: updatedAt },
         error: null,
       });
-      const upsert = vi.fn().mockResolvedValue({ error: null });
+      const update = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
       mockFrom
         .mockReturnValueOnce({ select: vi.fn().mockReturnValue(existing) })
-        .mockReturnValueOnce({ upsert });
+        .mockReturnValueOnce({ update: update.update });
 
       await expect(storage.setCredentials('user-1', '{same}', 'same-s2', 'new@example.com'))
         .resolves.toBe(true);
 
-      expect(upsert).toHaveBeenCalledWith({
-        clerk_user_id: 'user-1',
+      expect(update.update).toHaveBeenCalledWith({
         swid: '{same}',
         s2: 'same-s2',
         email: 'new@example.com',
         updated_at: updatedAt,
-      }, { onConflict: 'clerk_user_id' });
+      });
+      expect(update.chain.eq).toHaveBeenCalledWith('updated_at', updatedAt);
     });
 
     it('advances the credential snapshot timestamp when either ESPN cookie changes', async () => {
@@ -139,17 +149,101 @@ describe('EspnSupabaseStorage', () => {
         data: { swid: '{old}', s2: 'old-s2', updated_at: '2026-08-26T20:00:00.000Z' },
         error: null,
       });
-      const upsert = vi.fn().mockResolvedValue({ error: null });
+      const update = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
       mockFrom
         .mockReturnValueOnce({ select: vi.fn().mockReturnValue(existing) })
-        .mockReturnValueOnce({ upsert });
+        .mockReturnValueOnce({ update: update.update });
 
       await expect(storage.setCredentials('user-1', '{old}', 'new-s2'))
         .resolves.toBe(true);
 
-      expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({
         updated_at: '2026-08-26T21:00:00.000Z',
-      }), { onConflict: 'clerk_user_id' });
+      }));
+    });
+
+    it('advances past the existing fence when changed cookies land in the same millisecond', async () => {
+      const collision = '2026-08-26T21:00:00.000Z';
+      vi.setSystemTime(new Date(collision));
+      const existing = makeMaybeSingleChain({
+        data: { swid: '{old}', s2: 'old-s2', updated_at: collision },
+        error: null,
+      });
+      const update = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
+      mockFrom
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(existing) })
+        .mockReturnValueOnce({ update: update.update });
+
+      await expect(storage.setCredentials('user-1', '{new}', 'new-s2')).resolves.toBe(true);
+
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({
+        updated_at: '2026-08-26T21:00:00.001Z',
+      }));
+      expect(nextCredentialUpdatedAt(collision, Date.parse(collision)))
+        .toBe('2026-08-26T21:00:00.001Z');
+    });
+
+    it('retries a lost compare-and-swap without restoring an old credential timestamp', async () => {
+      vi.setSystemTime(new Date('2026-08-26T21:00:00.000Z'));
+      const firstRead = makeMaybeSingleChain({
+        data: { swid: '{old}', s2: 'old-s2', updated_at: '2026-08-26T20:00:00.000Z' },
+        error: null,
+      });
+      const lostUpdate = makeCredentialUpdate({ data: [], error: null });
+      const secondRead = makeMaybeSingleChain({
+        data: { swid: '{new}', s2: 'new-s2', updated_at: '2026-08-26T20:30:00.000Z' },
+        error: null,
+      });
+      const winningUpdate = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
+      mockFrom
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(firstRead) })
+        .mockReturnValueOnce({ update: lostUpdate.update })
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(secondRead) })
+        .mockReturnValueOnce({ update: winningUpdate.update });
+
+      await expect(storage.setCredentials('user-1', '{old}', 'old-s2')).resolves.toBe(true);
+
+      expect(lostUpdate.update).toHaveBeenCalledWith(expect.objectContaining({
+        updated_at: '2026-08-26T20:00:00.000Z',
+      }));
+      expect(winningUpdate.update).toHaveBeenCalledWith(expect.objectContaining({
+        updated_at: '2026-08-26T21:00:00.000Z',
+      }));
+    });
+  });
+
+  describe('persistLeagueWithLease', () => {
+    it('passes the exact owner and normalized league identity to the fenced RPC', async () => {
+      mockRpc.mockResolvedValue({ data: [{ outcome: 'added' }], error: null });
+
+      await expect(storage.persistLeagueWithLease('user-1', 'request-owner', {
+        leagueId: 'league-1',
+        sport: 'baseball',
+        seasonYear: 2025,
+        teamId: 'team-1',
+        teamName: 'Team',
+        leagueName: 'League',
+      })).resolves.toBe('added');
+
+      expect(mockRpc).toHaveBeenCalledWith('persist_espn_league_with_lease', {
+        p_clerk_user_id: 'user-1',
+        p_lease_owner: 'request-owner',
+        p_league_id: 'league-1',
+        p_sport: 'baseball',
+        p_season_year: 2025,
+        p_team_id: 'team-1',
+        p_team_name: 'Team',
+        p_league_name: 'League',
+      });
+    });
+
+    it('surfaces an exact-owner rejection without falling back to unfenced DML', async () => {
+      mockRpc.mockResolvedValue({ data: [{ outcome: 'lease_lost' }], error: null });
+
+      await expect(storage.persistLeagueWithLease('user-1', 'stale-owner', {
+        leagueId: 'league-1', sport: 'football', seasonYear: 2026, teamId: 'team-1',
+      })).resolves.toBe('lease_lost');
+      expect(mockFrom).not.toHaveBeenCalled();
     });
   });
 
