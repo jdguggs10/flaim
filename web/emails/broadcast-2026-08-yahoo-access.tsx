@@ -1,5 +1,6 @@
 import * as React from "react";
 import {
+  FlaimButton,
   FlaimEmailLayout,
   FlaimFooterLink,
   FlaimText,
@@ -18,7 +19,6 @@ export default function YahooAccessBroadcastEmail({
 }: YahooAccessBroadcastEmailProps) {
   return (
     <FlaimEmailLayout
-      eyebrow="YAHOO UPDATE"
       footerDisclosure={
         <>
           You are receiving this because Yahoo is connected to your Flaim
@@ -26,29 +26,30 @@ export default function YahooAccessBroadcastEmail({
         </>
       }
       headerUrl={withEmailRef(emailBrand.url, campaign)}
-      preview="I know Yahoo access has been frustrating. Here is where things stand."
-      title="A quick Yahoo update"
+      preview="Yahoo access is still unavailable, and I still do not have an ETA."
+      title="Yahoo Update"
     >
-      <FlaimText>Hey everyone,</FlaimText>
       <FlaimText>
-        If you connected Yahoo to Flaim recently, you have probably run into
-        the same problem: Yahoo has not yet restored Flaim&apos;s Fantasy Sports
-        API access. Until that happens, Flaim cannot finish syncing your Yahoo
-        leagues.
+        Unfortunately, Yahoo access is still unavailable. Yahoo told us the new
+        approval process would take 1-2 weeks. It&apos;s been more than a month,
+        and I have no ETA.
       </FlaimText>
       <FlaimText>
-        I know how frustrating that is, especially with football season getting
-        close. I use Yahoo too, and I feel the pain. I am continuing to work
-        through Yahoo&apos;s approval process and will restore the connection as
-        soon as they allow it.
+        In late-July, Yahoo deactivated everyone&apos;s Fantasy Sports API access
+        without warning and directed us to apply again through a new process. I
+        did so immediately. After some hopeful progress during the first few
+        weeks, it&apos;s been radio silence ever since.
       </FlaimText>
       <FlaimText>
-        You do not need to reconnect or keep retrying. Your Flaim account is
-        still here. I will send another short note when Yahoo access is working
-        again.
+        I&apos;m pulling every string I can think of to get Flaim&apos;s access
+        restored. If anyone has a contact at Yahoo who might be able to help,
+        I&apos;d be all ears. This wait is... very frustrating.
       </FlaimText>
-      <FlaimText>Thanks for hanging in there and for giving Flaim a try.</FlaimText>
+      <FlaimText>I&apos;ll update you as soon as anything changes.</FlaimText>
       <FlaimText>Gerry</FlaimText>
+      <FlaimButton href={withEmailRef(`${emailBrand.url}/leagues`, campaign)}>
+        Manage ESPN &amp; Sleeper leagues
+      </FlaimButton>
     </FlaimEmailLayout>
   );
 }

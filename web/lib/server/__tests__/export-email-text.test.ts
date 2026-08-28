@@ -37,7 +37,13 @@ describe("email plain-text export", () => {
     const text = htmlToText(html);
 
     expect(html).toContain('src="https://flaim.app/icon-light-5kb.png"');
-    expect(text).toContain("YAHOO STATUS: STILL WAITING");
+    expect(html).toContain("Yahoo Update");
+    expect(html.indexOf("Yahoo Update")).toBeLessThan(
+      html.indexOf('src="https://flaim.app/icon-light-5kb.png"'),
+    );
+    expect(text).toContain("YAHOO UPDATE");
+    expect(html).not.toContain("Yahoo Status: Still Waiting");
+    expect(text).not.toContain("YAHOO STATUS: STILL WAITING");
     expect(text).toContain("This wait is... very frustrating.");
     expect(text).not.toContain("The moment Yahoo turns Flaim's access back on");
     expect(text).not.toContain("You will not need to reconnect or do anything else.");

@@ -62,14 +62,25 @@ export function FlaimEmailLayout({
       <Body style={styles.body}>
         <Container style={styles.container}>
           <Section style={styles.card}>
-            <Section data-skip-in-text="true" style={styles.cardHeader}>
+            <Section
+              data-skip-in-text={eyebrow ? "true" : undefined}
+              style={eyebrow ? styles.cardHeader : styles.cardTitleHeader}
+            >
               <Row>
                 <Column style={styles.cardHeaderText}>
                   {eyebrow ? (
                     <Text style={styles.cardEyebrow}>{eyebrow}</Text>
-                  ) : null}
+                  ) : (
+                    <Heading as="h1" style={styles.cardHeaderHeading}>
+                      {title}
+                    </Heading>
+                  )}
                 </Column>
-                <Column align="right" style={styles.cardLogoColumn}>
+                <Column
+                  align="right"
+                  data-skip-in-text={eyebrow ? undefined : "true"}
+                  style={styles.cardLogoColumn}
+                >
                   <Link href={headerUrl} style={styles.logoLink}>
                     <Img
                       alt=""
@@ -82,9 +93,11 @@ export function FlaimEmailLayout({
                 </Column>
               </Row>
             </Section>
-            <Heading as="h1" style={styles.heading}>
-              {title}
-            </Heading>
+            {eyebrow ? (
+              <Heading as="h1" style={styles.heading}>
+                {title}
+              </Heading>
+            ) : null}
             {children}
           </Section>
 
@@ -173,8 +186,19 @@ const styles = {
     margin: "0 0 10px",
     width: "100%",
   },
+  cardTitleHeader: {
+    margin: "0 0 18px",
+    width: "100%",
+  },
   cardHeaderText: {
     verticalAlign: "middle",
+  },
+  cardHeaderHeading: {
+    color: emailBrand.colors.foreground,
+    fontSize: "24px",
+    fontWeight: "700",
+    lineHeight: "32px",
+    margin: "0",
   },
   cardEyebrow: {
     color: emailBrand.colors.mutedForeground,

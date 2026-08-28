@@ -20,10 +20,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Broadcast Deliverability and Yahoo Update (FLA-299)
 
-- **Added**: A concise, name-neutral Yahoo access-status Broadcast template uses the verified `news.flaim.app` marketing sender, first-party campaign attribution, and Resend's unsubscribe placeholder.
+- **Added**: A concise, name-neutral Yahoo access-status Broadcast template uses a compact `Yahoo Update` in-body heading, the verified `news.flaim.app` marketing sender, first-party campaign attribution, and Resend's unsubscribe placeholder.
 - **Added**: A dry-run-first, pagination-safe Yahoo Segment preparation script derives the approved outage-era/current-season cohort without selecting OAuth tokens, uses a unique row tie-breaker across Supabase pages, excludes internal users by hash, and applies Clerk verification plus Resend contact, unsubscribe, and suppression gates. Its default output contains aggregate counts only. Apply mode requires the exact Segment identity and reviewed eligible count, refreshes provider eligibility immediately before and after population, adds only existing eligible contacts, rejects drift or foreign Segment members, invalidates a partially or ambiguously populated Segment after any write-path failure, and cannot create contacts, resubscribe, remove suppressions, create a Broadcast, or send.
 - **Changed**: Broadcasts use `Flaim <updates@news.flaim.app>` with click tracking isolated to the marketing subdomain. Product and lifecycle email remains on `flaim.app` with provider click tracking off and first-party `ref=` attribution retained.
-- **Changed**: The shared email layout now balances each card's eyebrow with Flaim's existing optimized transparent mark in the top-right corner and removes the separate logo-and-wordmark row above the card.
+- **Changed**: The shared email layout now balances Flaim's existing optimized transparent mark in the top-right corner with the card eyebrow, or with the title when no eyebrow is used, and removes the separate logo-and-wordmark row above the card.
 - **Changed**: Provider-availability Broadcasts use the durable public `Service updates` subscription Topic, while campaign cohorts such as the Yahoo access-update audience remain Segments.
 
 ### Resend API Key Hygiene (FLA-296)
