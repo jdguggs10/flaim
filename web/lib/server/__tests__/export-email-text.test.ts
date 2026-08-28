@@ -38,6 +38,7 @@ describe("email plain-text export", () => {
     const text = htmlToText(html);
 
     expect(html).toContain('src="https://flaim.app/icon-light-5kb.png"');
+    expect(html).toContain('alt="Flaim"');
     expect(html).toContain("Yahoo Update");
     expect(html.indexOf("Yahoo Update")).toBeLessThan(
       html.indexOf('src="https://flaim.app/icon-light-5kb.png"'),

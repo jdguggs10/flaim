@@ -82,7 +82,7 @@ export function FlaimEmailLayout({
                 >
                   <Link href={headerUrl} style={styles.logoLink}>
                     <Img
-                      alt=""
+                      alt="Flaim"
                       height="36"
                       src={emailBrand.logoUrl}
                       style={styles.cardLogo}
