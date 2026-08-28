@@ -63,7 +63,6 @@ export function FlaimEmailLayout({
         <Container style={styles.container}>
           <Section style={styles.card}>
             <Section
-              data-skip-in-text={eyebrow ? "true" : undefined}
               style={eyebrow ? styles.cardHeader : styles.cardTitleHeader}
             >
               <Row>
@@ -78,7 +77,7 @@ export function FlaimEmailLayout({
                 </Column>
                 <Column
                   align="right"
-                  data-skip-in-text={eyebrow ? undefined : "true"}
+                  data-skip-in-text="true"
                   style={styles.cardLogoColumn}
                 >
                   <Link href={headerUrl} style={styles.logoLink}>

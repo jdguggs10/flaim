@@ -23,6 +23,7 @@ describe("email plain-text export", () => {
     const html = await render(React.createElement(KickoffBroadcastEmail));
     const text = htmlToText(html);
 
+    expect(text).toContain("PRODUCT UPDATES");
     expect(text).toContain(
       [
         "Add to ChatGPT https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
@@ -32,7 +33,7 @@ describe("email plain-text export", () => {
     );
   });
 
-  it("renders the Yahoo access note without asking the recipient to retry", async () => {
+  it("renders the Yahoo status note with the managed-leagues CTA", async () => {
     const html = await render(React.createElement(YahooAccessBroadcastEmail));
     const text = htmlToText(html);
 
