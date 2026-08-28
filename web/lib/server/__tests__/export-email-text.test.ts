@@ -7,7 +7,7 @@ import YahooAccessBroadcastEmail from "../../../emails/broadcast-2026-08-yahoo-a
 import { htmlToText } from "../../../scripts/export-email-text.mjs";
 
 describe("email plain-text export", () => {
-  it("omits the visual linked logo header from the text fallback", () => {
+  it("omits the visual linked logo row from the text fallback", () => {
     const text = htmlToText(`
       <section data-skip-in-text="true">
         <a href="https://flaim.app"><img alt="" src="https://flaim.app/mark.png"></a>
@@ -23,6 +23,7 @@ describe("email plain-text export", () => {
     const html = await render(React.createElement(KickoffBroadcastEmail));
     const text = htmlToText(html);
 
+    expect(text).toContain("PRODUCT UPDATES");
     expect(text).toContain(
       [
         "Add to ChatGPT https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
@@ -32,12 +33,29 @@ describe("email plain-text export", () => {
     );
   });
 
-  it("renders the Yahoo access note without asking the recipient to retry", async () => {
+  it("renders the Yahoo status note with the managed-leagues CTA", async () => {
     const html = await render(React.createElement(YahooAccessBroadcastEmail));
     const text = htmlToText(html);
 
-    expect(text).toContain("A QUICK YAHOO UPDATE");
-    expect(text).toContain("You do not need to reconnect or keep retrying.");
+    expect(html).toContain('src="https://flaim.app/icon-light-5kb.png"');
+    expect(html).toContain('alt="Flaim"');
+    expect(text).not.toContain("https://flaim.app/icon-light-5kb.png");
+    expect(text).not.toContain(
+      "https://flaim.app/?ref=email-yahoo-access-aug-2026",
+    );
+    expect(html).toContain("Yahoo Update");
+    expect(html.indexOf("Yahoo Update")).toBeLessThan(
+      html.indexOf('src="https://flaim.app/icon-light-5kb.png"'),
+    );
+    expect(text).toContain("YAHOO UPDATE");
+    expect(html).not.toContain("Yahoo Status: Still Waiting");
+    expect(text).not.toContain("YAHOO STATUS: STILL WAITING");
+    expect(text).toContain("This wait is... very frustrating.");
+    expect(text).not.toContain("The moment Yahoo turns Flaim's access back on");
+    expect(text).not.toContain("You will not need to reconnect or do anything else.");
+    expect(text).toContain(
+      "Manage ESPN & Sleeper leagues https://flaim.app/leagues?ref=email-yahoo-access-aug-2026",
+    );
     expect(text).toContain("Unsubscribe {{{RESEND_UNSUBSCRIBE_URL}}}");
   });
 });
