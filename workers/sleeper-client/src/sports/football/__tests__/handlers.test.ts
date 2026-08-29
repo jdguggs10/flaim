@@ -227,6 +227,46 @@ describe('football handlers', () => {
     expect(result.success).toBe(false);
   });
 
+  it('succeeds with null outcome fields when winners_bracket responds 200 with a null body for a completed season', async () => {
+    // Sleeper's winners_bracket endpoint can return HTTP 200 with a literal JSON `null` body
+    // before a bracket exists (or in edge cases after a season is marked complete).
+    const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2024', status: 'complete', total_rosters: 2, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null };
+    const rosters = [
+      { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 8, losses: 2, ties: 0, fpts: 1200, fpts_decimal: 0, fpts_against: 1000, fpts_against_decimal: 0 } },
+      { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 6, losses: 4, ties: 0, fpts: 1000, fpts_decimal: 0, fpts_against: 1050, fpts_against_decimal: 0 } },
+    ];
+    const users = [
+      { user_id: 'u1', display_name: 'Alpha', avatar: null },
+      { user_id: 'u2', display_name: 'Bravo', avatar: null },
+    ];
+
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(league))
+      .mockResolvedValueOnce(jsonResponse(rosters))
+      .mockResolvedValueOnce(jsonResponse(users))
+      .mockResolvedValueOnce(jsonResponse(null)); // winners_bracket — HTTP 200, body is literal null
+
+    const params: ToolParams = { sport: 'football', league_id: 'league_1', season_year: 2024 };
+    const result = await footballHandlers.get_standings({} as never, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error('Expected standings request to succeed');
+    }
+    const data = result.data as Record<string, unknown>;
+    expect(data.seasonPhase).toBe('season_complete');
+    expect(data.seasonComplete).toBe(true);
+
+    const standings = data.standings as Array<Record<string, unknown>>;
+    for (const entry of standings) {
+      expect(entry.finalRank).toBeNull();
+      expect(entry.championshipWon).toBeNull();
+      expect(entry.playoffOutcome).toBeNull();
+      expect(entry.outcomeConfidence).toBeNull();
+      expect(entry.madePlayoffs).toBeNull();
+    }
+  });
+
   it('returns playoffs_in_progress and in_progress outcome for teams in active bracket', async () => {
     const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2025', status: 'in_season', total_rosters: 2, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null };
     const rosters = [
@@ -287,6 +327,54 @@ describe('football handlers', () => {
     const standings = data.standings as Array<Record<string, unknown>>;
     expect(standings[0]?.madePlayoffs).toBeNull();
     expect(standings[0]?.playoffOutcome).toBeNull();
+  });
+
+  it('degrades to regular_season with correct record-based ranks when winners_bracket responds 200 with a null body', async () => {
+    // Sleeper's winners_bracket endpoint can return HTTP 200 with a literal JSON `null` body
+    // before a bracket exists for an in-season league. This must degrade like the existing
+    // bracket-fetch-failure path, not throw when something tries to read bracket.length.
+    const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2025', status: 'in_season', total_rosters: 3, roster_positions: [], scoring_settings: {}, settings: {}, previous_league_id: null, draft_id: 'd1', avatar: null };
+    const rosters = [
+      { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 8, losses: 2, ties: 0, fpts: 1200, fpts_decimal: 0, fpts_against: 1000, fpts_against_decimal: 0 } },
+      { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 6, losses: 4, ties: 0, fpts: 1100, fpts_decimal: 0, fpts_against: 1050, fpts_against_decimal: 0 } },
+      { roster_id: 3, owner_id: 'u3', players: [], starters: [], reserve: [], settings: { wins: 3, losses: 7, ties: 0, fpts: 900, fpts_decimal: 0, fpts_against: 1100, fpts_against_decimal: 0 } },
+    ];
+    const users = [
+      { user_id: 'u1', display_name: 'Alpha', avatar: null },
+      { user_id: 'u2', display_name: 'Bravo', avatar: null },
+      { user_id: 'u3', display_name: 'Charlie', avatar: null },
+    ];
+
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(league))
+      .mockResolvedValueOnce(jsonResponse(rosters))
+      .mockResolvedValueOnce(jsonResponse(users))
+      .mockResolvedValueOnce(jsonResponse(null)); // winners_bracket — HTTP 200, body is literal null
+
+    const params: ToolParams = { sport: 'football', league_id: 'league_1', season_year: 2025 };
+    const result = await footballHandlers.get_standings({} as never, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error('Expected standings request to succeed');
+    }
+    const data = result.data as Record<string, unknown>;
+    expect(data.seasonPhase).toBe('regular_season');
+    expect(data.seasonComplete).toBe(false);
+
+    const standings = data.standings as Array<{ rank: number; rosterId: number } & Record<string, unknown>>;
+    expect(standings.map((entry) => ({ rank: entry.rank, rosterId: entry.rosterId }))).toEqual([
+      { rank: 1, rosterId: 1 },
+      { rank: 2, rosterId: 2 },
+      { rank: 3, rosterId: 3 },
+    ]);
+    for (const entry of standings) {
+      expect(entry.madePlayoffs).toBeNull();
+      expect(entry.playoffOutcome).toBeNull();
+      expect(entry.finalRank).toBeNull();
+      expect(entry.championshipWon).toBeNull();
+      expect(entry.outcomeConfidence).toBeNull();
+    }
   });
 
   it('identifies champion when bracket championship match has w but no p field', async () => {
