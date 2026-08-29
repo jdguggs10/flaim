@@ -2,7 +2,6 @@
 
 import React from "react";
 import ReactMarkdown from "react-markdown";
-import { PhoneFlaimMark } from "@/components/site/phone-demo-frame";
 import { cn } from "@/lib/utils";
 
 interface PublicMessageProps {
@@ -23,13 +22,7 @@ export function PublicMessage({ role, text }: PublicMessageProps) {
             : "w-full bg-transparent text-[var(--phone-text)]"
         )}
       >
-        <div className={cn(isUser ? "flex items-start gap-1.5" : "")}>
-          {isUser ? (
-            <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 font-semibold text-[var(--phone-mention)]">
-              <PhoneFlaimMark size={16} />
-              <span>Flaim</span>
-            </span>
-          ) : null}
+        <div>
           <div
             className={cn(
               "prose prose-sm min-w-0 max-w-none flex-1 text-[length:var(--phone-type-body)] leading-[var(--phone-leading-body)] prose-headings:font-semibold prose-headings:tracking-[-0.02em] prose-h2:text-[clamp(1rem,5.2cqw,1.125rem)] prose-h2:leading-[1.35] prose-h3:text-[clamp(0.95rem,4.9cqw,1.05rem)] prose-h3:leading-[1.4] prose-p:my-0 prose-p:leading-[var(--phone-leading-body)] prose-strong:font-semibold prose-ul:my-2.5 prose-li:my-0.5 prose-li:leading-[var(--phone-leading-body)]",

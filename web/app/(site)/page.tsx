@@ -183,13 +183,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         initialPresetId={initialPresetId ?? null}
       />
 
-      {/* FLA-290: temporary note pointing out the football demo lanes are
-          staged but not yet live. Self-contained — safe to delete this
-          paragraph once ESPN/Sleeper football targets go live in the
-          live-demo capabilities feed. */}
+      {/* FLA-290: temporary note pointing out the remaining demo lanes are
+          staged but not yet live. Sleeper football went live 2026-08-29.
+          Self-contained — safe to delete this paragraph once the ESPN and
+          Yahoo football targets go live in the live-demo capabilities
+          feed. */}
       <p className="mx-auto max-w-md px-4 pb-8 text-center text-sm text-muted-foreground">
-        Football demos are on the way. ESPN and Sleeper league previews land
-        as soon as drafts wrap up.
+        More leagues are on the way. ESPN and Yahoo previews land once
+        Gerry&apos;s drafts wrap up.
       </p>
 
       <section
