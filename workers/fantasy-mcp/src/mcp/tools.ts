@@ -1613,7 +1613,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_DRAFT_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching draft results…', invoked: 'Draft results ready' },
-      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; use ownership metadata only for current ownership. Omit draft_id to use the league's associated draft, and pass it only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Best used after get_user_session and get_league_info for the specified league. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
+      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; use ownership metadata only for current ownership. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Best used after get_user_session and get_league_info for the specified league. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1631,7 +1631,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .string()
           .min(1)
           .optional()
-          .describe('Optional provider draft ID. Omit to retrieve the league\'s associated draft; pass only an ID previously returned by Flaim.'),
+          .describe('Optional Sleeper draft ID. Omit to retrieve the league\'s associated draft; pass only an ID previously returned by Flaim.'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {

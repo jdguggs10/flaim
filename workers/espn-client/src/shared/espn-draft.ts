@@ -58,7 +58,7 @@ function normalizePick(value: unknown, isAuction: boolean) {
 
   const selectionInRound = positiveInteger(pick.roundPickNumber);
   const overallPick = positiveInteger(pick.overallPickNumber);
-  const selectionTeamId = finiteNumber(pick.teamId);
+  const selectionTeamId = positiveInteger(pick.teamId);
   const bidAmount = nonNegativeNumber(pick.bidAmount);
 
   return {

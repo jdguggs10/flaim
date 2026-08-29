@@ -171,7 +171,7 @@ describe('espn cross-sport get_draft', () => {
           playerId: 404,
           roundPickNumber: 0,
           overallPickNumber: -1,
-          teamId: Number.POSITIVE_INFINITY,
+          teamId: 0,
           keeper: 'true',
           bidAmount: -22,
         }],
