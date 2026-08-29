@@ -394,14 +394,15 @@ describe("GET /api/public-chat/capabilities", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    // Matrix order leads with sleeper-football for the 2026 football season.
     expect(
       body.targets.map((target: { platform: string; default: boolean }) => [
         target.platform,
         target.default,
       ]),
     ).toEqual([
-      ["espn", true],
-      ["sleeper", false],
+      ["sleeper", true],
+      ["espn", false],
     ]);
   });
 

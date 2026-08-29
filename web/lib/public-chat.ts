@@ -81,41 +81,43 @@ export interface PublicChatTarget {
 
 /**
  * Supported platform/sport demo targets, in deterministic order. The first
- * selectable entry in this order is the overall default target, so
- * espn-baseball stays the default while it is the only enabled lane.
- * Default sports per platform: espn baseball (for now), yahoo baseball,
- * sleeper football.
+ * selectable entry in this order is the overall default target.
+ * sleeper-football leads for the 2026 football draft season, so the site
+ * defaults to it the moment that lane becomes selectable; until then
+ * espn-baseball (next in order) stays the default. Revisit this ordering at
+ * the FLA-253 season rollover. Default sports per platform: espn baseball
+ * (for now), yahoo baseball, sleeper football.
  */
 export const PUBLIC_CHAT_TARGET_MATRIX: readonly PublicChatTarget[] = [
-  {
-    platform: "espn",
-    sport: "baseball",
-    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
-    isDefaultSport: true,
-  },
-  {
-    platform: "espn",
-    sport: "football",
-    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
-    isDefaultSport: false,
-  },
-  {
-    platform: "yahoo",
-    sport: "baseball",
-    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
-    isDefaultSport: true,
-  },
-  {
-    platform: "yahoo",
-    sport: "football",
-    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
-    isDefaultSport: false,
-  },
   {
     platform: "sleeper",
     sport: "football",
     presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
     isDefaultSport: true,
+  },
+  {
+    platform: "espn",
+    sport: "baseball",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: true,
+  },
+  {
+    platform: "espn",
+    sport: "football",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: false,
+  },
+  {
+    platform: "yahoo",
+    sport: "baseball",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: true,
+  },
+  {
+    platform: "yahoo",
+    sport: "football",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: false,
   },
 ] as const;
 
