@@ -38,6 +38,7 @@ interface ExecuteRequest {
     sport: 'football' | 'basketball';
     league_id: string; // Sleeper league ID (numeric string)
     season_year: number;
+    draft_id?: string;  // Optional get_draft selector previously returned by Flaim
     team_id?: string;  // Sleeper roster/user ID within the league
     week?: number;
   };
@@ -50,6 +51,7 @@ interface ExecuteRequest {
 
 ### Football (NFL)
 - `get_league_info` — League settings and members, plus traded draft-pick ownership
+- `get_draft`: Confirmed draft results and provider-grounded pick ownership
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
@@ -59,6 +61,7 @@ interface ExecuteRequest {
 
 ### Basketball (NBA)
 - `get_league_info` — League settings and members, plus traded draft-pick ownership
+- `get_draft`: Confirmed draft results and provider-grounded pick ownership
 - `get_standings` — League standings (computed from roster settings: wins, losses, ties, points)
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
@@ -90,13 +93,19 @@ interface ExecuteRequest {
 
 `get_league_info` additionally fetches `GET /league/{league_id}/traded_picks` and surfaces `tradedPicks` — but only picks that changed hands; Sleeper does not list untraded picks, so this is not an exhaustive picture of every future draft. Each returned entry resolves the raw roster ids to names via the same user directory: `{ season, round, originalRosterId, originalOwnerName?, originalTeamName?, previousRosterId, currentRosterId, currentOwnerName?, currentTeamName? }`, sorted by season, round, then originalRosterId. `draftRounds` (from `league.settings.draft_rounds`) is also surfaced so a future draft's round count can be reasoned about. When `tradedPicks` is non-empty, a one-sentence `pickOwnershipNote` reminds the caller that every roster owns its own untraded picks and that Sleeper allows pick trading for the current season plus up to three future seasons depending on league settings — seasons beyond what's listed are unverified; the note is suppressed when `tradedPicks` is empty since there is nothing to caveat. Redraft leagues (and any league with nothing traded) return an empty `tradedPicks: []` array with no warning. Every raw entry is runtime-validated (`season` a non-empty string, `round`/`roster_id`/`previous_owner_id`/`owner_id` integers) before use. Malformed entries are dropped and the valid ones are kept, with a `TRADED_PICKS_PARTIAL: N malformed ...` entry added to a top-level `warnings: string[]` so the caller knows the list may be incomplete; if the fetch fails, the body isn't an array, or no entry is valid, `tradedPicks` and `pickOwnershipNote` are omitted and a `TRADED_PICKS_UNAVAILABLE` warning is added instead — never failing the whole `get_league_info` call, so the rest of the league/roster/user data still succeeds. A pick whose roster id has no matching roster resolves with the id fields present and the name fields omitted, never a thrown error.
 
+## Draft Results and Board Placement (`get_draft`)
+
+`get_draft` validates candidate drafts against league, season, and sport. An explicit `draft_id` must match that validated set. Without it, the handler prefers the league's associated draft ID, accepts one unambiguous candidate, and fails closed when multiple candidates remain. Completed selections preserve Sleeper's provider pick number, round, stable `draft_slot` column, selecting roster, original slot roster, and historical player metadata. It never fetches the current player index for a historical pick.
+
+Current-season ownership is materialized only when team count, round count, slot-to-roster mapping, and traded-pick evidence are all usable. Standard snake, third-round reversal, and linear orders can produce `projected/provider_order_derived` placements for unmade picks. Auction, unknown order, missing reversal settings, or missing order evidence returns `unavailable/no_provider_order` instead of guessing. A future season without a draft may return only a `changed_picks_only` ledger when Sleeper reports traded picks for that season; this is not a complete inventory and contains no exact board placement.
+
 ## Keeper / League-Format Context
 
 `get_league_info` adds a `leagueFormat` block, built from the league's raw `settings`, whenever `settings` itself is present (omitted entirely otherwise): `{ typeRaw, typeNote, maxKeepers?, tradeDeadlineWeek?, tradesDisabled?, pickTrading?, taxi?, reserveSlots? }`. `typeRaw` is `league.settings.type` (or `null` if unset) plus a fixed `typeNote` restating the same caveat as `draftRounds`/pick ownership above: `0`/`1`/`2` are a commonly-used community convention for redraft/keeper/dynasty, but it's undocumented by Sleeper and unreliable — a `3` has been observed live and confirmed by the league's own owner to mean "guillotine," and Sleeper's own demo dynasty league ships as `type:0`. Never gate behavior on this value alone. `maxKeepers` (`settings.max_keepers`) and `tradeDeadlineWeek` (`settings.trade_deadline`, a week number) are surfaced only when Sleeper sends a number. `tradesDisabled`, `pickTrading`, and `taxi.allowVets` (from `disable_trades`/`pick_trading`/`taxi_allow_vets`) are booleans emitted only when Sleeper sends the field as exact numeric `0` or `1` — Sleeper's own encoding for these flags — and are **omitted** (never defaulted to `false`) when the field is missing, `null`, or any other value, since Sleeper doesn't document what "absent" means for them. `taxi` (`{ slots?, years?, allowVets?, deadline? }`, from `taxi_slots`/`taxi_years`/`taxi_allow_vets`/`taxi_deadline`) and `reserveSlots` (`settings.reserve_slots`) are included only when the underlying league config has taxi-squad/reserve settings at all.
 
 Each team in `get_league_info`'s `teams` array also gets `keepers` — the roster's designated keeper `player_id[]`, passed through as **raw Sleeper ids, not resolved names** (this handler doesn't otherwise load the KV-backed player index used elsewhere in this worker, and threading it in for a field with no live populated example yet isn't worth the extra fetch — resolve names here later if usage justifies it). `get_roster`'s current-roster response (not the no-`team_id` roster-summary branch, and not historical week snapshots — Sleeper's matchup endpoint carries no keeper data) resolves `keepers` the same way as `starters`/`bench`/`reserve`/`taxi`, using the player index already loaded for that call: `{ id, name, position, team }` on an index hit, `{ id }` on a miss, using the shared enrichment helper's existing degradation behavior. In both tools, `null` vs `[]` is preserved exactly as Sleeper sends it rather than collapsed to one shape: Flaim always passes through whichever shape Sleeper's API returns rather than guessing at or normalizing it. Both shapes have been observed live — `[]` on a pre-draft first-season league, `null` on an archived/past-season league — but Sleeper does not document a distinct meaning for either, and this worker draws no conclusion from which one a given league returns. `keepers` is only ever non-empty during Sleeper's pre-draft keeper-selection window each season.
 
-Sleeper stores no per-player keeper *cost* anywhere in its API — a keeper's cost is whatever draft round/slot the commissioner manually places it at when building the draft board, not a value attached to the player. Computing or displaying "what will this player cost as a keeper" is out of scope here; see FLA-285.
+Sleeper stores no per-player keeper *cost* anywhere in its API. A keeper's cost is whatever draft round or slot the commissioner places it at on the provider draft board. `get_draft` can report that placement once it exists, but it does not calculate a keeper cost from league settings or roster data.
 
 ## Player Cache (KV)
 

@@ -163,6 +163,7 @@ ChatGPT / Claude / manual MCP clients → fantasy-mcp (gateway) → espn-client 
 - `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive)
 - `get_ancient_history` — Past seasons and historical leagues (everything not in the current season)
 - `get_league_info` — Baseline league context: settings, roster config, teams/owners (requires platform, sport, league_id, season_year)
+- `get_draft`: Confirmed draft results and provider-grounded draft-pick ownership (optional draft_id)
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details

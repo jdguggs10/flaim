@@ -20,6 +20,7 @@ import {
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import { executeEspnGetDraft } from '../../shared/espn-draft';
 
 const GAME_ID = 'fba'; // ESPN's game ID for fantasy basketball
 
@@ -31,6 +32,7 @@ type HandlerFn = (
 ) => Promise<ExecuteResponse>;
 
 export const basketballHandlers: Record<string, HandlerFn> = {
+  get_draft: (env, params, authHeader, correlationId) => executeEspnGetDraft(env, params, GAME_ID, authHeader, correlationId),
   get_league_info: handleGetLeagueInfo,
   get_standings: handleGetStandings,
   get_matchups: handleGetMatchups,

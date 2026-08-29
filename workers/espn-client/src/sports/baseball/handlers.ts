@@ -21,6 +21,7 @@ import {
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import { executeEspnGetDraft } from '../../shared/espn-draft';
 
 const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
 
@@ -105,6 +106,7 @@ type HandlerFn = (
 ) => Promise<ExecuteResponse>;
 
 export const baseballHandlers: Record<string, HandlerFn> = {
+  get_draft: (env, params, authHeader, correlationId) => executeEspnGetDraft(env, params, GAME_ID, authHeader, correlationId),
   get_league_info: handleGetLeagueInfo,
   get_standings: handleGetStandings,
   get_matchups: handleGetMatchups,

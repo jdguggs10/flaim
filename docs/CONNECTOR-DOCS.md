@@ -78,6 +78,7 @@ Analysis tools are read-only. `refresh_leagues` requires `mcp:write` because it 
 - `get_user_session` (required first call in a normal chat): your leagues and defaults
 - `refresh_leagues`: re-discover connected leagues and update Flaim's league records
 - `get_league_info` (usually second): baseline league context for team-name resolution, owner/team mapping, scoring, and roster-slot context before downstream league tools
+- `get_draft`: confirmed draft results and provider-grounded draft-pick ownership
 - `get_roster`
 - `get_standings`
 - `get_matchups`
@@ -91,6 +92,7 @@ Sleeper supports football and basketball.
 `get_transactions` note: ESPN `week` always means matchup period, including daily sports; omit it for the current and previous matchup periods. ESPN serves rows from its structured source and reports source/window/limitation metadata; failed-bid and trade-lifecycle filters are supported, becoming unavailable only if ESPN falls back to its activity feed. Sleeper supports week filtering. Yahoo ignores explicit `week` and uses a recent 14-day timestamp window for completed league transactions. On Yahoo, `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team.
 `get_free_agents` note: every response carries a normalized envelope (`leagueId`, `seasonYear`, `position`, `count`, `ordering`, `capabilities`, `ownershipScope`) plus normalized per-player fields where derivable (`acquisitionState` and `waiverClearsAt` on ESPN only, `id`, `team`); prefer these over the legacy provider fields, which remain present. ESPN and Yahoo include platform-wide ownership percentages and sort by ownership. Sleeper returns available-player identities without ownership percentages.
 `get_players` note: ESPN and Yahoo may return league ownership fields (`league_status`, `league_team_name`, `league_owner_name`) when available. Sleeper returns identity with unavailable ownership context. If league ownership fields are absent, null, or unavailable, verify with `get_league_info` plus `get_roster`.
+`get_draft` note: round slot, stable board column, historical selecting team, and current pick owner are separate fields. Flaim omits exact future round slots when the provider does not expose enough draft-order evidence.
 
 ## Working Examples (Copy/Paste)
 
@@ -103,19 +105,22 @@ These are intentionally short and easy to copy/paste.
    - “Show me the standings in my default league.”
    - “Show me the standings for ESPN football league 12345678 in 2025.”
 
-3. **Roster**
+3. **Draft picks**
+   - “Which picks do I currently own, and where are they projected on the draft board?”
+
+4. **Roster**
    - “Who is on my roster in my default league?”
    - “Show my roster for Yahoo football league 123.l.456789, season 2025.”
 
-4. **Available players**
+5. **Available players**
    - “Who are the best available players in my league right now?”
    - “Show best available QBs in my league.”
 
-5. **Player search**
+6. **Player search**
    - "Search for Giancarlo Stanton and Ben Rice in my league context."
    - "Find matching players for 'Rice' and show market ownership context."
 
-6. **Transactions**
+7. **Transactions**
    - “Show recent transactions in my default league.”
    - “Show week 8 transactions for ESPN football league 12345678 in 2025.”
    - “Show recent Yahoo transactions for league 423.l.193847 in 2025 (adds/drops/trades).”

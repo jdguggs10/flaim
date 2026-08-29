@@ -68,15 +68,20 @@ Handlers should use `params.seasonContext.espnYear` for ESPN URLs, cache keys, a
 
 ## Supported Tools
 
-All four sports (football, baseball, basketball, hockey) support the same 7 tools:
+All four sports (football, baseball, basketball, hockey) support the same 8 tools:
 
 - `get_league_info` - League settings and members
+- `get_draft` - Confirmed draft results from ESPN's draft-detail view
 - `get_standings` - League standings
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
 - `get_free_agents` - Available free agents
 - `get_players` - Player lookup with market/global ownership context
 - `get_transactions` - Recent league transactions (adds, drops, waivers, trades, failed bids, trade lifecycle) from the structured primary source with an activity-feed fallback
+
+### Draft Results (`get_draft`)
+
+`get_draft` requests ESPN's `mDraftDetail` and `mSettings` views. Populated selections return their provider-confirmed round, selection within the round, overall pick, selecting fantasy team ID, player ID, keeper flag, and auction cost when the draft type is auction. Empty pre-draft board placeholders are omitted and disclosed with a warning. The selecting team is historical selection evidence, not current player or future-pick ownership. ESPN does not expose a current draft-pick ownership ledger through this handler, and the worker does not project unmade slots.
 
 ### ESPN Period Fields
 

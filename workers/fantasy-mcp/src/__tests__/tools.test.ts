@@ -43,8 +43,9 @@ describe('fantasy-mcp tools', () => {
     const names = tools.map((tool) => tool.name).sort();
 
     expect(names).toEqual([
-      'get_ancient_history',
-      'get_free_agents',
+        'get_ancient_history',
+        'get_draft',
+        'get_free_agents',
       'get_league_info',
       'get_matchups',
       'get_players',
@@ -1150,6 +1151,59 @@ describe('fantasy-mcp tools', () => {
     const payload = JSON.parse(text as string) as { success?: boolean; data?: unknown };
     expect(payload.success).toBe(true);
     expect(payload.data).toEqual({ league: { id: 123, name: 'Test League' } });
+  });
+
+  it('get_draft defaults the season, forwards an optional draft ID, and formats a success payload', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_draft');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: {
+        platform: 'sleeper',
+        sport: 'football',
+        leagueId: '123',
+        seasonYear: 2025,
+        draft: { id: 'draft-1', type: 'snake', status: 'complete' },
+        picks: [],
+      },
+    });
+
+    const env = {} as Env;
+    const correlationId = 'corr-draft';
+    const defaultSeasonResult = await tool!.handler({
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: '123',
+    }, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenLastCalledWith(
+      env,
+      'get_draft',
+      { platform: 'sleeper', sport: 'football', league_id: '123', season_year: 2025, draft_id: undefined },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
+    expect(JSON.parse(defaultSeasonResult.content[0]!.text)).toMatchObject({ success: true });
+
+    await tool!.handler({
+      platform: 'espn',
+      sport: 'baseball',
+      league_id: '456',
+      season_year: 2024,
+      draft_id: 'provider-draft-456',
+    }, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenLastCalledWith(
+      env,
+      'get_draft',
+      { platform: 'espn', sport: 'baseball', league_id: '456', season_year: 2024, draft_id: 'provider-draft-456' },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
   });
 
   describe('get_roster snapshot selector validation', () => {

@@ -356,6 +356,29 @@ function buildFreeAgentsPageResponse(players: Array<{
   };
 }
 
+function buildDraftResultsResponse(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', draft_status: 'postdraft', draft_type: 'live' },
+        {
+          draft_results: {
+            '0': {
+              draft_result: {
+                pick: '1',
+                round: '1',
+                team_key: '449.l.123.t.2',
+                player_key: '449.p.101',
+              },
+            },
+            count: 1,
+          },
+        },
+      ],
+    },
+  };
+}
+
 describe('yahoo cross-sport handler characterization tests', () => {
   const getCredsMock = getYahooCredentials as MockedFunction<typeof getYahooCredentials>;
   const fetchMock = yahooFetch as MockedFunction<typeof yahooFetch>;
@@ -363,6 +386,92 @@ describe('yahoo cross-sport handler characterization tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getCredsMock.mockResolvedValue({ accessToken: 'token' });
+  });
+
+  describe('get_draft', () => {
+    it.each(scenarios)('$label routes the requested sport and season through Yahoo draftresults', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildDraftResultsResponse()));
+
+      const result = await handlers.get_draft(
+        {} as never,
+        { sport, league_id: '449.l.123', season_year: 2023 },
+        'Bearer x',
+        `cid-${sport}`,
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith('/league/449.l.123/draftresults', { credentials: { accessToken: 'token' } });
+      expect(result).toMatchObject({
+        success: true,
+        data: {
+          platform: 'yahoo',
+          sport,
+          leagueId: '449.l.123',
+          seasonYear: 2023,
+          draft: { type: 'unknown', status: 'complete' },
+          picks: [{
+            round: 1,
+            selectionTeamId: '449.l.123.t.2',
+            playerId: '449.p.101',
+            placement: { status: 'confirmed', source: 'provider_pick' },
+          }],
+        },
+      });
+    });
+
+    it.each(scenarios)('$label treats an empty draft-results collection as a successful pre-draft result', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse({
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', draft_status: 'predraft', draft_type: 'live' },
+            { draft_results: { count: 0 } },
+          ],
+        },
+      }));
+
+      const result = await handlers.get_draft({} as never, { sport, league_id: '449.l.123', season_year: 2026 }, 'Bearer x');
+
+      expect(result).toMatchObject({
+        success: true,
+        data: { draft: { status: 'pre_draft' }, picks: [] },
+      });
+    });
+
+    it.each(scenarios)('$label fails closed when Yahoo marks a draft complete but supplies no usable selections', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse({
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', draft_status: 'postdraft', draft_type: 'live' },
+            { draft_results: {
+              '0': { draft_result: { round: '1', team_key: '', player_key: '' } },
+              count: 1,
+            } },
+          ],
+        },
+      }));
+
+      const result = await handlers.get_draft({} as never, { sport, league_id: '449.l.123', season_year: 2026 }, 'Bearer x');
+
+      expect(result).toMatchObject({
+        success: false,
+        code: 'YAHOO_DRAFT_RESULTS_UNAVAILABLE',
+      });
+    });
+
+    it('propagates Yahoo access denial instead of returning an empty draft', async () => {
+      fetchMock.mockResolvedValue(new Response('Forbidden', { status: 403 }));
+
+      const result = await footballHandlers.get_draft(
+        {} as never,
+        { sport: 'football', league_id: '449.l.123', season_year: 2026 },
+        'Bearer x',
+      );
+
+      expect(result).toMatchObject({
+        success: false,
+        code: 'YAHOO_ACCESS_DENIED',
+        status: 403,
+      });
+    });
   });
 
   describe('get_league_info', () => {

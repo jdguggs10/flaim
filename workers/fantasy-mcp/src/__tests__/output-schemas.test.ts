@@ -410,6 +410,74 @@ describe('get_matchups output schema', () => {
   });
 });
 
+describe('get_draft output schema', () => {
+  it('accepts the required common draft contract with provider placement metadata', () => {
+    expectValid('get_draft', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      leagueId: 'league-1',
+      seasonYear: 2025,
+      draft: {
+        id: 'draft-1',
+          type: 'snake',
+          status: 'complete',
+          rounds: 15,
+          teams: 12,
+          playerPool: { source: 'provider' },
+      },
+      picks: [{
+        round: 1,
+        selectionInRound: 1,
+          overallPick: 1,
+          selectionTeamId: 'roster-1',
+          originalTeamId: 'roster-1',
+          playerId: '4034',
+          playerName: 'Patrick Mahomes',
+          playerPosition: 'QB',
+          playerProTeam: 'KC',
+          isKeeper: false,
+          cost: { amount: 17, unit: 'auction_dollars' },
+        placement: { status: 'confirmed', source: 'provider_pick' },
+      }],
+      ownership: {
+        scope: 'complete',
+        picks: [{
+          seasonYear: 2026,
+          round: 1,
+          draftColumn: 1,
+          selectionInRound: 1,
+          overallPick: 1,
+          originalTeamId: 'roster-1',
+          currentOwnerTeamId: 'roster-2',
+          originalTeamName: 'First Team',
+          currentOwnerTeamName: 'Second Team',
+          placement: { status: 'projected', source: 'provider_order_derived' },
+        }],
+      },
+    }));
+  });
+
+  it('requires the common draft fields while tolerating future provider keys', () => {
+    const schema = outputSchemaFor('get_draft');
+    expect(schema.safeParse(routed({
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 123,
+      seasonYear: 2024,
+      draft: { type: 'auction', status: 'unavailable', futureDraftField: true },
+      picks: [],
+      futureProviderField: { nested: true },
+    })).success).toBe(true);
+    expect(schema.safeParse(routed({
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 123,
+      seasonYear: 2024,
+      draft: { type: 'auction', status: 'complete' },
+    })).success).toBe(false);
+  });
+});
+
 describe('get_roster output schema', () => {
   it('accepts the ESPN roster envelope', () => {
     expectValid('get_roster', routed({

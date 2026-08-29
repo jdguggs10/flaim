@@ -15,6 +15,8 @@ export interface ToolParams {
   sport: Sport;
   league_id: string;      // Yahoo league_key (e.g., "449.l.12345")
   season_year: number;
+  /** Optional provider draft identifier for get_draft. Yahoo uses the league draft-results resource. */
+  draft_id?: string;
   team_id?: string;       // Yahoo team_key (e.g., "449.l.12345.t.3")
   week?: number;
   /** Normalized get_roster snapshot request injected by the gateway. */

@@ -22,6 +22,8 @@ export interface ToolParams {
   sport: Sport;
   league_id: string;
   season_year: number;
+  /** Optional provider draft identifier for get_draft. */
+  draft_id?: string;
   team_id?: string;
   week?: number;
   as_of_date?: string;

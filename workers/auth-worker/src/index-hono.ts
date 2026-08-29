@@ -481,7 +481,7 @@ async function getVerifiedUserId(
         userId: env.EVAL_USER_ID,
         authType: 'eval-api-key' as const,
         label: 'EVAL_API_KEY',
-        // The eval harness must exercise the full ten-tool contract, including
+        // The eval harness must exercise the full eleven-tool contract, including
         // the bounded registry refresh (refresh_leagues), so the eval identity
         // carries write scope. The write only touches Flaim's own league
         // registry and the refresh route is rate-limited.

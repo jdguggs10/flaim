@@ -1,7 +1,7 @@
 # Flaim Fantasy
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![MCP Tools](https://img.shields.io/badge/MCP_Tools-10-green.svg)](https://api.flaim.app/mcp)
+[![MCP Tools](https://img.shields.io/badge/MCP_Tools-11-green.svg)](https://api.flaim.app/mcp)
 [![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.2-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
 Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT or Claude for read-only analysis grounded in your real league. Advanced users can also add Flaim manually as a custom connector in compatible AI platforms.
@@ -43,6 +43,7 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 | `refresh_leagues` | Re-discover connected leagues and update Flaim's league records |
 | `get_ancient_history` | Past seasons and historical leagues outside the current season |
 | `get_league_info` | Baseline league context: settings, scoring, roster config, teams/owners |
+| `get_draft` | Confirmed draft results and provider-grounded draft-pick ownership |
 | `get_roster` | Team roster with player stats |
 | `get_matchups` | Weekly matchups and scores |
 | `get_standings` | League standings and rankings |
