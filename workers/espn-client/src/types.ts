@@ -16,8 +16,32 @@ export interface EspnLeagueResponse {
   currentMatchupPeriod?: number;
   status?: EspnLeagueStatus;
   settings?: EspnLeagueSettings;
+  draftDetail?: EspnDraftDetail;
   teams?: EspnTeam[];
   schedule?: EspnMatchup[];
+}
+
+/** ESPN's `mDraftDetail` payload. Empty pre-draft board slots omit `playerId`. */
+export interface EspnDraftDetail {
+  drafted?: boolean;
+  inProgress?: boolean;
+  picks?: EspnDraftPick[];
+}
+
+export interface EspnDraftPick {
+  id?: number;
+  roundId?: number;
+  roundPickNumber?: number;
+  overallPickNumber?: number;
+  playerId?: number;
+  teamId?: number;
+  bidAmount?: number;
+  keeper?: boolean;
+  reservedForKeeper?: boolean;
+  lineupSlotId?: number;
+  nominatingTeamId?: number;
+  tradeLocked?: boolean;
+  autoDraftTypeId?: number;
 }
 
 export function isEspnLeagueResponse(value: unknown): value is EspnLeagueResponse {

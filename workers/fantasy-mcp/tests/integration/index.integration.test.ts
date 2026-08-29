@@ -434,6 +434,7 @@ describe('fantasy-mcp gateway integration', () => {
       ['get_user_session', { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true }],
       ['refresh_leagues', { readOnlyHint: false, openWorldHint: true, destructiveHint: false, idempotentHint: false }],
       ['get_ancient_history', { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true }],
+      ['get_draft', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
       ['get_league_info', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
       ['get_standings', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
       ['get_matchups', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],

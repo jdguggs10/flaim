@@ -16,6 +16,8 @@ export interface ToolParams {
   league_id: string;      // Sleeper league_id (numeric string, e.g., "289646328504385536")
   season_year: number;
   team_id?: string;        // roster_id as string (e.g., "1")
+  /** Optional explicit Sleeper draft id for get_draft. */
+  draft_id?: string;
   week?: number;
   /** Normalized get_roster snapshot request injected by the gateway. */
   snapshot?: RosterSnapshot;
@@ -91,6 +93,50 @@ export interface SleeperTradedPick {
   roster_id: number;
   previous_owner_id: number;
   owner_id: number;
+}
+
+/**
+ * Public Sleeper draft summary/detail shape.  The list endpoint omits some
+ * detail-only fields (notably slot_to_roster_id), so every field beyond the
+ * identity tuple is deliberately optional until the detail response is
+ * validated.
+ */
+export interface SleeperDraft {
+  draft_id: string;
+  league_id: string;
+  season: string;
+  sport: string;
+  type?: string;
+  status?: string;
+  start_time?: number;
+  settings?: {
+    teams?: number;
+    rounds?: number;
+    reversal_round?: number;
+    [key: string]: unknown;
+  };
+  slot_to_roster_id?: Record<string, number>;
+  [key: string]: unknown;
+}
+
+export interface SleeperDraftPick {
+  draft_id?: string;
+  player_id?: string;
+  roster_id?: string | number;
+  round?: number;
+  draft_slot?: number;
+  pick_no?: number;
+  is_keeper?: boolean | null;
+  metadata?: {
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    position?: string;
+    team?: string;
+    amount?: number | string;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
 }
 
 export interface SleeperRoster {

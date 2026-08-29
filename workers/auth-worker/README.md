@@ -180,7 +180,7 @@ Static Bearer tokens that each resolve to a fixed Clerk user ID with a per-key s
 
 **Security model:**
 - **Default-deny:** Only routes that explicitly opt in via `{ allowStaticApiKey: true }` accept a static key. New routes reject them by default.
-- **Per-key scope:** The eval key introspects as `mcp:read mcp:write` so the eval harness can exercise the full ten-tool contract, including the bounded `refresh_leagues` registry rewrite. The demo key is fixed at `mcp:read` — the public demo surface has no write access. The only write the eval scope enables is `POST /auth/internal/leagues/refresh`, which rewrites Flaim's own connected-league registry (never provider platforms) and is rate-limited per user.
+- **Per-key scope:** The eval key introspects as `mcp:read mcp:write` so the eval harness can exercise the full eleven-tool contract, including the bounded `refresh_leagues` registry rewrite. The demo key is fixed at `mcp:read`; the public demo surface has no write access. The only write the eval scope enables is `POST /auth/internal/leagues/refresh`, which rewrites Flaim's own connected-league registry (never provider platforms) and is rate-limited per user.
 - **Constant-time comparison:** Uses SHA-256 digest comparison to prevent timing attacks.
 - **Both secrets required:** `EVAL_API_KEY` + `EVAL_USER_ID` (and `DEMO_API_KEY` + `DEMO_USER_ID`) must both be set. If only the key is set, static-key auth is skipped (logged) and falls through to OAuth.
 

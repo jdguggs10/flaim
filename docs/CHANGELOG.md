@@ -4,6 +4,17 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Provider-Grounded Draft Results (FLA-285)
+
+- **Added**: The unified MCP exposes `get_draft` as its eleventh tool and tenth read-only league-data tool. The common response keeps round selection, stable draft-board column, historical selecting team, original team, and current pick owner as separate fields, with explicit confirmed, projected, or unavailable placement provenance.
+- **Added**: ESPN returns confirmed draft results across football, baseball, basketball, and hockey. Yahoo returns confirmed draft results across the same sports when provider access is available. Sleeper returns confirmed NFL/NBA results and can materialize current-season pick ownership when the provider supplies a complete board order and traded-pick evidence.
+- **Changed**: Sleeper future seasons without a draft can return only the provider's changed-picks ledger. Flaim no longer derives an exact round slot from a roster ID or assumed snake order when provider order is unavailable. Standard snake, third-round reversal, and linear projections are labeled projected rather than confirmed.
+- **Changed**: ESPN and Yahoo fail closed when a provider marks a draft complete but supplies no usable selections. If only some completed rows are malformed, valid selections remain available with a `DRAFT_PICKS_PARTIAL` warning instead of silently presenting a complete result.
+- **Added**: The shipped Flaim skill and MCP instructions route draft-result and pick-ownership questions to `get_draft`, distinguish a value such as 12.15 from stable board column 2, and prohibit current-owner inference from completed selection history.
+- **Changed**: The deferred keeper guidance now documents platform-specific keeper fields and the league-rules boundary for traded-player cost. Tool descriptions disclose that keeper fields are additive and platform-dependent.
+- **Changed**: `get_transactions` now warns callers that a response hitting its `count` cap may omit older rows inside the requested window, and `get_ancient_history` scopes all-time claims to seasons actually returned rather than treating `thresholdYear` as a retrieval floor.
+- **Limited**: Yahoo draft support is fixture-tested but not live-verified while provider access remains unavailable. ESPN and Yahoo expose completed selections but not a current future-pick ownership ledger.
+
 ### Paced Legacy ESPN Backfill (FLA-310)
 
 - **Added**: A default-off backend migration can proactively repair legacy ESPN history one account at a time without waiting for a user refresh. A fixed cohort cutoff and an optional private allowlist make staged rollout explicit.

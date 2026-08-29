@@ -20,7 +20,7 @@ const expectedTools = [
 ];
 
 describe('shipped Flaim fantasy skill contract', () => {
-  it('has valid routing frontmatter and documents all ten tools', () => {
+  it('has valid routing frontmatter and documents all eleven tools', () => {
     expect(skill).toMatch(/^---\nname: flaim-fantasy\ndescription: .+\nlicense: MIT\n---/);
     const description = skill.match(/^description: (.+)$/m)?.[1] ?? '';
     expect(description.length).toBeGreaterThan(0);
