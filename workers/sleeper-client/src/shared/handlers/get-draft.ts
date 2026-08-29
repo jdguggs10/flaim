@@ -194,10 +194,10 @@ function metadataPlayer(pick: SleeperDraftPick): Record<string, unknown> {
 }
 
 function auctionAmount(value: unknown): number | undefined {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : undefined;
   if (typeof value === 'string' && value.trim()) {
     const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
   }
   return undefined;
 }
@@ -345,11 +345,11 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
 
       if (!selected) {
         const leagueSeason = Number(league.season);
-        const futureSeason = Number.isInteger(leagueSeason) && seasonYear > leagueSeason;
-        const futureLedger = futureSeason
+        const currentOrFutureSeason = Number.isInteger(leagueSeason) && seasonYear >= leagueSeason;
+        const changedPicksLedger = currentOrFutureSeason
           ? noDraftResponse(config.sport, leagueId, seasonYear, trades, teamResult.names, warnings)
           : null;
-        if (futureLedger) return { success: true, data: futureLedger };
+        if (changedPicksLedger) return { success: true, data: changedPicksLedger };
         return { success: false, error: 'Sleeper has no validated draft or current-season traded-pick ledger for this request', code: 'DRAFT_UNAVAILABLE' };
       }
 

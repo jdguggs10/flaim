@@ -132,7 +132,8 @@ export function parseYahooDraftResults(raw: unknown): YahooDraftResults | undefi
       // overall draft position (rather than another pick coordinate), leave it
       // out instead of asserting an incorrect cross-provider meaning.
       const selectionInRound = positiveInteger(result.selection_in_round) ?? positiveInteger(result.pick_in_round);
-      const cost = toYahooFiniteNumber(result.cost);
+      const rawCost = toYahooFiniteNumber(result.cost);
+      const cost = rawCost !== undefined && rawCost >= 0 ? rawCost : undefined;
 
       return {
         round,

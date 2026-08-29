@@ -44,7 +44,7 @@ describe('parseYahooDraftResults', () => {
 
   it('omits malformed rows while preserving supplied optional placement fields', () => {
     const parsed = parseYahooDraftResults(responseWith({
-      '0': { draft_result: { pick: '1', round: '1', team_key: '449.l.123.t.1', player_key: '449.p.101' } },
+      '0': { draft_result: { pick: '1', round: '1', team_key: '449.l.123.t.1', player_key: '449.p.101', cost: '-17' } },
       '1': { draft_result: { pick: '2', round: 'not-a-round', team_key: '449.l.123.t.2', player_key: '449.p.102' } },
       '2': { draft_result: { pick: '3', round: '1', team_key: '', player_key: '449.p.103' } },
       '3': { draft_result: { pick: '4', round: '1', team_key: '449.l.123.t.4' } },

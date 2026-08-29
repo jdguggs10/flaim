@@ -12,6 +12,16 @@ function finiteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function positiveInteger(value: unknown): number | undefined {
+  const parsed = finiteNumber(value);
+  return parsed !== undefined && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function nonNegativeNumber(value: unknown): number | undefined {
+  const parsed = finiteNumber(value);
+  return parsed !== undefined && parsed >= 0 ? parsed : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -40,16 +50,16 @@ function normalizePick(value: unknown, isAuction: boolean) {
   if (!isRecord(value)) return null;
   const pick = value as EspnDraftPick;
   const playerId = finiteNumber(pick.playerId);
-  const round = finiteNumber(pick.roundId);
+  const round = positiveInteger(pick.roundId);
 
   // ESPN emits board placeholders before the draft. A populated player and a
   // usable round are the minimum evidence for a completed provider pick.
   if (playerId === undefined || round === undefined) return null;
 
-  const selectionInRound = finiteNumber(pick.roundPickNumber);
-  const overallPick = finiteNumber(pick.overallPickNumber);
+  const selectionInRound = positiveInteger(pick.roundPickNumber);
+  const overallPick = positiveInteger(pick.overallPickNumber);
   const selectionTeamId = finiteNumber(pick.teamId);
-  const bidAmount = finiteNumber(pick.bidAmount);
+  const bidAmount = nonNegativeNumber(pick.bidAmount);
 
   return {
     round,

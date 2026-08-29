@@ -165,16 +165,23 @@ describe('Sleeper get_draft', () => {
       placement: { status: 'projected', source: 'provider_order_derived' },
     });
 
-    queueSelectedDraft(sleeperSport, detail(sleeperSport, { type: 'auction' }), [{
-      draft_id: 'draft-1', player_id: 'auction-player', roster_id: '1', round: 1, draft_slot: 1, pick_no: 1,
-      metadata: { first_name: 'Auction', last_name: 'Winner', amount: '42' },
-    }]);
+    queueSelectedDraft(sleeperSport, detail(sleeperSport, { type: 'auction' }), [
+      {
+        draft_id: 'draft-1', player_id: 'auction-player', roster_id: '1', round: 1, draft_slot: 1, pick_no: 1,
+        metadata: { first_name: 'Auction', last_name: 'Winner', amount: '42' },
+      },
+      {
+        draft_id: 'draft-1', player_id: 'invalid-auction-cost', roster_id: '3', round: 1, draft_slot: 3, pick_no: 2,
+        metadata: { first_name: 'Invalid', last_name: 'Cost', amount: '-1' },
+      },
+    ]);
     const auction = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
     const auctionData = auction.data as Record<string, any>;
     expect(auctionData.picks[0]).toMatchObject({
       cost: { amount: 42, unit: 'auction_dollars' },
       placement: { status: 'confirmed', source: 'provider_pick' },
     });
+    expect(auctionData.picks[1]).not.toHaveProperty('cost');
     const unmadeAuctionPick = auctionData.ownership.picks.find((pick: Record<string, unknown>) => pick.round === 1 && pick.originalTeamId === 2);
     expect(unmadeAuctionPick.placement).toEqual({ status: 'unavailable', source: 'no_provider_order' });
   });
@@ -200,6 +207,38 @@ describe('Sleeper get_draft', () => {
       scope: 'changed_picks_only',
       picks: [expect.objectContaining({ seasonYear: 2027, originalTeamId: 1, currentOwnerTeamId: 2, placement: { status: 'unavailable', source: 'no_provider_order' } })],
     }));
+  });
+
+  it.each(scenarios)('$label returns a current-season changed-picks-only ledger before a draft exists', async ({ sport, sleeperSport, handlers }) => {
+    const [rosters, users] = rosterAndUsers();
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse(league(sleeperSport, '2026')))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(rosters)
+      .mockResolvedValueOnce(users)
+      .mockResolvedValueOnce(jsonResponse([
+        { season: '2026', round: 2, roster_id: 3, previous_owner_id: 3, owner_id: 4 },
+      ]));
+
+    const result = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        draft: { type: 'unknown', status: 'unavailable', source: 'traded_picks_only' },
+        picks: [],
+        ownership: {
+          scope: 'changed_picks_only',
+          picks: [expect.objectContaining({
+            seasonYear: 2026,
+            round: 2,
+            originalTeamId: 3,
+            currentOwnerTeamId: 4,
+            placement: { status: 'unavailable', source: 'no_provider_order' },
+          })],
+        },
+      },
+    });
   });
 
   it.each(scenarios)('$label refuses ambiguous same-season candidates instead of taking the newest draft', async ({ sport, sleeperSport, handlers }) => {

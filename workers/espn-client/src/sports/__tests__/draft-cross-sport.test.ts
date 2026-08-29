@@ -169,11 +169,11 @@ describe('espn cross-sport get_draft', () => {
         picks: [{
           roundId: 4,
           playerId: 404,
-          roundPickNumber: Number.NaN,
-          overallPickNumber: null,
+          roundPickNumber: 0,
+          overallPickNumber: -1,
           teamId: Number.POSITIVE_INFINITY,
           keeper: 'true',
-          bidAmount: '22',
+          bidAmount: -22,
         }],
       },
     }));
@@ -211,6 +211,7 @@ describe('espn cross-sport get_draft', () => {
         picks: [
           { roundId: 1, playerId: 101, teamId: 1 },
           { roundId: 1, teamId: 2 },
+          { roundId: 0, playerId: 303, teamId: 3 },
         ],
       },
     }));
