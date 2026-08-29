@@ -102,9 +102,9 @@ describe("parsePublicDemoCapabilities", () => {
     });
 
     expect(targets.map((target) => [target.platform, target.sport])).toEqual([
+      ["sleeper", "football"],
       ["espn", "baseball"],
       ["espn", "football"],
-      ["sleeper", "football"],
     ]);
   });
 
@@ -197,7 +197,8 @@ describe("capability resolution", () => {
       }),
     );
 
-    expect(state.platform).toBe("espn");
+    // Matrix order puts sleeper-football first for the 2026 football season.
+    expect(state.platform).toBe("sleeper");
     expect(state.sport).toBe("football");
   });
 
