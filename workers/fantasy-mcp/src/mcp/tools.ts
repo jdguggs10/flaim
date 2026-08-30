@@ -20,6 +20,7 @@ import { logEvalEvent } from '../logging';
 import { USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
 
 const AUTH_WORKER_REFRESH_TIMEOUT_MS = 60_000;
+const MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT = 24_000;
 
 // =============================================================================
 // MCP RESPONSE TYPES
@@ -293,6 +294,20 @@ const GET_STANDINGS_OUTPUT_SCHEMA = routedOutputSchema({
   standings: z.array(standingsEntrySchema).optional(),
 });
 
+const matchupPlayerDetailSchema = looseObject({
+  playerId: z.string(),
+  name: z.string().nullable(),
+  lineupSlot: z.string(),
+  started: z.boolean().nullable(),
+  points: z.number().nullable(),
+});
+
+// Keep matchup sides permissive for existing ESPN/Yahoo/Sleeper summary
+// responses. The opt-in ESPN player array is constrained whenever present.
+const matchupSideSchema = looseObject({
+  players: z.array(matchupPlayerDetailSchema).optional(),
+});
+
 const GET_MATCHUPS_OUTPUT_SCHEMA = routedOutputSchema({
   leagueId: z.string().optional(),
   seasonYear: z.number().optional(),
@@ -306,8 +321,8 @@ const GET_MATCHUPS_OUTPUT_SCHEMA = routedOutputSchema({
   matchups: z
     .array(
       looseObject({
-        home: looseObject().nullable().optional(),
-        away: looseObject().nullable().optional(),
+        home: matchupSideSchema.nullable().optional(),
+        away: matchupSideSchema.nullable().optional(),
       })
     )
     .optional(),
@@ -1000,6 +1015,14 @@ function mcpError(message: string, code: string = 'ERROR'): McpToolResponse {
     structuredContent: { success: false, code, error: message },
     isError: true,
   };
+}
+
+function exceedsMatchupPlayerDetailSerializedToolResultLimit(response: McpToolResponse): boolean {
+  // The tool result carries the same payload twice: pretty JSON in content and
+  // structuredContent. This stable limit deliberately excludes the outer
+  // JSON-RPC envelope (including its variable request id) and SSE framing.
+  return new TextEncoder().encode(JSON.stringify(response)).byteLength
+    > MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT;
 }
 
 function didRefreshBatchFail(payload: unknown): boolean {
@@ -1697,7 +1720,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_MATCHUPS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching matchups\u2026', invoked: 'Matchups ready' },
-      description: `Get matchups/scoreboard for a specific week or the current week. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
+      description: `Get matchups/scoreboard for a specific week or the current week. To request compact player scores for one selected matchup, use detail: "players" with an explicit week and team_id; this is currently ESPN football only. Best used after get_user_session and after get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1708,19 +1731,61 @@ export function getUnifiedTools(): UnifiedTool[] {
         league_id: z.string().describe('League ID (get from get_user_session)'),
         season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
         week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
+        team_id: z.string().optional().describe('Required with detail: "players" to select one matchup; do not provide for summary mode.'),
+        detail: z.literal('players').optional().describe('Opt-in compact player detail for one selected ESPN football matchup; requires week and team_id.'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
+        const requestedDetail = args.detail;
+        const requestedTeamId = args.team_id;
+
+        if (requestedDetail !== undefined && requestedDetail !== 'players') {
+          return mcpError('get_matchups detail must be "players" when provided', 'MATCHUP_DETAIL_UNSUPPORTED');
+        }
+
+        if (requestedDetail !== 'players' && requestedTeamId !== undefined) {
+          return mcpError('team_id requires detail: "players" for get_matchups', 'MATCHUP_DETAIL_MODE_REQUIRED');
+        }
+
+        const detail = requestedDetail === 'players' ? requestedDetail : undefined;
+        const teamId = typeof requestedTeamId === 'string' ? requestedTeamId.trim() : '';
+        const week = args.week as number | undefined;
+        const seasonYear = args.season_year as number;
+
+        if (detail === 'players') {
+          if (args.platform !== 'espn' || args.sport !== 'football' || !Number.isInteger(seasonYear) || seasonYear < 2018) {
+            return mcpError(
+              'Player matchup detail is currently supported only for ESPN football seasons from 2018 onward',
+              'MATCHUP_DETAIL_UNSUPPORTED'
+            );
+          }
+
+          if (week === undefined || !Number.isInteger(week) || week < 1 || teamId.length === 0) {
+            return mcpError(
+              'Player matchup detail requires an explicit positive week and nonempty team_id',
+              'MATCHUP_DETAIL_SELECTOR_REQUIRED'
+            );
+          }
+        }
+
         const params: ToolParams = {
           platform: args.platform as Platform,
           sport: args.sport as Sport,
           league_id: args.league_id as string,
-          season_year: args.season_year as number,
-          week: args.week as number | undefined,
+          season_year: seasonYear,
+          week,
+          ...(detail === 'players' ? { team_id: teamId, detail } : {}),
         };
 
         return withToolLogging(correlationId, 'get_matchups', `${params.platform} ${params.sport} league=provided week=${params.week || 'current'}`, async () => {
           const result = await routeToClient(env, 'get_matchups', params, authHeader, correlationId, evalRunId, evalTraceId);
-          return routeResultToMcp(result);
+          const response = routeResultToMcp(result);
+          if (detail === 'players' && !response.isError && exceedsMatchupPlayerDetailSerializedToolResultLimit(response)) {
+            return mcpError(
+              'Player matchup detail exceeds the 24,000-byte serialized tool-result limit and cannot be truncated',
+              'MATCHUP_DETAIL_TOO_LARGE'
+            );
+          }
+          return response;
         }, evalRunId, evalTraceId);
       },
     },

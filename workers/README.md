@@ -122,7 +122,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_league_info` — Baseline league context: settings, members, teams/owners
 - `get_draft`: Confirmed draft results and provider-grounded pick ownership
 - `get_standings` — League standings
-- `get_matchups` — Current/specified week matchups
+- `get_matchups` — Current/specified week matchups; ESPN football can opt into bounded player detail
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available players with a normalized envelope (capabilities, ownership scope, ordering); ESPN/Yahoo include platform-wide ownership percentages, Sleeper returns identities without ownership percentages
 - `get_players` — Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable
@@ -136,6 +136,12 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `get_user_session` should be the first call in a normal chat, and `get_league_info` is usually the second call before most league-specific analysis so team names, owner/team mapping, and league rules are established.
 
 `get_draft` separates the round slot (`selectionInRound`) from the stable board column (`draftColumn`), historical selecting team (`selectionTeamId`), and current pick owner (`currentOwnerTeamId`). Exact slots are returned only with confirmed provider picks or provider-grounded order projections.
+
+### Bounded ESPN football matchup player detail
+
+`get_matchups` supports `detail: 'players'` only for ESPN football seasons 2018 and later. The mode requires a positive `week` and nonempty `team_id`, selects one matchup containing that team, and returns both present sides. Ordinary matchup summaries remain unchanged when `detail` is omitted, and `team_id` without player detail is rejected rather than ignored.
+
+Detail responses expose only compact player entries: `playerId`, `name`, `lineupSlot`, nullable `started`, and nullable weekly `points`. Raw provider roster payloads and expanded player metadata are never returned or cached. The selected matchup must fit the 24,000-byte serialized MCP tool-result limit (`content` plus `structuredContent`) in full, excluding the outer JSON-RPC envelope and SSE transport framing; Flaim fails closed with `MATCHUP_DETAIL_TOO_LARGE` rather than truncating players or omitting the opponent. Pre-2018 ESPN football, and every non-ESPN-football combination, are unsupported for player detail because their player-boxscore contract is not established.
 
 ### Refresh cooldown envelope
 
