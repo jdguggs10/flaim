@@ -38,7 +38,7 @@ const ACCOUNT_FAQS = [
   {
     question: "How do I delete my account?",
     answer:
-      "Email privacy@flaim.app to request complete account deletion. Flaim will permanently remove your stored account details, platform credentials, and league data within 30 days.",
+      "Open your account menu, choose Manage account, then Security, then Delete account. This starts permanent deletion of your Flaim account. Connected ESPN, Yahoo, and Sleeper credentials and saved league data are purged once the verified deletion event is processed, normally within seconds. A record that your account existed and was deleted is kept, and it does not remove or unsubscribe any marketing email contact record. See the Privacy Policy for details.",
   },
 ] as const;
 

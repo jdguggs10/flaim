@@ -246,6 +246,12 @@ wrangler secret put OAUTH_CLIENT_REGISTRATION_SIGNING_KEY --env preview
 # Eval API key (optional — for headless eval/CI)
 wrangler secret put EVAL_API_KEY --env preview
 wrangler secret put EVAL_USER_ID --env preview
+# Clerk user.deleted webhook (FLA-311). Each Clerk instance (dev, prod)
+# issues its own signing secret when you create its webhook subscription;
+# --env preview takes the dev-instance value, --env prod takes the
+# prod-instance value.
+wrangler secret put CLERK_ACCOUNT_DELETION_WEBHOOK_SIGNING_SECRET --env preview
+wrangler secret put CLERK_ACCOUNT_DELETION_WEBHOOK_SIGNING_SECRET --env prod
 ```
 
 ### 3. Local Development

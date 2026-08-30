@@ -23,6 +23,7 @@ readonly PROOF_SQL="supabase/tests/reproducibility.sql"
 readonly TOKEN_RPC_PROOF_SQL="supabase/tests/token_rpc.sql"
 readonly PROVIDER_FLAGS_PROOF_SQL="supabase/tests/provider_flags.sql"
 readonly ESPN_HISTORY_JOBS_PROOF_SQL="supabase/tests/espn_history_jobs.sql"
+readonly ACCOUNT_DELETIONS_PROOF_SQL="supabase/tests/account_deletions.sql"
 readonly CRON_PRODUCTION_SQL="supabase/cron/production.sql"
 readonly CRON_CUTOVER_SQL="supabase/cron/production-cadence-cutover.sql"
 readonly CUTOVER_GUARD_PROOF_SH="supabase/tests/cutover_guard.sh"
@@ -191,6 +192,7 @@ for reset_number in 1 2; do
     >> "${tmp_dir}/snapshot-${reset_number}.txt"
 
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ESPN_HISTORY_JOBS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
+  docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ACCOUNT_DELETIONS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
 done
 
 if ! diff -u \
@@ -203,6 +205,7 @@ fi
 bash "${CUTOVER_GUARD_PROOF_SH}"
 
 bash supabase/tests/token_rpc_concurrency.sh
+bash supabase/tests/account_deletions_concurrency.sh
 
 corepack pnpm exec supabase db lint \
   --local \

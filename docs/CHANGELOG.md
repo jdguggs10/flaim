@@ -14,6 +14,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: The deferred keeper guidance now documents platform-specific keeper fields and the league-rules boundary for traded-player cost. Tool descriptions disclose that keeper fields are additive and platform-dependent.
 - **Changed**: `get_transactions` now warns callers that a response hitting its `count` cap may omit older rows inside the requested window, and `get_ancient_history` scopes all-time claims to seasons actually returned rather than treating `thresholdYear` as a retrieval floor.
 - **Limited**: Yahoo draft support is fixture-tested but not live-verified while provider access remains unavailable. ESPN and Yahoo expose completed selections but not a current future-pick ownership ledger.
+### Self-Service Account Deletion (FLA-311)
+
+- **Added**: Users can permanently delete their Flaim account through Clerk's native self-serve UI (account menu, then Manage account, then Security, then Delete account). A dedicated, Svix-verified `user.deleted` webhook on auth-worker triggers an atomic Postgres purge of connected ESPN, Yahoo, and Sleeper credentials and league data. Usage-analytics tables remain untouched, and a permanent deletion record (Clerk user ID and timestamp) is retained.
+- **Added**: A generic anti-resurrection guard trigger, bound to all 13 in-scope tables, rejects any write for an account after its deletion is recorded, closing the race between an in-flight sync and a deletion.
+- **Changed**: The privacy policy's Data Retention section and the account-deletion FAQ now describe the self-serve flow and its actual retention behavior (pseudonymous usage records, a permanent deletion record, unaffected marketing contacts) instead of the prior email-request process.
 
 ### Paced Legacy ESPN Backfill (FLA-310)
 

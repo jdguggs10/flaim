@@ -13,10 +13,19 @@ migrations.
 The [reconciliation manifest](./reconciliation.md) records the live objects
 represented by this baseline and its one intentional omission.
 
-The current forward contract has 24 public tables and 75 public indexes. Its
+The current forward contract has 25 public tables and 77 public indexes. Its
 FLA-308 migration adds service-role-only `espn_history_jobs` and the
 `advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
-`persist_espn_league_with_lease(...)` RPCs. Those security-invoker RPCs use an
+`persist_espn_league_with_lease(...)` RPCs. The FLA-311 migration adds the
+service-role-only `account_deletions` tombstone, the `purge_account_data(...)`
+RPC, and a shared advisory-lock guard trigger bound to every user-keyed table.
+`supabase/tests/account_deletions.sql` proves the ACLs, the purge, all 13
+guard-trigger rejections, and idempotent replay inside a rolled-back
+transaction. `supabase/tests/account_deletions_concurrency.sh` independently
+races two live database sessions and requires the per-user advisory lock to
+genuinely serialize a concurrent writer against a concurrent purge in both
+directions (writer commits first and is still cleaned up by the purge;
+purge commits first and the writer is rejected once the tombstone lands). Those security-invoker RPCs use an
 empty search path. History progress and success/partial repair markers preserve
 the job's credential and lease fences, while request-time league writes require
 the exact live ESPN lease owner.

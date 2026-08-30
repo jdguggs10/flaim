@@ -90,6 +90,7 @@ import { handleWebSetupSignal } from './signal-handlers';
 import { runReconciliation } from './reconciliation';
 import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } from './sleeper-recurring-backfill';
 import { runEspnHistoryBackfill } from './espn-history-backfill';
+import { handleClerkAccountDeletionWebhook, type ClerkWebhookEnv } from './clerk-webhook';
 
 // =============================================================================
 // TYPES
@@ -108,6 +109,7 @@ export interface Env {
   OAUTH_REFRESH_TOKEN_TTL_SECONDS?: string; // MCP OAuth refresh-token inactivity TTL
   OAUTH_CLIENT_REGISTRATION_SIGNING_KEY?: string; // Optional stable signing key for confidential MCP DCR clients
   CLERK_ISSUER?: string; // Expected Clerk JWT issuer (e.g. "https://clerk.flaim.app")
+  CLERK_ACCOUNT_DELETION_WEBHOOK_SIGNING_SECRET?: string; // Svix signing secret for the dedicated user.deleted webhook (FLA-311)
   // Yahoo OAuth
   YAHOO_CLIENT_ID?: string;
   YAHOO_CLIENT_SECRET?: string;
@@ -134,6 +136,7 @@ export interface Env {
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
+  WEBHOOK_RATE_LIMITER: RateLimit;
 }
 
 type Jwk = {
@@ -836,6 +839,32 @@ api.post('/token', async (c) => {
 // Revocation endpoint (public)
 api.post('/revoke', (c) => {
   return handleRevoke(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
+});
+
+// Clerk user.deleted webhook (public; Svix-signature verified inside the
+// handler; rate-limited per IP). Reachable at /auth/webhooks/clerk/... and
+// /auth-preview/webhooks/clerk/... via the existing router mounts -- zero
+// wrangler.jsonc route changes needed for the route itself.
+//
+// Uses its own WEBHOOK_RATE_LIMITER, not the shared TOKEN_RATE_LIMITER: the
+// caller here is Svix's relay infrastructure, not an individual end user, so
+// CF-Connecting-IP reflects Svix's egress IP rather than a per-user identity.
+// Distinct users deleting their accounts within the same window can land on
+// the same IP and share one bucket. TOKEN_RATE_LIMITER's 10/60s ceiling is
+// sized for /authorize and /token, where the IP genuinely is the caller;
+// reusing it here risks 429-ing (and thereby delaying) unrelated, legitimate
+// deletions. A dedicated, more generous limiter keeps this endpoint's abuse
+// protection without coupling its capacity to those two callers' needs.
+api.post('/webhooks/clerk/account-deletion', async (c) => {
+  const clientIp = c.req.header('CF-Connecting-IP') || 'unknown';
+  const { success } = await c.env.WEBHOOK_RATE_LIMITER.limit({ key: `webhook:account-deletion:${clientIp}` });
+  if (!success) {
+    return c.json({
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many webhook requests. Please try again later.',
+    }, 429, { 'Retry-After': '60' });
+  }
+  return handleClerkAccountDeletionWebhook(c.req.raw, c.env as ClerkWebhookEnv);
 });
 
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
