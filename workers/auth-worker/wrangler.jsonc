@@ -19,6 +19,10 @@
   // - SUPABASE_SERVICE_KEY
   // - YAHOO_CLIENT_ID      (Yahoo Developer App)
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
+  // - CLERK_ACCOUNT_DELETION_WEBHOOK_SIGNING_SECRET (Clerk user.deleted
+  //   webhook; each Clerk instance issues its own value -- --env preview
+  //   takes the dev-instance value, --env prod takes the prod-instance
+  //   value; they are never the same secret)
   // Optional vars:
   // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 31536000 in code; set only to override)
   // - OAUTH_CLIENT_REGISTRATION_SIGNING_KEY (defaults to SUPABASE_SERVICE_KEY;

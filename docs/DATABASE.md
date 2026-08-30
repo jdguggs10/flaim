@@ -22,7 +22,7 @@ preview creation, and production DDL require separate approval and verification.
 Cloudflare Workers and server-side web paths use the Data API as
 `service_role`. Browser clients do not query Supabase directly.
 
-All 24 public tables currently have RLS enabled and no policies. The baseline
+All 25 public tables currently have RLS enabled and no policies. The baseline
 also reproduces the existing broad object grants and future-object defaults so
 permission hardening can be performed later as an isolated, reversible
 forward-only migration. Those before-state grants are not the desired final
@@ -91,6 +91,26 @@ stale-job recovery, pacing, retry eligibility, nonempty league-root seeding,
 provider-lease acquisition, and job insertion in one transaction. The public
 roles cannot execute it. Its additive migration must be applied before the
 default-off producer is enabled in a deployed auth worker.
+
+## Account deletion
+
+`account_deletions` is a permanent, service-role-only tombstone
+(`clerk_user_id`, `deleted_at`) written once per deleted account by the
+`purge_account_data(text)` RPC, which a dedicated auth-worker webhook calls
+after verifying Clerk's `user.deleted` event. The RPC deletes every row for
+that `clerk_user_id` (or `user_id`, for the two MCP OAuth tables) across all
+13 connected-platform and league tables listed above, in one transaction, and
+is safe to replay. `oauth_states` is excluded: it has no user column and
+already expires on its own.
+
+A generic `reject_write_after_account_deletion` trigger is bound to all 13
+tables (`BEFORE INSERT OR UPDATE`) so a write for an already-deleted account
+is rejected indefinitely, even years later. The trigger and the purge RPC
+acquire the identical per-user advisory lock via the shared
+`account_deletion_lock_key(text)` helper, which is what makes "delete this
+account" and "write for this account" mutually exclusive. Usage-analytics
+tables (`mcp_tool_events`, `mcp_user_daily`, `mcp_tool_daily`,
+`analytics.internal_users`) are explicitly out of scope for this purge.
 
 ## Analytics
 
