@@ -1206,6 +1206,161 @@ describe('fantasy-mcp tools', () => {
     );
   });
 
+  describe('get_matchups player detail', () => {
+    const matchupTool = () => getUnifiedTools().find((tool) => tool.name === 'get_matchups')!;
+    const detailArgs = {
+      platform: 'espn',
+      sport: 'football',
+      league_id: '123',
+      season_year: 2024,
+      week: 5,
+      team_id: '9',
+      detail: 'players',
+    } as const;
+
+    function detailData(padding = ''): Record<string, unknown> {
+      return {
+        leagueId: '123',
+        seasonYear: 2024,
+        matchupPeriod: 5,
+        padding,
+        matchups: [{
+          matchupPeriodId: 5,
+          home: {
+            teamId: 9,
+            totalPoints: 10,
+            players: [{
+              playerId: '101',
+              name: 'Player One',
+              lineupSlot: 'QB',
+              started: true,
+              points: 10,
+            }],
+          },
+          away: null,
+        }],
+      };
+    }
+
+    // This is the stable MCP tool-result object returned by the handler, not
+    // the outer JSON-RPC envelope or stream/SSE transport framing.
+    function serializedToolResultBytes(response: unknown): number {
+      return new TextEncoder().encode(JSON.stringify(response)).byteLength;
+    }
+
+    async function callDetailWithPadding(padding: string) {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: true, data: detailData(padding) });
+      return matchupTool().handler(detailArgs, {} as Env, 'Bearer token', 'corr-matchup-detail');
+    }
+
+    it('keeps summary-mode routing unchanged and rejects team_id without detail', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: true, data: { matchups: [] } });
+
+      await matchupTool().handler({
+        platform: 'espn', sport: 'football', league_id: '123', season_year: 2024, week: 5,
+      }, {} as Env, 'Bearer token', 'corr-summary');
+      expect(routeToClientMock).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'get_matchups',
+        { platform: 'espn', sport: 'football', league_id: '123', season_year: 2024, week: 5 },
+        'Bearer token',
+        'corr-summary',
+        undefined,
+        undefined
+      );
+
+      routeToClientMock.mockClear();
+      const result = await matchupTool().handler({
+        platform: 'espn', sport: 'football', league_id: '123', season_year: 2024, team_id: '9',
+      }, {} as Env, 'Bearer token', 'corr-ambiguous');
+      expect(result.structuredContent).toMatchObject({ code: 'MATCHUP_DETAIL_MODE_REQUIRED' });
+      expect(routeToClientMock).not.toHaveBeenCalled();
+    });
+
+    it('validates the ESPN-football capability and selectors before routing', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const rejectionMatrix = [
+        { args: { ...detailArgs, platform: 'yahoo' }, code: 'MATCHUP_DETAIL_UNSUPPORTED' },
+        { args: { ...detailArgs, sport: 'baseball' }, code: 'MATCHUP_DETAIL_UNSUPPORTED' },
+        { args: { ...detailArgs, season_year: 2017 }, code: 'MATCHUP_DETAIL_UNSUPPORTED' },
+        { args: { ...detailArgs, week: undefined }, code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED' },
+        { args: { ...detailArgs, week: 0 }, code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED' },
+        { args: { ...detailArgs, team_id: '   ' }, code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED' },
+      ];
+
+      for (const { args, code } of rejectionMatrix) {
+        routeToClientMock.mockClear();
+        const result = await matchupTool().handler(args, {} as Env, 'Bearer token', 'corr-invalid-detail');
+        expect(result.structuredContent).toMatchObject({ success: false, code });
+        expect(routeToClientMock).not.toHaveBeenCalled();
+      }
+    });
+
+    it('forwards only valid, normalized player-detail selectors', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: true, data: detailData() });
+
+      const result = await matchupTool().handler(
+        { ...detailArgs, team_id: ' 9 ' },
+        {} as Env,
+        'Bearer token',
+        'corr-valid-detail'
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(routeToClientMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'get_matchups',
+        {
+          platform: 'espn', sport: 'football', league_id: '123', season_year: 2024,
+          week: 5, team_id: '9', detail: 'players',
+        },
+        'Bearer token',
+        'corr-valid-detail',
+        undefined,
+        undefined
+      );
+    });
+
+    it('allows serialized MCP tool results at and below 24,000 bytes, but returns a corrective error above it', async () => {
+      // Content contains pretty JSON while structuredContent repeats the same
+      // data. ASCII padding grows the actual response by two bytes per
+      // character: once in the pretty text and once in structuredContent.
+      // Request IDs and transport framing are deliberately outside this cap.
+      let exact: { padding: string; response: Awaited<ReturnType<typeof callDetailWithPadding>> } | undefined;
+      for (const prefix of ['', '\n', '\u0000']) {
+        const baseline = await callDetailWithPadding(prefix);
+        const baselineBytes = serializedToolResultBytes(baseline);
+        const approximateCount = Math.max(0, Math.floor((24_000 - baselineBytes) / 2));
+        for (let delta = -4; delta <= 4; delta += 1) {
+          const padding = prefix + 'x'.repeat(Math.max(0, approximateCount + delta));
+          const response = await callDetailWithPadding(padding);
+          if (!response.isError && serializedToolResultBytes(response) === 24_000) {
+            exact = { padding, response };
+            break;
+          }
+        }
+        if (exact) break;
+      }
+
+      expect(exact).toBeDefined();
+      expect(exact!.response.isError).toBeUndefined();
+      expect(serializedToolResultBytes(exact!.response)).toBe(24_000);
+
+      const below = await callDetailWithPadding(exact!.padding.slice(0, -1));
+      expect(below.isError).toBeUndefined();
+      expect(serializedToolResultBytes(below)).toBeLessThan(24_000);
+
+      const above = await callDetailWithPadding(`${exact!.padding}x`);
+      expect(above).toMatchObject({
+        isError: true,
+        structuredContent: { success: false, code: 'MATCHUP_DETAIL_TOO_LARGE' },
+      });
+    });
+  });
+
   describe('get_roster snapshot selector validation', () => {
     const rosterTool = () => getUnifiedTools().find((t) => t.name === 'get_roster')!;
     const baseArgs = { league_id: '123', season_year: 2024, team_id: '1' };

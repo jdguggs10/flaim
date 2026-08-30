@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Bounded ESPN Football Matchup Player Detail (FLA-313)
+
+- **Added**: `get_matchups` now accepts opt-in `detail: 'players'` for ESPN football seasons 2018 and later. It requires an explicit positive `week` and nonempty `team_id`, selects one matchup containing that team, and returns both present sides with compact player entries: `playerId`, `name`, `lineupSlot`, nullable `started`, and nullable weekly `points`.
+- **Guarded**: The detail path returns no raw ESPN payloads and does not cache or truncate player detail. Its serialized MCP tool result (`content` plus `structuredContent`) has a 24,000-byte hard limit, excluding the outer JSON-RPC envelope and SSE transport framing; an oversized result fails closed with `MATCHUP_DETAIL_TOO_LARGE` instead of dropping players or the opponent.
+- **Limited**: Player detail is unavailable for ESPN football seasons before 2018 and for all other platform/sport combinations. `team_id` without `detail: 'players'` is rejected as ambiguous instead of being silently ignored.
+
 ### Provider-Grounded Draft Results (FLA-285)
 
 - **Added**: The unified MCP exposes `get_draft` as its eleventh tool and tenth read-only league-data tool. The common response keeps round selection, stable draft-board column, historical selecting team, original team, and current pick owner as separate fields, with explicit confirmed, projected, or unavailable placement provenance.

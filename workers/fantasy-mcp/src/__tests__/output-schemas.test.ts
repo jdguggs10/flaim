@@ -384,6 +384,57 @@ describe('get_matchups output schema', () => {
     }));
   });
 
+  it('accepts the bounded ESPN football player-detail shape', () => {
+    expectValid('get_matchups', routed({
+      leagueId: '336777',
+      seasonYear: 2024,
+      matchupPeriod: 5,
+      matchups: [{
+        matchupPeriodId: 5,
+        home: {
+          teamId: 1,
+          totalPoints: 101.2,
+          players: [{
+            playerId: '101',
+            name: 'Player One',
+            lineupSlot: 'QB',
+            started: true,
+            points: 0,
+          }],
+        },
+        away: {
+          teamId: 2,
+          totalPoints: 98.7,
+          players: [{
+            playerId: '202',
+            name: null,
+            lineupSlot: 'SLOT_88',
+            started: null,
+            points: null,
+          }],
+        },
+      }],
+    }));
+  });
+
+  it('rejects malformed player detail without tightening summary compatibility', () => {
+    const result = outputSchemaFor('get_matchups').safeParse(routed({
+      matchups: [{
+        home: {
+          teamId: 1,
+          players: [{
+            playerId: '101',
+            name: 'Player One',
+            lineupSlot: 'QB',
+            started: true,
+            points: '10',
+          }],
+        },
+      }],
+    }));
+    expect(result.success).toBe(false);
+  });
+
   it('accepts the Yahoo envelope with string week fields', () => {
     expectValid('get_matchups', routed({
       leagueKey: '449.l.123',

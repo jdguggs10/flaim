@@ -89,6 +89,14 @@ ESPN exposes both `scoringPeriodId` and `currentMatchupPeriod`. Treat `currentMa
 
 When callers pass an explicit `week`, use it. Otherwise prefer `currentMatchupPeriod` from the league response or `status.currentMatchupPeriod`, then fall back to `scoringPeriodId`.
 
+### Football matchup player detail (`get_matchups`)
+
+The opt-in `detail: 'players'` path is limited to ESPN football seasons 2018 and later. It requires a positive public `week` and a nonempty `team_id`, then fetches the requested scoring period with ESPN's `mBoxscore` view and a schedule `X-Fantasy-Filter` for that matchup period. The handler selects exactly one matchup containing the requested team and returns both present sides. A bye may have one null side.
+
+Each side's player rows come only from `rosterForCurrentScoringPeriod.entries`. The normalized whitelist is `playerId`, `name`, `lineupSlot`, nullable `started`, and nullable weekly `points` from ESPN's applied weekly total. The handler keeps a legitimate numeric zero, but returns `points: null` when a valid row has no trustworthy weekly score. It must not pass through raw ESPN roster objects, player stats, projections, acquisition fields, ownership, injury state, or current professional-team data. `rosterForMatchupPeriod` is not the source for lineup-slot classification.
+
+This path has no player-detail cache and does not truncate the selected matchup. The gateway owns the final 24,000-byte serialized MCP tool-result ceiling (`content` plus `structuredContent`), excluding the outer JSON-RPC envelope and SSE transport framing; if the complete normalized detail result is too large, it fails closed rather than slicing players or omitting the opponent. Pre-2018 ESPN football uses a historical route whose player-boxscore payload is not yet trustworthy for this contract, so it is rejected before this handler runs.
+
 ### Roster Snapshots (`get_roster`)
 
 `get_roster` consumes a normalized snapshot request instead of a raw `week`. Football maps `week` directly to `scoringPeriodId` (one NFL week per scoring period). Daily sports (baseball/basketball/hockey) take an `as_of_date` instead: a matchup week is *not* a scoring period there — scoring periods are calendar days — so a `week` selector fails closed with a corrective error rather than silently returning a months-old roster.

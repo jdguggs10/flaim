@@ -19,6 +19,10 @@ import {
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import {
+  normalizeEspnFootballMatchupPlayerDetail,
+  resolveEspnFootballMatchupPeriod,
+} from './matchup-player-detail';
 import { executeEspnGetDraft } from '../../shared/espn-draft';
 
 const GAME_ID = 'ffl'; // ESPN's game ID for fantasy football
@@ -300,6 +304,10 @@ async function handleGetMatchups(
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, week } = params;
 
+  if (params.detail === 'players') {
+    return handleGetMatchupPlayerDetail(env, params, authHeader, correlationId);
+  }
+
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
@@ -373,6 +381,106 @@ async function handleGetMatchups(
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',
       code: extractErrorCode(error)
+    };
+  }
+}
+
+/**
+ * Get one ESPN football matchup with the selected matchup's weekly player
+ * detail. This stays separate from the summary branch above so ordinary
+ * get_matchups requests preserve their URL, response shape, and semantics.
+ */
+async function handleGetMatchupPlayerDetail(
+  env: Env,
+  params: RoutedToolParams,
+  authHeader?: string,
+  correlationId?: string,
+): Promise<ExecuteResponse> {
+  const { league_id, season_year, week, team_id } = params;
+
+  if (typeof week !== 'number' || !Number.isInteger(week) || week <= 0 || !team_id?.trim()) {
+    return {
+      success: false,
+      error: 'MATCHUP_DETAIL_SELECTOR_REQUIRED: Player detail requires a positive week and team_id',
+      code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED',
+    };
+  }
+  if (season_year < 2018) {
+    return {
+      success: false,
+      error: 'MATCHUP_DETAIL_UNSUPPORTED: ESPN player detail is currently supported for seasons 2018 and later',
+      code: 'MATCHUP_DETAIL_UNSUPPORTED',
+    };
+  }
+
+  try {
+    const credentials = await getCredentials(env, authHeader, correlationId);
+    const league = {
+      leagueId: league_id,
+      espnSeasonYear: season_year,
+      historical: season_year < getCurrentSeasonYear('football'),
+    };
+    const settingsPath = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings`;
+    const settingsResponse = await espnFetch(settingsPath, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league,
+    });
+
+    if (!settingsResponse.ok) {
+      handleEspnError(settingsResponse);
+    }
+
+    const settingsData = await readEspnLeagueJson(settingsResponse, isEspnLeagueResponse);
+    if (!settingsData) {
+      throw new Error(
+        'MATCHUP_PLAYER_DETAIL_UNAVAILABLE: ESPN did not return usable matchup-period settings',
+      );
+    }
+    const matchupPeriod = resolveEspnFootballMatchupPeriod(settingsData, week);
+
+    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mBoxscore&scoringPeriodId=${week}`;
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      headers: {
+        'X-Fantasy-Filter': JSON.stringify({
+          schedule: {
+            filterMatchupPeriodIds: { value: [matchupPeriod] },
+          },
+        }),
+      },
+      league,
+    });
+
+    if (!response.ok) {
+      handleEspnError(response);
+    }
+
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
+    if (!data) {
+      return {
+        success: false,
+        error: 'MATCHUP_PLAYER_DETAIL_UNAVAILABLE: ESPN did not return a usable league payload for player detail',
+        code: 'MATCHUP_PLAYER_DETAIL_UNAVAILABLE',
+      };
+    }
+
+    const matchup = normalizeEspnFootballMatchupPlayerDetail(data, matchupPeriod, team_id.trim());
+    return {
+      success: true,
+      data: {
+        leagueId: league_id,
+        seasonYear: season_year,
+        matchupPeriod: matchup.matchupPeriodId,
+        matchups: [matchup],
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      code: extractErrorCode(error),
     };
   }
 }

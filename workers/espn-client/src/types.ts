@@ -206,6 +206,12 @@ export interface EspnMatchupTeam {
   totalProjectedPoints?: number;
   totalProjectedPointsLive?: number;
   pointsByScoringPeriod?: Record<string, number>;
+  /**
+   * The week-specific lineup returned by ESPN's mBoxscore view. This is the
+   * only roster shape used for matchup player detail: rosterForMatchupPeriod
+   * does not preserve trustworthy lineup-slot assignments.
+   */
+  rosterForCurrentScoringPeriod?: EspnMatchupRoster;
   cumulativeScore?: {
     wins?: number;
     losses?: number;
@@ -216,6 +222,22 @@ export interface EspnMatchupTeam {
       result?: string | null;
       score?: number;
     }>;
+  };
+}
+
+export interface EspnMatchupRoster {
+  entries?: EspnMatchupRosterEntry[];
+}
+
+export interface EspnMatchupRosterEntry {
+  playerId?: number;
+  lineupSlotId?: number;
+  playerPoolEntry?: {
+    appliedStatTotal?: number | null;
+    player?: {
+      id?: number;
+      fullName?: string | null;
+    };
   };
 }
 
@@ -247,6 +269,7 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;
   week?: number;
+  detail?: 'players';
   /** Normalized get_roster snapshot request injected by the gateway. */
   snapshot?: RosterSnapshot;
   type?: 'add' | 'drop' | 'trade' | 'waiver' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';

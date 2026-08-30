@@ -26,6 +26,8 @@ export interface ToolParams {
   draft_id?: string;
   team_id?: string;
   week?: number;
+  /** Opt-in matchup detail mode. Initially supported for ESPN football only. */
+  detail?: 'players';
   as_of_date?: string;
   /** Normalized get_roster snapshot, injected after capability validation. */
   snapshot?: RosterSnapshot;
