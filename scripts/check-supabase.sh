@@ -205,6 +205,7 @@ fi
 bash "${CUTOVER_GUARD_PROOF_SH}"
 
 bash supabase/tests/token_rpc_concurrency.sh
+bash supabase/tests/account_deletions_concurrency.sh
 
 corepack pnpm exec supabase db lint \
   --local \

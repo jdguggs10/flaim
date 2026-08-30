@@ -344,6 +344,190 @@ begin
     if sqlstate <> 'P0001' then raise; end if;
   end;
 
+  -- Post-tombstone UPDATE is rejected on all 13 guarded tables too -- the
+  -- trigger is BEFORE INSERT OR UPDATE, and the function itself branches on
+  -- neither TG_OP, but that's a code-reading inference, not proof by
+  -- execution. A row-level UPDATE trigger only fires for rows an UPDATE
+  -- actually matches, and the deleted user has zero rows left in any of
+  -- these tables post-purge -- and can never gain one through the guarded
+  -- path, since INSERT is rejected identically. So each fixture row here is
+  -- planted with the trigger briefly disabled (never through the guarded
+  -- path), the trigger is re-enabled, the UPDATE attempt is proven rejected,
+  -- then the fixture is removed via DELETE, which this trigger never guards.
+  -- Disabling/enabling a trigger is an ownership-level DDL operation --
+  -- service_role's plain DML grants aren't enough, so this fixture-planting
+  -- phase runs as the connection's own (superuser-equivalent) identity via
+  -- dynamic SQL, then hands back to service_role for the actual assertions
+  -- below, matching every other caller in this file.
+  execute 'reset role';
+
+  alter table public.espn_credentials disable trigger reject_write_after_account_deletion;
+  insert into public.espn_credentials (clerk_user_id, swid, s2) values (v_deleted_user, 'swid', 's2');
+  alter table public.espn_credentials enable trigger reject_write_after_account_deletion;
+
+  alter table public.espn_leagues disable trigger reject_write_after_account_deletion;
+  insert into public.espn_leagues (clerk_user_id, league_id, sport, team_id, season_year)
+  values (v_deleted_user, 'league-upd', 'football', 'team', 2024);
+  alter table public.espn_leagues enable trigger reject_write_after_account_deletion;
+
+  alter table public.espn_history_jobs disable trigger reject_write_after_account_deletion;
+  insert into public.espn_history_jobs (clerk_user_id, credential_updated_at, scan_version, mode)
+  values (v_deleted_user, now(), 1, 'full');
+  alter table public.espn_history_jobs enable trigger reject_write_after_account_deletion;
+
+  alter table public.yahoo_credentials disable trigger reject_write_after_account_deletion;
+  insert into public.yahoo_credentials (clerk_user_id, access_token, refresh_token, expires_at)
+  values (v_deleted_user, 'yat', 'yrt', now() + interval '1 hour');
+  alter table public.yahoo_credentials enable trigger reject_write_after_account_deletion;
+
+  alter table public.yahoo_leagues disable trigger reject_write_after_account_deletion;
+  insert into public.yahoo_leagues (clerk_user_id, sport, season_year, league_key, league_name)
+  values (v_deleted_user, 'football', 2024, 'yahoo-key-upd', 'Yahoo League');
+  alter table public.yahoo_leagues enable trigger reject_write_after_account_deletion;
+
+  alter table public.platform_oauth_states disable trigger reject_write_after_account_deletion;
+  insert into public.platform_oauth_states (state, platform, clerk_user_id, expires_at)
+  values ('state-upd-' || v_deleted_user, 'yahoo', v_deleted_user, now() + interval '1 hour');
+  alter table public.platform_oauth_states enable trigger reject_write_after_account_deletion;
+
+  alter table public.sleeper_connections disable trigger reject_write_after_account_deletion;
+  insert into public.sleeper_connections (clerk_user_id, sleeper_user_id) values (v_deleted_user, 'sleeper-uid-upd');
+  alter table public.sleeper_connections enable trigger reject_write_after_account_deletion;
+
+  alter table public.sleeper_leagues disable trigger reject_write_after_account_deletion;
+  insert into public.sleeper_leagues (clerk_user_id, league_id, sport, season_year, league_name, sleeper_user_id)
+  values (v_deleted_user, 'sleeper-league-upd', 'football', 2024, 'Sleeper League', 'sleeper-uid-upd');
+  alter table public.sleeper_leagues enable trigger reject_write_after_account_deletion;
+
+  alter table public.archived_leagues disable trigger reject_write_after_account_deletion;
+  insert into public.archived_leagues (clerk_user_id, platform, sport, recurring_league_id)
+  values (v_deleted_user, 'espn', 'football', 'league-upd');
+  alter table public.archived_leagues enable trigger reject_write_after_account_deletion;
+
+  alter table public.provider_sync_state disable trigger reject_write_after_account_deletion;
+  insert into public.provider_sync_state (clerk_user_id, provider) values (v_deleted_user, 'sleeper');
+  alter table public.provider_sync_state enable trigger reject_write_after_account_deletion;
+
+  alter table public.user_preferences disable trigger reject_write_after_account_deletion;
+  insert into public.user_preferences (clerk_user_id) values (v_deleted_user);
+  alter table public.user_preferences enable trigger reject_write_after_account_deletion;
+
+  alter table public.oauth_tokens disable trigger reject_write_after_account_deletion;
+  insert into public.oauth_tokens (access_token, user_id, expires_at)
+  values ('at-upd-' || v_deleted_user, v_deleted_user, now() + interval '1 hour');
+  alter table public.oauth_tokens enable trigger reject_write_after_account_deletion;
+
+  alter table public.oauth_codes disable trigger reject_write_after_account_deletion;
+  insert into public.oauth_codes (code, user_id, redirect_uri, expires_at)
+  values ('code-upd-' || v_deleted_user, v_deleted_user, 'https://example.com/callback', now() + interval '1 hour');
+  alter table public.oauth_codes enable trigger reject_write_after_account_deletion;
+
+  execute 'set local role service_role';
+
+  begin
+    update public.espn_credentials set email = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'espn_credentials update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.espn_credentials where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.espn_leagues set team_name = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'espn_leagues update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.espn_leagues where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.espn_history_jobs set status = 'running' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'espn_history_jobs update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.espn_history_jobs where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.yahoo_credentials set access_token = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'yahoo_credentials update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.yahoo_credentials where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.yahoo_leagues set team_name = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'yahoo_leagues update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.yahoo_leagues where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.platform_oauth_states set redirect_after = '/x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'platform_oauth_states update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.platform_oauth_states where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.sleeper_connections set sleeper_username = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'sleeper_connections update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.sleeper_connections where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.sleeper_leagues set league_name = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'sleeper_leagues update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.sleeper_leagues where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.archived_leagues set league_name = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'archived_leagues update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.archived_leagues where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.provider_sync_state set last_sync_source = 'x' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'provider_sync_state update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.provider_sync_state where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.user_preferences set default_sport = 'baseball' where clerk_user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'user_preferences update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.user_preferences where clerk_user_id = v_deleted_user;
+
+  begin
+    update public.oauth_tokens set client_name = 'x' where user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'oauth_tokens update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.oauth_tokens where user_id = v_deleted_user;
+
+  begin
+    update public.oauth_codes set used_at = now() where user_id = v_deleted_user;
+    raise exception using errcode = 'ZZ001', message = 'oauth_codes update after deletion unexpectedly succeeded';
+  exception when others then
+    if sqlstate <> 'P0001' then raise; end if;
+  end;
+  delete from public.oauth_codes where user_id = v_deleted_user;
+
   -- oauth_states has no guard trigger and must remain writable regardless.
   insert into public.oauth_states (state, redirect_uri, expires_at)
   values ('state-oauth-states-' || v_deleted_user, 'https://example.com/callback', now() + interval '1 hour');
