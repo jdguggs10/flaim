@@ -136,6 +136,7 @@ export interface Env {
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
+  WEBHOOK_RATE_LIMITER: RateLimit;
 }
 
 type Jwk = {
@@ -843,10 +844,20 @@ api.post('/revoke', (c) => {
 // Clerk user.deleted webhook (public; Svix-signature verified inside the
 // handler; rate-limited per IP). Reachable at /auth/webhooks/clerk/... and
 // /auth-preview/webhooks/clerk/... via the existing router mounts -- zero
-// wrangler.jsonc route changes needed.
+// wrangler.jsonc route changes needed for the route itself.
+//
+// Uses its own WEBHOOK_RATE_LIMITER, not the shared TOKEN_RATE_LIMITER: the
+// caller here is Svix's relay infrastructure, not an individual end user, so
+// CF-Connecting-IP reflects Svix's egress IP rather than a per-user identity.
+// Distinct users deleting their accounts within the same window can land on
+// the same IP and share one bucket. TOKEN_RATE_LIMITER's 10/60s ceiling is
+// sized for /authorize and /token, where the IP genuinely is the caller;
+// reusing it here risks 429-ing (and thereby delaying) unrelated, legitimate
+// deletions. A dedicated, more generous limiter keeps this endpoint's abuse
+// protection without coupling its capacity to those two callers' needs.
 api.post('/webhooks/clerk/account-deletion', async (c) => {
   const clientIp = c.req.header('CF-Connecting-IP') || 'unknown';
-  const { success } = await c.env.TOKEN_RATE_LIMITER.limit({ key: `webhook:account-deletion:${clientIp}` });
+  const { success } = await c.env.WEBHOOK_RATE_LIMITER.limit({ key: `webhook:account-deletion:${clientIp}` });
   if (!success) {
     return c.json({
       error: 'rate_limit_exceeded',

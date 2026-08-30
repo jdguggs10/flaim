@@ -69,6 +69,7 @@ jobs:
           fi
           printf '%s\n' "$output" | grep -q 'env.TOKEN_RATE_LIMITER'
           printf '%s\n' "$output" | grep -q 'env.CREDENTIALS_RATE_LIMITER'
+          printf '%s\n' "$output" | grep -q 'env.WEBHOOK_RATE_LIMITER'
 
       - name: Deploy ${{ matrix.worker }}
         if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'

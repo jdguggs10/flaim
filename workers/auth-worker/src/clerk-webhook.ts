@@ -2,12 +2,20 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * Manual Web Crypto verification of Clerk's `user.deleted` webhook, which
- * uses the Svix signing scheme. Do NOT add the `svix` or `@clerk/backend`
- * packages -- see AGENTS.md / the FLA-311 plan for why. This deliberately
- * does not reuse oauth-client-auth.ts's hmacSha256Base64Url: that helper
- * treats its key as UTF-8 text and emits base64url, and Svix requires the
- * key to be base64-decoded bytes and the signature to be standard base64
- * (with padding) -- see discrepancy #4 in the FLA-311 spec.
+ * uses the Svix signing scheme. No worker in this repo depends on the
+ * `svix` or `@clerk/backend` packages today, and this endpoint doesn't
+ * need to be the first -- auth-worker already verifies Clerk session JWTs
+ * by hand via raw JWKS + `crypto.subtle`, so one more hand-rolled HMAC
+ * check keeps the pattern consistent and avoids a new dependency (the
+ * `svix` package alone is roughly 1MB) for a single verification routine.
+ *
+ * This deliberately does not reuse oauth-client-auth.ts's
+ * hmacSha256Base64Url: that helper treats its key as UTF-8 text and emits
+ * base64url, but Svix's scheme requires the signing secret's payload
+ * (after stripping its `whsec_` prefix) to be base64-decoded into raw
+ * bytes before use as the HMAC key, and the resulting signature to be
+ * compared as standard base64 (with padding), not base64url -- reusing
+ * that helper as-is would silently verify against the wrong bytes.
  */
 
 export interface ClerkWebhookEnv {
@@ -211,7 +219,13 @@ function logAccountDeletionAttempt(fields: {
  * POST /webhooks/clerk/account-deletion handler. The caller (index-hono.ts)
  * is responsible for per-IP rate limiting before invoking this.
  *
- * Response code contract (see FLA-311 spec discrepancy notes for rationale):
+ * Response code contract. Svix retries any non-2xx response identically
+ * regardless of status code (it does not distinguish 4xx from 5xx), so the
+ * specific codes below exist for our own logs/monitoring, not to steer
+ * Svix's retry behavior. What actually matters for correctness is only the
+ * 2xx/non-2xx boundary: 2xx must mean "the purge committed, or this
+ * payload could never succeed no matter how many times it's retried";
+ * every other case must be non-2xx so Svix keeps retrying it.
  *  - 500: signing secret not configured / malformed (misconfiguration).
  *  - 413: request body exceeds MAX_WEBHOOK_BODY_BYTES (declared via
  *         Content-Length, or observed while streaming) -- rejected before
@@ -299,12 +313,12 @@ export async function handleClerkAccountDeletionWebhook(
   const timeoutId = setTimeout(() => controller.abort(), PURGE_RPC_TIMEOUT_MS);
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY);
   // supabase-js defaults to shouldThrowOnError: false, so an aborted fetch
-  // surfaces as `error`, not a rejected promise, in production -- see FLA-311
-  // spec discrepancy #5. The try/catch below is defense-in-depth only: it
-  // never inspects the caught value, so it still never guesses at an
-  // error.message/name shape -- it only lets `controller.signal.aborted`
-  // (armed independently by the timeout above) distinguish a timeout from
-  // any other unexpected rejection.
+  // is expected to surface as `error`, not a rejected promise. The
+  // try/catch below is defense-in-depth only, for whatever supabase-js
+  // version actually ends up deployed: it never inspects the caught value,
+  // so it still never guesses at an error.message/name shape -- it only
+  // lets `controller.signal.aborted` (armed independently by the timeout
+  // above) distinguish a timeout from any other unexpected rejection.
   let rpcError: unknown = null;
   try {
     const { error } = await supabase

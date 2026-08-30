@@ -54,6 +54,11 @@
           "namespace_id": "1002",
           "simple": { "limit": 15, "period": 60 }
         },
+        {
+          "name": "WEBHOOK_RATE_LIMITER",
+          "namespace_id": "1003",
+          "simple": { "limit": 30, "period": 60 }
+        },
       ],
       // Custom domain routes for production (external clients)
       // OAuth routes at root level for MCP spec compliance
@@ -124,6 +129,11 @@
           "name": "CREDENTIALS_RATE_LIMITER",
           "namespace_id": "1012",
           "simple": { "limit": 15, "period": 60 }
+        },
+        {
+          "name": "WEBHOOK_RATE_LIMITER",
+          "namespace_id": "1013",
+          "simple": { "limit": 30, "period": 60 }
         }
       ],
       // Custom domain routes for preview (needed for worker-to-worker calls)
@@ -169,9 +179,14 @@
           "name": "CREDENTIALS_RATE_LIMITER",
           "namespace_id": "1022",
           "simple": { "limit": 15, "period": 60 }
+        },
+        {
+          "name": "WEBHOOK_RATE_LIMITER",
+          "namespace_id": "1023",
+          "simple": { "limit": 30, "period": 60 }
         }
       ],
-      // Environment variables for dev  
+      // Environment variables for dev
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY loaded from .env.local for local development
       "vars": {
         "NODE_ENV": "development",

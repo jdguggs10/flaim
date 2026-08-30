@@ -27,6 +27,7 @@ const baseEnv = {
   ESPN_HISTORY_REFRESH: { create: vi.fn() },
   TOKEN_RATE_LIMITER: { limit: async () => ({ success: true }) },
   CREDENTIALS_RATE_LIMITER: { limit: async () => ({ success: true }) },
+  WEBHOOK_RATE_LIMITER: { limit: async () => ({ success: true }) },
 } satisfies Env;
 
 function summaryWith(outcome: EspnHistoryBackfillOutcome): EspnHistoryBackfillSummary {

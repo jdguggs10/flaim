@@ -162,9 +162,10 @@ begin
 end $acl_proof$;
 
 -- The deployed auth-worker invokes purge_account_data as service_role, and
--- the guard trigger only ever actually fires under service_role writes
--- (anon/authenticated cannot write to any of the 13 guarded tables today --
--- see discrepancy #3 in the spec header). Prove the real contract here.
+-- the guard trigger only ever actually fires under service_role writes:
+-- anon/authenticated already have zero grants on any of the 13 guarded
+-- tables (proved above), so they can never reach the trigger at all.
+-- Prove the real, service_role-scoped contract here instead.
 set local role service_role;
 do $service_role_proof$
 declare

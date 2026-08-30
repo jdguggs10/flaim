@@ -126,6 +126,7 @@ describe('POST /webhooks/clerk/account-deletion', () => {
     ESPN_HISTORY_REFRESH: { create: vi.fn() },
     TOKEN_RATE_LIMITER: { limit: async () => ({ success: true }) },
     CREDENTIALS_RATE_LIMITER: { limit: async () => ({ success: true }) },
+    WEBHOOK_RATE_LIMITER: { limit: async () => ({ success: true }) },
   } as unknown as Env;
 
   async function makeSignedRequest(
@@ -271,7 +272,7 @@ describe('POST /webhooks/clerk/account-deletion', () => {
     const env = {
       ...baseEnv,
       CLERK_ACCOUNT_DELETION_WEBHOOK_SIGNING_SECRET: TEST_SECRET,
-      TOKEN_RATE_LIMITER: { limit: async () => ({ success: false }) },
+      WEBHOOK_RATE_LIMITER: { limit: async () => ({ success: false }) },
     };
     const body = JSON.stringify({ type: 'user.deleted', data: { id: 'user_abc' } });
     const request = await makeSignedRequest(body);
