@@ -24,15 +24,38 @@ export const POSITION_MAP: Record<number, string> = {
 // Lineup slot IDs to slot names (matching ESPN UI)
 export const LINEUP_SLOT_MAP: Record<number, string> = {
   0: 'QB',
+  1: 'TQB',
   2: 'RB',
+  3: 'RB/WR',
   4: 'WR',
+  5: 'WR/TE',
   6: 'TE',
-  17: 'K',
+  7: 'OP',
+  8: 'DT',
+  9: 'DE',
+  10: 'LB',
+  11: 'DL',
+  12: 'CB',
+  13: 'S',
+  14: 'DB',
+  15: 'DP',
   16: 'D/ST',
-  23: 'FLEX',    // RB/WR/TE flex
+  17: 'K',
+  18: 'P',
+  19: 'HC',
   20: 'Bench',
   21: 'IR',
+  23: 'FLEX',    // RB/WR/TE flex
+  24: 'ER',      // Edge Rusher
+  25: 'Rookie',
 };
+
+// ESPN's active football lineup slots. Custom leagues can start players in
+// combined offense, OP/superflex, IDP, punter, or head-coach slots, so active
+// classification cannot be limited to the standard offensive defaults.
+export const STARTER_LINEUP_SLOT_IDS: ReadonlySet<number> = new Set([
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 23, 24, 25,
+]);
 
 // Pro team IDs to team abbreviations (NFL teams)
 export const PRO_TEAM_MAP: Record<number, string> = {

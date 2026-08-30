@@ -206,7 +206,7 @@ describe('football get_matchups handler', () => {
       players: [
         { playerId: '101', name: 'Sample Starter', lineupSlot: 'QB', started: true, points: 0 },
         { playerId: '102', lineupSlot: 'Bench', started: false, points: -1.5 },
-        { playerId: '103', name: null, lineupSlot: 'SLOT_7', started: null, points: null },
+        { playerId: '103', name: null, lineupSlot: 'OP', started: true, points: null },
       ],
     });
     expect(data.matchups[0]?.away?.players).toEqual([
@@ -332,6 +332,28 @@ describe('football get_matchups handler', () => {
     expect(() => normalizeEspnFootballMatchupPlayerDetail(fixture, 7, '11')).toThrow(
       'MATCHUP_DETAIL_MALFORMED',
     );
+  });
+
+  it('classifies every supported custom and IDP active lineup slot as started', () => {
+    const fixture = buildFootballMatchupPlayerDetailFixture();
+    const entry = fixture.schedule[0]?.home?.rosterForCurrentScoringPeriod?.entries[0];
+    if (!entry) throw new Error('fixture setup failed');
+    const activeSlots = new Map<number, string>([
+      [0, 'QB'], [1, 'TQB'], [2, 'RB'], [3, 'RB/WR'], [4, 'WR'], [5, 'WR/TE'],
+      [6, 'TE'], [7, 'OP'], [8, 'DT'], [9, 'DE'], [10, 'LB'], [11, 'DL'],
+      [12, 'CB'], [13, 'S'], [14, 'DB'], [15, 'DP'], [16, 'D/ST'], [17, 'K'],
+      [18, 'P'], [19, 'HC'], [23, 'FLEX'], [24, 'ER'], [25, 'Rookie'],
+    ]);
+
+    for (const [lineupSlotId, lineupSlot] of activeSlots) {
+      entry.lineupSlotId = lineupSlotId;
+      const matchup = normalizeEspnFootballMatchupPlayerDetail(fixture, 7, '11');
+      expect(matchup.home?.players[0]).toMatchObject({ lineupSlot, started: true });
+    }
+
+    entry.lineupSlotId = 22;
+    const unmapped = normalizeEspnFootballMatchupPlayerDetail(fixture, 7, '11');
+    expect(unmapped.home?.players[0]).toMatchObject({ lineupSlot: 'SLOT_22', started: null });
   });
 
   it('rejects pre-2018 detail before requesting credentials', async () => {

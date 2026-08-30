@@ -51,14 +51,30 @@ All mappings live in:
 | ID | Slot |
 |----|------|
 | 0 | QB |
+| 1 | TQB |
 | 2 | RB |
+| 3 | RB/WR |
 | 4 | WR |
+| 5 | WR/TE |
 | 6 | TE |
-| 17 | K |
+| 7 | OP (offensive player / superflex) |
+| 8 | DT |
+| 9 | DE |
+| 10 | LB |
+| 11 | DL |
+| 12 | CB |
+| 13 | S |
+| 14 | DB |
+| 15 | DP |
 | 16 | D/ST |
-| 23 | FLEX (RB/WR/TE) |
+| 17 | K |
+| 18 | P |
+| 19 | HC |
 | 20 | Bench |
 | 21 | IR |
+| 23 | FLEX (RB/WR/TE) |
+| 24 | ER (edge rusher) |
+| 25 | Rookie |
 
 ### 3) Pro Team IDs (proTeamId → PRO_TEAM_MAP)
 

@@ -1,5 +1,5 @@
 import type { EspnLeagueResponse, EspnMatchup } from '../../types';
-import { getLineupSlotName } from './mappings';
+import { getLineupSlotName, STARTER_LINEUP_SLOT_IDS } from './mappings';
 
 export interface MatchupDetailPlayer {
   playerId: string;
@@ -26,7 +26,6 @@ export interface MatchupDetailMatchup {
   playoffTierType?: string;
 }
 
-const STARTER_SLOT_IDS = new Set([0, 2, 4, 6, 16, 17, 23]);
 const INACTIVE_SLOT_IDS = new Set([20, 21]);
 
 function unavailable(message: string): never {
@@ -131,7 +130,7 @@ function normalizeOptionalString(value: unknown, field: string): string | undefi
 }
 
 function classifyStarted(lineupSlotId: number): boolean | null {
-  if (STARTER_SLOT_IDS.has(lineupSlotId)) return true;
+  if (STARTER_LINEUP_SLOT_IDS.has(lineupSlotId)) return true;
   if (INACTIVE_SLOT_IDS.has(lineupSlotId)) return false;
   return null;
 }
