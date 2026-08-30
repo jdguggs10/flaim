@@ -41,6 +41,63 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+/**
+ * Resolve a football scoring week to ESPN's owning matchup period. This is
+ * normally identical during the regular season, but multi-week playoff rounds
+ * retain one matchupPeriodId across multiple scoring weeks.
+ */
+export function resolveEspnFootballMatchupPeriod(
+  data: EspnLeagueResponse,
+  scoringWeek: number,
+): number {
+  if (!isPositiveInteger(scoringWeek)) {
+    malformed('scoringWeek must be a positive integer');
+  }
+
+  const settings = data.settings;
+  const rawMatchupPeriods = settings?.scheduleSettings?.matchupPeriods;
+  if (rawMatchupPeriods !== undefined && rawMatchupPeriods !== null) {
+    if (!isRecord(rawMatchupPeriods)) {
+      unavailable('ESPN returned malformed matchup-period settings');
+    }
+
+    const owners: number[] = [];
+    for (const [rawMatchupPeriod, rawScoringWeeks] of Object.entries(rawMatchupPeriods)) {
+      const matchupPeriod = Number(rawMatchupPeriod);
+      if (!isPositiveInteger(matchupPeriod) || !Array.isArray(rawScoringWeeks)) {
+        unavailable('ESPN returned malformed matchup-period settings');
+      }
+      if (!rawScoringWeeks.every(isPositiveInteger)) {
+        unavailable('ESPN returned malformed matchup-period settings');
+      }
+      if (rawScoringWeeks.includes(scoringWeek)) owners.push(matchupPeriod);
+    }
+
+    if (owners.length === 1) return owners[0]!;
+    if (owners.length > 1) {
+      unavailable('ESPN assigned the requested scoring week to multiple matchup periods');
+    }
+  }
+
+  const regularSeasonMatchupPeriods = settings?.regularSeasonMatchupPeriods;
+  if (isPositiveInteger(regularSeasonMatchupPeriods)) {
+    if (scoringWeek <= regularSeasonMatchupPeriods) return scoringWeek;
+
+    const playoffLength = settings?.scheduleSettings?.playoffMatchupPeriodLength;
+    if (isPositiveInteger(playoffLength)) {
+      return regularSeasonMatchupPeriods
+        + 1
+        + Math.floor((scoringWeek - regularSeasonMatchupPeriods - 1) / playoffLength);
+    }
+  }
+
+  unavailable('ESPN did not identify the matchup period for the requested scoring week');
+}
+
 function requireFiniteNumber(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     malformed(`${field} must be a finite number`);
@@ -187,7 +244,7 @@ function normalizeTeamNames(teams: unknown): Record<string, string> {
  */
 export function normalizeEspnFootballMatchupPlayerDetail(
   data: EspnLeagueResponse,
-  week: number,
+  matchupPeriod: number,
   requestedTeamId: string,
 ): MatchupDetailMatchup {
   if (!Array.isArray(data.schedule)) {
@@ -197,7 +254,7 @@ export function normalizeEspnFootballMatchupPlayerDetail(
   const matchup = data.schedule.find((candidate) => {
     if (!isRecord(candidate)) return false;
     const value = candidate as EspnMatchup;
-    return value.matchupPeriodId === week
+    return value.matchupPeriodId === matchupPeriod
       && (sideHasTeamId(value.home, requestedTeamId) || sideHasTeamId(value.away, requestedTeamId));
   });
 

@@ -19,7 +19,10 @@ import {
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
-import { normalizeEspnFootballMatchupPlayerDetail } from './matchup-player-detail';
+import {
+  normalizeEspnFootballMatchupPlayerDetail,
+  resolveEspnFootballMatchupPeriod,
+} from './matchup-player-detail';
 import { executeEspnGetDraft } from '../../shared/espn-draft';
 
 const GAME_ID = 'ffl'; // ESPN's game ID for fantasy football
@@ -412,6 +415,30 @@ async function handleGetMatchupPlayerDetail(
 
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
+    const league = {
+      leagueId: league_id,
+      espnSeasonYear: season_year,
+      historical: season_year < getCurrentSeasonYear('football'),
+    };
+    const settingsPath = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings`;
+    const settingsResponse = await espnFetch(settingsPath, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league,
+    });
+
+    if (!settingsResponse.ok) {
+      handleEspnError(settingsResponse);
+    }
+
+    const settingsData = await readEspnLeagueJson(settingsResponse, isEspnLeagueResponse);
+    if (!settingsData) {
+      throw new Error(
+        'MATCHUP_PLAYER_DETAIL_UNAVAILABLE: ESPN did not return usable matchup-period settings',
+      );
+    }
+    const matchupPeriod = resolveEspnFootballMatchupPeriod(settingsData, week);
+
     const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mBoxscore&scoringPeriodId=${week}`;
     const response = await espnFetch(path, GAME_ID, {
       credentials,
@@ -419,15 +446,11 @@ async function handleGetMatchupPlayerDetail(
       headers: {
         'X-Fantasy-Filter': JSON.stringify({
           schedule: {
-            filterMatchupPeriodIds: { value: [week] },
+            filterMatchupPeriodIds: { value: [matchupPeriod] },
           },
         }),
       },
-      league: {
-        leagueId: league_id,
-        espnSeasonYear: season_year,
-        historical: season_year < getCurrentSeasonYear('football'),
-      },
+      league,
     });
 
     if (!response.ok) {
@@ -443,7 +466,7 @@ async function handleGetMatchupPlayerDetail(
       };
     }
 
-    const matchup = normalizeEspnFootballMatchupPlayerDetail(data, week, team_id.trim());
+    const matchup = normalizeEspnFootballMatchupPlayerDetail(data, matchupPeriod, team_id.trim());
     return {
       success: true,
       data: {

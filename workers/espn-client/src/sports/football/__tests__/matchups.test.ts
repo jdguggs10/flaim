@@ -22,6 +22,33 @@ describe('football get_matchups handler', () => {
   const getCredentialsMock = getCredentials as MockedFunction<typeof getCredentials>;
   const espnFetchMock = espnFetch as MockedFunction<typeof espnFetch>;
 
+  function matchupSettingsResponse(): Response {
+    return new Response(JSON.stringify([{
+      settings: {
+        regularSeasonMatchupPeriods: 14,
+        scheduleSettings: {
+          matchupPeriods: {
+            7: [7],
+            15: [15, 16],
+          },
+          playoffMatchupPeriodLength: 2,
+        },
+      },
+    }]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  function mockPlayerDetailResponse(body: unknown): void {
+    espnFetchMock
+      .mockResolvedValueOnce(matchupSettingsResponse())
+      .mockResolvedValueOnce(new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+  }
+
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -122,12 +149,7 @@ describe('football get_matchups handler', () => {
 
   it('uses the exact bounded mBoxscore detail request with historical league options and normalizes both sides', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify([buildFootballMatchupPlayerDetailFixture()]), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    mockPlayerDetailResponse([buildFootballMatchupPlayerDetailFixture()]);
 
     const params = withSeasonContext({
       sport: 'football',
@@ -140,6 +162,18 @@ describe('football get_matchups handler', () => {
     const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
 
     expect(result.success).toBe(true);
+    expect(espnFetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/seasons/2023/segments/0/leagues/123?view=mSettings',
+      'ffl',
+      expect.objectContaining({
+        league: {
+          leagueId: '123',
+          espnSeasonYear: 2023,
+          historical: true,
+        },
+      }),
+    );
     expect(espnFetchMock).toHaveBeenCalledWith(
       '/seasons/2023/segments/0/leagues/123?view=mBoxscore&scoringPeriodId=7',
       'ffl',
@@ -180,14 +214,37 @@ describe('football get_matchups handler', () => {
     ]);
   });
 
-  it('selects the matchup when the requested team is away and still returns both sides', async () => {
+  it('maps the second scoring week of a multi-week playoff round to its owning matchup period', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify(buildFootballMatchupPlayerDetailFixture()), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
+    const fixture = buildFootballMatchupPlayerDetailFixture();
+    fixture.schedule[0]!.matchupPeriodId = 15;
+    mockPlayerDetailResponse(fixture);
+
+    const params = withSeasonContext({
+      sport: 'football', league_id: '123', season_year: 2023, week: 16, team_id: '11', detail: 'players',
+    });
+    const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    expect(espnFetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/seasons/2023/segments/0/leagues/123?view=mBoxscore&scoringPeriodId=16',
+      'ffl',
+      expect.objectContaining({
+        headers: {
+          'X-Fantasy-Filter': JSON.stringify({
+            schedule: { filterMatchupPeriodIds: { value: [15] } },
+          }),
+        },
       }),
     );
+    if (!result.success) return;
+    expect((result.data as { matchupPeriod: number }).matchupPeriod).toBe(15);
+  });
+
+  it('selects the matchup when the requested team is away and still returns both sides', async () => {
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+    mockPlayerDetailResponse(buildFootballMatchupPlayerDetailFixture());
 
     const params = withSeasonContext({
       sport: 'football', league_id: '123', season_year: 2023, week: 7, team_id: '22', detail: 'players',
@@ -213,9 +270,7 @@ describe('football get_matchups handler', () => {
       schedule: Array<{ away: unknown }>;
     };
     fixture.schedule[0]!.away = null;
-    espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify(fixture), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-    );
+    mockPlayerDetailResponse(fixture);
 
     const params = withSeasonContext({
       sport: 'football', league_id: '123', season_year: 2023, week: 7, team_id: '11', detail: 'players',
@@ -230,7 +285,9 @@ describe('football get_matchups handler', () => {
 
   it('preserves non-OK ESPN provider errors on the detail path', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    espnFetchMock.mockResolvedValue(new Response(null, { status: 403 }));
+    espnFetchMock
+      .mockResolvedValueOnce(matchupSettingsResponse())
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
 
     const params = withSeasonContext({
       sport: 'football', league_id: '123', season_year: 2023, week: 7, team_id: '11', detail: 'players',
@@ -244,9 +301,7 @@ describe('football get_matchups handler', () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
     const fixture = buildFootballMatchupPlayerDetailFixture();
     Reflect.deleteProperty(fixture.schedule[0]!.home, 'rosterForCurrentScoringPeriod');
-    espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify(fixture), { status: 200, headers: { 'Content-Type': 'application/json' } }),
-    );
+    mockPlayerDetailResponse(fixture);
 
     const params = withSeasonContext({
       sport: 'football', league_id: '123', season_year: 2023, week: 7, team_id: '11', detail: 'players',
@@ -258,12 +313,7 @@ describe('football get_matchups handler', () => {
 
   it('returns a corrective team-not-found response for an absent selected team', async () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
-    espnFetchMock.mockResolvedValue(
-      new Response(JSON.stringify(buildFootballMatchupPlayerDetailFixture()), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    mockPlayerDetailResponse(buildFootballMatchupPlayerDetailFixture());
 
     const params = withSeasonContext({
       sport: 'football', league_id: '123', season_year: 2023, week: 7, team_id: '999', detail: 'players',
@@ -291,6 +341,17 @@ describe('football get_matchups handler', () => {
     const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
 
     expect(result).toMatchObject({ success: false, code: 'MATCHUP_DETAIL_UNSUPPORTED' });
+    expect(getCredentialsMock).not.toHaveBeenCalled();
+    expect(espnFetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a whitespace-only detail team selector before requesting credentials', async () => {
+    const params = withSeasonContext({
+      sport: 'football', league_id: '123', season_year: 2023, week: 7, team_id: '   ', detail: 'players',
+    });
+    const result = await footballHandlers.get_matchups({} as never, params, 'Bearer x', 'cid');
+
+    expect(result).toMatchObject({ success: false, code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED' });
     expect(getCredentialsMock).not.toHaveBeenCalled();
     expect(espnFetchMock).not.toHaveBeenCalled();
   });
