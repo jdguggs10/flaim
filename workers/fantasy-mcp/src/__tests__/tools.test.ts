@@ -1180,7 +1180,7 @@ describe('fantasy-mcp tools', () => {
     expect(routeToClient).toHaveBeenLastCalledWith(
       env,
       'get_draft',
-      { platform: 'sleeper', sport: 'football', league_id: '123', season_year: 2025, draft_id: undefined },
+      { platform: 'sleeper', sport: 'football', league_id: '123', season_year: 2025, draft_id: undefined, round: undefined, team_id: undefined },
       'Bearer token',
       correlationId,
       undefined,
@@ -1198,12 +1198,114 @@ describe('fantasy-mcp tools', () => {
     expect(routeToClient).toHaveBeenLastCalledWith(
       env,
       'get_draft',
-      { platform: 'espn', sport: 'baseball', league_id: '456', season_year: 2024, draft_id: 'provider-draft-456' },
+      { platform: 'espn', sport: 'baseball', league_id: '456', season_year: 2024, draft_id: 'provider-draft-456', round: undefined, team_id: undefined },
       'Bearer token',
       correlationId,
       undefined,
       undefined
     );
+  });
+
+  it('get_draft filters historical selections and current ownership using their distinct team fields', async () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_draft')!;
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: {
+        platform: 'sleeper',
+        sport: 'football',
+        leagueId: '123',
+        seasonYear: 2025,
+        draft: { id: 'draft-1', type: 'snake', status: 'in_progress' },
+        picks: [
+          { round: 2, selectionTeamId: '449.l.123.t.7', playerId: 'keep', placement: { status: 'confirmed', source: 'provider_pick' } },
+          { round: 2, selectionTeamId: '449.l.123.t.8', playerId: 'wrong-team', placement: { status: 'confirmed', source: 'provider_pick' } },
+          { round: 3, selectionTeamId: '449.l.123.t.7', playerId: 'wrong-round', placement: { status: 'confirmed', source: 'provider_pick' } },
+        ],
+        ownership: {
+          scope: 'changed_picks_only',
+          picks: [
+            { seasonYear: 2025, round: 2, originalTeamId: 3, currentOwnerTeamId: 7, placement: { status: 'unavailable', source: 'no_provider_order' } },
+            { seasonYear: 2025, round: 2, originalTeamId: 7, currentOwnerTeamId: 8, placement: { status: 'unavailable', source: 'no_provider_order' } },
+          ],
+        },
+      },
+    });
+
+    const result = await tool.handler({
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: '123',
+      season_year: 2025,
+      round: 2,
+      team_id: '7',
+    }, {} as Env, 'Bearer token', 'corr-filter');
+
+    expect(routeToClient).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'get_draft',
+      expect.objectContaining({ round: 2, team_id: '7' }),
+      'Bearer token',
+      'corr-filter',
+      undefined,
+      undefined,
+    );
+    const payload = JSON.parse(result.content[0]!.text) as Record<string, any>;
+    expect(payload.data.picks).toEqual([expect.objectContaining({ playerId: 'keep' })]);
+    expect(payload.data.ownership.picks).toEqual([
+      expect.objectContaining({ originalTeamId: 3, currentOwnerTeamId: 7 }),
+    ]);
+  });
+
+  it('get_draft keeps a 14-team by 25-round completed result within its regression size budget', async () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_draft')!;
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    const teams = Object.fromEntries(Array.from({ length: 14 }, (_, index) => [String(index + 1), `Team ${index + 1}`]));
+    const teamOwners = Object.fromEntries(Array.from({ length: 14 }, (_, index) => [String(index + 1), `Owner ${index + 1}`]));
+    const picks = Array.from({ length: 350 }, (_, index) => ({
+      round: Math.floor(index / 14) + 1,
+      selectionInRound: (index % 14) + 1,
+      overallPick: index + 1,
+      draftColumn: (index % 14) + 1,
+      selectionTeamId: (index % 14) + 1,
+      originalTeamId: (index % 14) + 1,
+      playerId: `player-${index + 1}`,
+      playerName: `Player ${index + 1}`,
+      playerPosition: 'WR',
+      placement: { status: 'confirmed', source: 'provider_pick' },
+    }));
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: {
+        platform: 'sleeper', sport: 'football', leagueId: 'large', seasonYear: 2025,
+        draft: { id: 'large-draft', type: 'snake', status: 'complete', rounds: 25, teams: 14 },
+        picks,
+        teams,
+        teamOwners,
+      },
+    });
+
+    const result = await tool.handler({
+      platform: 'sleeper', sport: 'football', league_id: 'large', season_year: 2025,
+    }, {} as Env, 'Bearer token', 'corr-large');
+
+    const serializedBytes = new TextEncoder().encode(JSON.stringify(result)).byteLength;
+    expect(serializedBytes).toBeLessThan(300_000);
+  });
+
+  it('get_draft exposes bounded optional filter schemas', () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_draft')!;
+    const roundSchema = asZod(tool.inputSchema.round);
+    const teamSchema = asZod(tool.inputSchema.team_id);
+
+    expect(roundSchema.safeParse(undefined).success).toBe(true);
+    expect(roundSchema.safeParse(1).success).toBe(true);
+    expect(roundSchema.safeParse(0).success).toBe(false);
+    expect(roundSchema.safeParse(-1).success).toBe(false);
+    expect(roundSchema.safeParse(1.5).success).toBe(false);
+    expect(teamSchema.safeParse(undefined).success).toBe(true);
+    expect(teamSchema.safeParse('7').success).toBe(true);
+    expect(teamSchema.safeParse('').success).toBe(false);
   });
 
   describe('get_matchups player detail', () => {

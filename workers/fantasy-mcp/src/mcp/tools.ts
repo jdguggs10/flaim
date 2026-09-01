@@ -384,8 +384,6 @@ const draftOwnershipPickSchema = looseObject({
   overallPick: z.number().int().positive().optional(),
   originalTeamId: z.union([z.string(), z.number()]),
   currentOwnerTeamId: z.union([z.string(), z.number()]),
-  originalTeamName: z.string().optional(),
-  currentOwnerTeamName: z.string().optional(),
   placement: draftPlacementSchema,
 });
 
@@ -403,6 +401,8 @@ const GET_DRAFT_OUTPUT_SCHEMA = routedOutputSchema({
     playerPool: looseObject().optional(),
   }),
   picks: z.array(draftPickSchema),
+  teams: z.record(z.string()).optional().describe('Team names keyed by provider team ID'),
+  teamOwners: z.record(z.string()).optional().describe('Owner names keyed by provider team ID'),
   ownership: looseObject({
     scope: z.enum(['complete', 'changed_picks_only', 'unavailable']),
     picks: z.array(draftOwnershipPickSchema),
@@ -1124,6 +1124,57 @@ function routeResultToMcp(result: RouteResult): McpToolResponse {
   };
 }
 
+function filterDraftRouteResult(
+  result: RouteResult,
+  filters: { round?: number; teamId?: string },
+): RouteResult {
+  if (!result.success || !result.data || typeof result.data !== 'object' || Array.isArray(result.data)) return result;
+  if (filters.round === undefined && filters.teamId === undefined) return result;
+
+  const data = result.data as Record<string, unknown>;
+  const normalizeTeamId = (value: unknown): string | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const normalized = String(value);
+    // Yahoo draft rows can use a full team key such as 449.l.123.t.7 while
+    // tool input uses the short team_id. get_roster only detects whether a
+    // key is qualified, so its broader includes('.') check is intentional.
+    const yahooTeamMarker = normalized.lastIndexOf('.t.');
+    return yahooTeamMarker >= 0 ? normalized.slice(yahooTeamMarker + 3) : normalized;
+  };
+  const matchesRound = (row: Record<string, unknown>): boolean =>
+    filters.round === undefined || row.round === filters.round;
+  const matchesTeam = (row: Record<string, unknown>, field: 'selectionTeamId' | 'currentOwnerTeamId'): boolean => {
+    return filters.teamId === undefined || normalizeTeamId(row[field]) === normalizeTeamId(filters.teamId);
+  };
+  const filterRows = (
+    value: unknown,
+    teamField: 'selectionTeamId' | 'currentOwnerTeamId',
+  ): unknown => Array.isArray(value)
+    ? value.filter((row): row is Record<string, unknown> =>
+      Boolean(row && typeof row === 'object' && !Array.isArray(row))
+      && matchesRound(row as Record<string, unknown>)
+      && matchesTeam(row as Record<string, unknown>, teamField))
+    : value;
+
+  const ownership = data.ownership && typeof data.ownership === 'object' && !Array.isArray(data.ownership)
+    ? data.ownership as Record<string, unknown>
+    : undefined;
+
+  return {
+    ...result,
+    data: {
+      ...data,
+      picks: filterRows(data.picks, 'selectionTeamId'),
+      ...(ownership ? {
+        ownership: {
+          ...ownership,
+          picks: filterRows(ownership.picks, 'currentOwnerTeamId'),
+        },
+      } : {}),
+    },
+  };
+}
+
 // =============================================================================
 // HELPER: Tool logging with correlation ID and timing
 // =============================================================================
@@ -1599,7 +1650,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_LEAGUE_INFO_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
-      description: `For a selected active league, call this immediately after get_user_session and before the requested standings, matchup, roster, free-agent, player, transaction, or draft tool. Skip it only when answering from session data alone or branching to get_ancient_history. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Keeper and draft-format fields are additive and platform-dependent; never assume one provider's fields exist on another. When fanning out across multiple leagues, call this once per league. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
+      description: `For a selected active league, call this immediately after get_user_session and before the requested standings, matchup, roster, free-agent, player, transaction, or draft tool. Skip it only when answering from session data alone or branching to get_ancient_history. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Keeper and draft-format fields are additive and platform-dependent; never assume one provider's fields exist on another. Sleeper futureDraftRounds describes the configured round count for future drafts; use get_draft.draft.rounds for the selected draft's actual round count. When fanning out across multiple leagues, call this once per league. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1636,7 +1687,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_DRAFT_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching draft results…', invoked: 'Draft results ready' },
-      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; use ownership metadata only for current ownership. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Best used after get_user_session and get_league_info for the specified league. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
+      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; use ownership metadata only for current ownership. For a completed Sleeper draft, an omitted ownership block means no draft picks changed hands. Use round to return one draft round. Use team_id to return completed selections made by that historical team and ownership rows currently owned by that team. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Best used after get_user_session and get_league_info for the specified league. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1655,6 +1706,17 @@ export function getUnifiedTools(): UnifiedTool[] {
           .min(1)
           .optional()
           .describe('Optional Sleeper draft ID. Omit to retrieve the league\'s associated draft; pass only an ID previously returned by Flaim.'),
+        round: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe('Optional positive draft round. Returns only completed selections and ownership rows from this round.'),
+        team_id: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Optional provider team ID. Filters completed selections by historical selecting team and ownership rows by current owner.'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
@@ -1663,11 +1725,16 @@ export function getUnifiedTools(): UnifiedTool[] {
           league_id: args.league_id as string,
           season_year: (args.season_year as number | undefined) ?? getDefaultSeasonYear(args.sport as Sport),
           draft_id: args.draft_id as string | undefined,
+          round: args.round as number | undefined,
+          team_id: args.team_id as string | undefined,
         };
 
         return withToolLogging(correlationId, 'get_draft', `${params.platform} ${params.sport} league=provided draft=${params.draft_id ? 'provided' : 'league-default'}`, async () => {
           const result = await routeToClient(env, 'get_draft', params, authHeader, correlationId, evalRunId, evalTraceId);
-          return routeResultToMcp(result);
+          return routeResultToMcp(filterDraftRouteResult(result, {
+            round: params.round,
+            teamId: params.team_id,
+          }));
         }, evalRunId, evalTraceId);
       },
     },

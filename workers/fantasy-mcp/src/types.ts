@@ -24,6 +24,8 @@ export interface ToolParams {
   season_year: number;
   /** Optional provider draft identifier for get_draft. */
   draft_id?: string;
+  /** Optional draft-round filter for get_draft. */
+  round?: number;
   team_id?: string;
   week?: number;
   /** Opt-in matchup detail mode. Initially supported for ESPN football only. */
