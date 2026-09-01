@@ -38,10 +38,14 @@ function rosterAndUsers() {
   ];
 }
 
-function detail(sport: string, options: { type?: string; reversalRound?: number; rounds?: number } = {}) {
+function detail(
+  sport: string,
+  options: { type?: string; reversalRound?: number; rounds?: number; status?: string } = {},
+) {
   return {
     ...candidate(sport),
     type: options.type ?? 'snake',
+    status: options.status ?? 'complete',
     settings: {
       teams: 16,
       rounds: options.rounds ?? 15,
@@ -99,16 +103,11 @@ describe('Sleeper get_draft', () => {
       playerPosition: 'WR',
       playerProTeam: 'DET',
     })]);
-    expect(data.ownership.scope).toBe('complete');
-    expect(data.ownership.picks).toContainEqual(expect.objectContaining({
-      round: 12,
-      originalTeamId: 2,
-      currentOwnerTeamId: 2,
-      seasonYear: 2026,
-      selectionInRound: 15,
-      overallPick: 191,
-      placement: { status: 'confirmed', source: 'provider_pick' },
-    }));
+    expect(data.picks[0]).not.toHaveProperty('selectionTeamName');
+    expect(data.picks[0]).not.toHaveProperty('originalTeamName');
+    expect(data.teams['2']).toBe('Team Derek');
+    expect(data.teamOwners['2']).toBe('Derek');
+    expect(data.ownership).toBeUndefined();
     expect(mockFetch).not.toHaveBeenCalledWith(expect.stringContaining('/players/'), expect.anything());
   });
 
@@ -125,8 +124,33 @@ describe('Sleeper get_draft', () => {
     expect(data.warnings).toEqual(expect.arrayContaining([expect.stringContaining('DRAFT_PICKS_PARTIAL') ]));
   });
 
+  it.each(scenarios)('$label keeps only changed ownership rows after a draft is complete', async ({ sport, sleeperSport, handlers }) => {
+    queueSelectedDraft(sleeperSport, detail(sleeperSport, { reversalRound: 0 }), [], [
+      { season: '2026', round: 3, roster_id: 1, previous_owner_id: 1, owner_id: 2 },
+    ]);
+
+    const result = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        draft: { status: 'complete' },
+        ownership: {
+          scope: 'changed_picks_only',
+          picks: [{
+            seasonYear: 2026,
+            round: 3,
+            originalTeamId: 1,
+            currentOwnerTeamId: 2,
+            placement: { status: 'unavailable', source: 'no_provider_order' },
+          }],
+        },
+      },
+    });
+  });
+
   it.each(scenarios)('$label projects 3RR but does not assume standard snake when reversal_round is absent', async ({ sport, sleeperSport, handlers }) => {
-    queueSelectedDraft(sleeperSport, detail(sleeperSport, { reversalRound: 3 }), []);
+    queueSelectedDraft(sleeperSport, detail(sleeperSport, { reversalRound: 3, status: 'in_progress' }), []);
     const result = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
     const data = result.data as Record<string, any>;
     const thirdRoundFirstColumn = data.ownership.picks.find((pick: Record<string, unknown>) => pick.round === 3 && pick.originalTeamId === 1);
@@ -136,13 +160,13 @@ describe('Sleeper get_draft', () => {
       placement: { status: 'projected', source: 'provider_order_derived' },
     });
 
-    queueSelectedDraft(sleeperSport, detail(sleeperSport), []);
+    queueSelectedDraft(sleeperSport, detail(sleeperSport, { status: 'in_progress' }), []);
     const noReversal = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
     const noReversalData = noReversal.data as Record<string, any>;
     const unverified = noReversalData.ownership.picks.find((pick: Record<string, unknown>) => pick.round === 3 && pick.originalTeamId === 1);
     expect(unverified).toMatchObject({ draftColumn: 1, placement: { status: 'unavailable', source: 'no_provider_order' } });
 
-    queueSelectedDraft(sleeperSport, detail(sleeperSport, { reversalRound: 0 }), []);
+    queueSelectedDraft(sleeperSport, detail(sleeperSport, { reversalRound: 0, status: 'in_progress' }), []);
     const standardSnake = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
     const standardSnakeData = standardSnake.data as Record<string, any>;
     const derekStyleProjection = standardSnakeData.ownership.picks.find((pick: Record<string, unknown>) => pick.round === 12 && pick.originalTeamId === 2);
@@ -155,7 +179,7 @@ describe('Sleeper get_draft', () => {
   });
 
   it.each(scenarios)('$label projects linear order and keeps auction price separate from placement', async ({ sport, sleeperSport, handlers }) => {
-    queueSelectedDraft(sleeperSport, detail(sleeperSport, { type: 'linear' }), []);
+    queueSelectedDraft(sleeperSport, detail(sleeperSport, { type: 'linear', status: 'in_progress' }), []);
     const linear = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
     const linearData = linear.data as Record<string, any>;
     const linearRoundTwo = linearData.ownership.picks.find((pick: Record<string, unknown>) => pick.round === 2 && pick.originalTeamId === 3);
@@ -165,7 +189,7 @@ describe('Sleeper get_draft', () => {
       placement: { status: 'projected', source: 'provider_order_derived' },
     });
 
-    queueSelectedDraft(sleeperSport, detail(sleeperSport, { type: 'auction' }), [
+    queueSelectedDraft(sleeperSport, detail(sleeperSport, { type: 'auction', status: 'in_progress' }), [
       {
         draft_id: 'draft-1', player_id: 'auction-player', roster_id: '1', round: 1, draft_slot: 1, pick_no: 1,
         metadata: { first_name: 'Auction', last_name: 'Winner', amount: '42' },
@@ -207,6 +231,10 @@ describe('Sleeper get_draft', () => {
       scope: 'changed_picks_only',
       picks: [expect.objectContaining({ seasonYear: 2027, originalTeamId: 1, currentOwnerTeamId: 2, placement: { status: 'unavailable', source: 'no_provider_order' } })],
     }));
+    expect(data.teams['1']).toBe('Team Manager 1');
+    expect(data.teamOwners['1']).toBe('Manager 1');
+    expect(data.ownership.picks[0]).not.toHaveProperty('originalTeamName');
+    expect(data.ownership.picks[0]).not.toHaveProperty('currentOwnerTeamName');
   });
 
   it.each(scenarios)('$label returns a current-season changed-picks-only ledger before a draft exists', async ({ sport, sleeperSport, handlers }) => {

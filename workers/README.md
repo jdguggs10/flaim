@@ -120,7 +120,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive; rate-limited, see below)
 - `get_ancient_history` — Past seasons and historical leagues outside the current season
 - `get_league_info` — Baseline league context: settings, members, teams/owners
-- `get_draft`: Confirmed draft results and provider-grounded pick ownership
+- `get_draft`: Confirmed draft results and provider-grounded pick ownership, with optional round and team filters
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups; ESPN football can opt into bounded player detail
 - `get_roster` — Team roster with player details
@@ -135,7 +135,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - Yahoo: `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team; other supported types use the recent league transaction feed.
 - `get_user_session` should be the first call in a normal chat, and `get_league_info` is usually the second call before most league-specific analysis so team names, owner/team mapping, and league rules are established.
 
-`get_draft` separates the round slot (`selectionInRound`) from the stable board column (`draftColumn`), historical selecting team (`selectionTeamId`), and current pick owner (`currentOwnerTeamId`). Exact slots are returned only with confirmed provider picks or provider-grounded order projections.
+`get_draft` separates the round slot (`selectionInRound`) from the stable board column (`draftColumn`), historical selecting team (`selectionTeamId`), and current pick owner (`currentOwnerTeamId`). Optional `round` and `team_id` filters reduce large results; the team filter uses `selectionTeamId` for completed selections and `currentOwnerTeamId` for ownership rows. Team and owner names appear once in the top-level `teams` and `teamOwners` maps. Completed Sleeper drafts omit the redundant full ownership board while changed-picks-only and future ledgers remain available. Exact slots are returned only with confirmed provider picks or provider-grounded order projections.
 
 ### Bounded ESPN football matchup player detail
 

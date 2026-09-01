@@ -167,12 +167,23 @@ function projectedSelectionInRound(
   return forward ? column : teams - column + 1;
 }
 
-function teamFields(teamId: number | undefined, names: Map<number, TeamNames>, prefix: string): Record<string, string> {
-  if (!teamId) return {};
-  const entry = names.get(teamId);
+function teamNameMaps(names: Map<number, TeamNames>): {
+  teams?: Record<string, string>;
+  teamOwners?: Record<string, string>;
+} {
+  const teams = Object.fromEntries(
+    [...names.entries()]
+      .filter(([, entry]) => entry.teamName)
+      .map(([teamId, entry]) => [String(teamId), entry.teamName!]),
+  );
+  const teamOwners = Object.fromEntries(
+    [...names.entries()]
+      .filter(([, entry]) => entry.ownerName)
+      .map(([teamId, entry]) => [String(teamId), entry.ownerName!]),
+  );
   return {
-    ...(entry?.teamName ? { [`${prefix}TeamName`]: entry.teamName } : {}),
-    ...(entry?.ownerName ? { [`${prefix}OwnerName`]: entry.ownerName } : {}),
+    ...(Object.keys(teams).length > 0 ? { teams } : {}),
+    ...(Object.keys(teamOwners).length > 0 ? { teamOwners } : {}),
   };
 }
 
@@ -244,7 +255,6 @@ function makeOwnershipEntry(
   originalTeamId: number,
   currentOwnerTeamId: number,
   placement: { status: PlacementStatus; source: 'provider_pick' | 'provider_order_derived' | 'no_provider_order' },
-  names: Map<number, TeamNames>,
   position?: { draftColumn?: number; selectionInRound?: number; overallPick?: number },
 ): Record<string, unknown> {
   return {
@@ -256,8 +266,6 @@ function makeOwnershipEntry(
     ...(position?.draftColumn ? { draftColumn: position.draftColumn } : {}),
     ...(position?.selectionInRound ? { selectionInRound: position.selectionInRound } : {}),
     ...(position?.overallPick ? { overallPick: position.overallPick } : {}),
-    ...teamFields(originalTeamId, names, 'original'),
-    ...teamFields(currentOwnerTeamId, names, 'currentOwner'),
   };
 }
 
@@ -281,6 +289,7 @@ function noDraftResponse(
     seasonYear,
     draft: { type: 'unknown', status: 'unavailable', source: 'traded_picks_only' },
     picks: [],
+    ...teamNameMaps(names),
     ownership: {
       scope: 'changed_picks_only',
       picks: targetTrades.map((pick) => makeOwnershipEntry(
@@ -289,7 +298,6 @@ function noDraftResponse(
         pick.roster_id,
         pick.owner_id,
         { status: 'unavailable', source: 'no_provider_order' },
-        names,
       )),
     },
     ...(warnings.length > 0 ? { warnings } : {}),
@@ -370,6 +378,7 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
       }
 
       const type = draftType(detail.type);
+      const status = normalizeDraftStatus(detail.status);
       const settings = draftSettings(detail);
       const slots = slotMap(detail, settings.teams);
       const validPicks = picksRaw.filter((pick) => isDraftPick(pick, selected!.draft_id));
@@ -393,8 +402,8 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
           ...(pickNoConsistent ? { overallPick: pickNo! } : {}),
           ...(selectionInRound ? { selectionInRound } : {}),
           ...(draftColumn ? { draftColumn } : {}),
-          ...(selectionTeamId ? { selectionTeamId, ...teamFields(selectionTeamId, teamResult.names, 'selection') } : {}),
-          ...(originalTeamId ? { originalTeamId, ...teamFields(originalTeamId, teamResult.names, 'original') } : {}),
+          ...(selectionTeamId ? { selectionTeamId } : {}),
+          ...(originalTeamId ? { originalTeamId } : {}),
           placement: {
             status: 'confirmed' as const,
             source: 'provider_pick' as const,
@@ -425,7 +434,7 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
       );
 
       let ownership: Record<string, unknown> | undefined;
-      if (completeOwnershipUsable) {
+      if (completeOwnershipUsable && status !== 'complete') {
         const ownershipPicks: Record<string, unknown>[] = [];
         for (let round = 1; round <= settings.rounds!; round++) {
           for (let column = 1; column <= settings.teams!; column++) {
@@ -443,7 +452,6 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
                 : projected
                   ? { status: 'projected', source: 'provider_order_derived' }
                   : { status: 'unavailable', source: 'no_provider_order' },
-              teamResult.names,
               actual
                 ? {
                   draftColumn: column,
@@ -470,10 +478,9 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
             trade.roster_id,
             trade.owner_id,
             { status: 'unavailable', source: 'no_provider_order' },
-            teamResult.names,
           )),
         };
-      } else {
+      } else if (!trades.available) {
         ownership = { scope: 'unavailable', picks: [] };
       }
 
@@ -487,12 +494,13 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
           draft: {
             id: detail.draft_id,
             type,
-            status: normalizeDraftStatus(detail.status),
+            status,
             ...(typeof detail.start_time === 'number' && Number.isFinite(detail.start_time) ? { startTime: detail.start_time } : {}),
             ...(settings.teams ? { teams: settings.teams } : {}),
             ...(settings.rounds ? { rounds: settings.rounds } : {}),
           },
           picks: normalizedPicks,
+          ...teamNameMaps(teamResult.names),
           ...(ownership ? { ownership } : {}),
           ...(warnings.length > 0 ? { warnings: [...new Set(warnings)] } : {}),
         },

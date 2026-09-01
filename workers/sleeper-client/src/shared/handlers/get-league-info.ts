@@ -15,7 +15,7 @@ export function tradedPicksPartialWarning(dropped: number): string {
 const PICK_OWNERSHIP_NOTE =
   'Only picks that changed hands are listed; every roster owns its own untraded picks. Sleeper allows pick trading for ' +
   'the current season plus up to three future seasons depending on league settings — treat seasons beyond those listed ' +
-  'as unverified. Use draftRounds for rounds per future draft.';
+  'as unverified. Use futureDraftRounds for rounds per future draft.';
 
 const LEAGUE_FORMAT_TYPE_NOTE =
   'Undocumented Sleeper convention: 0/1/2 are commonly redraft/keeper/dynasty; 3 observed as guillotine. Do not rely on it alone.';
@@ -259,7 +259,7 @@ export function createGetLeagueInfoHandler(): HandlerFn {
         warnings.push(TRADED_PICKS_UNAVAILABLE_WARNING);
       }
 
-      const draftRounds = typeof league.settings?.draft_rounds === 'number' ? league.settings.draft_rounds : undefined;
+      const futureDraftRounds = typeof league.settings?.draft_rounds === 'number' ? league.settings.draft_rounds : undefined;
       const leagueFormat = buildLeagueFormat(league.settings);
 
       return {
@@ -277,7 +277,7 @@ export function createGetLeagueInfoHandler(): HandlerFn {
           draftId: league.draft_id,
           ...(leagueFormat ? { leagueFormat } : {}),
           teams,
-          draftRounds,
+          futureDraftRounds,
           // pickOwnershipNote is suppressed when tradedPicks is empty — an
           // empty list just means redraft or no trades, and the note's
           // horizon caveat is only useful once there's something to caveat.

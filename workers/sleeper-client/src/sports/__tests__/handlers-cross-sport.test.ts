@@ -280,7 +280,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
-      expect(data.draftRounds).toBe(4);
+      expect(data.futureDraftRounds).toBe(4);
       expect(typeof data.pickOwnershipNote).toBe('string');
       expect(data.warnings).toBeUndefined();
 
@@ -535,7 +535,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         pickTrading: false,
         taxi: { slots: 0 },
       });
-      expect(data.draftRounds).toBe(3);
+      expect(data.futureDraftRounds).toBe(3);
 
       const teams = data.teams as Array<{ rosterId: number; keepers?: string[] | null }>;
       expect(teams[0].keepers).toEqual([]);

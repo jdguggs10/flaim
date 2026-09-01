@@ -490,6 +490,14 @@ describe('get_draft output schema', () => {
           cost: { amount: 17, unit: 'auction_dollars' },
         placement: { status: 'confirmed', source: 'provider_pick' },
       }],
+      teams: {
+        'roster-1': 'First Team',
+        'roster-2': 'Second Team',
+      },
+      teamOwners: {
+        'roster-1': 'First Owner',
+        'roster-2': 'Second Owner',
+      },
       ownership: {
         scope: 'complete',
         picks: [{
@@ -500,8 +508,6 @@ describe('get_draft output schema', () => {
           overallPick: 1,
           originalTeamId: 'roster-1',
           currentOwnerTeamId: 'roster-2',
-          originalTeamName: 'First Team',
-          currentOwnerTeamName: 'Second Team',
           placement: { status: 'projected', source: 'provider_order_derived' },
         }],
       },
