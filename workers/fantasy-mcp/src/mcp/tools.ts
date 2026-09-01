@@ -1135,6 +1135,9 @@ function filterDraftRouteResult(
   const normalizeTeamId = (value: unknown): string | undefined => {
     if (value === undefined || value === null) return undefined;
     const normalized = String(value);
+    // Yahoo draft rows can use a full team key such as 449.l.123.t.7 while
+    // tool input uses the short team_id. get_roster only detects whether a
+    // key is qualified, so its broader includes('.') check is intentional.
     const yahooTeamMarker = normalized.lastIndexOf('.t.');
     return yahooTeamMarker >= 0 ? normalized.slice(yahooTeamMarker + 3) : normalized;
   };
@@ -1684,7 +1687,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_DRAFT_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching draft results…', invoked: 'Draft results ready' },
-      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; use ownership metadata only for current ownership. Use round to return one draft round. Use team_id to return completed selections made by that historical team and ownership rows currently owned by that team. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Best used after get_user_session and get_league_info for the specified league. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
+      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; use ownership metadata only for current ownership. For a completed Sleeper draft, an omitted ownership block means no draft picks changed hands. Use round to return one draft round. Use team_id to return completed selections made by that historical team and ownership rows currently owned by that team. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Best used after get_user_session and get_league_info for the specified league. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
