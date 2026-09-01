@@ -1218,9 +1218,9 @@ describe('fantasy-mcp tools', () => {
         seasonYear: 2025,
         draft: { id: 'draft-1', type: 'snake', status: 'in_progress' },
         picks: [
-          { round: 2, selectionTeamId: 7, playerId: 'keep', placement: { status: 'confirmed', source: 'provider_pick' } },
-          { round: 2, selectionTeamId: 8, playerId: 'wrong-team', placement: { status: 'confirmed', source: 'provider_pick' } },
-          { round: 3, selectionTeamId: 7, playerId: 'wrong-round', placement: { status: 'confirmed', source: 'provider_pick' } },
+          { round: 2, selectionTeamId: '449.l.123.t.7', playerId: 'keep', placement: { status: 'confirmed', source: 'provider_pick' } },
+          { round: 2, selectionTeamId: '449.l.123.t.8', playerId: 'wrong-team', placement: { status: 'confirmed', source: 'provider_pick' } },
+          { round: 3, selectionTeamId: '449.l.123.t.7', playerId: 'wrong-round', placement: { status: 'confirmed', source: 'provider_pick' } },
         ],
         ownership: {
           scope: 'changed_picks_only',

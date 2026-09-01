@@ -149,6 +149,22 @@ describe('Sleeper get_draft', () => {
     });
   });
 
+  it.each(scenarios)('$label reports unavailable ownership when an in-progress board cannot be materialized', async ({ sport, sleeperSport, handlers }) => {
+    const incomplete = detail(sleeperSport, { status: 'in_progress' });
+    incomplete.slot_to_roster_id = {};
+    queueSelectedDraft(sleeperSport, incomplete, []);
+
+    const result = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);
+
+    expect(result).toMatchObject({
+      success: true,
+      data: {
+        draft: { status: 'in_progress' },
+        ownership: { scope: 'unavailable', picks: [] },
+      },
+    });
+  });
+
   it.each(scenarios)('$label projects 3RR but does not assume standard snake when reversal_round is absent', async ({ sport, sleeperSport, handlers }) => {
     queueSelectedDraft(sleeperSport, detail(sleeperSport, { reversalRound: 3, status: 'in_progress' }), []);
     const result = await handlers.get_draft({} as Env, { sport, league_id: 'league-1', season_year: 2026 } as ToolParams);

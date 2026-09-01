@@ -78,7 +78,7 @@ Analysis tools are read-only. `refresh_leagues` requires `mcp:write` because it 
 - `get_user_session` (required first call in a normal chat): your leagues and defaults
 - `refresh_leagues`: re-discover connected leagues and update Flaim's league records
 - `get_league_info` (usually second): baseline league context for team-name resolution, owner/team mapping, scoring, and roster-slot context before downstream league tools
-- `get_draft`: confirmed draft results and provider-grounded draft-pick ownership
+- `get_draft`: confirmed draft results and provider-grounded draft-pick ownership (optional `round`, `team_id`, and Sleeper `draft_id`)
 - `get_roster`
 - `get_standings`
 - `get_matchups`

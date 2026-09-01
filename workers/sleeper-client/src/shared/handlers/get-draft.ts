@@ -480,7 +480,7 @@ export function createGetDraftHandler(config: SleeperSportConfig): HandlerFn {
             { status: 'unavailable', source: 'no_provider_order' },
           )),
         };
-      } else if (!trades.available) {
+      } else if (!trades.available || status !== 'complete') {
         ownership = { scope: 'unavailable', picks: [] };
       }
 

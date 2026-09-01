@@ -1132,11 +1132,16 @@ function filterDraftRouteResult(
   if (filters.round === undefined && filters.teamId === undefined) return result;
 
   const data = result.data as Record<string, unknown>;
+  const normalizeTeamId = (value: unknown): string | undefined => {
+    if (value === undefined || value === null) return undefined;
+    const normalized = String(value);
+    const yahooTeamMarker = normalized.lastIndexOf('.t.');
+    return yahooTeamMarker >= 0 ? normalized.slice(yahooTeamMarker + 3) : normalized;
+  };
   const matchesRound = (row: Record<string, unknown>): boolean =>
     filters.round === undefined || row.round === filters.round;
   const matchesTeam = (row: Record<string, unknown>, field: 'selectionTeamId' | 'currentOwnerTeamId'): boolean => {
-    const value = row[field];
-    return filters.teamId === undefined || (value !== undefined && value !== null && String(value) === filters.teamId);
+    return filters.teamId === undefined || normalizeTeamId(row[field]) === normalizeTeamId(filters.teamId);
   };
   const filterRows = (
     value: unknown,
