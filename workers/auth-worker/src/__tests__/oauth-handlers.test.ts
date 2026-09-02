@@ -1284,6 +1284,14 @@ describe('redirect URI validation', () => {
     expect(isValidRedirectUri('https://evil.com/rest/connections/oauth_callback')).toBe(false);
   });
 
+  it('accepts only the exact Littlebird production callback', () => {
+    expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback')).toBe(true);
+    expect(isValidRedirectUri('https://littlebird.ai/mcp/oauth/callback')).toBe(false);
+    expect(isValidRedirectUri('https://evil.lilbird.co/mcp/oauth/callback')).toBe(false);
+    expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback?next=https://evil.com')).toBe(false);
+    expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback/')).toBe(false);
+  });
+
   it('accepts a loopback redirect with the /oauth2callback path', () => {
     expect(isValidRedirectUri('http://127.0.0.1:9876/oauth2callback')).toBe(true);
     expect(isValidRedirectUri('http://localhost:9876/oauth2callback')).toBe(true);

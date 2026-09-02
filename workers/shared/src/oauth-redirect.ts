@@ -13,6 +13,8 @@ const ALLOWED_REDIRECT_URIS = [
   'https://chatgpt.com/connector_platform_oauth_redirect',
   'https://platform.openai.com/apps-manage/oauth',
   // Perplexity custom connectors (pattern matched below for all subdomains)
+  // Littlebird custom connectors (exact production callback)
+  'https://app.lilbird.co/mcp/oauth/callback',
   // VS Code / GitHub Copilot
   'http://127.0.0.1:33418',
   'https://vscode.dev/redirect',

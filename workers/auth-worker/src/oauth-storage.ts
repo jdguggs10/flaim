@@ -229,6 +229,7 @@ function getClientNameFromRedirectUri(redirectUri: string): string {
   if (uri.includes('chatgpt.com') || uri.includes('openai.com')) return 'ChatGPT';
   if (uri.includes('gemini') || uri.includes('google.com')) return 'Gemini';
   if (uri.includes('perplexity.ai') || uri.includes('perplexity.com')) return 'Perplexity';
+  if (uri === 'https://app.lilbird.co/mcp/oauth/callback') return 'Littlebird';
   if (uri.includes('localhost') || uri.includes('127.0.0.1')) return 'Development';
   return 'MCP Client';
 }

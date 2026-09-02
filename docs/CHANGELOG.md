@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Littlebird Custom Connector Support
+
+- **Added**: Flaim now accepts Littlebird's exact production OAuth callback for user-authorized custom MCP connections. The redirect remains exact-match only; other `lilbird.co` hosts, paths, query strings, and fragments are rejected.
+
 ## [9.0.0] - 2026-08-31
 
 ### Bounded Draft Results (FLA-318)
