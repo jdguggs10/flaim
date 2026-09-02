@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Targeted Sleeper League Availability
+
+- **Fixed**: Sleeper `get_players` now checks every matched player ID against all current roster `players` lists for the exact selected league instead of returning league ownership as unavailable.
+- **Added**: Sleeper player-search rows expose `availability_status` (`ROSTERED` or `AVAILABLE`) plus roster/team/owner fields while preserving the cross-provider `league_status` vocabulary and keeping market-percentage ownership explicitly unavailable.
+- **Guarded**: Exact full-name matches sort ahead of the 25-result substring cap; request-local ownership maps are never cached across leagues, and three synthetic league fixtures verify cross-league isolation without publishing live league data.
+
 ### Littlebird Custom Connector Support
 
 - **Added**: Flaim now accepts Littlebird's exact production OAuth callback for user-authorized custom MCP connections. The redirect remains exact-match only; other `lilbird.co` hosts, paths, query strings, and fragments are rejected.

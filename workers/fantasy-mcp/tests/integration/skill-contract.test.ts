@@ -88,6 +88,9 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain(
       '"Find the right Ben Rice and show market ownership context" → `get_user_session` → `get_league_info` → `get_players`'
     );
+    expect(skill).toContain(
+      '"Who owns Player X in my league?" → `get_user_session` → `get_league_info` → `get_players`'
+    );
   });
 
   it('keeps fantasy availability distinct from professional, market, and waiver context', () => {
@@ -151,6 +154,9 @@ describe('shipped Flaim fantasy skill contract', () => {
     );
     expect(skill).toContain(
       'Do not include `injuryStatus` or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
+    );
+    expect(skill).toContain(
+      'Sleeper\'s `availability_status` is authoritative because the matched player ID is checked against every current roster for that exact league'
     );
   });
 });

@@ -48,7 +48,7 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 | `get_matchups` | Weekly matchups and scores |
 | `get_standings` | League standings and rankings |
 | `get_free_agents` | Available players with a normalized envelope; ESPN/Yahoo include platform-wide ownership percentages, Sleeper returns identities only |
-| `get_players` | Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable |
+| `get_players` | Targeted player lookup; ESPN/Yahoo can add league ownership, and Sleeper verifies each match against the selected league's current rosters |
 | `get_transactions` | Recent adds, drops, waivers, and trades |
 
 All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`

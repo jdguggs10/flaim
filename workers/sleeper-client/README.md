@@ -56,7 +56,7 @@ interface ExecuteRequest {
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
-- `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
+- `get_players` — Targeted player lookup with authoritative selected-league availability from current roster `players` lists; Sleeper market-percentage ownership remains unavailable
 - `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
 
 ### Basketball (NBA)
@@ -66,7 +66,7 @@ interface ExecuteRequest {
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
-- `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
+- `get_players` — Targeted player lookup with authoritative selected-league availability from current roster `players` lists; Sleeper market-percentage ownership remains unavailable
 - `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
 
 ## Roster/Matchup Player Enrichment and Team Names
@@ -106,6 +106,18 @@ Before a draft is complete, current-season ownership is materialized only when t
 Each team in `get_league_info`'s `teams` array also gets `keepers` — the roster's designated keeper `player_id[]`, passed through as **raw Sleeper ids, not resolved names** (this handler doesn't otherwise load the KV-backed player index used elsewhere in this worker, and threading it in for a field with no live populated example yet isn't worth the extra fetch — resolve names here later if usage justifies it). `get_roster`'s current-roster response (not the no-`team_id` roster-summary branch, and not historical week snapshots — Sleeper's matchup endpoint carries no keeper data) resolves `keepers` the same way as `starters`/`bench`/`reserve`/`taxi`, using the player index already loaded for that call: `{ id, name, position, team }` on an index hit, `{ id }` on a miss, using the shared enrichment helper's existing degradation behavior. In both tools, `null` vs `[]` is preserved exactly as Sleeper sends it rather than collapsed to one shape: Flaim always passes through whichever shape Sleeper's API returns rather than guessing at or normalizing it. Both shapes have been observed live — `[]` on a pre-draft first-season league, `null` on an archived/past-season league — but Sleeper does not document a distinct meaning for either, and this worker draws no conclusion from which one a given league returns. `keepers` is only ever non-empty during Sleeper's pre-draft keeper-selection window each season.
 
 Sleeper stores no per-player keeper *cost* anywhere in its API. A keeper's cost is whatever draft round or slot the commissioner places it at on the provider draft board. `get_draft` can report that placement once it exists, but it does not calculate a keeper cost from league settings or roster data.
+
+## Targeted Player Availability
+
+`get_players` is the authoritative path for checking a named Sleeper player in a selected league. It resolves name matches through the player index, prioritizes an exact full-name match before the 25-result substring cap, then fetches `GET /league/{league_id}/rosters` and `GET /league/{league_id}/users`. Each matched player ID is compared with every current roster's complete `players` list for that exact request.
+
+Each result keeps Sleeper's unavailable market context (`market_percent_owned: null`, `ownership_scope: "unavailable"`) separate from league availability and adds:
+
+- `availability_status: "ROSTERED" | "AVAILABLE"`
+- `league_status: "ROSTERED" | "FREE_AGENT"` for compatibility with the cross-provider contract
+- `league_team_id`, `league_team_name`, and `league_owner_name` (all null when available)
+
+The ownership map is request-local and never stored in the shared player-index cache, preventing ownership from one league from bleeding into another. A roster fetch failure returns an error rather than falsely labeling a player available.
 
 ## Player Cache (KV)
 

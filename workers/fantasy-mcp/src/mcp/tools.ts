@@ -474,7 +474,9 @@ const searchPlayerEntrySchema = looseObject({
   position: z.string().nullable().optional(),
   market_percent_owned: z.number().nullable().optional(),
   ownership_scope: z.string().optional(),
+  availability_status: z.enum(['ROSTERED', 'AVAILABLE']).optional().describe('Sleeper league availability from an exact current-roster player-id scan'),
   league_status: z.string().nullable().optional().describe('ROSTERED, FREE_AGENT, or null when unavailable'),
+  league_team_id: z.string().nullable().optional(),
   league_team_name: z.string().nullable().optional(),
   league_owner_name: z.string().nullable().optional(),
 });
@@ -1975,7 +1977,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_PLAYERS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
-      description: `Search for player identity by name. Always returns identity fields, but ownership context varies by platform. ESPN and Yahoo return market/global ownership and can also populate league ownership fields when credentials and league context are available. Sleeper returns identity plus ownership_scope="unavailable" with market_percent_owned=null. For a selected active league, call this after get_user_session and get_league_info so league-specific ownership and team names can be resolved. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = available, null = unavailable), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). When those league fields are absent, null, or unavailable, fall back to get_roster to verify manually. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
+      description: `Search for player identity by name and return league-specific ownership when the platform can verify it. ESPN and Yahoo return market/global ownership and can also populate league ownership fields when credentials and league context are available. Sleeper market ownership remains unavailable (ownership_scope="unavailable", market_percent_owned=null), but its selected-league availability is authoritative: each matched player id is checked against every current roster players list for the exact league_id. Sleeper availability_status is "ROSTERED" or "AVAILABLE"; a rostered result includes league_team_id, league_team_name, and league_owner_name. Cross-platform league_status remains "ROSTERED", "FREE_AGENT", or null. Exact full-name matches are prioritized before the result cap. For a selected active league, call this after get_user_session and get_league_info. Use this tool for targeted "who owns Player X?" and "is Player X available?" questions; fall back to get_roster only if league ownership fields are absent or null. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         query: z
           .string()
