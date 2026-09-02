@@ -26,13 +26,23 @@ export function buildSleeperPlayerSearch(
   position?: string,
   count = 10,
 ): SleeperPlayerSearchResult[] {
-  const normalizedQuery = query.toLowerCase();
+  const normalizedQuery = query.trim().toLowerCase();
   const normalizedPosition = position?.trim().toUpperCase();
   const maxCount = Math.max(1, Math.min(25, Math.trunc(count)));
 
   return Array.from(players.values())
     .filter((player) => player.full_name.toLowerCase().includes(normalizedQuery))
     .filter((player) => !normalizedPosition || player.position?.toUpperCase() === normalizedPosition)
+    .sort((a, b) => {
+      // A full-name match must never fall beyond the capped substring results.
+      // This makes a targeted name lookup independent of player-index order.
+      const aExact = a.full_name.trim().toLowerCase() === normalizedQuery;
+      const bExact = b.full_name.trim().toLowerCase() === normalizedQuery;
+      if (aExact !== bExact) return aExact ? -1 : 1;
+      const nameCmp = a.full_name.localeCompare(b.full_name);
+      if (nameCmp !== 0) return nameCmp;
+      return a.player_id.localeCompare(b.player_id);
+    })
     .slice(0, maxCount)
     .map((player) => ({
       id: player.player_id,

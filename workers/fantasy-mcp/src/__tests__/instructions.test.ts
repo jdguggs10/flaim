@@ -95,6 +95,21 @@ describe('Flaim MCP initialization instructions', () => {
     );
   });
 
+  it('routes targeted Sleeper ownership checks through exact league availability', () => {
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'For a targeted "who owns Player X?" or "is Player X available?" question, use get_players for the selected league'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Sleeper resolves each matched player id against every current roster players list for that exact league'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'availability_status ROSTERED or AVAILABLE'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'market_percent_owned and ownership_scope remain market context and must never be used to infer league availability'
+    );
+  });
+
   it('allows one bounded retry only for temporary failures', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Correct invalid-request parameters before trying again'

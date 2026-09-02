@@ -766,7 +766,7 @@ describe('get_players output schema', () => {
     }));
   });
 
-  it('accepts Sleeper identity-only entries (ownership unavailable)', () => {
+  it('accepts Sleeper market-unavailable identity with authoritative league availability', () => {
     expectValid('get_players', routed({
       platform: 'sleeper',
       sport: 'football',
@@ -780,9 +780,11 @@ describe('get_players output schema', () => {
           team: null,
           market_percent_owned: null,
           ownership_scope: 'unavailable',
-          league_status: null,
-          league_team_name: null,
-          league_owner_name: null,
+          availability_status: 'ROSTERED',
+          league_status: 'ROSTERED',
+          league_team_id: '6',
+          league_team_name: 'Example Team',
+          league_owner_name: 'Example Owner',
         },
       ],
     }));

@@ -1987,7 +1987,7 @@ describe('fantasy-mcp tools', () => {
     expect(result.structuredContent).toEqual(payload);
   });
 
-  it('get_players schema remains unchanged and includes ownership guardrails in description', () => {
+  it('get_players schema includes targeted Sleeper availability guardrails', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();
 
@@ -2002,6 +2002,8 @@ describe('fantasy-mcp tools', () => {
 
     expect(tool!.description).toContain('market/global ownership');
     expect(tool!.description).toContain('league_status');
+    expect(tool!.description).toContain('availability_status');
+    expect(tool!.description).toContain('every current roster players list');
     expect(tool!.description).toContain('league_team_name');
     expect(tool!.description).toContain('league_owner_name');
     expect(tool!.description).toContain('get_league_info');

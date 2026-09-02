@@ -94,4 +94,25 @@ describe('buildSleeperPlayerSearch', () => {
     const result = buildSleeperPlayerSearch(big, 'test', undefined, 100);
     expect(result).toHaveLength(25);
   });
+
+  it('prioritizes an exact full-name match before capped substring matches', () => {
+    const crowded = new Map<string, SleeperPlayerRecord>();
+    for (let i = 0; i < 30; i += 1) {
+      crowded.set(`variant-${i}`, {
+        player_id: `variant-${i}`,
+        full_name: `Patrick Mahomes ${i}`,
+        active: true,
+      });
+    }
+    crowded.set('exact', {
+      player_id: 'exact',
+      full_name: 'Patrick Mahomes',
+      active: true,
+    });
+
+    const result = buildSleeperPlayerSearch(crowded, 'Patrick Mahomes', undefined, 25);
+
+    expect(result).toHaveLength(25);
+    expect(result[0].id).toBe('exact');
+  });
 });
