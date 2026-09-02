@@ -15,6 +15,8 @@ const ALLOWED_REDIRECT_URIS = [
   // Perplexity custom connectors (pattern matched below for all subdomains)
   // Littlebird custom connectors (exact production callback)
   'https://app.lilbird.co/mcp/oauth/callback',
+  // User-hosted relay (exact callback only, not other Render services)
+  'https://flaim-relay.onrender.com/oauth/callback',
   // VS Code / GitHub Copilot
   'http://127.0.0.1:33418',
   'https://vscode.dev/redirect',

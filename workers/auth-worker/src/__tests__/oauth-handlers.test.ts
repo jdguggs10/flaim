@@ -22,6 +22,7 @@ const env: OAuthEnv = {
 
 const corsHeaders = {};
 const cursorRedirectUri = 'cursor://anysphere.cursor-mcp/oauth/abc123/callback';
+const taskletRelayRedirectUri = 'https://flaim-relay.onrender.com/oauth/callback';
 
 function buildRegisterRequest(body: Record<string, unknown> = {}): Request {
   return new Request('https://api.flaim.app/auth/register', {
@@ -107,6 +108,26 @@ describe('oauth-handlers', () => {
     };
 
     expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
+  it('registers the exact Tasklet relay callback as a public client without a client_secret', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [taskletRelayRedirectUri],
+      token_endpoint_auth_method: 'none',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      redirect_uris?: string[];
+      token_endpoint_auth_method?: string;
+    };
+
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.redirect_uris).toEqual([taskletRelayRedirectUri]);
     expect(body.token_endpoint_auth_method).toBe('none');
     expect(body.client_secret).toBeUndefined();
   });
@@ -227,6 +248,18 @@ describe('oauth-handlers', () => {
     expect(redirect.searchParams.get('error_description')).toBe('code_challenge is required (PKCE)');
   });
 
+  it('requires PKCE before authorizing through the exact Tasklet relay callback', async () => {
+    const req = new Request(
+      `https://api.flaim.app/authorize?response_type=code&client_id=test&redirect_uri=${encodeURIComponent(taskletRelayRedirectUri)}`
+    );
+    const res = await handleAuthorize(req, env);
+    const redirect = expectRedirectLocation(res);
+
+    expect(`${redirect.origin}${redirect.pathname}`).toBe(taskletRelayRedirectUri);
+    expect(redirect.searchParams.get('error')).toBe('invalid_request');
+    expect(redirect.searchParams.get('error_description')).toBe('code_challenge is required (PKCE)');
+  });
+
   it('rejects missing redirect_uri for /authorize', async () => {
     const req = new Request('https://api.flaim.app/authorize?response_type=code');
     const res = await handleAuthorize(req, env);
@@ -315,6 +348,26 @@ describe('oauth-handlers', () => {
     expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
       state: 'pkce:abc123',
       scope: 'mcp:read',
+    }));
+  });
+
+  it('starts a PKCE read-only authorization for the exact Tasklet relay callback', async () => {
+    const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      `&redirect_uri=${encodeURIComponent(taskletRelayRedirectUri)}` +
+      '&scope=mcp%3Aread&code_challenge=relay-challenge&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.pathname).toBe('/oauth/consent');
+    expect(location.searchParams.get('scope')).toBe('mcp:read');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      redirectUri: taskletRelayRedirectUri,
+      scope: 'mcp:read',
+      codeChallenge: 'relay-challenge',
     }));
   });
 
@@ -1290,6 +1343,22 @@ describe('redirect URI validation', () => {
     expect(isValidRedirectUri('https://evil.lilbird.co/mcp/oauth/callback')).toBe(false);
     expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback?next=https://evil.com')).toBe(false);
     expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback/')).toBe(false);
+  });
+
+  it.each([
+    [taskletRelayRedirectUri, true],
+    ['https://other-relay.onrender.com/oauth/callback', false],
+    ['https://sub.flaim-relay.onrender.com/oauth/callback', false],
+    ['https://flaim-relay.onrender.com.evil.example/oauth/callback', false],
+    ['https://flaim-relay.onrender.com/oauth/callback/extra', false],
+    ['https://flaim-relay.onrender.com/oauth/callback/', false],
+    ['https://flaim-relay.onrender.com/oauth/callback?next=https://evil.example', false],
+    ['https://flaim-relay.onrender.com/oauth/callback#fragment', false],
+    ['http://flaim-relay.onrender.com/oauth/callback', false],
+    ['https://user@flaim-relay.onrender.com/oauth/callback', false],
+    ['https://flaim-relay.onrender.com:8443/oauth/callback', false],
+  ])('validates the Tasklet relay callback exactly: %s', (uri, expected) => {
+    expect(isValidRedirectUri(uri)).toBe(expected);
   });
 
   it('accepts a loopback redirect with the /oauth2callback path', () => {

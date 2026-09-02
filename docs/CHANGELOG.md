@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### User-Hosted Relay Callback
+
+- **Added**: The exact `https://flaim-relay.onrender.com/oauth/callback` URL is accepted for user-authorized MCP connections. Other Render hosts and callback variations remain blocked; OAuth consent, PKCE, and scope requirements are unchanged.
+
 ### Littlebird Custom Connector Support
 
 - **Added**: Flaim now accepts Littlebird's exact production OAuth callback for user-authorized custom MCP connections. The redirect remains exact-match only; other `lilbird.co` hosts, paths, query strings, and fragments are rejected.
