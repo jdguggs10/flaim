@@ -77,8 +77,16 @@ describe('shipped Flaim fantasy skill contract', () => {
 
   it('locks the ordinary selected-league sequence', () => {
     expect(skill).toContain(
-      'For a selected active league, call `get_league_info` immediately after `get_user_session`'
+      'With session context established, call `get_league_info` for the selected active league'
     );
+    expect(skill).toContain('call `get_user_session` only when no usable successful session result is available in this chat');
+    expect(skill).toContain('do not repeat it merely because a new user message arrived');
+    expect(skill).toContain('when the user confirms account, connection, league-list, or default changes');
+    expect(skill).toContain('when the needed session context is missing');
+    expect(skill).toContain('A new chat needs its own session lookup');
+    expect(skill).toContain('a failed session lookup is not reusable context');
+    expect(skill).toContain('Reuse session context, not stale roster, score, or player data');
+    expect(skill).toContain('Analysis sequences below show a fresh chat');
     expect(skill).toContain(
       '"What are the standings in my league?" → `get_user_session` → `get_league_info` → `get_standings`'
     );

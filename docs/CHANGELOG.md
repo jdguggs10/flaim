@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Reuse Session Context on Follow-Ups
+
+- **Changed**: The shipped skills and MCP routing guidance reuse successful session context within a chat instead of repeating `get_user_session` on ordinary follow-ups or switches to an already-known league. New chats, missing context, confirmed account/league/default changes, explicit status requests, and successful refreshes still allow session lookup. Current roster, score, and player data are fetched independently when needed. **[tool-contract]**
+
 ### User-Hosted Relay Callback
 
 - **Added**: The exact `https://flaim-relay.onrender.com/oauth/callback` URL is accepted for user-authorized MCP connections. Other Render hosts and callback variations remain blocked; OAuth consent, PKCE, and scope requirements are unchanged.
