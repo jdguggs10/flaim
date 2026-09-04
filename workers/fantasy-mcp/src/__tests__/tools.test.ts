@@ -57,7 +57,7 @@ describe('fantasy-mcp tools', () => {
     ]);
   });
 
-  it('describes the three get_user_session routing paths without a global bootstrap', () => {
+  it('describes session reuse for analysis while preserving status and refresh paths', () => {
     const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_user_session');
     expect(tool).toBeTruthy();
 
@@ -68,17 +68,45 @@ describe('fantasy-mcp tools', () => {
       'Use this alone for user-specific connection, league, or account-status questions'
     );
     expect(tool!.description).toContain(
-      'For a normal selected-league request, call this once before any other data tool'
+      'call this only when no usable successful session result is available in this chat'
     );
     expect(tool!.description).toContain(
       'For an explicit refresh request, call refresh_leagues first and then call this tool after success'
     );
-    expect(tool!.description).not.toContain('at the start of each chat');
+    expect(tool!.description).toContain('do not repeat this call merely because a new user message arrived');
+    expect(tool!.description).toContain('switching to another league already in allLeagues');
+    expect(tool!.description).toContain('when the user confirms account, connection, league-list, or default changes');
+    expect(tool!.description).toContain('when the needed session context is missing');
+    expect(tool!.description).toContain('A new chat needs its own session lookup');
+    expect(tool!.description).toContain('Follow the error guidance if a call fails');
+    expect(tool!.description).toContain('Session reuse does not replace fresh roster, score, or player reads');
     expect(tool!.description).toContain('generic coding, scraping, weather');
     expect(tool!.description).toContain(
-      'For a selected active league, call get_league_info next before the requested league-specific data tool'
+      'With session context established, call get_league_info for the selected active league before the requested league-specific data tool'
     );
     expect(tool!.description).toContain('call it again even if it ran earlier in the chat');
+  });
+
+  it('keeps downstream tool descriptions compatible with reusable session context', () => {
+    const tools = new Map(getUnifiedTools().map((tool) => [tool.name, tool]));
+
+    for (const name of [
+      'get_draft',
+      'get_standings',
+      'get_matchups',
+      'get_roster',
+      'get_players',
+      'get_transactions',
+    ]) {
+      expect(tools.get(name)?.description).toContain(
+        'established session context (call get_user_session only if needed)'
+      );
+    }
+
+    const history = tools.get('get_ancient_history')?.description;
+    expect(history).toContain('established session context (call get_user_session only if needed)');
+    expect(history).toContain('This is the historical branch');
+    expect(history).not.toContain('get_league_info');
   });
 
   it('describes refresh_leagues as explicit, registry-only, and provider-write incapable', () => {
@@ -189,6 +217,11 @@ describe('fantasy-mcp tools', () => {
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
+  });
+
+  it('keeps every downstream data tool and refresh free of widget attachments', () => {
+    expect(getUnifiedTools().filter((tool) => tool.widgetUri).map((tool) => tool.name))
+      .toEqual(['get_user_session']);
   });
 
   it('pins the frozen v1/v2 widget body to its immutable golden hash', () => {
