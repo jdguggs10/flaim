@@ -13,11 +13,12 @@ const DEMO_USER_ID = 'user_demo_test_54321';
 const INTERNAL_SERVICE_TOKEN = 'internal-service-secret';
 
 const mockRateLimiter = { limit: async () => ({ success: true }) };
-const { mockClearDefaultLeague, mockClearStaleDefaultForLeague, mockGetLeagues, mockInsertEvent } = vi.hoisted(() => ({
+const { mockClearDefaultLeague, mockClearStaleDefaultForLeague, mockGetLeagues, mockInsertEvent, mockIsSleeperLeagueAuthorized } = vi.hoisted(() => ({
   mockClearDefaultLeague: vi.fn().mockResolvedValue({ success: true }),
   mockClearStaleDefaultForLeague: vi.fn().mockResolvedValue(undefined),
   mockGetLeagues: vi.fn().mockResolvedValue([]),
   mockInsertEvent: vi.fn().mockResolvedValue({ error: null }),
+  mockIsSleeperLeagueAuthorized: vi.fn().mockResolvedValue(false),
 }));
 
 const baseEnv = {
@@ -100,6 +101,14 @@ vi.mock('../yahoo-storage', () => {
   };
 });
 
+vi.mock('../sleeper-storage', () => ({
+  SleeperStorage: {
+    fromEnvironment: vi.fn().mockReturnValue({
+      isSleeperLeagueAuthorized: mockIsSleeperLeagueAuthorized,
+    }),
+  },
+}));
+
 vi.mock('../yahoo-connect-handlers', () => ({
   handleYahooAuthorize: vi.fn(),
   handleYahooCallback: vi.fn(),
@@ -143,6 +152,7 @@ describe('eval API key auth', () => {
     mockClearStaleDefaultForLeague.mockResolvedValue(undefined);
     mockGetLeagues.mockResolvedValue([]);
     mockInsertEvent.mockResolvedValue({ error: null });
+    mockIsSleeperLeagueAuthorized.mockResolvedValue(false);
     vi.mocked(validateOAuthToken).mockResolvedValue(null);
   });
 
@@ -169,6 +179,56 @@ describe('eval API key auth', () => {
     expect(body.authType).toBe('eval-api-key');
     // client_name is OAuth-only — null for static API key auth
     expect(body.client_name).toBeNull();
+  });
+
+  it('authorizes only the static API key user against one stored Sleeper league without enrichment', async () => {
+    mockIsSleeperLeagueAuthorized.mockResolvedValueOnce(true);
+
+    const res = await appFetch(makeRequest(
+      '/auth/internal/leagues/sleeper/authorize?league_id=league-2024&sport=football&season_year=2024',
+      { headers: internalHeaders(EVAL_API_KEY) },
+    ));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ allowed: true });
+    expect(mockIsSleeperLeagueAuthorized).toHaveBeenCalledWith(
+      EVAL_USER_ID,
+      'league-2024',
+      'football',
+      2024,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not let a caller choose another user for Sleeper league authorization', async () => {
+    mockIsSleeperLeagueAuthorized.mockResolvedValueOnce(false);
+
+    const res = await appFetch(makeRequest(
+      '/auth/internal/leagues/sleeper/authorize?league_id=other-users-league&sport=football&season_year=2025&user_id=user-other',
+      { headers: internalHeaders(EVAL_API_KEY) },
+    ));
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual({ allowed: false });
+    expect(mockIsSleeperLeagueAuthorized).toHaveBeenCalledWith(
+      EVAL_USER_ID,
+      'other-users-league',
+      'football',
+      2025,
+    );
+  });
+
+  it('fails closed when stored Sleeper authorization cannot be read without enrichment', async () => {
+    mockIsSleeperLeagueAuthorized.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const res = await appFetch(makeRequest(
+      '/auth/internal/leagues/sleeper/authorize?league_id=league-2025&sport=football&season_year=2025',
+      { headers: internalHeaders(EVAL_API_KEY) },
+    ));
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ error: 'Sleeper league authorization unavailable' });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('GET /auth/internal/introspect with OAuth token returns client_name', async () => {

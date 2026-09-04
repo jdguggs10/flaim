@@ -1097,12 +1097,21 @@ describe('fantasy-mcp gateway integration', () => {
   });
 
   it('routes get_free_agents tools/call to sleeper worker when platform is sleeper', async () => {
-    const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
+    const authFetch = vi.fn(async (request: Request) => {
+      if (new URL(request.url).pathname === '/internal/leagues/sleeper/authorize') {
+        expect(new URL(request.url).searchParams.get('league_id')).toBe('league-42');
+        expect(new URL(request.url).searchParams.get('sport')).toBe('football');
+        expect(new URL(request.url).searchParams.get('season_year')).toBe('2025');
+        return new Response(JSON.stringify({ allowed: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      })
-    );
+      });
+    });
     const sleeperFetch = vi.fn(async () =>
       new Response(
         JSON.stringify({

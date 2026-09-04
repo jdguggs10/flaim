@@ -152,6 +152,50 @@ export class SleeperStorage {
     }));
   }
 
+  /**
+   * Check the exact stored league season for the authenticated user without
+   * performing discovery or enriching legacy rows through Sleeper's public API.
+   * Historical archives remain readable; explicitly hidden leagues do not.
+   */
+  async isSleeperLeagueAuthorized(
+    clerkUserId: string,
+    leagueId: string,
+    sport: string,
+    seasonYear: number,
+  ): Promise<boolean> {
+    // Do not use getSleeperConnection here: its consumer-facing behavior
+    // intentionally treats a storage error like "not connected." The gateway
+    // authorization path must instead distinguish an absent connection (deny)
+    // from an unavailable connection lookup (fail closed upstream).
+    const { data: connection, error: connectionError } = await this.supabase
+      .from('sleeper_connections')
+      .select('sleeper_user_id')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (connectionError) throw new Error(`Failed to read Sleeper connection for authorization: ${connectionError.message}`);
+    if (!connection) return false;
+    const sleeperUserId = (connection as Pick<SleeperConnectionRow, 'sleeper_user_id'>).sleeper_user_id;
+
+    const { data, error } = await this.supabase
+      .from('sleeper_leagues')
+      .select('league_id, sport, season_year, recurring_league_id')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('sleeper_user_id', sleeperUserId)
+      .eq('league_id', leagueId)
+      .eq('sport', sport)
+      .eq('season_year', seasonYear)
+      .maybeSingle();
+
+    if (error) throw new Error(`Failed to authorize Sleeper league: ${error.message}`);
+    if (!data) return false;
+
+    const row = data as Pick<SleeperLeagueRow, 'league_id' | 'sport' | 'recurring_league_id'>;
+    const archivedMap = await this.archive.getArchivedMap(clerkUserId, 'sleeper');
+    const recurringId = row.recurring_league_id ?? row.league_id;
+    return !isSuppressed('exclude-hidden', archivedMap, archivedKey(row.sport, recurringId));
+  }
+
   async saveSleeperLeague(league: {
     clerkUserId: string;
     leagueId: string;
