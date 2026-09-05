@@ -8,6 +8,7 @@ import {
   withInternalServiceToken,
   type SetupSignalEvent,
 } from '@flaim/worker-shared';
+import { authorizeSleeperLeague } from './sleeper-league-authorization';
 
 export interface RouteResult {
   success: boolean;
@@ -68,6 +69,21 @@ export async function routeToClient(
       error: `Platform "${platform}" is not yet supported`,
       code: 'PLATFORM_NOT_SUPPORTED'
     };
+  }
+
+  // Sleeper's upstream API is public, but Flaim tools are scoped to the
+  // authenticated user's discovered leagues. Keep this policy in the gateway,
+  // where user context is available, rather than in the provider client.
+  if (platform === 'sleeper') {
+    const authorizationFailure = await authorizeSleeperLeague(
+      env,
+      params,
+      authHeader,
+      correlationId,
+      evalRunId,
+      evalTraceId,
+    );
+    if (authorizationFailure) return authorizationFailure;
   }
 
   // Forward request to platform worker

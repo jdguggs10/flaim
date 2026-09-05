@@ -67,6 +67,7 @@ import {
 } from './yahoo-connect-handlers';
 import { YahooStorage, type YahooLeague } from './yahoo-storage';
 import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport, type ArchiveMode, type ArchivedFilter } from './archive-storage';
+import { SleeperStorage } from './sleeper-storage';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
   handleSleeperDiscover,
@@ -1690,6 +1691,35 @@ api.get('/internal/leagues/sleeper', async (c) => {
   // 'historical' leagues browsable while still hiding 'hidden' ones.
   const archived: ArchivedFilter = c.req.query('archived') === 'exclude-hidden' ? 'exclude-hidden' : 'exclude-archived';
   return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw), { archived });
+});
+
+// Lightweight gateway authorization check. Unlike the league-list endpoint,
+// this reads the current connection, exact league row, and archive state
+// without enriching legacy rows from the public Sleeper API.
+api.get('/internal/leagues/sleeper/authorize', async (c) => {
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, authStatus ?? 401);
+  }
+
+  const leagueId = c.req.query('league_id')?.trim();
+  const sport = c.req.query('sport')?.trim();
+  const seasonYear = Number(c.req.query('season_year'));
+  if (!leagueId || !sport || !Number.isInteger(seasonYear) || seasonYear < 1) {
+    return c.json({ error: 'league_id, sport, and season_year are required' }, 400);
+  }
+
+  try {
+    const storage = SleeperStorage.fromEnvironment(c.env);
+    const allowed = await storage.isSleeperLeagueAuthorized(userId, leagueId, sport, seasonYear);
+    return c.json({ allowed });
+  } catch (error) {
+    console.error('[internal/sleeper-authorize] stored authorization check failed', error);
+    return c.json({ error: 'Sleeper league authorization unavailable' }, 503);
+  }
 });
 
 // Delete Sleeper league (requires auth)

@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Sleeper Connected-League Authorization (FLA-104)
+
+- **Changed**: Sleeper league-scoped MCP reads now verify the requested league, sport, and season against the authenticated user's stored, discovered records for their current configured Sleeper identity before calling Sleeper's public API. The authorization lookup does not run provider discovery or enrich legacy rows. Historical discovered seasons remain available; explicitly hidden leagues remain unavailable. League-wide analysis inside an authorized league, including opponent rosters and matchups, is unchanged.
+
 ### Reuse Session Context on Follow-Ups
 
 - **Changed**: The shipped skills and MCP routing guidance reuse successful session context within a chat instead of repeating `get_user_session` on ordinary follow-ups or switches to an already-known league. New chats, missing context, confirmed account/league/default changes, explicit status requests, and successful refreshes still allow session lookup. Current roster, score, and player data are fetched independently when needed. **[tool-contract]**
