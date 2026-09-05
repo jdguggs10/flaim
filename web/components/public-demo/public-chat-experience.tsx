@@ -11,6 +11,7 @@ import {
 import {
   INITIAL_PUBLIC_DEMO_STATE,
   PUBLIC_DEMO_PLATFORM_LABELS,
+  PUBLIC_DEMO_SPORT_LABELS,
   buildPublicDemoCacheRequestUrl,
   canStartPublicDemoRun,
   loadPublicDemoCapabilities,
@@ -318,6 +319,17 @@ export function PublicChatExperience({
     }),
     [state.platform, state.sport],
   );
+  // The sport button toggles directly to the other sport (there are only
+  // two), so it only ever needs "the current one" and "the other one".
+  const currentSportOption = sportOptions.find((option) => option.selected);
+  const otherSportOption = sportOptions.find((option) => !option.selected);
+  const currentSportLabel =
+    currentSportOption?.label ?? PUBLIC_DEMO_SPORT_LABELS[demoSport];
+  const sportButtonAriaLabel = otherSportOption
+    ? otherSportOption.available
+      ? `Demo sport: ${currentSportLabel}. Switch to ${otherSportOption.label}.`
+      : `Demo sport: ${currentSportLabel}. ${otherSportOption.label} is not available for ${demoTarget.platformLabel}.`
+    : `Demo sport: ${currentSportLabel}`;
 
   const selectedPreset = useMemo(
     () =>
@@ -733,15 +745,26 @@ export function PublicChatExperience({
                     }
                     onClick={() => handleSelectPlatform(option.platform)}
                     className={cn(
-                      "h-11 min-w-0 flex-1 rounded-full px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                      "inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
                       option.selected
                         ? "bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
-                        : "text-[var(--phone-muted)]",
+                        : option.available
+                          ? "text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]/60"
+                          : "text-[var(--phone-muted)]",
                       option.available
                         ? "cursor-pointer"
                         : "cursor-not-allowed opacity-45",
                     )}
                   >
+                    {option.available ? (
+                      <span
+                        className={cn(
+                          "h-1.25 w-1.25 shrink-0 rounded-full bg-success",
+                          option.selected ? "" : "opacity-45",
+                        )}
+                        aria-hidden="true"
+                      />
+                    ) : null}
                     {option.label}
                   </button>
                 ))}
@@ -749,13 +772,19 @@ export function PublicChatExperience({
 
               <button
                 type="button"
-                onClick={(event) =>
-                  openEducationPanel("sport", event.currentTarget)
-                }
-                aria-label={`Demo sport: ${PUBLIC_SPORT_COPY[demoSport].label}`}
-                aria-haspopup="dialog"
-                aria-expanded={educationPanel === "sport"}
-                className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                disabled={!otherSportOption?.available}
+                onClick={() => {
+                  if (otherSportOption?.available) {
+                    handleSelectSport(otherSportOption.sport);
+                  }
+                }}
+                aria-label={sportButtonAriaLabel}
+                className={cn(
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                  otherSportOption?.available
+                    ? "cursor-pointer hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95"
+                    : "cursor-default opacity-45",
+                )}
               >
                 {PUBLIC_SPORT_COPY[demoSport].icon}
               </button>
@@ -946,8 +975,6 @@ export function PublicChatExperience({
           <PhoneEducationPanel
             container={phonePanelContainer}
             demoTarget={demoTarget}
-            sportOptions={sportOptions}
-            onSelectSport={handleSelectSport}
             panel={educationPanel}
             returnFocusRef={educationTriggerRef}
           />
