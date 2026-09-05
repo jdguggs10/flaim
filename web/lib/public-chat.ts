@@ -82,13 +82,20 @@ export interface PublicChatTarget {
 /**
  * Supported platform/sport demo targets, in deterministic order. The first
  * selectable entry in this order is the overall default target.
- * sleeper-football leads for the 2026 football draft season, so the site
- * defaults to it the moment that lane becomes selectable; until then
- * espn-baseball (next in order) stays the default. Revisit this ordering at
- * the FLA-253 season rollover. Default sports per platform: espn baseball
- * (for now), yahoo baseball, sleeper football.
+ * espn-football leads for the 2026 NFL season (activated 2026-09-05), with
+ * sleeper-football next, so the site defaults to ESPN football while it is
+ * selectable and falls back through the football lanes before baseball.
+ * Revisit this ordering at the FLA-253 season rollover. Default sports per
+ * platform during football season: espn football, sleeper football, yahoo
+ * baseball (until FLA-237 restores Yahoo access).
  */
 export const PUBLIC_CHAT_TARGET_MATRIX: readonly PublicChatTarget[] = [
+  {
+    platform: "espn",
+    sport: "football",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: true,
+  },
   {
     platform: "sleeper",
     sport: "football",
@@ -98,12 +105,6 @@ export const PUBLIC_CHAT_TARGET_MATRIX: readonly PublicChatTarget[] = [
   {
     platform: "espn",
     sport: "baseball",
-    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
-    isDefaultSport: true,
-  },
-  {
-    platform: "espn",
-    sport: "football",
     presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
     isDefaultSport: false,
   },
