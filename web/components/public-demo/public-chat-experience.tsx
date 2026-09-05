@@ -436,31 +436,6 @@ export function PublicChatExperience({
     const controller = new AbortController();
 
     void (async () => {
-      // WORKSHOP-ONLY MOCK — REMOVE BEFORE MERGE. `?workshop=1` renders the
-      // production target set on preview deployments, whose isolated DB only
-      // seeds espn-baseball, so the three chip states and the sport toggle
-      // can be reviewed visually. Cache reads for the mocked targets miss on
-      // preview; this is a styling review aid only.
-      if (
-        typeof window !== "undefined" &&
-        new URLSearchParams(window.location.search).get("workshop") === "1"
-      ) {
-        const workshopPresetIds = [
-          "hot-hands", "league-format", "this-matchup", "my-moves",
-          "best-team", "wire-watch", "league-moves", "roster-hole",
-        ] as const;
-        dispatch({
-          type: "capabilities_resolved",
-          targets: [
-            { platform: "espn", sport: "football", presetIds: workshopPresetIds, isDefault: true },
-            { platform: "sleeper", sport: "football", presetIds: workshopPresetIds, isDefault: false },
-            { platform: "espn", sport: "baseball", presetIds: workshopPresetIds, isDefault: false },
-          ],
-          token: (runTokenRef.current += 1),
-        });
-        return;
-      }
-
       const targets = await loadPublicDemoCapabilities({
         signal: controller.signal,
       });
