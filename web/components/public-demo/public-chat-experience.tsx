@@ -82,12 +82,11 @@ const SPORT_HOLD_THRESHOLD_MS = 500;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
-  { icon: React.ReactNode; label: string }
-> =
-  {
-    baseball: { icon: <IconBallBaseball className="h-5 w-5" stroke={1.5} />, label: "baseball" },
-    football: { icon: <IconBallAmericanFootball className="h-5 w-5" stroke={1.5} />, label: "football" },
-  };
+  { icon: React.ReactNode }
+> = {
+  baseball: { icon: <IconBallBaseball className="h-5 w-5" stroke={1.5} /> },
+  football: { icon: <IconBallAmericanFootball className="h-5 w-5" stroke={1.5} /> },
+};
 
 function formatRelativeUpdateTime(value: string) {
   const timestamp = new Date(value).getTime();
@@ -265,15 +264,27 @@ function IdleState({ platformLabel }: { platformLabel: string }) {
 /*  this in place of the transcript instead of a disabled chip.        */
 /* ------------------------------------------------------------------ */
 
-function PausedPlatformState({ platformLabel }: { platformLabel: string }) {
+function PausedPlatformState({
+  platform,
+}: {
+  platform: PublicChatDemoPlatform;
+}) {
+  const platformLabel = PUBLIC_DEMO_PLATFORM_LABELS[platform];
+  // Only Yahoo's pause is caused by a third-party API access restriction;
+  // every other platform's copy stays neutral about the actual cause (e.g.
+  // Sleeper falling back to legacy mode after a capabilities failure).
+  const description =
+    platform === "yahoo"
+      ? `Previews will return as soon as ${platformLabel} restores third-party API access.`
+      : `The ${platformLabel} demo isn't available right now.`;
+
   return (
     <div className="flex min-h-[15rem] flex-1 flex-col items-center justify-center px-4 text-center">
       <p className="text-[clamp(1.125rem,6.1cqw,1.3rem)] font-semibold leading-tight tracking-[-0.025em] text-[var(--phone-text)]">
         {platformLabel} demo is paused
       </p>
       <p className="mt-2 max-w-[16rem] text-[length:var(--phone-type-secondary)] leading-[1.4] text-[var(--phone-muted)]">
-        Previews will return as soon as {platformLabel} restores third-party
-        API access.
+        {description}
       </p>
     </div>
   );
@@ -340,9 +351,8 @@ export function PublicChatExperience({
   const demoTarget = useMemo(
     () => ({
       platformLabel: PUBLIC_DEMO_PLATFORM_LABELS[state.platform],
-      sport: state.sport,
     }),
-    [state.platform, state.sport],
+    [state.platform],
   );
   // The sport button toggles directly to the other sport on a short tap
   // (there are only two); press-and-hold (or right-click) opens the full
@@ -470,6 +480,22 @@ export function PublicChatExperience({
       activeRunAbortControllerRef.current?.abort();
     }
   }, [runStatus]);
+
+  // A chip tapped while unavailable can become available later (capabilities
+  // resolving, or any future availability change). Clear the preview instead
+  // of letting it linger over an now-available platform.
+  useEffect(() => {
+    if (!offPlatformPreview) {
+      return;
+    }
+
+    const previewedOption = platformOptions.find(
+      (option) => option.platform === offPlatformPreview,
+    );
+    if (previewedOption?.available) {
+      setOffPlatformPreview(null);
+    }
+  }, [offPlatformPreview, platformOptions]);
 
   const handleRunPreset = useCallback(
     async (preset: PublicChatPreset) => {
@@ -646,10 +672,24 @@ export function PublicChatExperience({
     };
   }, [clearSportHoldTimer]);
 
+  // Central close path: whenever the education panel (including the sports
+  // sheet a hold opens) closes — via Escape, an outside click, or selecting a
+  // sport from the sheet — clear the hold flag so it can't leak into a tap
+  // that happens after the sheet is gone.
+  useEffect(() => {
+    if (educationPanel === null) {
+      sportHoldTriggeredRef.current = false;
+    }
+  }, [educationPanel]);
+
   const handleSportPointerDown = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       const trigger = event.currentTarget;
       clearSportHoldTimer();
+      // Reset at the start of every new gesture so a hold whose release
+      // landed outside the button (leaving the flag set) doesn't swallow
+      // this tap's click.
+      sportHoldTriggeredRef.current = false;
       sportHoldTimerRef.current = setTimeout(() => {
         sportHoldTimerRef.current = null;
         sportHoldTriggeredRef.current = true;
@@ -848,7 +888,11 @@ export function PublicChatExperience({
                         if (option.available) {
                           setOffPlatformPreview(null);
                           handleSelectPlatform(option.platform);
-                        } else {
+                        } else if (!capabilitiesLoading) {
+                          // While capabilities are still loading, "available"
+                          // hasn't settled yet — ignore the tap instead of
+                          // showing a paused preview that may immediately be
+                          // stale once the real answer arrives.
                           setOffPlatformPreview(option.platform);
                         }
                       }}
@@ -888,7 +932,10 @@ export function PublicChatExperience({
             </div>
 
             <div role="status" aria-live="polite" className="sr-only">
-              {liveAnnouncement}
+              {/* Suppressed while the paused screen hides the transcript, so
+                  this region can't keep announcing run progress or "Answer
+                  ready" over the paused-state announcement below. */}
+              {offPlatformPreview ? "" : liveAnnouncement}
             </div>
 
             {/* Separate region so an automatic sport switch is announced
@@ -909,11 +956,7 @@ export function PublicChatExperience({
             >
               <div className="mx-auto flex flex-col gap-5">
                 {offPlatformPreview ? (
-                  <PausedPlatformState
-                    platformLabel={
-                      PUBLIC_DEMO_PLATFORM_LABELS[offPlatformPreview]
-                    }
-                  />
+                  <PausedPlatformState platform={offPlatformPreview} />
                 ) : (
                   <>
                     {!selectedPreset && runStatus === "idle" ? (
