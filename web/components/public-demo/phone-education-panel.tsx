@@ -1,8 +1,16 @@
 "use client";
 
 import type { PublicChatDemoSport } from "@/lib/public-chat";
+import type { PublicDemoSportOption } from "@/lib/public-demo-client";
+import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Database, LockKeyhole, X } from "lucide-react";
+import {
+  IconBallAmericanFootball,
+  IconBallBaseball,
+  IconBallBasketball,
+  IconIceSkating,
+} from "@tabler/icons-react";
+import { Database, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, type RefObject } from "react";
 
@@ -10,8 +18,12 @@ export type PhoneEducationPanelId =
   | "about"
   | "drawer"
   | "activation"
-  | "ask";
-type PhoneInsideChatGptPanelId = Exclude<PhoneEducationPanelId, "about">;
+  | "ask"
+  | "sports";
+type PhoneInsideChatGptPanelId = Exclude<
+  PhoneEducationPanelId,
+  "about" | "sports"
+>;
 
 // The composer's plus, Flaim, and send controls each open a short "Inside
 // ChatGPT" sheet: a title and a sentence or two. They are informational
@@ -36,19 +48,34 @@ const INSIDE_CHATGPT_CONTENT: Record<
 
 interface PhoneEducationPanelProps {
   container: HTMLElement | null;
-  demoTarget: {
-    platformLabel: string;
-    sport: PublicChatDemoSport;
-  };
+  onSelectSport: (sport: PublicChatDemoSport) => void;
   panel: PhoneEducationPanelId | null;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
+  sportOptions: PublicDemoSportOption[];
 }
 
-function AboutPanel({
-  demoTarget,
-}: {
-  demoTarget: PhoneEducationPanelProps["demoTarget"];
-}) {
+const SPORT_CHOOSER_ICONS: Record<PublicChatDemoSport, React.ReactNode> = {
+  football: <IconBallAmericanFootball className="h-5 w-5" stroke={1.5} />,
+  baseball: <IconBallBaseball className="h-5 w-5" stroke={1.5} />,
+};
+
+// Basketball and hockey aren't real demo sports yet (see
+// PublicChatDemoSport), so they're rendered as permanently-disabled tiles
+// rather than driven by `sportOptions`.
+const SPORTS_PANEL_COMING_SOON = [
+  {
+    key: "basketball",
+    label: "Basketball",
+    icon: <IconBallBasketball className="h-5 w-5" stroke={1.5} />,
+  },
+  {
+    key: "hockey",
+    label: "Hockey",
+    icon: <IconIceSkating className="h-5 w-5" stroke={1.5} />,
+  },
+] as const;
+
+function AboutPanel() {
   return (
     <>
       <DialogPrimitive.Description className="text-[length:var(--phone-type-secondary)] leading-[1.45] text-[var(--phone-muted)]">
@@ -56,33 +83,15 @@ function AboutPanel({
         account.
       </DialogPrimitive.Description>
 
-      <div className="mt-5 space-y-3">
-        <div className="flex gap-3 rounded-2xl bg-[var(--phone-panel)] p-3.5">
-          <Database className="mt-0.5 h-5 w-5 shrink-0 text-[var(--phone-accent)]" />
-          <div>
-            <div className="text-[length:var(--phone-type-secondary)] font-semibold leading-5 text-[var(--phone-text)]">
-              Real league data
-            </div>
-            <p className="mt-1 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
-              Recently refreshed answers from Gerry&apos;s actual{" "}
-              {demoTarget.platformLabel} {demoTarget.sport} league.
-            </p>
+      <div className="mt-5 flex gap-3 rounded-2xl bg-[var(--phone-panel)] p-3.5">
+        <Database className="mt-0.5 h-5 w-5 shrink-0 text-[var(--phone-accent)]" />
+        <div>
+          <div className="text-[length:var(--phone-type-secondary)] font-semibold leading-5 text-[var(--phone-text)]">
+            Real league data
           </div>
-        </div>
-
-        <div className="flex gap-3 rounded-2xl bg-[var(--phone-panel)] p-3.5">
-          <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0 text-[var(--phone-accent)]" />
-          <div>
-            <div className="text-[length:var(--phone-type-secondary)] font-semibold leading-5 text-[var(--phone-text)]">
-              Safe public preview
-            </div>
-            <p className="mt-1 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
-              This page serves prepared, cached answers, and Flaim&apos;s
-              league access is read-only — it cannot add, drop, trade, or
-              change a roster. Visitors never receive reusable access to
-              Gerry&apos;s account.
-            </p>
-          </div>
+          <p className="mt-1 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
+            Recently refreshed answers from Gerry&apos;s actual leagues.
+          </p>
         </div>
       </div>
 
@@ -98,19 +107,11 @@ function AboutPanel({
             <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
               ESPN · Football and Baseball
             </span>
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
-              aria-hidden="true"
-            />
           </div>
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
             <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
               Sleeper · Football
             </span>
-            <span
-              className="h-1.5 w-1.5 shrink-0 rounded-full bg-success"
-              aria-hidden="true"
-            />
           </div>
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-[var(--phone-muted)]">
             <span className="text-[length:var(--phone-type-caption)] font-medium">
@@ -133,11 +134,73 @@ function AboutPanel({
   );
 }
 
+function SportsPanel({
+  onSelectSport,
+  sportOptions,
+}: {
+  onSelectSport: (sport: PublicChatDemoSport) => void;
+  sportOptions: PublicDemoSportOption[];
+}) {
+  return (
+    <>
+      <DialogPrimitive.Description className="text-[length:var(--phone-type-secondary)] leading-[1.45] text-[var(--phone-muted)]">
+        Flaim supports football, baseball, basketball, and hockey. The demo
+        covers the sports with prepared answers.
+      </DialogPrimitive.Description>
+
+      <div className="mt-4 grid grid-cols-2 gap-2.5">
+        {sportOptions.map((option) => (
+          <button
+            key={option.sport}
+            type="button"
+            disabled={!option.available}
+            aria-pressed={option.selected}
+            onClick={() => {
+              if (!option.available) {
+                return;
+              }
+              onSelectSport(option.sport);
+            }}
+            className={cn(
+              "flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[length:var(--phone-type-secondary)] font-medium transition-colors",
+              option.selected
+                ? "border-[var(--phone-accent)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
+                : option.available
+                  ? "border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]"
+                  : "cursor-not-allowed border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-muted)] opacity-45",
+            )}
+          >
+            {SPORT_CHOOSER_ICONS[option.sport]}
+            {option.label}
+          </button>
+        ))}
+
+        {SPORTS_PANEL_COMING_SOON.map((sport) => (
+          <button
+            key={sport.key}
+            type="button"
+            disabled
+            className="flex min-h-11 cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[var(--phone-border)] bg-[var(--phone-panel)] px-3 py-2.5 text-[length:var(--phone-type-secondary)] font-medium text-[var(--phone-muted)] opacity-45"
+          >
+            {sport.icon}
+            {sport.label}
+          </button>
+        ))}
+      </div>
+
+      <p className="mt-3 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
+        Basketball and hockey demos are not available yet.
+      </p>
+    </>
+  );
+}
+
 export function PhoneEducationPanel({
   container,
-  demoTarget,
+  onSelectSport,
   panel,
   returnFocusRef,
+  sportOptions,
 }: PhoneEducationPanelProps) {
   const titleRef = useRef<HTMLHeadingElement | null>(null);
 
@@ -154,10 +217,12 @@ export function PhoneEducationPanel({
   const heading =
     panel === "about"
       ? { eyebrow: "Demo guide", title: "About this demo" }
-      : {
-          eyebrow: "Inside ChatGPT",
-          title: INSIDE_CHATGPT_CONTENT[panel].title,
-        };
+      : panel === "sports"
+        ? { eyebrow: "Demo sport", title: "All sports" }
+        : {
+            eyebrow: "Inside ChatGPT",
+            title: INSIDE_CHATGPT_CONTENT[panel].title,
+          };
 
   return (
     <DialogPrimitive.Portal container={container}>
@@ -196,7 +261,9 @@ export function PhoneEducationPanel({
 
         <div className="mt-3">
           {panel === "about" ? (
-            <AboutPanel demoTarget={demoTarget} />
+            <AboutPanel />
+          ) : panel === "sports" ? (
+            <SportsPanel onSelectSport={onSelectSport} sportOptions={sportOptions} />
           ) : (
             <DialogPrimitive.Description className="text-[length:var(--phone-type-body)] leading-[var(--phone-leading-body)] text-[var(--phone-text)]">
               {INSIDE_CHATGPT_CONTENT[panel].body}

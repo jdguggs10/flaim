@@ -77,6 +77,8 @@ const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
 const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
 /** Seconds of ticker travel per prepared question; ~45px/s at pill width. */
 const PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT = 4;
+/** Press-and-hold duration on the sport button before the all-sports sheet opens. */
+const SPORT_HOLD_THRESHOLD_MS = 500;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
@@ -258,6 +260,25 @@ function IdleState({ platformLabel }: { platformLabel: string }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Off-platform preview — tapping an unavailable platform chip shows  */
+/*  this in place of the transcript instead of a disabled chip.        */
+/* ------------------------------------------------------------------ */
+
+function PausedPlatformState({ platformLabel }: { platformLabel: string }) {
+  return (
+    <div className="flex min-h-[15rem] flex-1 flex-col items-center justify-center px-4 text-center">
+      <p className="text-[clamp(1.125rem,6.1cqw,1.3rem)] font-semibold leading-tight tracking-[-0.025em] text-[var(--phone-text)]">
+        {platformLabel} demo is paused
+      </p>
+      <p className="mt-2 max-w-[16rem] text-[length:var(--phone-type-secondary)] leading-[1.4] text-[var(--phone-muted)]">
+        Previews will return as soon as {platformLabel} restores third-party
+        API access.
+      </p>
+    </div>
+  );
+}
+
 export function PublicChatExperience({
   initialPresetId = null,
   id,
@@ -287,6 +308,10 @@ export function PublicChatExperience({
   const runTokenRef = useRef(0);
   const [educationPanel, setEducationPanel] =
     useState<PhoneEducationPanelId | null>(null);
+  // Pure view state: previewing an unavailable platform's paused copy in the
+  // phone. Never touches the reducer — the real demo target is untouched.
+  const [offPlatformPreview, setOffPlatformPreview] =
+    useState<PublicChatDemoPlatform | null>(null);
   const [phonePanelContainer, setPhonePanelContainer] =
     useState<HTMLDivElement | null>(null);
   const educationTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -319,17 +344,17 @@ export function PublicChatExperience({
     }),
     [state.platform, state.sport],
   );
-  // The sport button toggles directly to the other sport (there are only
-  // two), so it only ever needs "the current one" and "the other one".
+  // The sport button toggles directly to the other sport on a short tap
+  // (there are only two); press-and-hold (or right-click) opens the full
+  // four-sport sheet, so the button stays enabled even when the platform
+  // only offers one sport — a short tap just does nothing in that case.
   const currentSportOption = sportOptions.find((option) => option.selected);
   const otherSportOption = sportOptions.find((option) => !option.selected);
   const currentSportLabel =
     currentSportOption?.label ?? PUBLIC_DEMO_SPORT_LABELS[demoSport];
-  const sportButtonAriaLabel = otherSportOption
-    ? otherSportOption.available
-      ? `Demo sport: ${currentSportLabel}. Switch to ${otherSportOption.label}.`
-      : `Demo sport: ${currentSportLabel}. ${otherSportOption.label} is not available for ${demoTarget.platformLabel}.`
-    : `Demo sport: ${currentSportLabel}`;
+  const sportButtonAriaLabel = otherSportOption?.available
+    ? `Demo sport: ${currentSportLabel}. Tap to switch to ${otherSportOption.label}. Hold to see all sports.`
+    : `Demo sport: ${currentSportLabel}. Hold to see all sports.`;
 
   const selectedPreset = useMemo(
     () =>
@@ -354,6 +379,11 @@ export function PublicChatExperience({
           ? `Answer ready. ${formatRelativeUpdateTime(answerMeta.generatedAt)}`
           : "Answer ready"
         : "";
+  // Announces when an unavailable platform chip opens the paused-state
+  // overlay in the transcript.
+  const pausedAnnouncement = offPlatformPreview
+    ? `${PUBLIC_DEMO_PLATFORM_LABELS[offPlatformPreview]} demo is paused.`
+    : "";
   // Deep links wait for capabilities so the auto-run happens against the real
   // target, and only run when the target still advertises that preset.
   const initialQueryPreset = useMemo(
@@ -618,6 +648,70 @@ export function PublicChatExperience({
     });
   }, []);
 
+  // Press-and-hold (or right-click) on the sport button opens the full
+  // four-sport sheet; a short tap keeps toggling between football/baseball.
+  // The timer set on pointerdown is what tells a hold apart from a tap —
+  // when it fires we flag the hold so the click event it also produces gets
+  // swallowed instead of re-toggling the sport underneath the open sheet.
+  const sportHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const sportHoldTriggeredRef = useRef(false);
+
+  const clearSportHoldTimer = useCallback(() => {
+    if (sportHoldTimerRef.current !== null) {
+      clearTimeout(sportHoldTimerRef.current);
+      sportHoldTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearSportHoldTimer();
+    };
+  }, [clearSportHoldTimer]);
+
+  const handleSportPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLButtonElement>) => {
+      const trigger = event.currentTarget;
+      clearSportHoldTimer();
+      sportHoldTimerRef.current = setTimeout(() => {
+        sportHoldTimerRef.current = null;
+        sportHoldTriggeredRef.current = true;
+        openEducationPanel("sports", trigger);
+      }, SPORT_HOLD_THRESHOLD_MS);
+    },
+    [clearSportHoldTimer, openEducationPanel],
+  );
+
+  const handleSportClick = useCallback(() => {
+    if (sportHoldTriggeredRef.current) {
+      // The hold already opened the sheet; swallow the click it also fires.
+      sportHoldTriggeredRef.current = false;
+      return;
+    }
+    if (otherSportOption?.available) {
+      handleSelectSport(otherSportOption.sport);
+    }
+  }, [handleSelectSport, otherSportOption]);
+
+  const handleSportContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      clearSportHoldTimer();
+      openEducationPanel("sports", event.currentTarget);
+    },
+    [clearSportHoldTimer, openEducationPanel],
+  );
+
+  const handleSelectSportFromSheet = useCallback(
+    (sport: PublicChatDemoSport) => {
+      handleSelectSport(sport);
+      setEducationPanel(null);
+    },
+    [handleSelectSport],
+  );
+
   useEffect(() => {
     if (!initialQueryPreset) {
       return;
@@ -757,58 +851,61 @@ export function PublicChatExperience({
                 role="group"
                 aria-label="Demo platform"
               >
-                {platformOptions.map((option) => (
-                  <button
-                    key={option.platform}
-                    type="button"
-                    disabled={!option.available}
-                    aria-pressed={option.selected}
-                    aria-label={
-                      option.available
-                        ? `${option.label} demo`
-                        : `${option.label} demo coming soon`
-                    }
-                    onClick={() => handleSelectPlatform(option.platform)}
-                    className={cn(
-                      "inline-flex h-11 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
-                      option.selected
-                        ? "bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
-                        : option.available
-                          ? "text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]/60"
-                          : "text-[var(--phone-muted)]",
-                      option.available
-                        ? "cursor-pointer"
-                        : "cursor-not-allowed opacity-45",
-                    )}
-                  >
-                    {option.available ? (
-                      <span
-                        className={cn(
-                          "h-1.25 w-1.25 shrink-0 rounded-full bg-success",
-                          option.selected ? "" : "opacity-45",
-                        )}
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    {option.label}
-                  </button>
-                ))}
+                {platformOptions.map((option) => {
+                  // While an off-platform preview is active it takes over the
+                  // filled "selected" look from the real selection, so the
+                  // paused platform reads as the one currently shown.
+                  const showAsSelected = offPlatformPreview
+                    ? offPlatformPreview === option.platform
+                    : option.selected;
+
+                  return (
+                    <button
+                      key={option.platform}
+                      type="button"
+                      aria-pressed={showAsSelected}
+                      aria-label={
+                        option.available
+                          ? `${option.label} demo`
+                          : `${option.label} demo paused`
+                      }
+                      onClick={() => {
+                        if (option.available) {
+                          setOffPlatformPreview(null);
+                          handleSelectPlatform(option.platform);
+                        } else {
+                          setOffPlatformPreview(option.platform);
+                        }
+                      }}
+                      className={cn(
+                        "inline-flex h-11 min-w-0 flex-1 cursor-pointer items-center justify-center rounded-full px-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                        showAsSelected
+                          ? "bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
+                          : option.available
+                            ? "text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]/60"
+                            : "text-[var(--phone-muted)] opacity-60 hover:bg-[var(--phone-panel-strong)]/60",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
               </div>
 
               <button
                 type="button"
-                disabled={!otherSportOption?.available}
-                onClick={() => {
-                  if (otherSportOption?.available) {
-                    handleSelectSport(otherSportOption.sport);
-                  }
-                }}
+                onClick={handleSportClick}
+                onPointerDown={handleSportPointerDown}
+                onPointerUp={clearSportHoldTimer}
+                onPointerLeave={clearSportHoldTimer}
+                onPointerCancel={clearSportHoldTimer}
+                onContextMenu={handleSportContextMenu}
                 aria-label={sportButtonAriaLabel}
+                aria-haspopup="dialog"
+                aria-expanded={educationPanel === "sports"}
                 className={cn(
-                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
-                  otherSportOption?.available
-                    ? "cursor-pointer hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95"
-                    : "cursor-default opacity-45",
+                  "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                  otherSportOption?.available ? "" : "opacity-45",
                 )}
               >
                 {PUBLIC_SPORT_COPY[demoSport].icon}
@@ -825,116 +922,134 @@ export function PublicChatExperience({
               {sportTransitionAnnouncement}
             </div>
 
+            {/* Separate region so tapping a paused platform chip is announced
+                without competing with the run-status line above. */}
+            <div role="status" aria-live="polite" className="sr-only">
+              {pausedAnnouncement}
+            </div>
+
             <div
               ref={transcriptScrollRef}
               className="min-h-0 flex-1 overflow-y-auto overscroll-auto px-4 pb-5 pt-2"
             >
               <div className="mx-auto flex flex-col gap-5">
-                {!selectedPreset && runStatus === "idle" ? (
-                  <IdleState platformLabel={demoTarget.platformLabel} />
-                ) : null}
-
-                {selectedPreset ? (
-                  <PublicMessage
-                    role="user"
-                    text={selectedPreset.userMessage}
+                {offPlatformPreview ? (
+                  <PausedPlatformState
+                    platformLabel={
+                      PUBLIC_DEMO_PLATFORM_LABELS[offPlatformPreview]
+                    }
                   />
-                ) : null}
+                ) : (
+                  <>
+                    {!selectedPreset && runStatus === "idle" ? (
+                      <IdleState platformLabel={demoTarget.platformLabel} />
+                    ) : null}
 
-                {selectedPreset ? (
-                  <div className="flex items-center gap-2 pt-1 text-[length:var(--phone-type-secondary)] font-medium leading-5 text-[var(--phone-muted)]">
-                    <PhoneFlaimMark />
-                    <span>Flaim Fantasy</span>
-                  </div>
-                ) : null}
-
-                {showPreToolStatus ? (
-                  <div className="flex items-center gap-2 text-[length:var(--phone-type-secondary)] leading-5 text-[var(--phone-muted)]">
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                    <span>{preToolStatusCopy}</span>
-                  </div>
-                ) : null}
-
-                {toolCalls.length > 0 ? (
-                  <div className="space-y-2">
-                    {toolCalls.map((toolCall) => (
-                      <PublicToolCall
-                        key={toolCall.id}
-                        name={toolCall.name}
-                        status={toolCall.status}
+                    {selectedPreset ? (
+                      <PublicMessage
+                        role="user"
+                        text={selectedPreset.userMessage}
                       />
-                    ))}
-                  </div>
-                ) : null}
+                    ) : null}
 
-                {assistantText ? (
-                  <PublicMessage role="assistant" text={assistantText} />
-                ) : null}
-
-                {assistantText && runStatus === "completed" ? (
-                  <div
-                    className="flex items-center gap-3 text-[var(--phone-muted)]"
-                    aria-hidden="true"
-                  >
-                    <Copy className="h-4 w-4" />
-                    <Volume2 className="h-4 w-4" />
-                    <ThumbsUp className="h-4 w-4" />
-                    <Share className="h-4 w-4" />
-                    <MoreHorizontal className="h-4 w-4" />
-                  </div>
-                ) : null}
-
-                {runStatus === "completed" ? (
-                  <div className="space-y-2 pt-2 text-center text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
-                    {answerMeta ? (
-                      <div>
-                        {formatRelativeUpdateTime(answerMeta.generatedAt)}
-                        {answerMeta.status === "degraded"
-                          ? " • showing last good answer"
-                          : answerMeta.isStale
-                            ? " • refresh overdue"
-                            : answerMeta.isExpired
-                              ? " • refreshing soon"
-                              : ""}
+                    {selectedPreset ? (
+                      <div className="flex items-center gap-2 pt-1 text-[length:var(--phone-type-secondary)] font-medium leading-5 text-[var(--phone-muted)]">
+                        <PhoneFlaimMark />
+                        <span>Flaim Fantasy</span>
                       </div>
                     ) : null}
-                    {answerMeta?.status === "degraded" ? (
-                      <div className="text-destructive">
-                        Latest refresh failed.{" "}
-                        {getPublicDemoFailureCopy({
-                          errorCode: answerMeta.failureCode,
-                          errorMessage: answerMeta.failureMessage,
-                        })}
+
+                    {showPreToolStatus ? (
+                      <div className="flex items-center gap-2 text-[length:var(--phone-type-secondary)] leading-5 text-[var(--phone-muted)]">
+                        <LoaderCircle className="h-4 w-4 animate-spin" />
+                        <span>{preToolStatusCopy}</span>
                       </div>
                     ) : null}
-                    <div>
-                      That&apos;s Gerry&apos;s league.{" "}
-                      <Link
-                        href="/leagues"
-                        className="font-medium text-[var(--phone-text)] underline underline-offset-4"
+
+                    {toolCalls.length > 0 ? (
+                      <div className="space-y-2">
+                        {toolCalls.map((toolCall) => (
+                          <PublicToolCall
+                            key={toolCall.id}
+                            name={toolCall.name}
+                            status={toolCall.status}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {assistantText ? (
+                      <PublicMessage role="assistant" text={assistantText} />
+                    ) : null}
+
+                    {assistantText && runStatus === "completed" ? (
+                      <div
+                        className="flex items-center gap-3 text-[var(--phone-muted)]"
+                        aria-hidden="true"
                       >
-                        Want to connect yours?
-                      </Link>
-                    </div>
-                  </div>
-                ) : null}
+                        <Copy className="h-4 w-4" />
+                        <Volume2 className="h-4 w-4" />
+                        <ThumbsUp className="h-4 w-4" />
+                        <Share className="h-4 w-4" />
+                        <MoreHorizontal className="h-4 w-4" />
+                      </div>
+                    ) : null}
 
-                {runStatus === "error" ? (
-                  <div
-                    role="alert"
-                    className="rounded-[1.4rem] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                  >
-                    <div className="font-semibold">Demo answer unavailable</div>
-                    <p className="mt-2 leading-6">
-                      {error || "Unknown public chat error."}
-                    </p>
-                  </div>
-                ) : null}
+                    {runStatus === "completed" ? (
+                      <div className="space-y-2 pt-2 text-center text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
+                        {answerMeta ? (
+                          <div>
+                            {formatRelativeUpdateTime(answerMeta.generatedAt)}
+                            {answerMeta.status === "degraded"
+                              ? " • showing last good answer"
+                              : answerMeta.isStale
+                                ? " • refresh overdue"
+                                : answerMeta.isExpired
+                                  ? " • refreshing soon"
+                                  : ""}
+                          </div>
+                        ) : null}
+                        {answerMeta?.status === "degraded" ? (
+                          <div className="text-destructive">
+                            Latest refresh failed.{" "}
+                            {getPublicDemoFailureCopy({
+                              errorCode: answerMeta.failureCode,
+                              errorMessage: answerMeta.failureMessage,
+                            })}
+                          </div>
+                        ) : null}
+                        <div>
+                          That&apos;s Gerry&apos;s league.{" "}
+                          <Link
+                            href="/leagues"
+                            className="font-medium text-[var(--phone-text)] underline underline-offset-4"
+                          >
+                            Want to connect yours?
+                          </Link>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {runStatus === "error" ? (
+                      <div
+                        role="alert"
+                        className="rounded-[1.4rem] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                      >
+                        <div className="font-semibold">
+                          Demo answer unavailable
+                        </div>
+                        <p className="mt-2 leading-6">
+                          {error || "Unknown public chat error."}
+                        </p>
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
             </div>
 
             <div className="border-t border-[var(--phone-border)] bg-[var(--phone-screen)] px-3 pb-4 pt-3">
-              {renderPromptTicker(visiblePresets)}
+              {offPlatformPreview ? null : renderPromptTicker(visiblePresets)}
 
               {/* Each composer control opens a short "Inside ChatGPT" sheet:
                   a title and a sentence or two, no numbered steps. */}
@@ -999,9 +1114,10 @@ export function PublicChatExperience({
           </div>
           <PhoneEducationPanel
             container={phonePanelContainer}
-            demoTarget={demoTarget}
+            onSelectSport={handleSelectSportFromSheet}
             panel={educationPanel}
             returnFocusRef={educationTriggerRef}
+            sportOptions={sportOptions}
           />
           </DialogPrimitive.Root>
         </PhoneDemoFrame>
