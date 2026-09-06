@@ -5,10 +5,11 @@
 --
 -- Phase 2 is this file, and it is the step that can break alerting. The
 -- provider-failure consumer rejects a snapshot timestamp older than 30
--- minutes and fails open when it does — no error, no alert. Dropping the
+-- minutes and skips provider-specific checks when it does. Dropping the
 -- dashboard to hourly before that consumer sources both its provider rows and
--- its timestamp from analytics.provider_flags_snapshot would silently disable
--- provider-outage monitoring.
+-- its timestamp from analytics.provider_flags_snapshot would interrupt
+-- provider-outage monitoring. Endpoint-failure notification does not replace
+-- those provider-specific checks.
 --
 -- The whole file is ONE transaction. A failed precondition aborts it, so the
 -- schedule changes below cannot be applied by a session that stepped over the

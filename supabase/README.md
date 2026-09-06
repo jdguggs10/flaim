@@ -127,8 +127,12 @@ America/New_York day grain without changing the existing UTC rollups or the
 90-day raw-event retention policy.
 
 `public.mcp_user_daily_et` stores call counts by ET day, environment, user,
-authentication type, and nullable client name. NULL and the literal empty
-client name remain distinct. The table has RLS enabled with no policies and is
+authentication type, nullable client name, platform, and sport. NULL and
+literal empty values remain distinct in the unique grain. Platform and sport
+are event attribution, not complete user/provider identity: setup and
+cross-platform calls can lack them, and sport is not a league season year.
+The current payload sums across these dimensions without adding new metrics.
+The table has RLS enabled with no policies and is
 owner-only, including no access for `service_role` or `analytics_readonly`.
 
 `analytics.history_rollup_state` is an owner-only singleton recording the
@@ -155,6 +159,22 @@ Neither migration backfills data, replaces `analytics.dashboard_payload()`,
 refreshes a snapshot, creates a cron job, or activates a schedule. Initial
 backfill, parity acceptance, reader switching, and scheduling are separate
 promotion gates.
+
+The forward platform/sport refinement likewise performs no backfill or
+activation. It locks the progress state and aggregate, and refuses initialized
+history or any existing aggregate row before changing the grain. It must land
+before the initial close. Never start that close concurrently with the
+migration: relation locks do not replace a function body already compiled by
+a waiting call. Start backfill only after the migration commits.
+An already-populated environment needs a separately
+reviewed rebuild while complete raw coverage is still available; clearing its
+marker or labelling old rows with NULL dimensions is not a recovery procedure.
+
+History-job monitoring must be independent of dashboard refresh success. The
+raw bridge intentionally tolerates missed closes, so a fresh snapshot alone
+does not prove preservation is running. Failed jobs and a marker that has not
+advanced by the next scheduled close require timely operator notification.
+Activating a job and inspecting one successful run is not ongoing monitoring.
 
 The reviewed activation artifacts live outside the migration path:
 `cron/analytics-history.sql` schedules history preservation only after an
@@ -206,9 +226,10 @@ and no non-owner `EXECUTE` grants. The migration creates no cron job.
 ### Two-phase cron cutover
 
 The consumer of this signal rejects a snapshot timestamp older than 30 minutes
-and **fails open** when it does — no error, no alert. Reducing the dashboard
-cadence before that consumer reads the dedicated snapshot would silently stop
-provider-outage monitoring. The order is therefore load-bearing:
+and skips provider-specific checks when it does. Endpoint-failure notification
+does not replace those checks. Reducing the dashboard cadence before that
+consumer reads the dedicated snapshot would interrupt provider-outage
+monitoring. The order is therefore load-bearing:
 
 1. **Phase 1 — `cron/production.sql`.** Adds `provider-flags-snapshot` at
    `*/5` while `dashboard-snapshot` keeps its `*/5` cadence. Both signals stay

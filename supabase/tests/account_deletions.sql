@@ -159,6 +159,14 @@ begin
   ) then
     raise exception 'oauth_states must not carry the guard trigger';
   end if;
+  if exists (
+    select 1 from pg_trigger trig
+    join pg_class c on c.oid = trig.tgrelid
+    where c.relname = 'mcp_user_daily_et'
+      and trig.tgname = 'reject_write_after_account_deletion'
+  ) then
+    raise exception 'mcp_user_daily_et must not carry the account-deletion guard trigger';
+  end if;
 end $acl_proof$;
 
 -- The deployed auth-worker invokes purge_account_data as service_role, and

@@ -37,10 +37,10 @@ readonly PROVIDER_FLAGS_COMMAND='select analytics.refresh_provider_flags_snapsho
 readonly PROVIDER_FLAGS_JOB_BODY='$job$'"${PROVIDER_FLAGS_COMMAND}"'$job$'
 readonly PROVIDER_FLAGS_GUARD_MATCH="command = '${PROVIDER_FLAGS_COMMAND}'"
 
-# FLA-264 cron cutover ordering, asserted statically because the failure is
-# silent: the provider-failure consumer fails open on a stale snapshot, so
-# dropping the dashboard cadence before that consumer reads the dedicated
-# provider snapshot stops outage alerting without an error anywhere.
+# FLA-264 cron cutover ordering: the provider-failure consumer skips checks on
+# a stale snapshot. Dropping the dashboard cadence before that consumer reads
+# the dedicated provider snapshot interrupts provider-specific detection;
+# endpoint-failure notification is not a replacement for those checks.
 #
 # The canonical production schedule must stay in phase 1 — the dedicated job
 # added at */5 while the dashboard job is still */5. Phase 2 lives in its own
@@ -209,6 +209,7 @@ bash supabase/tests/token_rpc_concurrency.sh
 bash supabase/tests/account_deletions_concurrency.sh
 bash supabase/tests/analytics_history_concurrency.sh
 bash supabase/tests/analytics_history_guard.sh
+bash supabase/tests/analytics_history_dimensions_guard.sh
 
 corepack pnpm exec supabase db lint \
   --local \

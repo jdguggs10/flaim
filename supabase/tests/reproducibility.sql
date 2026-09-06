@@ -241,6 +241,45 @@ begin
     raise exception 'service_role unexpectedly has analytics schema usage';
   end if;
 
+  -- FLA-265 preserves source dimensions at daily aggregate grain. They must
+  -- remain nullable and have no default so NULL is distinct from literal
+  -- empty strings under the NULLS NOT DISTINCT composite uniqueness rule.
+  if (
+    select count(*)
+    from pg_attribute a
+    where a.attrelid = 'public.mcp_user_daily_et'::regclass
+      and a.attname in ('platform', 'sport')
+      and a.attnum > 0
+      and not a.attisdropped
+      and a.atttypid = 'text'::regtype
+      and not a.attnotnull
+      and not a.atthasdef
+  ) <> 2 then
+    raise exception 'mcp_user_daily_et platform/sport columns must be nullable text without defaults';
+  end if;
+  if exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = 'public.mcp_user_daily_et'::regclass
+      and a.attname = 'tool_name'
+      and a.attnum > 0
+      and not a.attisdropped
+  ) then
+    raise exception 'mcp_user_daily_et must not add a tool_name dimension';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint con
+    where con.conrelid = 'public.mcp_user_daily_et'::regclass
+      and con.conname = 'mcp_user_daily_et_grain'
+      and con.contype = 'u'
+      and pg_get_constraintdef(con.oid, true)
+        = 'UNIQUE NULLS NOT DISTINCT (et_day, env, user_id, auth_type, client_name, platform, sport)'
+  ) then
+    raise exception 'mcp_user_daily_et grain must include platform/sport with NULLS NOT DISTINCT';
+  end if;
+
   if has_table_privilege('anon', 'public.demo_antigravity_cache', 'SELECT')
      or has_table_privilege(
        'authenticated',

@@ -39,7 +39,7 @@ select cron.schedule(
 -- Phase 2 — dashboard hourly, internal-inclusive nightly — is deliberately NOT
 -- here. It lives in production-cadence-cutover.sql behind a precondition
 -- guard, because applying it before the provider-flags consumer has been
--- verified would silently stop provider-outage alerting on a stale-snapshot
+-- verified would interrupt provider-specific checks on a stale-snapshot
 -- gate. Fold the post-cutover cadence into this file only after phase 2 has
 -- been applied and verified in production.
 select cron.schedule(
