@@ -225,6 +225,8 @@ fantasy-mcp tool call → waitUntil(POST /internal/usage-event) → auth-worker 
 - **Fire-and-forget:** emitted in `ctx.waitUntil` with swallowed errors — never awaited, adds no latency, and a logging failure can never break a tool call.
 - **Tagged for filtering:** every event carries `env` (`prod`/`preview`/`dev`) and `auth_type` (`oauth`/`clerk`/`eval-api-key`/`demo-api-key`). Real-user metrics filter `env='prod' AND auth_type='oauth'`, which excludes preview traffic, the demo runner (`demo-api-key`), and eval runs (`eval-api-key`).
 - **Two tiers:** raw `mcp_tool_events` is pruned after 90 days; `pg_cron` rolls each UTC day into the permanent, tiny `mcp_user_daily` / `mcp_tool_daily` rollups.
+- **ET history prepared, not active:** the database contract also contains an owner-only `mcp_user_daily_et` aggregate and serialized close/backfill function. Its state lands uninitialized, no close cron is created, and the current dashboard payload still reads its existing sources. An owner-only parity sibling can combine closed ET summaries with raw days after the marker once an explicit initial backfill has succeeded.
+- **Health stays exact:** the parity sibling keeps latency and error health on raw events, using a disclosed 30-day window for the historical health keys and the existing seven-day window for recent health. It does not combine stored percentiles.
 - **Telemetry only:** tool, platform, sport, status, latency, and a hashed league id — never rosters, players, or question text.
 
 Schema is summarized in `docs/DATABASE.md`; the reviewed, secret-free

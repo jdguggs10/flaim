@@ -22,7 +22,7 @@ preview creation, and production DDL require separate approval and verification.
 Cloudflare Workers and server-side web paths use the Data API as
 `service_role`. Browser clients do not query Supabase directly.
 
-All 25 public tables currently have RLS enabled and no policies. The baseline
+All 26 public tables in the forward contract have RLS enabled and no policies. The baseline
 also reproduces the existing broad object grants and future-object defaults so
 permission hardening can be performed later as an isolated, reversible
 forward-only migration. Those before-state grants are not the desired final
@@ -49,7 +49,8 @@ Connected-provider state:
 MCP OAuth and telemetry:
 
 - OAuth: `oauth_states`, `oauth_codes`, `oauth_tokens`
-- Telemetry: `mcp_tool_events`, `mcp_user_daily`, `mcp_tool_daily`
+- Telemetry: `mcp_tool_events`, `mcp_user_daily`, `mcp_tool_daily`,
+  `mcp_user_daily_et`
 - Compatibility view: `oauth_connections`
 
 Public-demo operations:
@@ -120,6 +121,25 @@ rows in `provider_flags_snapshot`, plus views that calculate usage, retention,
 client mix, tool health, funnel, platform, sport, and user concentration
 metrics.
 
+`mcp_user_daily_et` is an owner-only permanent aggregate at
+America/New_York day, environment, user, authentication type, and nullable
+client-name grain. The owner-only `analytics.history_rollup_state` singleton
+records its explicit initial history date and last fully closed ET day.
+`close_mcp_user_daily_et(date, date)` serializes initial backfill and later
+catch-up closes against that state. Both relations use RLS with no policies;
+the close function and relations grant no access to Data API roles,
+`service_role`, or `analytics_readonly`.
+
+`dashboard_payload_history(boolean)` is an inactive owner-only sibling of the
+current payload. After an explicit initial backfill, it combines aggregate rows
+through the marker with raw rows after the marker. It fails closed before that
+initialization or when the marker is too stale for the raw 90-day window to
+bridge safely. Its historical health summary and per-tool health use an exact
+30-day raw window, disclosed as `health_window_days: 30`; recent rolling usage,
+seven-day health, UTC client mix, and operational keys keep their current
+sources. The existing `dashboard_payload()` and snapshot refresh functions are
+unchanged.
+
 Both snapshot relations carry the same two variants: id=1 excludes internal
 accounts, id=2 includes them.
 
@@ -151,6 +171,11 @@ approval gate from the migration that adds the function it calls.
 Reducing the dashboard refresh cadence is a separate, gated second phase in
 `supabase/cron/production-cadence-cutover.sql`; see `supabase/README.md` for
 why the order matters and what the guard checks.
+
+The ET-history migrations add no cron job. The explicit initial close/backfill
+must precede the scheduling gate in `supabase/cron/analytics-history.sql`.
+The separately approved reader switch lives in
+`supabase/cron/analytics-history-cutover.sql`.
 
 Exact columns, constraints, indexes, views, functions, and grants belong in the
 SQL contract rather than a second prose copy here.

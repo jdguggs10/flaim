@@ -13,7 +13,7 @@ migrations.
 The [reconciliation manifest](./reconciliation.md) records the live objects
 represented by this baseline and its one intentional omission.
 
-The current forward contract has 25 public tables and 77 public indexes. Its
+The current forward contract has 26 public tables and 78 public indexes. Its
 FLA-308 migration adds service-role-only `espn_history_jobs` and the
 `advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
 `persist_espn_league_with_lease(...)` RPCs. The FLA-311 migration adds the
@@ -119,6 +119,52 @@ extensions, or cron jobs.
 The reproducibility proof requires both synthetic snapshot rows to contain one
 recent ESPN success and no recent failure. Applying this migration to any
 hosted database remains a separate approval gate.
+
+## ET-day analytics history
+
+The additive FLA-265 migrations preserve user-level usage at
+America/New_York day grain without changing the existing UTC rollups or the
+90-day raw-event retention policy.
+
+`public.mcp_user_daily_et` stores call counts by ET day, environment, user,
+authentication type, and nullable client name. NULL and the literal empty
+client name remain distinct. The table has RLS enabled with no policies and is
+owner-only, including no access for `service_role` or `analytics_readonly`.
+
+`analytics.history_rollup_state` is an owner-only singleton recording the
+explicit initial history date and the last fully closed ET day. It lands
+uninitialized. `public.close_mcp_user_daily_et(date, date)` performs the first
+backfill and later catch-up closes under that row's lock, rejects open days or
+ranges outside the fully available raw window, and advances the marker only
+after the replacement succeeds. The first call must declare its history start
+instead of inferring an all-time claim from the oldest raw row.
+
+`analytics.dashboard_payload_history(boolean)` is an owner-only parity sibling,
+not the active dashboard function. Once history is initialized, it reads the
+ET aggregate through the marker and raw ET days strictly after it. It fails
+closed when history is uninitialized or too stale to bridge from retained raw
+events. Existing raw recent-use windows, UTC `client_mix`, seven-day health,
+provider state, connector state, and league summaries keep their current
+sources. The historical `health_summary` and `tool_health` keys use exact
+trailing 30-day raw data and add `health_window_days: 30` to disclose that
+window. `user_concentration` keeps call-count ranking; equal-call user rank
+order remains unspecified, while equal-weight client modes use a stable lexical
+tie-break after ignoring NULL client names.
+
+Neither migration backfills data, replaces `analytics.dashboard_payload()`,
+refreshes a snapshot, creates a cron job, or activates a schedule. Initial
+backfill, parity acceptance, reader switching, and scheduling are separate
+promotion gates.
+
+The reviewed activation artifacts live outside the migration path:
+`cron/analytics-history.sql` schedules history preservation only after an
+explicit initial close/backfill has been verified,
+while `cron/analytics-history-cutover.sql` performs the separately gated reader
+switch. Before an approved cutover, capture the exact existing
+`analytics.dashboard_payload(boolean)` definition as the rollback source.
+Restoring that raw-only definition is history-safe only while raw events still
+cover the full declared history; after pruning, it cannot reconstruct or serve
+the preserved older days and must not be presented as a complete rollback.
 
 ## Analytics snapshot cadence
 
