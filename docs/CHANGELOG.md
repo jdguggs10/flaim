@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ET-Day Analytics History Preservation (FLA-265)
+
+- **Added**: An owner-only permanent aggregate preserves MCP call counts at America/New_York day and user grain while retaining environment, authentication type, and nullable client identity. A private singleton records the explicit initial history date and last fully closed ET day; its serialized close/backfill function catches up missed days, rejects partial or no-longer-fully-retained ranges, and advances the marker only after replacement succeeds.
+- **Added**: An inactive owner-only `dashboard_payload_history(boolean)` parity sibling reads the aggregate through its marker and raw events after it without overlap. It fails closed until the first explicit backfill succeeds or when the marker falls beyond the recoverable raw window.
+- **Changed**: In the sibling payload only, historical health summary and per-tool health use exact trailing 30-day raw events and disclose `health_window_days: 30`. Existing seven-day health, recent 1/7/30-day usage, UTC client mix, operational metrics, raw 90-day retention, active dashboard payload, snapshot refresh, and cron schedules are unchanged.
+
 ### Sleeper Connected-League Authorization (FLA-104)
 
 - **Changed**: Sleeper league-scoped MCP reads now verify the requested league, sport, and season against the authenticated user's stored, discovered records for their current configured Sleeper identity before calling Sleeper's public API. The authorization lookup does not run provider discovery or enrich legacy rows. Historical discovered seasons remain available; explicitly hidden leagues remain unavailable. League-wide analysis inside an authorized league, including opponent rosters and matchups, is unchanged.

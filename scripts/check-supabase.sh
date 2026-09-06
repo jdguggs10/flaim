@@ -193,6 +193,7 @@ for reset_number in 1 2; do
 
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ESPN_HISTORY_JOBS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ACCOUNT_DELETIONS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
+  docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < supabase/tests/analytics_history.sql >> "${tmp_dir}/snapshot-${reset_number}.txt"
 done
 
 if ! diff -u \
@@ -206,6 +207,8 @@ bash "${CUTOVER_GUARD_PROOF_SH}"
 
 bash supabase/tests/token_rpc_concurrency.sh
 bash supabase/tests/account_deletions_concurrency.sh
+bash supabase/tests/analytics_history_concurrency.sh
+bash supabase/tests/analytics_history_guard.sh
 
 corepack pnpm exec supabase db lint \
   --local \

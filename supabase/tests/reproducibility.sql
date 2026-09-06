@@ -14,16 +14,16 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'r';
-  if actual_count <> 25 then
-    raise exception 'expected 25 public tables, found %', actual_count;
+  if actual_count <> 26 then
+    raise exception 'expected 26 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'r';
-  if actual_count <> 3 then
-    raise exception 'expected 3 analytics tables, found %', actual_count;
+  if actual_count <> 4 then
+    raise exception 'expected 4 analytics tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -46,8 +46,8 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.prokind = 'f';
-  if actual_count <> 25 then
-    raise exception 'expected 25 public functions, found %', actual_count;
+  if actual_count <> 26 then
+    raise exception 'expected 26 public functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -56,25 +56,25 @@ begin
   where n.nspname = 'analytics' and p.prokind = 'f';
   -- dashboard_payload, refresh_dashboard_snapshot(), the FLA-264 per-variant
   -- refresh_dashboard_snapshot(boolean), provider_flags_payload, and
-  -- refresh_provider_flags_snapshot.
-  if actual_count <> 5 then
-    raise exception 'expected 5 analytics functions, found %', actual_count;
+  -- refresh_provider_flags_snapshot, plus the inactive history payload.
+  if actual_count <> 6 then
+    raise exception 'expected 6 analytics functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
-  if actual_count <> 77 then
-    raise exception 'expected 77 public indexes, found %', actual_count;
+  if actual_count <> 78 then
+    raise exception 'expected 78 public indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'i';
-  if actual_count <> 3 then
-    raise exception 'expected 3 analytics indexes, found %', actual_count;
+  if actual_count <> 4 then
+    raise exception 'expected 4 analytics indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -91,8 +91,8 @@ begin
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relrowsecurity;
-  if actual_count <> 25 then
-    raise exception 'expected RLS on all 25 public tables, found %', actual_count;
+  if actual_count <> 26 then
+    raise exception 'expected RLS on all 26 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -395,11 +395,13 @@ begin
       ('public.archived_leagues', 1),
       ('public.mcp_tool_events', 3),
       ('public.mcp_user_daily', 1),
+      ('public.mcp_user_daily_et', 0),
       ('public.mcp_tool_daily', 3),
       ('public.provider_sync_state', 2),
       ('analytics.dashboard_snapshot', 2),
       ('analytics.provider_flags_snapshot', 2),
-      ('analytics.internal_users', 1)
+      ('analytics.internal_users', 1),
+      ('analytics.history_rollup_state', 1)
     ) expected(relation_name, expected_count)
   loop
     execute format('select count(*) from %s', relation_name)
