@@ -11,6 +11,10 @@
 
 begin;
 
+-- Keep today's synthetic seed events for raw-after-marker parity after the
+-- controlled oldest-row boundary fixture has been removed.
+create temp table history_seed_events as select * from public.mcp_tool_events;
+
 -- Existing concentration rank ties have no secondary ORDER BY. Compare the
 -- complete tied-row multiset, while checking rank/cumulative math separately.
 create function pg_temp.history_comparable_payload(payload jsonb)
@@ -45,6 +49,8 @@ declare
   v_marker date;
   v_rows_before bigint;
   v_rows_after bigint;
+  v_partial_boundary_ts timestamptz;
+  v_partial_et_day date;
   v_raw jsonb;
   v_history jsonb;
   v_external_before jsonb;
@@ -55,8 +61,10 @@ begin
   -- Keep the fixture namespace narrow. The new aggregate and its singleton
   -- state are reset inside this rollback-only proof; production code never
   -- truncates either relation.
-  delete from public.mcp_tool_events
-  where user_id like 'history-proof-%';
+  -- This rollback-only proof needs a controlled oldest raw row for the
+  -- partial-retention boundary case below. No caller-visible state survives
+  -- the enclosing transaction.
+  delete from public.mcp_tool_events;
   delete from public.account_deletions
   where clerk_user_id like 'history-proof-%';
   delete from analytics.internal_users
@@ -118,6 +126,58 @@ begin
   ) or exists (select 1 from public.mcp_user_daily_et) then
     raise exception 'stale initial-range rejection changed history state or data';
   end if;
+
+  -- A row can still be physically present at the retention boundary while its
+  -- ET day is incomplete. Its timestamp is just inside now()-90 days, but its
+  -- ET midnight is earlier than that cutoff. Closing that day must fail; so
+  -- must skipping it, because the raw minimum proves an omission. This is a
+  -- deliberate fail-closed boundary, not a request to preserve a partial day.
+  v_partial_boundary_ts := now() - interval '90 days' + interval '1 microsecond';
+  v_partial_et_day := (v_partial_boundary_ts at time zone 'America/New_York')::date;
+  if (v_partial_et_day::timestamp at time zone 'America/New_York') >= now() - interval '90 days' then
+    raise exception 'partial-retention fixture did not land in a partially retained ET day';
+  end if;
+  insert into public.mcp_tool_events (
+    ts, env, user_id, auth_type, client_name, tool_name, platform, sport,
+    status, error_code, latency_ms, league_hash
+  ) values (
+    v_partial_boundary_ts,
+    'prod', 'history-proof-partial-retention', 'oauth', 'Claude', 'get_roster',
+    'espn', 'football', 'ok', null, 100, 'history-proof-league'
+  );
+  begin
+    perform public.close_mcp_user_daily_et(v_yesterday_et, v_partial_et_day);
+    raise exception 'partial-retention initial day unexpectedly succeeded';
+  exception
+    when others then
+      if sqlerrm = 'partial-retention initial day unexpectedly succeeded' then
+        raise;
+      elsif sqlerrm <> 'analytics history close starts before the fully available 90-day raw window' then
+        raise;
+      end if;
+  end;
+  begin
+    perform public.close_mcp_user_daily_et(v_yesterday_et, v_partial_et_day + 1);
+    raise exception 'partial-retention omission unexpectedly succeeded';
+  exception
+    when others then
+      if sqlerrm = 'partial-retention omission unexpectedly succeeded' then
+        raise;
+      elsif sqlerrm <> 'initial_history_start_et_day must not omit available raw event history' then
+        raise;
+      end if;
+  end;
+  if exists (
+    select 1
+    from analytics.history_rollup_state
+    where id and (initial_history_start_et_day is not null or last_closed_et_day is not null)
+  ) or exists (select 1 from public.mcp_user_daily_et) then
+    raise exception 'partial-retention rejections changed history state or data';
+  end if;
+  delete from public.mcp_tool_events
+  where user_id = 'history-proof-partial-retention';
+  insert into public.mcp_tool_events overriding system value
+  select * from pg_temp.history_seed_events;
 
   -- All fixture events land in the current fully retained interval. The raw
   -- writer owns `ts`; these explicit values model the rows it has already

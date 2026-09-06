@@ -11,6 +11,7 @@ readonly ACTIVATE_SQL="supabase/cron/analytics-history.sql"
 readonly CUTOVER_SQL="supabase/cron/analytics-history-cutover.sql"
 readonly CLOSE_JOB="mcp-et-history-close"
 readonly CLOSE_COMMAND="select public.close_mcp_user_daily_et();"
+readonly GUARD_USER="history-guard-close"
 
 tmp_dir="$(mktemp -d)"
 original_payload_sql="${tmp_dir}/dashboard_payload_before.sql"
@@ -53,6 +54,13 @@ reset_history_state() {
   "
 }
 
+clear_guard_fixture() {
+  psql_quiet "
+    delete from public.mcp_tool_events
+    where user_id = '${GUARD_USER}';
+  "
+}
+
 restore_payload() {
   if [[ -s "${original_payload_sql}" ]]; then
     docker exec -i "${DB_CONTAINER}" \
@@ -64,6 +72,7 @@ restore_payload() {
 cleanup() {
   restore_payload || true
   clear_history_job || true
+  clear_guard_fixture || true
   reset_history_state || true
   rm -rf "${tmp_dir}"
 }
@@ -105,6 +114,7 @@ await_command_success() {
 }
 
 clear_history_job
+clear_guard_fixture
 reset_history_state
 
 # Save the exact pre-cutover body. The cutover artifact deliberately preserves
@@ -181,13 +191,53 @@ if [[ "$(psql_value "select md5(pg_get_functiondef('analytics.dashboard_payload(
   exit 1
 fi
 
-# pg_cron accepts sub-minute schedules locally. Run the real close command once
-# at one-second cadence, then put the same job back on the exact production
-# cadence. The job id and its matching command history remain intact.
+# pg_cron accepts sub-minute schedules locally. Make yesterday genuinely
+# unclosed and add a unique raw event before running the real close command.
+# A bare successful no-op would not prove the activation path can advance the
+# marker or persist a daily summary.
+psql_quiet "
+  update analytics.history_rollup_state
+  set last_closed_et_day = (now() at time zone 'America/New_York')::date - 2,
+      updated_at = now()
+  where id;
+  insert into public.mcp_tool_events (
+    ts, env, user_id, auth_type, client_name, tool_name, platform, sport,
+    status, error_code, latency_ms, league_hash
+  ) values (
+    (((now() at time zone 'America/New_York')::date - 1)::timestamp + interval '12 hours')
+      at time zone 'America/New_York',
+    'prod', '${GUARD_USER}', 'oauth', 'guard', 'get_roster', 'espn',
+    'football', 'ok', null, 1, 'history-guard-close'
+  );
+"
+
+# Run the real close command once at one-second cadence, then put the same job
+# back on the exact production cadence. The job id and its matching command
+# history remain intact.
 psql_quiet "
   select cron.schedule('${CLOSE_JOB}', '1 seconds', \$job\$${CLOSE_COMMAND}\$job\$);
 "
 await_command_success "${CLOSE_COMMAND}"
+if [[ "$(psql_value "
+  select last_closed_et_day = (now() at time zone 'America/New_York')::date - 1
+  from analytics.history_rollup_state
+  where id;
+")" != "t" ]]; then
+  printf 'analytics-history guard: successful close did not advance the ET marker through yesterday.\n' >&2
+  exit 1
+fi
+if [[ "$(psql_value "
+  select count(*)::text || '|' || coalesce(sum(call_count), 0)::text
+  from public.mcp_user_daily_et
+  where et_day = (now() at time zone 'America/New_York')::date - 1
+    and env = 'prod'
+    and user_id = '${GUARD_USER}'
+    and auth_type = 'oauth'
+    and client_name = 'guard';
+")" != "1|1" ]]; then
+  printf 'analytics-history guard: successful close did not persist exactly one synthetic yesterday summary.\n' >&2
+  exit 1
+fi
 psql_quiet "
   select cron.schedule('${CLOSE_JOB}', '0 6 * * *', \$job\$${CLOSE_COMMAND}\$job\$);
 "
