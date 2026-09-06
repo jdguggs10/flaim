@@ -111,7 +111,9 @@ acquire the identical per-user advisory lock via the shared
 `account_deletion_lock_key(text)` helper, which is what makes "delete this
 account" and "write for this account" mutually exclusive. Usage-analytics
 tables (`mcp_tool_events`, `mcp_user_daily`, `mcp_tool_daily`,
-`analytics.internal_users`) are explicitly out of scope for this purge.
+`mcp_user_daily_et`, `analytics.internal_users`) and the global
+`analytics.history_rollup_state` progress marker are explicitly out of scope
+for this purge and its anti-resurrection guards.
 
 ## Analytics
 
@@ -122,8 +124,14 @@ client mix, tool health, funnel, platform, sport, and user concentration
 metrics.
 
 `mcp_user_daily_et` is an owner-only permanent aggregate at
-America/New_York day, environment, user, authentication type, and nullable
-client-name grain. The owner-only `analytics.history_rollup_state` singleton
+America/New_York day, environment, user, authentication type, nullable client
+name, platform, and sport grain. NULL and empty values remain distinct.
+Platform and sport preserve event attribution for future segmented reporting;
+they do not identify every call or a league's season year. Current dashboard
+metrics sum across these dimensions and keep their existing definitions.
+The dimension migration requires empty, uninitialized history rather than
+silently assigning unknown dimensions to previously closed days.
+The owner-only `analytics.history_rollup_state` singleton
 records its explicit initial history date and last fully closed ET day.
 `close_mcp_user_daily_et(date, date)` serializes initial backfill and later
 catch-up closes against that state. Both relations use RLS with no policies;

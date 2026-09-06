@@ -245,6 +245,35 @@ begin
       'prod', 'history-proof-internal', 'oauth', 'Claude', 'get_free_agents', 'espn', 'football', 'ok', null, 101, 'history-proof-league'),
     ((v_start_et::timestamp + interval '5 days 16 hours') at time zone 'America/New_York',
       'prod', 'history-proof-internal', 'oauth', 'Claude', 'get_free_agents', 'espn', 'football', 'ok', null, 101, 'history-proof-league'),
+    -- The durable grain keeps platform and sport even when every preceding
+    -- identity dimension is the same. NULL and literal-empty dimensions also
+    -- stay distinct, so historical rows cannot silently merge two sources.
+    ((v_start_et::timestamp + interval '16 hours') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', 'espn', 'football', 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 1 minute') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', 'espn', 'football', 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 2 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', 'yahoo', 'baseball', 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 3 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', 'yahoo', 'baseball', 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 4 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', 'yahoo', 'baseball', 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 5 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', null, null, 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 6 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', null, null, 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 7 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', null, null, 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 8 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', null, null, 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 9 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', null, '', 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 10 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', '', null, 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 11 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', '', '', 'ok', null, 100, 'history-proof-league'),
+    ((v_start_et::timestamp + interval '16 hours 12 minutes') at time zone 'America/New_York',
+      'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', 'get_roster', '', '', 'ok', null, 100, 'history-proof-league'),
     ((v_start_et::timestamp + interval '4 days 17 hours') at time zone 'America/New_York',
       'preview', 'history-proof-nonprod', 'api_key', 'Preview Client', 'get_roster', 'espn', 'football', 'ok', null, 100, 'history-proof-league');
 
@@ -265,6 +294,49 @@ begin
   if v_marker <> v_yesterday_et then
     raise exception 'first history close stored marker %, expected %', v_marker, v_yesterday_et;
   end if;
+
+  if (
+    select count(*)
+    from public.mcp_user_daily_et
+    where et_day = v_start_et
+      and env = 'prod'
+      and user_id = 'history-proof-dimensions'
+      and auth_type = 'oauth'
+      and client_name = 'Dimensions'
+  ) <> 6 then
+    raise exception 'platform/sport dimensions did not produce six distinct daily groups';
+  end if;
+  if exists (
+    select 1
+    from (values
+      ('espn'::text, 'football'::text, 2::bigint),
+      ('yahoo'::text, 'baseball'::text, 3::bigint),
+      (null::text, null::text, 4::bigint),
+      (null::text, ''::text, 1::bigint),
+      (''::text, null::text, 1::bigint),
+      (''::text, ''::text, 2::bigint)
+    ) expected(platform, sport, call_count)
+    left join public.mcp_user_daily_et as d
+      on d.et_day = v_start_et
+      and d.env = 'prod'
+      and d.user_id = 'history-proof-dimensions'
+      and d.auth_type = 'oauth'
+      and d.client_name = 'Dimensions'
+      and (d.platform, d.sport) is not distinct from (expected.platform, expected.sport)
+    where d.call_count is distinct from expected.call_count
+  ) then
+    raise exception 'platform/sport daily grouping lost a NULL or empty dimension distinction';
+  end if;
+  begin
+    insert into public.mcp_user_daily_et (
+      et_day, env, user_id, auth_type, client_name, platform, sport, call_count
+    ) values (
+      v_start_et, 'prod', 'history-proof-dimensions', 'oauth', 'Dimensions', null, null, 1
+    );
+    raise exception 'daily grain accepted a duplicate all-NULL platform/sport key';
+  exception
+    when unique_violation then null;
+  end;
 
   v_raw := analytics.dashboard_payload(false);
   v_history := analytics.dashboard_payload_history(false);

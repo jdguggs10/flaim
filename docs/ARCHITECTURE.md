@@ -227,6 +227,7 @@ fantasy-mcp tool call → waitUntil(POST /internal/usage-event) → auth-worker 
 - **Two tiers:** raw `mcp_tool_events` is pruned after 90 days; `pg_cron` rolls each UTC day into the permanent, tiny `mcp_user_daily` / `mcp_tool_daily` rollups.
 - **ET history prepared, not active:** the database contract also contains an owner-only `mcp_user_daily_et` aggregate and serialized close/backfill function. Its state lands uninitialized, no close cron is created, and the current dashboard payload still reads its existing sources. An owner-only parity sibling can combine closed ET summaries with raw days after the marker once an explicit initial backfill has succeeded.
 - **Health stays exact:** the parity sibling keeps latency and error health on raw events, using a disclosed 30-day window for the historical health keys and the existing seven-day window for recent health. It does not combine stored percentiles.
+- **Attribution retained:** ET summaries also preserve nullable platform and sport from each event. Missing attribution stays unknown; it is not inferred from current connections. Existing dashboard metrics sum across these dimensions.
 - **Telemetry only:** tool, platform, sport, status, latency, and a hashed league id — never rosters, players, or question text.
 
 Schema is summarized in `docs/DATABASE.md`; the reviewed, secret-free
