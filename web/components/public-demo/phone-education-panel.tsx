@@ -2,14 +2,9 @@
 
 import type { PublicChatDemoSport } from "@/lib/public-chat";
 import type { PublicDemoSportOption } from "@/lib/public-demo-client";
+import { SportIcon } from "@/components/site/sport-icon";
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import {
-  IconBallAmericanFootball,
-  IconBallBaseball,
-  IconBallBasketball,
-  IconIceSkating,
-} from "@tabler/icons-react";
 import { Database, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, type RefObject } from "react";
@@ -55,8 +50,8 @@ interface PhoneEducationPanelProps {
 }
 
 const SPORT_CHOOSER_ICONS: Record<PublicChatDemoSport, React.ReactNode> = {
-  football: <IconBallAmericanFootball className="h-5 w-5" stroke={1.5} />,
-  baseball: <IconBallBaseball className="h-5 w-5" stroke={1.5} />,
+  football: <SportIcon sport="football" className="h-5 w-5" />,
+  baseball: <SportIcon sport="baseball" className="h-5 w-5" />,
 };
 
 // Basketball and hockey aren't real demo sports yet (see
@@ -66,12 +61,12 @@ const SPORTS_PANEL_COMING_SOON = [
   {
     key: "basketball",
     label: "Basketball",
-    icon: <IconBallBasketball className="h-5 w-5" stroke={1.5} />,
+    icon: <SportIcon sport="basketball" className="h-5 w-5" />,
   },
   {
     key: "hockey",
     label: "Hockey",
-    icon: <IconIceSkating className="h-5 w-5" stroke={1.5} />,
+    icon: <SportIcon sport="hockey" className="h-5 w-5" />,
   },
 ] as const;
 

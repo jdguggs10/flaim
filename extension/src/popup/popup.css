@@ -353,9 +353,11 @@ body {
 }
 
 
-.league-item .sport-emoji {
-  font-size: 18px;
-  line-height: 1;
+.league-item .sport-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: hsl(var(--muted-foreground));
 }
 
 .league-item .league-info {

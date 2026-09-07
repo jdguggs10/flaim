@@ -9,6 +9,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
 - **Verified**: Grok completes the Flaim authorization flow through the exact observed OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, and can use the authenticated `get_user_session` tool without calling `refresh_leagues`.
 
+### Consistent Sport Icons
+
+- **Changed**: Sport indicators use monochrome Tabler outline icons across league management, the public demo, and the extension popup. Hockey uses the matching ice-skate icon. Existing sport labels remain, and icon-only popup indicators have accessible names.
+- **Changed**: The ChatGPT "Your Leagues" widget is redesigned and ships through the existing v1–v3 resources rather than a new URI. It gains a compact header, full-width sport heading bands with the Tabler sport icons, fixed-height league rows with soft provider badges, a single continuous footer whose first sentence is the refresh control, an accessible refresh status region, and a dark palette driven by the host theme with a `prefers-color-scheme` fallback.
+- **Changed**: The frozen-widget-body policy is retired. A backward-compatible content update at an already-published resource URI needs no resubmission, and cached client copies refresh on their own. What stays frozen per URI is the read-result metadata OpenAI snapshots (`ui.csp`, `openai/widgetDescription`, `openai/widgetCSP`), which is unchanged here.
+- **Preserved**: v1 and v2 declare only `https://flaim.app` as a redirect domain, so their body names Yahoo Fantasy, ESPN, and Sleeper as plain text; v3 also declares `https://sports.yahoo.com`, so only its body links the Yahoo Fantasy credit. The tool descriptor still targets v3, and tool names, descriptions, schemas, and annotations are untouched.
+
 ### Gemini Custom Connector Callback
 
 - **Fixed**: Accept Gemini Spark's Google-hosted, user-bound OAuth callback for Flaim's production MCP endpoint. Only the numeric account identifier varies; the host and Flaim suffix are pinned, and alternate paths, ports, queries, and fragments remain blocked.

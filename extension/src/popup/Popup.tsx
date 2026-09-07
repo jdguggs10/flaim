@@ -36,13 +36,129 @@ type State =
   | 'setup_complete'
   | 'setup_error';
 
-// Sport to emoji mapping
-const sportEmoji: Record<string, string> = {
-  football: '🏈',
-  baseball: '⚾',
-  basketball: '🏀',
-  hockey: '🏒',
+type SportIconDefinition = {
+  label: string;
+  paths: readonly string[];
 };
+
+/*!
+ * @license @tabler/icons-react v3.41.1 - MIT
+ *
+ * Copyright (c) 2020-2026 Paweł Kuna
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+const SPORT_ICONS = new Map<string, SportIconDefinition>([
+  [
+    'football',
+    {
+      label: 'Football',
+      paths: [
+        'M15 9l-6 6',
+        'M10 12l2 2',
+        'M12 10l2 2',
+        'M8 21a5 5 0 0 0 -5 -5',
+        'M16 3c-7.18 0 -13 5.82 -13 13a5 5 0 0 0 5 5c7.18 0 13 -5.82 13 -13a5 5 0 0 0 -5 -5',
+        'M16 3a5 5 0 0 0 5 5',
+      ],
+    },
+  ],
+  [
+    'baseball',
+    {
+      label: 'Baseball',
+      paths: [
+        'M5.636 18.364a9 9 0 1 0 12.728 -12.728a9 9 0 0 0 -12.728 12.728',
+        'M12.495 3.02a9 9 0 0 1 -9.475 9.475',
+        'M20.98 11.505a9 9 0 0 0 -9.475 9.475',
+        'M9 9l2 2',
+        'M13 13l2 2',
+        'M11 7l2 1',
+        'M7 11l1 2',
+        'M16 11l1 2',
+        'M11 16l2 1',
+      ],
+    },
+  ],
+  [
+    'basketball',
+    {
+      label: 'Basketball',
+      paths: [
+        'M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0',
+        'M5.65 5.65l12.7 12.7',
+        'M5.65 18.35l12.7 -12.7',
+        'M12 3a9 9 0 0 0 9 9',
+        'M3 12a9 9 0 0 1 9 9',
+      ],
+    },
+  ],
+  [
+    'hockey',
+    {
+      label: 'Hockey',
+      paths: [
+        'M5.905 5h3.418a1 1 0 0 1 .928 .629l1.143 2.856a3 3 0 0 0 2.207 1.83l4.717 .926a2.084 2.084 0 0 1 1.682 2.045v.714a1 1 0 0 1 -1 1h-13.895a1 1 0 0 1 -1 -1.1l.8 -8a1 1 0 0 1 1 -.9',
+        'M3 19h17a1 1 0 0 0 1 -1',
+        'M9 15v4',
+        'M15 15v4',
+      ],
+    },
+  ],
+]);
+
+const FALLBACK_SPORT_ICON: SportIconDefinition = {
+  label: 'Fantasy',
+  paths: [
+    'M8 21l8 0',
+    'M12 17l0 4',
+    'M7 4l10 0',
+    'M17 4v8a5 5 0 0 1 -10 0v-8',
+    'M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+    'M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+  ],
+};
+
+function SportIcon({ sport }: { sport: string }) {
+  // Discovered leagues come straight from the API response, so a missing
+  // sport must fall back rather than throw.
+  const definition = SPORT_ICONS.get(sport?.toLowerCase()) ?? FALLBACK_SPORT_ICON;
+
+  return (
+    <svg
+      aria-label={`${definition.label} league`}
+      className="sport-icon"
+      fill="none"
+      focusable="false"
+      role="img"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+      viewBox="0 0 24 24"
+    >
+      {definition.paths.map((d) => (
+        <path d={d} key={d} />
+      ))}
+    </svg>
+  );
+}
 
 // Cap error message length and provide fallbacks for unexpected errors
 function sanitizeError(msg: string, fallback: string): string {
@@ -659,7 +775,7 @@ export default function Popup() {
                       key={`${league.sport}-${league.leagueId}-${league.seasonYear}`}
                       className="league-item"
                     >
-                      <span className="sport-emoji">{sportEmoji[league.sport] || '🏆'}</span>
+                      <SportIcon sport={league.sport} />
                       <div className="league-info">
                         <span className="league-name">{league.leagueName}</span>
                         <span className="team-name">Team: {league.teamName}</span>

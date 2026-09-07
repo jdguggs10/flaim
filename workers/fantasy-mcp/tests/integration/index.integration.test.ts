@@ -532,8 +532,8 @@ describe('fantasy-mcp gateway integration', () => {
         body: LEGACY_USER_SESSION_WIDGET_HTML,
         hasDescription: false,
         redirectDomains: ['https://flaim.app'],
-        hasAttribution: false,
-        frozen: true,
+        linksYahoo: false,
+        frozenLegacyMeta: true,
       },
       {
         uri: V2_USER_SESSION_WIDGET_URI,
@@ -541,8 +541,8 @@ describe('fantasy-mcp gateway integration', () => {
         body: LEGACY_USER_SESSION_WIDGET_HTML,
         hasDescription: true,
         redirectDomains: ['https://flaim.app'],
-        hasAttribution: false,
-        frozen: true,
+        linksYahoo: false,
+        frozenLegacyMeta: true,
       },
       {
         uri: USER_SESSION_WIDGET_URI,
@@ -550,8 +550,8 @@ describe('fantasy-mcp gateway integration', () => {
         body: USER_SESSION_WIDGET_HTML,
         hasDescription: true,
         redirectDomains: ['https://flaim.app', 'https://sports.yahoo.com'],
-        hasAttribution: true,
-        frozen: false,
+        linksYahoo: true,
+        frozenLegacyMeta: false,
       },
     ] as const;
     expect(new Set(listPayload.result?.resources?.map((item) => item.uri))).toEqual(
@@ -596,7 +596,14 @@ describe('fantasy-mcp gateway integration', () => {
         resource_domains: [],
         redirect_domains: widget.redirectDomains,
       });
-      if (widget.frozen) {
+      // Every body credits the three providers; only a URI whose published
+      // widget CSP allows the Yahoo redirect domain may link the credit.
+      expect(content?.text).toContain(
+        widget.linksYahoo
+          ? 'Fantasy data provided by <a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>, ESPN, and Sleeper.'
+          : 'Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
+      );
+      if (widget.frozenLegacyMeta) {
         // Frozen published contracts (v1: original submission; v2: v2.1
         // submission): the read-result _meta must stay byte-identical to the
         // snapshots OpenAI scanned — strict-equal on the whole object so no
@@ -618,22 +625,40 @@ describe('fantasy-mcp gateway integration', () => {
             redirect_domains: ['https://flaim.app'],
           },
         });
-        // The frozen v1/v2 bodies stay attribution-free by design: published
-        // clients cached on these URIs keep rendering their scanned bytes.
-        expect(content?.text).not.toContain('Fantasy data provided by');
+        // The v1/v2 body carries no link the frozen v1/v2 CSP does not
+        // allow: every URL in it points at flaim.app.
+        expect(content?.text).not.toContain('sports.yahoo.com');
+        expect(
+          Array.from(new Set((content?.text?.match(/https?:\/\/[^"'\s<>)]+/g) || []).map((url) => new URL(url).origin)))
+        ).toEqual(['https://flaim.app']);
       } else {
-        expect(content?._meta?.['openai/widgetDescription']).toBe(
-          'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
-        );
-        // Provider attribution footer ships on the v3 body only.
-        expect(content?.text).toContain(
-          'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
-        );
+        // v3 is published too, so its read-result _meta is frozen on the same
+        // terms — strict-equal on the whole object, written out literally so
+        // an added or removed key cannot pass unnoticed.
+        expect(content?._meta).toEqual({
+          ui: {
+            csp: {
+              connectDomains: [],
+              resourceDomains: [],
+            },
+          },
+          'openai/widgetDescription':
+            'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+          'openai/widgetCSP': {
+            connect_domains: [],
+            resource_domains: [],
+            redirect_domains: ['https://flaim.app', 'https://sports.yahoo.com'],
+          },
+        });
+        // Nothing in the v3 body reaches past the two domains its CSP allows.
+        expect(
+          Array.from(new Set((content?.text?.match(/https?:\/\/[^"'\s<>)]+/g) || []).map((url) => new URL(url).origin))).sort()
+        ).toEqual(['https://flaim.app', 'https://sports.yahoo.com']);
       }
     }
     expect(widgetBodies).toHaveLength(3);
-    // v1 and v2 share the frozen body; v3 is that body plus the provider
-    // attribution footer.
+    // v1 and v2 serve the identical flaim-only body; v3 differs only by the
+    // Yahoo Fantasy link its published CSP allows.
     expect(widgetBodies[1]).toBe(widgetBodies[0]);
     expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
@@ -683,7 +708,7 @@ describe('fantasy-mcp gateway integration', () => {
       widgetBodies.push(content?.text || '');
     }
     expect(widgetBodies).toHaveLength(3);
-    // v1/v2 stay frozen; v3 adds the provider attribution footer.
+    // v1/v2 share one body; v3 adds the linked Yahoo Fantasy credit.
     expect(widgetBodies[1]).toBe(widgetBodies[0]);
     expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
@@ -779,10 +804,10 @@ describe('fantasy-mcp gateway integration', () => {
 
   it('HTTP fallback widget routes serve the current attributed body', async () => {
     // These version-less routes are a fallback for HTTP-fetching clients and
-    // deliberately track the CURRENT widget: live fetches must carry the
+    // deliberately serve the v3 body: live fetches must carry the linked
     // provider attribution the Yahoo agreement requires on rendering
-    // surfaces. Only the immutable ui://widget/... resource URIs serve the
-    // frozen v1/v2 contracts. Pinned so a future body change is deliberate.
+    // surfaces. The flaim-only body is reachable only through the v1/v2
+    // resource URIs, whose frozen CSP cannot allow the Yahoo link.
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
 
@@ -797,7 +822,7 @@ describe('fantasy-mcp gateway integration', () => {
       const body = await response.text();
       expect(body).toBe(USER_SESSION_WIDGET_HTML);
       expect(body).toContain(
-        'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
+        'Fantasy data provided by <a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>, ESPN, and Sleeper.'
       );
     }
     expect(authFetch).not.toHaveBeenCalled();

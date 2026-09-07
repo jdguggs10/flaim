@@ -601,10 +601,10 @@ app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
 });
 
 // Widget HTML endpoint (fallback for HTTP-fetching clients). Deliberately
-// version-less: serves the CURRENT widget body, so live fetches carry the
-// provider attribution the Yahoo agreement requires on rendering surfaces.
-// The frozen v1/v2 contracts are only reachable via their immutable
-// ui://widget/... resource URIs, which cached ChatGPT clients pin.
+// version-less: serves the v3 body, so live fetches carry the linked provider
+// attribution the Yahoo agreement requires on rendering surfaces. The v1/v2
+// body, whose published widget CSP cannot allow the Yahoo link, is only
+// reachable through its own ui://widget/... resource URIs.
 app.get('/widgets/user-session', (c) => {
   return c.html(USER_SESSION_WIDGET_HTML);
 });

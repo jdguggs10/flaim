@@ -3,6 +3,7 @@ import {
   PhoneDemoFrame,
   PhoneFlaimMark,
 } from "@/components/site/phone-demo-frame";
+import { SportIcon } from "@/components/site/sport-icon";
 import {
   type PublicChatDemoPlatform,
   type PublicChatDemoSport,
@@ -24,7 +25,6 @@ import {
 } from "@/lib/public-demo-client";
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { IconBallBaseball, IconBallAmericanFootball } from "@tabler/icons-react";
 import {
   ArrowUp,
   Copy,
@@ -84,8 +84,8 @@ const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
   { icon: React.ReactNode }
 > = {
-  baseball: { icon: <IconBallBaseball className="h-5 w-5" stroke={1.5} /> },
-  football: { icon: <IconBallAmericanFootball className="h-5 w-5" stroke={1.5} /> },
+  baseball: { icon: <SportIcon sport="baseball" className="h-5 w-5" /> },
+  football: { icon: <SportIcon sport="football" className="h-5 w-5" /> },
 };
 
 function formatRelativeUpdateTime(value: string) {
