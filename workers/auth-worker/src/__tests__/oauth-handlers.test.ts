@@ -25,6 +25,23 @@ const cursorRedirectUri = 'cursor://anysphere.cursor-mcp/oauth/abc123/callback';
 const taskletRelayRedirectUri = 'https://flaim-relay.onrender.com/oauth/callback';
 const geminiSparkRedirectUri =
   'https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-123456789012345678901-api_flaim_app';
+const grokRedirectUri = 'https://grok.com/connectors-oauth-exchange-code/';
+const grokInvalidRedirectUris = [
+  'https://grok.com/connectors-oauth-exchange-code',
+  'https://www.grok.com/connectors-oauth-exchange-code/',
+  'https://sub.grok.com/connectors-oauth-exchange-code/',
+  'https://grok.com.evil.example/connectors-oauth-exchange-code/',
+  'https://grok.com/connectors-oauth-exchange-code/extra',
+  'https://grok.com/connectors-oauth-exchange-code/?next=https://evil.example',
+  'https://grok.com/connectors-oauth-exchange-code/#fragment',
+  'http://grok.com/connectors-oauth-exchange-code/',
+  'https://user@grok.com/connectors-oauth-exchange-code/',
+  'https://grok.com:443/connectors-oauth-exchange-code/',
+  'https://grok.com/ignored/../connectors-oauth-exchange-code/',
+  'https://grok.com/connectors-oauth-exchange-code/%2e%2e/',
+  'https://grok.com/connectors-oauth-exchange-code/\n',
+  'https://grok.com/connectors-oauth-exchange-code/\r\n',
+];
 const geminiSparkInvalidRedirectUris = [
   'https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp--api_flaim_app',
   'https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-account123-api_flaim_app',
@@ -175,6 +192,39 @@ describe('oauth-handlers', () => {
 
   it.each(geminiSparkInvalidRedirectUris)(
     'rejects an invalid Gemini Spark callback during DCR: %s',
+    async (redirectUri) => {
+      const res = await handleClientRegistration(buildRegisterRequest({
+        redirect_uris: [redirectUri],
+      }), env, corsHeaders);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string };
+      expect(body.error).toBe('invalid_redirect_uri');
+    }
+  );
+
+  it('registers the exact Grok callback as a public client', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [grokRedirectUri],
+      token_endpoint_auth_method: 'none',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      redirect_uris?: string[];
+      token_endpoint_auth_method?: string;
+    };
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.redirect_uris).toEqual([grokRedirectUri]);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
+  it.each(grokInvalidRedirectUris)(
+    'rejects a structurally different Grok callback during DCR: %s',
     async (redirectUri) => {
       const res = await handleClientRegistration(buildRegisterRequest({
         redirect_uris: [redirectUri],
@@ -343,6 +393,24 @@ describe('oauth-handlers', () => {
     }
   );
 
+  it.each(grokInvalidRedirectUris)(
+    'rejects a structurally different Grok callback during authorization: %s',
+    async (redirectUri) => {
+      const req = new Request(
+        'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        '&code_challenge=abc123&code_challenge_method=S256'
+      );
+      const res = await handleAuthorize(req, env);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string; error_description?: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toBe('redirect_uri is not in the allowed list');
+    }
+  );
+
   it('does not emit setup signal for no-param /authorize probes', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const req = new Request('https://api.flaim.app/authorize');
@@ -461,6 +529,26 @@ describe('oauth-handlers', () => {
       redirectUri: geminiSparkRedirectUri,
       scope: 'mcp:read',
       codeChallenge: 'gemini-challenge',
+    }));
+  });
+
+  it('starts a PKCE read-only authorization for the exact Grok callback', async () => {
+    const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      `&redirect_uri=${encodeURIComponent(grokRedirectUri)}` +
+      '&scope=mcp%3Aread&code_challenge=grok-challenge&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.pathname).toBe('/oauth/consent');
+    expect(location.searchParams.get('scope')).toBe('mcp:read');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      redirectUri: grokRedirectUri,
+      scope: 'mcp:read',
+      codeChallenge: 'grok-challenge',
     }));
   });
 
@@ -1434,6 +1522,17 @@ describe('redirect URI validation', () => {
 
   it.each(geminiSparkInvalidRedirectUris)(
     'rejects structurally different Gemini Spark callback: %s',
+    (uri) => {
+      expect(isValidRedirectUri(uri)).toBe(false);
+    }
+  );
+
+  it('accepts only the exact observed Grok callback', () => {
+    expect(isValidRedirectUri(grokRedirectUri)).toBe(true);
+  });
+
+  it.each(grokInvalidRedirectUris)(
+    'rejects structurally different Grok callback: %s',
     (uri) => {
       expect(isValidRedirectUri(uri)).toBe(false);
     }

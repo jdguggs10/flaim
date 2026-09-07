@@ -312,6 +312,13 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   });
 
   const authHeader = c.req.header('Authorization');
+  // Preview-only interoperability probe for clients that discover tools
+  // anonymously but do not recover when a later tools/call receives a 401.
+  // The exact query keeps the normal preview URL and every production request
+  // on the published anonymous-handshake behavior.
+  const requirePreviewHandshakeAuth =
+    c.env.ENVIRONMENT === 'preview'
+    && new URL(c.req.raw.url).search === '?auth=required';
   // Static widget resources are public based on method + exact URI, even when
   // a client happens to attach a stale bearer token. User-data paths still
   // require normal token introspection.
@@ -319,6 +326,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   const allowPublicHandshake =
     !authHeader &&
     !allowPublicStaticResource &&
+    !requirePreviewHandshakeAuth &&
     await isPublicMcpHandshakeRequest(c.req.raw);
   if (!authHeader && !allowPublicHandshake && !allowPublicStaticResource) {
     if (await isAuthenticatedMcpToolAttemptRequest(c.req.raw)) {

@@ -1621,6 +1621,28 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     });
   }
 
+  function buildUnauthenticatedRequest(url: string, method: string, params: Record<string, unknown> = {}): Request {
+    return new Request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: `preview-auth-required-${method}`,
+        method,
+        params,
+      }),
+    });
+  }
+
+  const initializeParams = {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'preview-auth-probe', version: '1.0.0' },
+  };
+
   it('keeps every api.flaim.app metadata body byte-identical to the scanned production surface', async () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
@@ -1663,6 +1685,67 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     expect(response.headers.get('WWW-Authenticate')).toBe(
       'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
     );
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('requires authentication for preview handshakes only on the exact auth-required query', async () => {
+    const authFetch = vi.fn();
+    const env = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
+
+    for (const [method, params] of [
+      ['initialize', initializeParams],
+      ['tools/list', {}],
+    ] as const) {
+      const response = await app.fetch(
+        buildUnauthenticatedRequest(`${PREVIEW_ORIGIN}/mcp?auth=required`, method, params),
+        env,
+        mockExecutionContext()
+      );
+
+      expect(response.status, method).toBe(401);
+      expect(response.headers.get('WWW-Authenticate'), method).toBe(
+        `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/mcp", resource_metadata="${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource"`
+      );
+    }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps normal preview and every production handshake public', async () => {
+    const authFetch = vi.fn();
+    const previewEnv = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
+
+    const normalPreviewResponse = await app.fetch(
+      buildUnauthenticatedRequest(`${PREVIEW_ORIGIN}/mcp`, 'initialize', initializeParams),
+      previewEnv,
+      mockExecutionContext()
+    );
+    expect(normalPreviewResponse.status).toBe(200);
+
+    const productionQueryResponse = await app.fetch(
+      buildUnauthenticatedRequest(`${PROD_ORIGIN}/mcp?auth=required`, 'initialize', initializeParams),
+      buildEnv(authFetch),
+      mockExecutionContext()
+    );
+    expect(productionQueryResponse.status).toBe(200);
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps public widget reads available on the preview auth-required probe', async () => {
+    const authFetch = vi.fn();
+    const env = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
+    const response = await app.fetch(
+      buildUnauthenticatedRequest(
+        `${PREVIEW_ORIGIN}/mcp?auth=required`,
+        'resources/read',
+        { uri: USER_SESSION_WIDGET_URI }
+      ),
+      env,
+      mockExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const payload = await parseJsonRpcResponse(response);
+    expect(payload.result?.contents?.some((item) => item.uri === USER_SESSION_WIDGET_URI)).toBe(true);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
