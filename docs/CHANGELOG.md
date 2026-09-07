@@ -28,6 +28,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Paced Yahoo Recovery (FLA-338)
 
 - **Added**: A temporary, service-token-only auth-worker endpoint can re-run Yahoo league discovery for accounts connected before the September 7 recovery cutoff, one account per request. It defaults to a database-only dry run, uses stable opaque cursor pagination, reuses normal per-user Yahoo leases and cooldowns, and returns sanitized provider stop signals for a renewed app denial or rate limit.
+- **Added**: Yahoo league discovery now logs a bounded slice of the upstream response body when Yahoo answers 5xx or an unclassified status, so a deterministic provider failure records Yahoo's own reason instead of a bare status. Diagnostics only: error codes, HTTP statuses, and response payloads are unchanged.
 - **Limited**: The recovery path has no cron, schema change, or permanent configuration. It preserves league archive and hidden state, never deletes omitted leagues, and expires in code after September 14 ET.
 
 ### Yahoo Availability Restored

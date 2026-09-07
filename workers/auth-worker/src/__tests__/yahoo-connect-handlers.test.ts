@@ -3117,6 +3117,49 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
     });
 
+    it('logs a bounded upstream body when Yahoo league discovery returns HTTP 500', async () => {
+      // Yahoo returns a deterministic 500 for some accounts. Logging only the
+      // status hides Yahoo's own reason, so the 5xx branch reads a bounded
+      // slice of the body for diagnostics. The response contract is unchanged:
+      // still the retryable 503 built from the classification, with no upstream
+      // text leaking into it.
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      const upstreamBody = `{"error":{"description":"${'x'.repeat(600)}"}}`;
+      mockFetch.mockResolvedValue(new Response(upstreamBody, { status: 500 }));
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('yahoo_api_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
+      expect(body.upstream_status).toBe(500);
+      expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        `[yahoo-connect] discovery upstream 500 body: ${upstreamBody.slice(0, 500)}`
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[yahoo-connect] Yahoo API error during discovery: 500'
+      );
+      // Bounded: the 601st character of the body never reaches the log line.
+      const loggedBodyLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.startsWith('[yahoo-connect] discovery upstream'));
+      expect(loggedBodyLine).toBeDefined();
+      expect(loggedBodyLine).not.toContain(upstreamBody);
+      // And it stays out of the client-facing payload.
+      expect(JSON.stringify(body)).not.toContain('xxxx');
+    });
+
     it('surfaces the app-review outage message on an application-level 403 during discovery', async () => {
       // Yahoo's approval program denies the APP platform-wide. That is not the
       // user's connection and reconnecting cannot fix it, so discovery must say
