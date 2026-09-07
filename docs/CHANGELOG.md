@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Claude League Setup
+
+- **Added**: The Your Leagues AI Apps panel now offers the same direct Claude Connector Directory link as ChatGPT, so connected users can open either official Flaim Fantasy channel from setup.
+
 ### Paced Yahoo Recovery (FLA-338)
 
 - **Added**: A temporary, service-token-only auth-worker endpoint can re-run Yahoo league discovery for accounts connected before the September 7 recovery cutoff, one account per request. It defaults to a database-only dry run, uses stable opaque cursor pagination, reuses normal per-user Yahoo leases and cooldowns, and returns sanitized provider stop signals for a renewed app denial or rate limit.
