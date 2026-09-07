@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Custom Connector Docs
+
+- **Changed**: AI setup docs group Perplexity, Gemini, and Grok settings and documentation links separately from the shared four-step custom connector setup.
+
 ### Claude League Setup
 
 - **Added**: The Your Leagues AI Apps panel now offers the same direct Claude Connector Directory link as ChatGPT, so connected users can open either official Flaim Fantasy channel from setup.

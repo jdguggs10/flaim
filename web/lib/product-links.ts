@@ -11,3 +11,12 @@ export const PERPLEXITY_CONNECTOR_SETTINGS_URL =
 
 export const PERPLEXITY_CONNECTOR_HELP_URL =
   "https://www.perplexity.ai/help-center/en/articles/13915507-adding-custom-remote-connectors";
+
+export const GEMINI_CUSTOM_APPS_URL = "https://gemini.google.com/apps";
+
+export const GEMINI_CUSTOM_APPS_HELP_URL =
+  "https://support.google.com/gemini/answer/17209137";
+
+export const GROK_CONNECTOR_SETTINGS_URL = "https://grok.com/connectors";
+
+export const GROK_CONNECTOR_HELP_URL = "https://docs.x.ai/grok/connectors";

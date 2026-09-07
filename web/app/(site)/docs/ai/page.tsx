@@ -8,6 +8,10 @@ import {
   CHATGPT_APP_URL,
   CLAUDE_CONNECTOR_DIRECTORY_URL,
   FLAIM_MCP_URL,
+  GEMINI_CUSTOM_APPS_HELP_URL,
+  GEMINI_CUSTOM_APPS_URL,
+  GROK_CONNECTOR_HELP_URL,
+  GROK_CONNECTOR_SETTINGS_URL,
   PERPLEXITY_CONNECTOR_HELP_URL,
   PERPLEXITY_CONNECTOR_SETTINGS_URL,
 } from "@/lib/product-links";
@@ -227,28 +231,21 @@ export default function AiGuidePage() {
             Custom connectors
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight">
-            Other AI apps, like Perplexity
+            Other AI apps, like Perplexity, Gemini, and Grok
           </h2>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Flaim uses Model Context Protocol (MCP), so you can add it to AI
-            apps that support remote MCP connectors with OAuth and Streamable
-            HTTP. Perplexity is one example.
+            Flaim uses Model Context Protocol (MCP). If your AI app supports
+            custom connectors or custom apps, use its links below, then follow
+            the shared setup steps.
           </p>
 
-          <div className="mt-8 rounded-2xl border bg-background p-6">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-2xl">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                  Example setup
-                </p>
-                <h3 className="mt-3 text-2xl font-semibold">Perplexity</h3>
-                <p className="mt-3 leading-7 text-muted-foreground">
-                  Add a remote connector named Flaim Fantasy, then authorize
-                  your Flaim account. Availability may depend on your
-                  Perplexity account or workspace settings.
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-3">
+          <div className="mt-8 grid gap-5 lg:grid-cols-3">
+            <article className="flex flex-col rounded-2xl border bg-background p-6">
+              <h3 className="text-xl font-semibold">Perplexity</h3>
+              <p className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">
+                Custom connectors require Perplexity Pro, Max, or Enterprise.
+              </p>
+              <div className="mt-6 grid gap-3">
                 <Button asChild>
                   <a
                     href={PERPLEXITY_CONNECTOR_SETTINGS_URL}
@@ -270,17 +267,81 @@ export default function AiGuidePage() {
                   </a>
                 </Button>
               </div>
-            </div>
+            </article>
 
+            <article className="flex flex-col rounded-2xl border bg-background p-6">
+              <h3 className="text-xl font-semibold">Gemini</h3>
+              <p className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">
+                Custom apps are available in Gemini Spark for eligible US
+                personal accounts.
+              </p>
+              <div className="mt-6 grid gap-3">
+                <Button asChild>
+                  <a
+                    href={GEMINI_CUSTOM_APPS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open Gemini Apps
+                    <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a
+                    href={GEMINI_CUSTOM_APPS_HELP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Gemini Instructions
+                    <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                  </a>
+                </Button>
+              </div>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border bg-background p-6">
+              <h3 className="text-xl font-semibold">Grok</h3>
+              <p className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">
+                Add Flaim from Grok&apos;s Connectors area as a custom connector.
+              </p>
+              <div className="mt-6 grid gap-3">
+                <Button asChild>
+                  <a
+                    href={GROK_CONNECTOR_SETTINGS_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Open Grok Connectors
+                    <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a
+                    href={GROK_CONNECTOR_HELP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Grok Instructions
+                    <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
+                  </a>
+                </Button>
+              </div>
+            </article>
+          </div>
+
+          <div className="mt-8 rounded-2xl border bg-background p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              Shared setup
+            </p>
+            <h3 className="mt-3 text-2xl font-semibold">Add Flaim Fantasy</h3>
             <ol className="mt-7 grid gap-4 text-sm leading-6 text-muted-foreground md:grid-cols-2">
               <li className="rounded-xl bg-muted/60 p-4">
                 <strong className="block text-foreground">1. Add a connector</strong>
-                In Account settings, open Connectors, choose Custom connector,
-                then choose Remote.
+                In your AI app, find its custom connector or custom app option.
               </li>
               <li className="rounded-xl bg-muted/60 p-4">
                 <strong className="block text-foreground">2. Enter Flaim</strong>
-                Name it Flaim Fantasy and use this address:{" "}
+                Name it Flaim Fantasy if asked and use this address:{" "}
                 <code className="break-all rounded bg-background px-1 py-0.5 text-xs">
                   {FLAIM_MCP_URL}
                 </code>
@@ -290,13 +351,13 @@ export default function AiGuidePage() {
                 <strong className="block text-foreground">
                   3. Choose the connection
                 </strong>
-                Select OAuth for authentication and Streamable HTTP for the
-                connection type. Accept the acknowledgement and choose Add.
+                If asked, select OAuth for authentication and Streamable HTTP
+                for the connection type.
               </li>
               <li className="rounded-xl bg-muted/60 p-4">
                 <strong className="block text-foreground">4. Authorize Flaim</strong>
-                Open the new Flaim Fantasy connector and sign in to your Flaim
-                account when Perplexity asks.
+                Finish the app&apos;s enable or authorization flow, then sign in
+                to your Flaim account if asked.
               </li>
             </ol>
           </div>
