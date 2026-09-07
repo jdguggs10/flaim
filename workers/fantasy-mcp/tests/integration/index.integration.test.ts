@@ -1745,7 +1745,7 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     }
   });
 
-  it('keeps auth-required query near misses on the public handshake behavior', async () => {
+  it('keeps auth-required URL near misses on the public handshake behavior', async () => {
     const queryNearMisses = [
       '?auth=Required',
       '?auth=required&other=1',
@@ -1773,6 +1773,22 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
         expect(response.status, `${origin}/mcp${query}`).toBe(200);
         expect(authFetch, `${origin}/mcp${query}`).not.toHaveBeenCalled();
       }
+
+      const legacyAuthFetch = vi.fn();
+      const legacyEnv = environment
+        ? { ...buildEnv(legacyAuthFetch), ENVIRONMENT: environment }
+        : buildEnv(legacyAuthFetch);
+      const legacyAliasResponse = await app.fetch(
+        buildUnauthenticatedRequest(
+          `${origin}/fantasy/mcp?auth=required`,
+          'initialize',
+          initializeParams
+        ),
+        legacyEnv,
+        mockExecutionContext()
+      );
+      expect(legacyAliasResponse.status, `${origin}/fantasy/mcp?auth=required`).toBe(200);
+      expect(legacyAuthFetch, `${origin}/fantasy/mcp?auth=required`).not.toHaveBeenCalled();
     }
   });
 

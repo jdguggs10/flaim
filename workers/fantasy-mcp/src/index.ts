@@ -312,11 +312,13 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   });
 
   const authHeader = c.req.header('Authorization');
+  const requestUrl = new URL(c.req.raw.url);
   // Opt-in interoperability path for clients that discover tools anonymously
   // but do not recover when a later tools/call receives a 401. Requiring the
   // exact query preserves the published behavior of the normal endpoint.
   const requireHandshakeAuth =
-    new URL(c.req.raw.url).search === '?auth=required';
+    requestUrl.pathname === '/mcp'
+    && requestUrl.search === '?auth=required';
   // Static widget resources are public based on method + exact URI, even when
   // a client happens to attach a stale bearer token. User-data paths still
   // require normal token introspection.
@@ -346,7 +348,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   // Preview's request-derived value is also used for post-introspection
   // in-band auth/scope challenges so a consent upgrade cannot redirect
   // discovery back to production.
-  const { origin, pathname } = new URL(c.req.raw.url);
+  const { origin, pathname } = requestUrl;
   const expectedResource = pathname.startsWith('/fantasy/')
     ? `${origin}/fantasy/mcp`
     : `${origin}/mcp`;
