@@ -6,7 +6,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Gemini Redirect Diagnostics
 
-- **Added**: A temporary, failure-only Gemini registration signal records bounded callback-shape categories and booleans without logging redirect URIs, account identifiers, client metadata, headers, or tokens. Redirect acceptance is unchanged, and the signal will be removed after the live request shape is captured.
+- **Added**: A temporary, failure-only Gemini registration signal records up to three callback hostnames only when they use an exact Google-owned suffix, plus booleans for HTTPS, credentials, an explicit port, the expected raw path shape, query, and fragment; every other host is the fixed `other` category. It does not log redirect paths, account identifiers, client metadata, headers, or tokens. Redirect acceptance is unchanged, and the signal will be removed after the live host aliases are captured.
 
 ### Opt-in Connector Discovery
 
