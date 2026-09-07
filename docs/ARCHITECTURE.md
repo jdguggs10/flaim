@@ -138,6 +138,8 @@ ChatGPT, Claude, and optional manual MCP clients connect to Flaim's MCP servers:
 
 The exact observed Grok OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, is accepted for registration and authorization. With the opt-in authenticated-discovery path, Grok completes the Flaim authorization flow and can use the authenticated `get_user_session` tool.
 
+Gemini Spark registers production, test, and sandbox callbacks together. Flaim accepts only those three exact Google hosts with Gemini's numeric user-bound callback path and Flaim production-host suffix; sibling hosts and structural URI variations remain rejected.
+
 **User flow**: Open Flaim Fantasy in ChatGPT or Claude, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools

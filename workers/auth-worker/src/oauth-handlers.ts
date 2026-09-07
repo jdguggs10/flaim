@@ -253,116 +253,6 @@ function logOAuthFailure(
   } as SetupSignalEvent & Record<string, unknown>);
 }
 
-const EXACT_GEMINI_REDIRECT_URI =
-  /^https:\/\/oauth-redirect\.googleusercontent\.com\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app(?![\s\S])/;
-const EXPECTED_GEMINI_REDIRECT_PATH =
-  /^\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app(?![\s\S])/;
-interface GeminiRedirectHostProbeEntry {
-  hostname?: string;
-  category?: 'other';
-  https: boolean;
-  credentials: boolean;
-  explicitPort: boolean;
-  expectedPath: boolean;
-  query: boolean;
-  fragment: boolean;
-}
-
-function hasExplicitAuthorityPort(uri: string): boolean {
-  const authority = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(uri)?.[1];
-  if (!authority) return false;
-
-  const hostAndPort = authority.slice(authority.lastIndexOf('@') + 1);
-  return hostAndPort.startsWith('[')
-    ? hostAndPort.includes(']:')
-    : hostAndPort.includes(':');
-}
-
-function hasExpectedRawGeminiPath(uri: string): boolean {
-  const rawPath = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*((?:\/|[?#])[\s\S]*)?$/i.exec(uri)?.[1] || '';
-  return EXPECTED_GEMINI_REDIRECT_PATH.test(rawPath);
-}
-
-function inspectGeminiRedirectHost(candidate: unknown): GeminiRedirectHostProbeEntry {
-  try {
-    if (typeof candidate !== 'string') {
-      return {
-        category: 'other',
-        https: false,
-        credentials: false,
-        explicitPort: false,
-        expectedPath: false,
-        query: false,
-        fragment: false,
-      };
-    }
-
-    const parsed = new URL(candidate);
-    const hostname = parsed.hostname.toLowerCase();
-    const isTrustedGoogleSuffix = hostname === 'googleusercontent.com'
-      || hostname.endsWith('.googleusercontent.com')
-      || hostname === 'google.com'
-      || hostname.endsWith('.google.com');
-
-    return {
-      ...(isTrustedGoogleSuffix ? { hostname } : { category: 'other' as const }),
-      https: parsed.protocol === 'https:',
-      credentials: Boolean(parsed.username || parsed.password),
-      explicitPort: hasExplicitAuthorityPort(candidate),
-      expectedPath: hasExpectedRawGeminiPath(candidate),
-      query: Boolean(parsed.search),
-      fragment: Boolean(parsed.hash),
-    };
-  } catch {
-    return {
-      category: 'other',
-      https: false,
-      credentials: false,
-      explicitPort: false,
-      expectedPath: false,
-      query: false,
-      fragment: false,
-    };
-  }
-}
-
-/**
- * Temporary production diagnostic for Gemini registration failures.
- *
- * The event contains only fixed labels, safe transport/shape booleans, and up to
- * three hostnames under exact Google-owned suffixes; every other candidate is
- * the fixed `other` category.
- * It must be removed after the live aliases are captured and the narrow
- * compatibility fix is verified.
- */
-function logGeminiRedirectProbe(redirectUris: unknown): void {
-  try {
-    const candidates = Array.isArray(redirectUris)
-      ? redirectUris
-      : typeof redirectUris === 'string'
-        ? [redirectUris]
-        : [];
-    const cappedCandidates = candidates.slice(0, 3);
-
-    if (!cappedCandidates.some((candidate) => (
-      typeof candidate === 'string' && EXACT_GEMINI_REDIRECT_URI.test(candidate)
-    ))) {
-      return;
-    }
-
-    console.log(JSON.stringify({
-      schema_version: 1,
-      service: 'auth-worker',
-      component: 'oauth-provider',
-      event: 'oauth_gemini_redirect_host_probe',
-      outcome: 'failure',
-      entries: cappedCandidates.map(inspectGeminiRedirectHost),
-    }));
-  } catch {
-    // Logging must never affect request behavior.
-  }
-}
-
 function hasAuthorizeAttemptEvidence(params: AuthorizeParams): boolean {
   return Boolean(
     params.client_id ||
@@ -529,7 +419,6 @@ export async function handleClientRegistration(
   const redirectUris = body.redirect_uris || [];
   for (const uri of redirectUris) {
     if (!isValidRedirectUri(uri)) {
-      logGeminiRedirectProbe(body.redirect_uris);
       logOAuthFailure(request, env, 'oauth_registration_failed', {
         stage: 'redirect_uri_validation',
         failure_kind: 'validation',

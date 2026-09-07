@@ -4,10 +4,6 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
-### Gemini Redirect Diagnostics
-
-- **Added**: A temporary, failure-only Gemini registration signal records up to three callback hostnames only when they use an exact Google-owned suffix, plus booleans for HTTPS, credentials, an explicit port, the expected raw path shape, query, and fragment; every other host is the fixed `other` category. It does not log redirect paths, account identifiers, client metadata, headers, or tokens. Redirect acceptance is unchanged, and the signal will be removed after the live host aliases are captured.
-
 ### Opt-in Connector Discovery
 
 - **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
@@ -22,7 +18,8 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Gemini Custom Connector Callback
 
-- **Fixed**: Accept Gemini Spark's Google-hosted, user-bound OAuth callback for Flaim's production MCP endpoint. Only the numeric account identifier varies; the host and Flaim suffix are pinned, and alternate paths, ports, queries, and fragments remain blocked.
+- **Fixed**: Accept the production, test, and sandbox Google callback hosts that Gemini Spark registers together for Flaim's MCP endpoint. Only the numeric user-bound identifier varies; the three hosts and Flaim suffix are pinned, and sibling hosts, alternate paths, ports, queries, and fragments remain blocked.
+- **Removed**: The temporary failure-only Gemini redirect diagnostic after it identified the exact callback set.
 
 ### Custom Connector Docs
 
