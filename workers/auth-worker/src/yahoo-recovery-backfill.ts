@@ -186,8 +186,12 @@ class SupabaseYahooRecoveryStorage implements YahooRecoveryStorage {
     const countPromise = includeCohortCount
       ? this.supabase
           .from('yahoo_credentials')
-          .select('clerk_user_id', { count: 'exact', head: true })
+          // Keep this as a bounded GET. The hosted Data API rejects HEAD count
+          // requests on this service-role path even though the same exact-count
+          // GET succeeds.
+          .select('clerk_user_id', { count: 'exact' })
           .or(`created_at.lte.${cutoff},created_at.is.null`)
+          .limit(1)
       : Promise.resolve({ count: undefined, error: null });
     const [{ data, error }, countResult] = await Promise.all([query, countPromise]);
     if (error) throw new Error(`Yahoo recovery credential page failed: ${error.message}`);
@@ -200,8 +204,9 @@ class SupabaseYahooRecoveryStorage implements YahooRecoveryStorage {
     const [leagueCountResult, syncResult] = await Promise.all([
       this.supabase
         .from('yahoo_leagues')
-        .select('id', { count: 'exact', head: true })
-        .eq('clerk_user_id', row.clerk_user_id),
+        .select('id', { count: 'exact' })
+        .eq('clerk_user_id', row.clerk_user_id)
+        .limit(1),
       this.supabase
         .from('provider_sync_state')
         .select('last_attempt_at,last_success_at,last_failure_at,last_error_code')
