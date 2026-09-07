@@ -7,6 +7,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Claude League Setup
 
 - **Added**: The Your Leagues AI Apps panel now offers the same direct Claude Connector Directory link as ChatGPT, so connected users can open either official Flaim Fantasy channel from setup.
+- **Added**: The panel now points Perplexity, Gemini, and Grok users to the custom-connector setup guide.
 
 ### Paced Yahoo Recovery (FLA-338)
 

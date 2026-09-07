@@ -5,6 +5,7 @@ import {
   CLAUDE_CONNECTOR_DIRECTORY_URL,
 } from "@/lib/product-links";
 import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 interface StepConnectAIProps {
   showStepNumber?: boolean;
@@ -53,6 +54,15 @@ export function StepConnectAI({
           <ExternalLink className="ml-2 h-4 w-4" />
         </a>
       </Button>
+      <div className="mt-4 text-center text-sm text-muted-foreground">
+        <p>Using Perplexity, Gemini, or Grok?</p>
+        <Link
+          href="/docs/ai#custom-connectors"
+          className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          Custom connector setup →
+        </Link>
+      </div>
     </div>
   );
 
