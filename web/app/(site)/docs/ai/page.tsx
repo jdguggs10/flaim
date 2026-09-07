@@ -16,9 +16,9 @@ import {
 } from "@/lib/product-links";
 
 export const metadata: Metadata = {
-  title: "Connect Flaim to ChatGPT, Claude & Perplexity",
+  title: "Connect Flaim to ChatGPT, Claude & Other AI Apps",
   description:
-    "Connect Flaim Fantasy to ChatGPT or Claude, or add Flaim to Perplexity as a custom connector. Ask about your real ESPN, Yahoo, or Sleeper leagues.",
+    "Connect Flaim to ChatGPT or Claude, or use custom connectors in Perplexity, Gemini, or Grok. Ask about your real ESPN, Yahoo, or Sleeper leagues.",
   alternates: {
     canonical: "https://flaim.app/docs/ai",
   },
@@ -72,16 +72,15 @@ const HOW_TO_SCHEMAS = [
   {
     "@context": "https://schema.org",
     "@type": "HowTo",
-    name: "Connect Flaim Fantasy to Perplexity",
-    dateModified: "2026-08-15",
+    name: "Add as Custom Connector",
+    dateModified: "2026-09-07",
     description:
-      "Add Flaim Fantasy to Perplexity as a custom remote connector.",
+      "Add Flaim Fantasy as a custom connector in an AI app such as Perplexity, Gemini, or Grok.",
     step: [
-      "Connect your ESPN, Yahoo, or Sleeper leagues to Flaim.",
-      "In Perplexity, open Account settings, choose Connectors, and add a custom remote connector.",
-      "Name it Flaim Fantasy and enter " + FLAIM_MCP_URL + ".",
-      "Choose OAuth and Streamable HTTP, accept the acknowledgement, and add the connector.",
-      "Open the Flaim Fantasy connector, authorize your account, and ask what fantasy leagues you have.",
+      "In your AI app, find its custom connector or custom app option.",
+      "Name it Flaim Fantasy if asked and use this address: " + FLAIM_MCP_URL + ".",
+      "If asked, select OAuth for authentication and Streamable HTTP for the connection type.",
+      "Finish the app's enable or authorization flow, then sign in to your Flaim account if asked.",
     ],
   },
 ].map((howTo) => ({
