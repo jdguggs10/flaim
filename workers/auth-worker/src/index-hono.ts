@@ -91,6 +91,7 @@ import { handleWebSetupSignal } from './signal-handlers';
 import { runReconciliation } from './reconciliation';
 import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } from './sleeper-recurring-backfill';
 import { runEspnHistoryBackfill } from './espn-history-backfill';
+import { parseYahooRecoveryRequest, runYahooRecovery } from './yahoo-recovery-backfill';
 import { handleClerkAccountDeletionWebhook, type ClerkWebhookEnv } from './clerk-webhook';
 
 // =============================================================================
@@ -955,6 +956,24 @@ api.post('/internal/backfill/espn-history', async (c) => {
   const summary = await runEspnHistoryBackfill(c.env, 'manual');
   const refused = summary.outcome === 'disabled' || summary.outcome === 'refused';
   return c.json(summary, summary.outcome === 'failed' ? 500 : refused ? 409 : 200);
+});
+
+// Temporary, operator-only Yahoo registry recovery (FLA-338). Processes at
+// most one pre-recovery credential row per request, defaults to a DB-only dry
+// run, and expires in code after the incident closeout window.
+api.post('/internal/backfill/yahoo-recovery', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const validation = await parseYahooRecoveryRequest(c.req.raw);
+  if (validation.error) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const summary = await runYahooRecovery(c.env, validation.request!);
+  return c.json(summary, summary.outcome === 'expired' ? 410 : summary.outcome === 'failed' ? 500 : 200);
 });
 
 // One-off backfill for Sleeper recurring_league_id (FLA-168). Service-token
