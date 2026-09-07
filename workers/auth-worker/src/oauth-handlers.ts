@@ -253,6 +253,99 @@ function logOAuthFailure(
   } as SetupSignalEvent & Record<string, unknown>);
 }
 
+const EXACT_GEMINI_REDIRECT_URI =
+  /^https:\/\/oauth-redirect\.googleusercontent\.com\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app(?![\s\S])/;
+const GEMINI_TRAILING_SLASH_REDIRECT_URI =
+  /^https:\/\/oauth-redirect\.googleusercontent\.com\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app\/(?![\s\S])/;
+const EXPECTED_GEMINI_REDIRECT_PATH =
+  /^\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app$/;
+
+interface GeminiRedirectProbeEntry {
+  string: boolean;
+  allowed: boolean;
+  exactGemini: boolean;
+  googleHost: boolean;
+  expectedPath: boolean;
+  query: boolean;
+  fragment: boolean;
+  trailingSlashVariant: boolean;
+}
+
+function inspectGeminiRedirectCandidate(candidate: unknown): GeminiRedirectProbeEntry {
+  const entry: GeminiRedirectProbeEntry = {
+    string: typeof candidate === 'string',
+    allowed: false,
+    exactGemini: false,
+    googleHost: false,
+    expectedPath: false,
+    query: false,
+    fragment: false,
+    trailingSlashVariant: false,
+  };
+
+  if (typeof candidate !== 'string') {
+    return entry;
+  }
+
+  entry.allowed = isValidRedirectUri(candidate);
+  entry.exactGemini = EXACT_GEMINI_REDIRECT_URI.test(candidate);
+  entry.trailingSlashVariant = GEMINI_TRAILING_SLASH_REDIRECT_URI.test(candidate);
+
+  try {
+    const parsed = new URL(candidate);
+    entry.googleHost = parsed.hostname === 'oauth-redirect.googleusercontent.com';
+    entry.expectedPath = EXPECTED_GEMINI_REDIRECT_PATH.test(parsed.pathname);
+    entry.query = Boolean(parsed.search);
+    entry.fragment = Boolean(parsed.hash);
+  } catch {
+    // The fixed false values above are sufficient for malformed candidates.
+  }
+
+  return entry;
+}
+
+/**
+ * Temporary production diagnostic for Gemini registration failures.
+ *
+ * The event contains only fixed labels, bounded categories, and booleans. It
+ * must be removed after the live request shape is captured and the narrow
+ * compatibility fix is verified.
+ */
+function logGeminiRedirectProbe(redirectUris: unknown): void {
+  try {
+    const candidates = Array.isArray(redirectUris)
+      ? redirectUris
+      : typeof redirectUris === 'string'
+        ? [redirectUris]
+        : [];
+    const entries = candidates.slice(0, 3).map(inspectGeminiRedirectCandidate);
+
+    if (!entries.some((entry) => entry.googleHost)) {
+      return;
+    }
+
+    const candidateCount = candidates.length === 0
+      ? 'zero'
+      : candidates.length === 1
+        ? 'one'
+        : 'multiple';
+
+    console.log(JSON.stringify({
+      schema_version: 1,
+      service: 'auth-worker',
+      component: 'oauth-provider',
+      event: 'oauth_gemini_redirect_probe',
+      outcome: 'failure',
+      is_array: Array.isArray(redirectUris),
+      is_string: typeof redirectUris === 'string',
+      candidate_count: candidateCount,
+      entries,
+    }));
+  } catch {
+    // Logging must never affect request behavior.
+  }
+}
+
 function hasAuthorizeAttemptEvidence(params: AuthorizeParams): boolean {
   return Boolean(
     params.client_id ||
@@ -419,6 +512,7 @@ export async function handleClientRegistration(
   const redirectUris = body.redirect_uris || [];
   for (const uri of redirectUris) {
     if (!isValidRedirectUri(uri)) {
+      logGeminiRedirectProbe(body.redirect_uris);
       logOAuthFailure(request, env, 'oauth_registration_failed', {
         stage: 'redirect_uri_validation',
         failure_kind: 'validation',
