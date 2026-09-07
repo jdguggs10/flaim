@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### API Domain Routes (FLA-348)
+
+- **Fixed**: The unprefixed `/health` check and the `/widgets/*` (including `/widgets/user-session`) fallback paths now have explicit Worker Routes on `api.flaim.app`, so they reach the fantasy-mcp gateway instead of returning Cloudflare 522 for a route with no matching origin.
+
 ### Opt-in Connector Discovery
 
 - **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
