@@ -255,60 +255,84 @@ function logOAuthFailure(
 
 const EXACT_GEMINI_REDIRECT_URI =
   /^https:\/\/oauth-redirect\.googleusercontent\.com\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app(?![\s\S])/;
-const GEMINI_TRAILING_SLASH_REDIRECT_URI =
-  /^https:\/\/oauth-redirect\.googleusercontent\.com\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app\/(?![\s\S])/;
 const EXPECTED_GEMINI_REDIRECT_PATH =
-  /^\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app$/;
-
-interface GeminiRedirectProbeEntry {
-  string: boolean;
-  allowed: boolean;
-  exactGemini: boolean;
-  googleHost: boolean;
+  /^\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app(?![\s\S])/;
+interface GeminiRedirectHostProbeEntry {
+  hostname?: string;
+  category?: 'other';
+  https: boolean;
+  credentials: boolean;
+  explicitPort: boolean;
   expectedPath: boolean;
   query: boolean;
   fragment: boolean;
-  trailingSlashVariant: boolean;
 }
 
-function inspectGeminiRedirectCandidate(candidate: unknown): GeminiRedirectProbeEntry {
-  const entry: GeminiRedirectProbeEntry = {
-    string: typeof candidate === 'string',
-    allowed: false,
-    exactGemini: false,
-    googleHost: false,
-    expectedPath: false,
-    query: false,
-    fragment: false,
-    trailingSlashVariant: false,
-  };
+function hasExplicitAuthorityPort(uri: string): boolean {
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(uri)?.[1];
+  if (!authority) return false;
 
-  if (typeof candidate !== 'string') {
-    return entry;
-  }
+  const hostAndPort = authority.slice(authority.lastIndexOf('@') + 1);
+  return hostAndPort.startsWith('[')
+    ? hostAndPort.includes(']:')
+    : hostAndPort.includes(':');
+}
 
-  entry.allowed = isValidRedirectUri(candidate);
-  entry.exactGemini = EXACT_GEMINI_REDIRECT_URI.test(candidate);
-  entry.trailingSlashVariant = GEMINI_TRAILING_SLASH_REDIRECT_URI.test(candidate);
+function hasExpectedRawGeminiPath(uri: string): boolean {
+  const rawPath = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*((?:\/|[?#])[\s\S]*)?$/i.exec(uri)?.[1] || '';
+  return EXPECTED_GEMINI_REDIRECT_PATH.test(rawPath);
+}
 
+function inspectGeminiRedirectHost(candidate: unknown): GeminiRedirectHostProbeEntry {
   try {
-    const parsed = new URL(candidate);
-    entry.googleHost = parsed.hostname === 'oauth-redirect.googleusercontent.com';
-    entry.expectedPath = EXPECTED_GEMINI_REDIRECT_PATH.test(parsed.pathname);
-    entry.query = Boolean(parsed.search);
-    entry.fragment = Boolean(parsed.hash);
-  } catch {
-    // The fixed false values above are sufficient for malformed candidates.
-  }
+    if (typeof candidate !== 'string') {
+      return {
+        category: 'other',
+        https: false,
+        credentials: false,
+        explicitPort: false,
+        expectedPath: false,
+        query: false,
+        fragment: false,
+      };
+    }
 
-  return entry;
+    const parsed = new URL(candidate);
+    const hostname = parsed.hostname.toLowerCase();
+    const isTrustedGoogleSuffix = hostname === 'googleusercontent.com'
+      || hostname.endsWith('.googleusercontent.com')
+      || hostname === 'google.com'
+      || hostname.endsWith('.google.com');
+
+    return {
+      ...(isTrustedGoogleSuffix ? { hostname } : { category: 'other' as const }),
+      https: parsed.protocol === 'https:',
+      credentials: Boolean(parsed.username || parsed.password),
+      explicitPort: hasExplicitAuthorityPort(candidate),
+      expectedPath: hasExpectedRawGeminiPath(candidate),
+      query: Boolean(parsed.search),
+      fragment: Boolean(parsed.hash),
+    };
+  } catch {
+    return {
+      category: 'other',
+      https: false,
+      credentials: false,
+      explicitPort: false,
+      expectedPath: false,
+      query: false,
+      fragment: false,
+    };
+  }
 }
 
 /**
  * Temporary production diagnostic for Gemini registration failures.
  *
- * The event contains only fixed labels, bounded categories, and booleans. It
- * must be removed after the live request shape is captured and the narrow
+ * The event contains only fixed labels, safe transport/shape booleans, and up to
+ * three hostnames under exact Google-owned suffixes; every other candidate is
+ * the fixed `other` category.
+ * It must be removed after the live aliases are captured and the narrow
  * compatibility fix is verified.
  */
 function logGeminiRedirectProbe(redirectUris: unknown): void {
@@ -318,28 +342,21 @@ function logGeminiRedirectProbe(redirectUris: unknown): void {
       : typeof redirectUris === 'string'
         ? [redirectUris]
         : [];
-    const entries = candidates.slice(0, 3).map(inspectGeminiRedirectCandidate);
+    const cappedCandidates = candidates.slice(0, 3);
 
-    if (!entries.some((entry) => entry.googleHost)) {
+    if (!cappedCandidates.some((candidate) => (
+      typeof candidate === 'string' && EXACT_GEMINI_REDIRECT_URI.test(candidate)
+    ))) {
       return;
     }
-
-    const candidateCount = candidates.length === 0
-      ? 'zero'
-      : candidates.length === 1
-        ? 'one'
-        : 'multiple';
 
     console.log(JSON.stringify({
       schema_version: 1,
       service: 'auth-worker',
       component: 'oauth-provider',
-      event: 'oauth_gemini_redirect_probe',
+      event: 'oauth_gemini_redirect_host_probe',
       outcome: 'failure',
-      is_array: Array.isArray(redirectUris),
-      is_string: typeof redirectUris === 'string',
-      candidate_count: candidateCount,
-      entries,
+      entries: cappedCandidates.map(inspectGeminiRedirectHost),
     }));
   } catch {
     // Logging must never affect request behavior.

@@ -102,11 +102,11 @@ function emittedSetupSignal(spy: ReturnType<typeof vi.spyOn>): boolean {
   return spy.mock.calls.some((call) => String(call[0]).includes('"schema_version":1'));
 }
 
-function findGeminiRedirectProbe(spy: ReturnType<typeof vi.spyOn>): Record<string, unknown> | undefined {
+function findGeminiRedirectHostProbe(spy: ReturnType<typeof vi.spyOn>): Record<string, unknown> | undefined {
   for (const call of spy.mock.calls) {
     try {
       const payload = JSON.parse(String(call[0])) as Record<string, unknown>;
-      if (payload.event === 'oauth_gemini_redirect_probe') {
+      if (payload.event === 'oauth_gemini_redirect_host_probe') {
         return payload;
       }
     } catch {
@@ -204,10 +204,10 @@ describe('oauth-handlers', () => {
     expect(body.redirect_uris).toEqual([geminiSparkRedirectUri]);
     expect(body.token_endpoint_auth_method).toBe('none');
     expect(body.client_secret).toBeUndefined();
-    expect(findGeminiRedirectProbe(logSpy)).toBeUndefined();
+    expect(findGeminiRedirectHostProbe(logSpy)).toBeUndefined();
   });
 
-  it('classifies a Gemini redirect_uris string without changing its rejection', async () => {
+  it('logs only the trusted Google hostname for a rejected redirect_uris string', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const res = await handleClientRegistration(buildRegisterRequest({
       redirect_uris: geminiSparkRedirectUri,
@@ -215,95 +215,88 @@ describe('oauth-handlers', () => {
     }), env, corsHeaders);
 
     expect(res.status).toBe(400);
-    expect(findGeminiRedirectProbe(logSpy)).toEqual({
+    expect(findGeminiRedirectHostProbe(logSpy)).toEqual({
       schema_version: 1,
       service: 'auth-worker',
       component: 'oauth-provider',
-      event: 'oauth_gemini_redirect_probe',
+      event: 'oauth_gemini_redirect_host_probe',
       outcome: 'failure',
-      is_array: false,
-      is_string: true,
-      candidate_count: 'one',
       entries: [{
-        string: true,
-        allowed: true,
-        exactGemini: true,
-        googleHost: true,
+        hostname: 'oauth-redirect.googleusercontent.com',
+        https: true,
+        credentials: false,
+        explicitPort: false,
         expectedPath: true,
         query: false,
         fragment: false,
-        trailingSlashVariant: false,
       }],
     });
 
     const serializedLogs = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
     expect(serializedLogs).not.toContain(geminiSparkRedirectUri);
-    expect(serializedLogs).not.toContain('oauth-redirect.googleusercontent.com');
     expect(serializedLogs).not.toContain('user_bound_custom-mcp');
     expect(serializedLogs).not.toContain('123456789012345678901');
   });
 
-  it('classifies multiple Gemini redirect candidates without logging their values', async () => {
+  it('logs capped trusted Google hostnames and categorizes every other host', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
-    const trailingSlashRedirectUri = `${geminiSparkRedirectUri}/`;
+    const geminiPath = new URL(geminiSparkRedirectUri).pathname;
+    const trustedAliasRedirectUri = `https://user@oauth-redirect-synthetic.googleusercontent.com:443${geminiPath}`;
+    const lookalikeRedirectUri = `http://oauth-redirect.googleusercontent.com.evil.example${geminiPath}?next=1#fragment`;
+    const cappedGoogleRedirectUri = `https://accountlinking-synthetic.google.com${geminiPath}`;
     const res = await handleClientRegistration(buildRegisterRequest({
       redirect_uris: [
+        trustedAliasRedirectUri,
+        lookalikeRedirectUri,
         geminiSparkRedirectUri,
-        trailingSlashRedirectUri,
-        geminiSparkRedirectUri,
-        geminiSparkRedirectUri,
+        cappedGoogleRedirectUri,
       ],
     }), env, corsHeaders);
 
     expect(res.status).toBe(400);
-    expect(findGeminiRedirectProbe(logSpy)).toEqual({
+    expect(findGeminiRedirectHostProbe(logSpy)).toEqual({
       schema_version: 1,
       service: 'auth-worker',
       component: 'oauth-provider',
-      event: 'oauth_gemini_redirect_probe',
+      event: 'oauth_gemini_redirect_host_probe',
       outcome: 'failure',
-      is_array: true,
-      is_string: false,
-      candidate_count: 'multiple',
       entries: [
         {
-          string: true,
-          allowed: true,
-          exactGemini: true,
-          googleHost: true,
+          hostname: 'oauth-redirect-synthetic.googleusercontent.com',
+          https: true,
+          credentials: true,
+          explicitPort: true,
           expectedPath: true,
           query: false,
           fragment: false,
-          trailingSlashVariant: false,
         },
         {
-          string: true,
-          allowed: false,
-          exactGemini: false,
-          googleHost: true,
+          category: 'other',
+          https: false,
+          credentials: false,
+          explicitPort: false,
           expectedPath: false,
-          query: false,
-          fragment: false,
-          trailingSlashVariant: true,
+          query: true,
+          fragment: true,
         },
         {
-          string: true,
-          allowed: true,
-          exactGemini: true,
-          googleHost: true,
+          hostname: 'oauth-redirect.googleusercontent.com',
+          https: true,
+          credentials: false,
+          explicitPort: false,
           expectedPath: true,
           query: false,
           fragment: false,
-          trailingSlashVariant: false,
         },
       ],
     });
 
     const serializedLogs = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
-    expect(serializedLogs).not.toContain(geminiSparkRedirectUri);
-    expect(serializedLogs).not.toContain('oauth-redirect.googleusercontent.com');
+    expect(serializedLogs).not.toContain(geminiPath);
     expect(serializedLogs).not.toContain('user_bound_custom-mcp');
     expect(serializedLogs).not.toContain('123456789012345678901');
+    expect(serializedLogs).not.toContain('googleusercontent.com.evil.example');
+    expect(serializedLogs).not.toContain('accountlinking-synthetic.google.com');
   });
 
   it.each(geminiSparkInvalidRedirectUris)(
