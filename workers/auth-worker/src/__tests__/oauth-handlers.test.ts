@@ -278,6 +278,7 @@ describe('oauth-handlers', () => {
       `https://oauth-redirect-sandbox.googleusercontent.com/r/relay-${uuid}-api_flaim_app`,
       `https://oauth-redirect-test.googleusercontent.com/r/${longAtom}-123-api_flaim_app`,
       'https://oauth-redirect.googleusercontent.com/r/PrivateToken-456-api_flaim_app',
+      'https://oauth-redirect.googleusercontent.com/r/secretvalue-api_flaim_app',
       'http://user:password@oauth-redirect.googleusercontent.com.evil.example:8443/r/private-987654321-api_flaim_app?token=private#fragment',
     ];
     const res = await handleClientRegistration(buildRegisterRequest({
@@ -286,18 +287,20 @@ describe('oauth-handlers', () => {
 
     expect(res.status).toBe(400);
     const probe = findRejectedGeminiRedirectProbe(logSpy);
-    expect(probe).toEqual(expect.objectContaining({ total_count: 5, rejected_count: 4 }));
+    expect(probe).toEqual(expect.objectContaining({ total_count: 6, rejected_count: 5 }));
     expect(probe?.rejected).toEqual([
       expect.objectContaining({ index: 2, sanitized_path: '/r/relay-<uuid>-api_flaim_app' }),
       expect.objectContaining({ index: 3, sanitized_path: '/r/<opaque>-api_flaim_app' }),
       expect.objectContaining({ index: 4, sanitized_path: '/r/<opaque>-api_flaim_app' }),
-      expect.objectContaining({ index: 5, host_category: 'other', path_category: 'unknown' }),
+      expect.objectContaining({ index: 5, path_category: 'unknown' }),
+      expect.objectContaining({ index: 6, host_category: 'other', path_category: 'unknown' }),
     ]);
 
     const logs = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
     expect(logs).not.toContain(uuid);
     expect(logs).not.toContain(longAtom);
     expect(logs).not.toContain('PrivateToken');
+    expect(logs).not.toContain('secretvalue');
     expect(logs).not.toContain('password');
     expect(logs).not.toContain('evil.example');
     expect(logs).not.toContain('private-987654321');

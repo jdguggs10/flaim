@@ -333,13 +333,15 @@ function sanitizeObservedGeminiPath(path: string): string | undefined {
   const dynamicStart = dynamicStarts.length > 0 ? Math.min(...dynamicStarts) : -1;
 
   if (dynamicStart === -1) {
-    if (!isSafeStaticPathPrefix(beforeSuffix)) return undefined;
-    return `${beforeSuffix}<missing-id>${GEMINI_FLAIM_PATH_SUFFIX}${trailingSlash}`;
+    return undefined;
   }
 
   const staticPrefix = beforeSuffix.slice(0, dynamicStart);
   if (!isSafeStaticPathPrefix(staticPrefix)) return undefined;
 
+  // Retain the bounded lowercase prefix so the vendor's second callback form
+  // can be identified. This is intentionally narrower than a general-purpose
+  // secret scrubber, so paths without a maskable dynamic component are omitted.
   const dynamicPart = beforeSuffix.slice(dynamicStart);
   let maskedDynamic = '<opaque>';
   if (UUID_PATTERN.test(dynamicPart) && dynamicPart.match(UUID_PATTERN)?.[0] === dynamicPart) {
@@ -436,6 +438,8 @@ function logRejectedGeminiRedirectProbe(redirectUris: unknown): void {
       return;
     }
 
+    // Re-derive the complete rejected set only inside this bounded diagnostic;
+    // the handler deliberately preserves its original first-invalid response.
     const rejectedRedirects = redirectUris.reduce<RejectedRedirect[]>((rejected, candidate, index) => {
       let valid = false;
       try {

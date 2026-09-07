@@ -6,7 +6,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Gemini Rejected Callback Diagnostic
 
-- **Changed**: The temporary, failure-only registration signal records every rejected callback position from a bounded Gemini registration in one event. Sanitized paths are limited to Gemini's three observed Google redirect hosts with Flaim's endpoint suffix; numeric identifiers, UUIDs, uppercase values, and long or mixed opaque components are replaced before logging. Oversized callback arrays omit the rejected-entry list instead of sampling it. Redirect acceptance is unchanged, and the signal will be removed after the complete callback set is captured.
+- **Changed**: The temporary, failure-only registration signal records every rejected callback position from a bounded Gemini registration in one event. Path diagnostics are limited to Gemini's three observed Google redirect hosts with Flaim's endpoint suffix; they retain a bounded lowercase prefix before the first dynamic component, replace numeric identifiers, UUIDs, and opaque suffixes, and omit paths with no dynamic component. Oversized callback arrays omit the rejected-entry list instead of sampling it. Redirect acceptance is unchanged, and the signal will be removed after the complete callback set is captured.
 
 ### Opt-in Connector Discovery
 
