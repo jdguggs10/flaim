@@ -113,6 +113,18 @@ function emittedSetupSignal(spy: ReturnType<typeof vi.spyOn>): boolean {
   return spy.mock.calls.some((call) => String(call[0]).includes('"schema_version":1'));
 }
 
+function findRejectedGeminiRedirectProbe(spy: ReturnType<typeof vi.spyOn>): Record<string, unknown> | undefined {
+  for (const call of spy.mock.calls) {
+    try {
+      const payload = JSON.parse(String(call[0])) as Record<string, unknown>;
+      if (payload.event === 'oauth_gemini_rejected_redirect_probe') return payload;
+    } catch {
+      // Ignore non-JSON operational logs.
+    }
+  }
+  return undefined;
+}
+
 describe('oauth-handlers', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -182,6 +194,7 @@ describe('oauth-handlers', () => {
   });
 
   it('registers Gemini Spark production, test, and sandbox callbacks together as a public client', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const res = await handleClientRegistration(buildRegisterRequest({
       redirect_uris: geminiSparkRedirectUris,
       token_endpoint_auth_method: 'none',
@@ -199,6 +212,122 @@ describe('oauth-handlers', () => {
     expect(body.redirect_uris).toEqual(geminiSparkRedirectUris);
     expect(body.token_endpoint_auth_method).toBe('none');
     expect(body.client_secret).toBeUndefined();
+    expect(findRejectedGeminiRedirectProbe(logSpy)).toBeUndefined();
+  });
+
+  it('does not inspect rejected registrations without a known Gemini callback', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: ['https://private.example/callback'],
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(400);
+    expect(findRejectedGeminiRedirectProbe(logSpy)).toBeUndefined();
+  });
+
+  it.each([
+    [
+      'unbound',
+      'https://oauth-redirect.googleusercontent.com/r/custom-mcp-api_flaim_app',
+      '/r/custom-mcp-<missing-id>-api_flaim_app',
+    ],
+    [
+      'user-bound',
+      'https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-api_flaim_app',
+      '/r/user_bound_custom-mcp-<missing-id>-api_flaim_app',
+    ],
+  ])('captures the first rejected %s missing-ID Gemini callback with its exact array position', async (
+    _label,
+    rejectedUri,
+    sanitizedPath
+  ) => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [...geminiSparkRedirectUris, rejectedUri],
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(400);
+    expect(findRejectedGeminiRedirectProbe(logSpy)).toEqual({
+      schema_version: 1,
+      service: 'auth-worker',
+      component: 'oauth-provider',
+      event: 'oauth_gemini_rejected_redirect_probe',
+      outcome: 'failure',
+      total_count: 4,
+      rejected_index: 4,
+      rejected: {
+        hostname: 'oauth-redirect.googleusercontent.com',
+        https: true,
+        credentials: false,
+        explicit_port: false,
+        query: false,
+        fragment: false,
+        sanitized_path: sanitizedPath,
+      },
+    });
+  });
+
+  it('masks every numeric run in a closed-form rejected Gemini path', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const rejectedUri =
+      'https://oauth-redirect-stage.googleusercontent.com/r/custom-mcp-987654321_123456789-api_flaim_app/';
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [geminiSparkRedirectUri, rejectedUri],
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(400);
+    expect(findRejectedGeminiRedirectProbe(logSpy)).toEqual(expect.objectContaining({
+      total_count: 2,
+      rejected_index: 2,
+      rejected: {
+        hostname: 'oauth-redirect-stage.googleusercontent.com',
+        https: true,
+        credentials: false,
+        explicit_port: false,
+        query: false,
+        fragment: false,
+        sanitized_path: '/r/custom-mcp-<id>_<id>-api_flaim_app/',
+      },
+    }));
+
+    const logs = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logs).not.toContain('987654321');
+    expect(logs).not.toContain('123456789');
+  });
+
+  it('categorizes arbitrary rejected callback data without logging raw values', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const rejectedUri =
+      'http://user:password@oauth-redirect.googleusercontent.com.evil.example:8443/r/private-987654321/%2Fsecret?token=private#fragment';
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [geminiSparkRedirectUri, rejectedUri],
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(400);
+    expect(findRejectedGeminiRedirectProbe(logSpy)).toEqual(expect.objectContaining({
+      total_count: 2,
+      rejected_index: 2,
+      rejected: {
+        host_category: 'other',
+        https: false,
+        credentials: true,
+        explicit_port: true,
+        query: true,
+        fragment: true,
+        path_category: 'unknown',
+        known_prefix: false,
+        flaim_suffix: false,
+        trailing_slash: false,
+        dot_segment: false,
+        encoded_path_syntax: true,
+      },
+    }));
+
+    const logs = logSpy.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logs).not.toContain('password');
+    expect(logs).not.toContain('evil.example');
+    expect(logs).not.toContain('private-987654321');
+    expect(logs).not.toContain('token=private');
   });
 
   it.each(geminiSparkInvalidRedirectUris)(

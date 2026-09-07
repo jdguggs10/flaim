@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Gemini Rejected Callback Diagnostic
+
+- **Added**: A temporary, failure-only registration signal records the total callback count, the first rejected callback's position, a trusted Google hostname, fixed URL-shape booleans, and a closed-form callback path with every numeric identifier masked. Arbitrary hosts, paths, queries, credentials, and identifiers are never logged. Redirect acceptance is unchanged, and the signal will be removed after the rejected callback shape is captured.
+
 ### Opt-in Connector Discovery
 
 - **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
