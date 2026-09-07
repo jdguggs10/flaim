@@ -130,10 +130,13 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 ChatGPT, Claude, and optional manual MCP clients connect to Flaim's MCP servers:
 
 - **MCP URL**: `https://api.flaim.app/mcp` (unified gateway - handles all sports; `/fantasy/mcp` also works as legacy alias)
+- **Opt-in authenticated discovery**: The exact path `/mcp?auth=required` requires OAuth during connector discovery in production and preview. The canonical resource remains `/mcp`, public widget resources remain available, and the default unauthenticated `/mcp` discovery handshake is unchanged.
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 - **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 1-year inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum).
+
+The exact observed Grok OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, is accepted for registration and authorization. This callback acceptance does not establish completed end-to-end Grok connector support.
 
 **User flow**: Open Flaim Fantasy in ChatGPT or Claude, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 

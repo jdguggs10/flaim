@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Opt-in Connector Discovery
+
+- **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
+- **Verified**: Flaim accepts Grok's exact observed OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, for registration and authorization. This validates the callback allowlist only; full Grok sign-in and authenticated tool use still require end-to-end validation.
+
 ### Gemini Custom Connector Callback
 
 - **Fixed**: Accept Gemini Spark's Google-hosted, user-bound OAuth callback for Flaim's production MCP endpoint. Only the numeric account identifier varies; the host and Flaim suffix are pinned, and alternate paths, ports, queries, and fragments remain blocked.

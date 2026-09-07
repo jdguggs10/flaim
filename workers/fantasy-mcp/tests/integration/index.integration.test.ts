@@ -1630,7 +1630,7 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
-        id: `preview-auth-required-${method}`,
+        id: `auth-required-${method}`,
         method,
         params,
       }),
@@ -1640,7 +1640,7 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
   const initializeParams = {
     protocolVersion: '2025-06-18',
     capabilities: {},
-    clientInfo: { name: 'preview-auth-probe', version: '1.0.0' },
+    clientInfo: { name: 'auth-required-probe', version: '1.0.0' },
   };
 
   it('keeps every api.flaim.app metadata body byte-identical to the scanned production surface', async () => {
@@ -1688,65 +1688,152 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     expect(authFetch).not.toHaveBeenCalled();
   });
 
-  it('requires authentication for preview handshakes only on the exact auth-required query', async () => {
-    const authFetch = vi.fn();
-    const env = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
+  it('requires authentication for production and preview handshakes on the exact auth-required query', async () => {
+    const cases = [
+      {
+        origin: PROD_ORIGIN,
+        environment: undefined,
+        challenge: 'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"',
+      },
+      {
+        origin: PREVIEW_ORIGIN,
+        environment: 'preview',
+        challenge: `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/mcp", resource_metadata="${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource"`,
+      },
+    ] as const;
 
-    for (const [method, params] of [
-      ['initialize', initializeParams],
-      ['tools/list', {}],
+    for (const { origin, environment, challenge } of cases) {
+      const authFetch = vi.fn();
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
+
+      for (const [method, params] of [
+        ['initialize', initializeParams],
+        ['tools/list', {}],
+      ] as const) {
+        const response = await app.fetch(
+          buildUnauthenticatedRequest(`${origin}/mcp?auth=required`, method, params),
+          env,
+          mockExecutionContext()
+        );
+
+        expect(response.status, `${origin} ${method}`).toBe(401);
+        expect(response.headers.get('WWW-Authenticate'), `${origin} ${method}`).toBe(challenge);
+      }
+      expect(authFetch, origin).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps normal production and preview handshakes public', async () => {
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
     ] as const) {
+      const authFetch = vi.fn();
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
       const response = await app.fetch(
-        buildUnauthenticatedRequest(`${PREVIEW_ORIGIN}/mcp?auth=required`, method, params),
+        buildUnauthenticatedRequest(`${origin}/mcp`, 'initialize', initializeParams),
         env,
         mockExecutionContext()
       );
 
-      expect(response.status, method).toBe(401);
-      expect(response.headers.get('WWW-Authenticate'), method).toBe(
-        `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/mcp", resource_metadata="${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource"`
+      expect(response.status, origin).toBe(200);
+      expect(authFetch, origin).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps auth-required query near misses on the public handshake behavior', async () => {
+    const queryNearMisses = [
+      '?auth=Required',
+      '?auth=required&other=1',
+      '?other=1&auth=required',
+      '?auth=required%20',
+      '?authentication=required',
+      '?auth=required&auth=required',
+    ];
+
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
+    ] as const) {
+      for (const query of queryNearMisses) {
+        const authFetch = vi.fn();
+        const env = environment
+          ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+          : buildEnv(authFetch);
+        const response = await app.fetch(
+          buildUnauthenticatedRequest(`${origin}/mcp${query}`, 'initialize', initializeParams),
+          env,
+          mockExecutionContext()
+        );
+
+        expect(response.status, `${origin}/mcp${query}`).toBe(200);
+        expect(authFetch, `${origin}/mcp${query}`).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it('keeps public widget reads available on the auth-required endpoint', async () => {
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
+    ] as const) {
+      const authFetch = vi.fn();
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
+      const response = await app.fetch(
+        buildUnauthenticatedRequest(
+          `${origin}/mcp?auth=required`,
+          'resources/read',
+          { uri: USER_SESSION_WIDGET_URI }
+        ),
+        env,
+        mockExecutionContext()
+      );
+
+      expect(response.status, origin).toBe(200);
+      const payload = await parseJsonRpcResponse(response);
+      expect(
+        payload.result?.contents?.some((item) => item.uri === USER_SESSION_WIDGET_URI),
+        origin
+      ).toBe(true);
+      expect(authFetch, origin).not.toHaveBeenCalled();
+    }
+  });
+
+  it('omits the auth-required query from the authenticated token resource', async () => {
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
+    ] as const) {
+      const authFetch = vi.fn(async () =>
+        new Response(
+          JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
+      const request = buildUnauthenticatedRequest(
+        `${origin}/mcp?auth=required`,
+        'tools/list'
+      );
+      request.headers.set('Authorization', 'Bearer test-token');
+
+      const response = await app.fetch(request, env, mockExecutionContext());
+
+      expect(response.status, origin).toBe(200);
+      expect(authFetch, origin).toHaveBeenCalledTimes(1);
+      const introspectRequest = authFetch.mock.calls[0]?.[0] as Request;
+      expect(introspectRequest.headers.get('X-Flaim-Expected-Resource'), origin).toBe(
+        `${origin}/mcp`
       );
     }
-    expect(authFetch).not.toHaveBeenCalled();
-  });
-
-  it('keeps normal preview and every production handshake public', async () => {
-    const authFetch = vi.fn();
-    const previewEnv = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
-
-    const normalPreviewResponse = await app.fetch(
-      buildUnauthenticatedRequest(`${PREVIEW_ORIGIN}/mcp`, 'initialize', initializeParams),
-      previewEnv,
-      mockExecutionContext()
-    );
-    expect(normalPreviewResponse.status).toBe(200);
-
-    const productionQueryResponse = await app.fetch(
-      buildUnauthenticatedRequest(`${PROD_ORIGIN}/mcp?auth=required`, 'initialize', initializeParams),
-      buildEnv(authFetch),
-      mockExecutionContext()
-    );
-    expect(productionQueryResponse.status).toBe(200);
-    expect(authFetch).not.toHaveBeenCalled();
-  });
-
-  it('keeps public widget reads available on the preview auth-required probe', async () => {
-    const authFetch = vi.fn();
-    const env = { ...buildEnv(authFetch), ENVIRONMENT: 'preview' };
-    const response = await app.fetch(
-      buildUnauthenticatedRequest(
-        `${PREVIEW_ORIGIN}/mcp?auth=required`,
-        'resources/read',
-        { uri: USER_SESSION_WIDGET_URI }
-      ),
-      env,
-      mockExecutionContext()
-    );
-
-    expect(response.status).toBe(200);
-    const payload = await parseJsonRpcResponse(response);
-    expect(payload.result?.contents?.some((item) => item.uri === USER_SESSION_WIDGET_URI)).toBe(true);
-    expect(authFetch).not.toHaveBeenCalled();
   });
 
   it('appends RFC 6750 error params to the api.flaim.app 401 when a presented token fails', async () => {
