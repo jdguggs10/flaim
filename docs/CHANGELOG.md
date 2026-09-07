@@ -9,6 +9,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: A temporary, service-token-only auth-worker endpoint can re-run Yahoo league discovery for accounts connected before the September 7 recovery cutoff, one account per request. It defaults to a database-only dry run, uses stable opaque cursor pagination, reuses normal per-user Yahoo leases and cooldowns, and returns sanitized provider stop signals for a renewed app denial or rate limit.
 - **Limited**: The recovery path has no cron, schema change, or permanent configuration. It preserves league archive and hidden state, never deletes omitted leagues, and expires in code after September 14 ET.
 
+### Yahoo Availability Restored
+
+- **Changed**: Removed the temporary Yahoo outage notice from Support and restored Yahoo to the standard homepage platform pill now that provider access is available again.
+
 ### ET-Day Analytics History Preservation (FLA-265)
 
 - **Added**: A pre-backfill forward refinement retains nullable platform and sport in ET user-day summaries, preserving future attributed-provider/sport cohort analysis without changing current dashboard metrics. The migration rejects populated or initialized history rather than silently mislabelling older summaries. No hosted backfill, schedule, or reader switch is activated.
