@@ -11,6 +11,7 @@ Flaim cannot make trades, add or drop players, edit lineups, or change league se
 ## Server + Auth
 
 - **MCP URL:** `https://api.flaim.app/mcp`
+- **Grok custom connector URL:** `https://api.flaim.app/mcp?auth=required` (requires OAuth during connector discovery)
 - **Transport:** HTTP `POST` (non-POST returns `405` with `Allow: POST`)
 - **Auth:** OAuth 2.1 + PKCE (S256)
 - **Dynamic client registration:** `https://api.flaim.app/auth/register`
@@ -38,6 +39,7 @@ After setup, use `https://flaim.app/leagues` to add leagues, sync new seasons, o
 | ChatGPT | Published in ChatGPT's Plugin Store | [Open Flaim Fantasy in ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) |
 | Claude | Published in Claude's Connector Directory | [Open Flaim Fantasy in Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754) |
 | Perplexity | Manual custom connector | Add Flaim where your Perplexity account supports custom remote connectors |
+| Grok | Manual custom connector | Add Flaim using `https://api.flaim.app/mcp?auth=required` |
 | Other compatible AI platforms | Advanced, unofficial setup | Add Flaim with the custom connector URL `https://api.flaim.app/mcp` |
 
 ### ChatGPT
@@ -64,6 +66,15 @@ Perplexity custom remote connectors require HTTPS. Availability may depend on yo
 6. Open the Flaim Fantasy connector, complete authorization, and enable it.
 
 See [Perplexity's current custom remote connector instructions](https://www.perplexity.ai/help-center/en/articles/13915507-adding-custom-remote-connectors) if its interface changes.
+
+### Grok (Custom Connector)
+
+1. Open [Grok Connectors](https://grok.com/connectors) and add a custom connector.
+2. Name it **Flaim Fantasy** if asked and enter `https://api.flaim.app/mcp?auth=required`.
+3. Complete the Flaim authorization flow.
+4. Start a new Grok conversation and ask what fantasy leagues you have.
+
+See [Grok's connector documentation](https://docs.x.ai/grok/connectors) if its interface changes.
 
 ### Other Compatible AI Platforms
 

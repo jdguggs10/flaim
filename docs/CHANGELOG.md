@@ -7,7 +7,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Opt-in Connector Discovery
 
 - **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
-- **Verified**: Flaim accepts Grok's exact observed OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, for registration and authorization. This validates the callback allowlist only; full Grok sign-in and authenticated tool use still require end-to-end validation.
+- **Verified**: Grok completes the Flaim authorization flow through the exact observed OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, and can use the authenticated `get_user_session` tool without calling `refresh_leagues`.
 
 ### Gemini Custom Connector Callback
 
@@ -17,7 +17,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 - **Changed**: AI setup docs group Perplexity, Gemini, and Grok settings and documentation links separately from the shared four-step custom connector setup.
 - **Changed**: Setup docs simplify hero navigation and name all three custom connector options in the AI page introduction.
-- **Clarified**: Grok remains listed with its settings and documentation links, but the guide flags that Flaim sign-in is not currently completing and excludes Grok from the custom-connector HowTo schema.
+- **Changed**: Grok now has its own authenticated-discovery URL and setup steps, and the custom-connector HowTo includes the verified Grok flow.
 
 ### Claude League Setup
 
