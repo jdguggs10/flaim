@@ -110,15 +110,12 @@ function AboutPanel() {
           </div>
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
             <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
-              Sleeper · Football
+              Yahoo · Football and Baseball
             </span>
           </div>
-          <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 text-[var(--phone-muted)]">
-            <span className="text-[length:var(--phone-type-caption)] font-medium">
-              Yahoo
-            </span>
-            <span className="text-[length:var(--phone-type-caption)]">
-              Returns when Yahoo restores API access
+          <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+            <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
+              Sleeper · Football
             </span>
           </div>
         </div>
