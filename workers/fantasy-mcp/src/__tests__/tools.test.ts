@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import type { z } from 'zod';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError, mcpInsufficientScopeError } from '../mcp/tools';
@@ -11,8 +10,6 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
-  V3_USER_SESSION_WIDGET_HTML,
-  V3_USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import {
@@ -210,16 +207,15 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
-    // Published URIs are immutable ChatGPT cache keys. The icon revision gets
-    // a new v4 key while v1-v3 remain available at their original bytes.
+    // Published URIs are stable cache keys with frozen resource metadata. The
+    // descriptor points at v3, the only URI whose published widget CSP allows
+    // the Yahoo Fantasy attribution link.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
     expect(V2_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
-    expect(V3_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
-    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v4.html');
+    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
-    expect(tool?.widgetUri).not.toBe(V3_USER_SESSION_WIDGET_URI);
   });
 
   it('keeps every downstream data tool and refresh free of widget attachments', () => {
@@ -227,59 +223,129 @@ describe('fantasy-mcp tools', () => {
       .toEqual(['get_user_session']);
   });
 
-  it('pins the frozen v1/v2 widget body to its immutable golden hash', () => {
-    // The self-referential trap: every other byte-identity assertion compares
-    // the runtime output against the same LEGACY_USER_SESSION_WIDGET_HTML
-    // constant, so an accidental edit to the literal would move expected and
-    // actual in lockstep. This golden hash (computed from the body as
-    // published in the OpenAI-scanned v2.1 submission) is the anchor that
-    // cannot move with it. If this test fails, the frozen bytes changed —
-    // revert the literal; do not update the hash.
-    expect(Buffer.byteLength(LEGACY_USER_SESSION_WIDGET_HTML, 'utf8')).toBe(24998);
-    expect(
-      createHash('sha256').update(LEGACY_USER_SESSION_WIDGET_HTML, 'utf8').digest('hex')
-    ).toBe('ca6160c5ccabd329e60885e6bfbe72b35ab48985fb1b6866fa64c0d657e2647b');
-  });
-
-  it('pins the frozen v3 widget body to its immutable golden hash', () => {
-    expect(Buffer.byteLength(V3_USER_SESSION_WIDGET_HTML, 'utf8')).toBe(25431);
-    expect(
-      createHash('sha256').update(V3_USER_SESSION_WIDGET_HTML, 'utf8').digest('hex')
-    ).toBe('a5a09ea79d6082d5e64588ed0a48311a5d89223049264d1183deb78ff854b876');
-  });
-
-  it('v3 widget carries the provider attribution footer; the legacy body stays frozen', () => {
-    // Exact attribution markup is pinned deliberately — the credit line and
-    // its Yahoo Fantasy link are a required product surface on v3.
-    expect(V3_USER_SESSION_WIDGET_HTML).toContain(
-      '<div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>'
+  it('serves exactly one body per link permission, differing only by the Yahoo link', () => {
+    // The v1/v2 widget CSP allows only https://flaim.app as a redirect
+    // domain, so those URIs cannot carry the Yahoo Fantasy link. Everything
+    // else about the two bodies must be identical, or the two URIs would
+    // drift into separate widgets to maintain.
+    const yahooLink =
+      '<a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>';
+    expect(USER_SESSION_WIDGET_HTML).toContain(yahooLink);
+    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(yahooLink);
+    expect(LEGACY_USER_SESSION_WIDGET_HTML).toContain(
+      'Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
     );
-    expect(V3_USER_SESSION_WIDGET_HTML).toContain('.attribution {');
-    // The frozen v1/v2 body must never pick the footer up.
-    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('Fantasy data provided by');
-    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('class="attribution"');
-    // v3 differs from the frozen body only by the injected CSS and footer.
-    expect(
-      V3_USER_SESSION_WIDGET_HTML
-        .replace('  .attribution {\n    padding: 8px 16px 10px;\n    border-top: 1px solid rgba(13, 13, 13, 0.05);\n    font-size: 11px;\n    line-height: 14px;\n    text-align: center;\n    color: #9ca3af;\n  }\n  .attribution a {\n    color: inherit;\n    text-decoration: underline;\n  }\n', '')
-        .replace('\n  <div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>', '')
-    ).toBe(LEGACY_USER_SESSION_WIDGET_HTML);
+    // ESPN and Sleeper stay plain text on every body: no published widget CSP
+    // allows their domains.
+    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
+      expect(body).not.toContain('espn.com');
+      expect(body).not.toContain('sleeper.com');
+    }
   });
 
-  it('v4 widget replaces sport emoji with self-contained monochrome icons', () => {
+  it('keeps every URL in each body inside that URI\'s published redirect domains', () => {
+    // Every href/src attribute value plus every absolute or protocol-relative
+    // URL anywhere in the document, so a javascript:, data:, or //host
+    // reference cannot slip past an https-only scan.
+    const referencesIn = (body: string) => {
+      const refs = new Set<string>();
+      for (const match of body.matchAll(/(?:href|src)\s*=\s*"([^"]*)"/gi)) refs.add(match[1].trim());
+      for (const match of body.matchAll(/(?:[a-z][a-z0-9+.-]*:)?\/\/[^"'\s<>)]+/gi)) refs.add(match[0].trim());
+      return Array.from(refs).sort();
+    };
+    // The single dynamic href is the leagues link; its constant is pinned here
+    // so the concatenation cannot quietly point somewhere else.
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      "var LEAGUES_URL = 'https://flaim.app/leagues?from=widget';"
+    );
+    expect(referencesIn(LEGACY_USER_SESSION_WIDGET_HTML)).toEqual([
+      "' + LEAGUES_URL + '",
+      'https://flaim.app/leagues?from=widget',
+    ]);
+    expect(referencesIn(USER_SESSION_WIDGET_HTML)).toEqual([
+      "' + LEAGUES_URL + '",
+      'https://flaim.app/leagues?from=widget',
+      'https://sports.yahoo.com/fantasy/',
+    ]);
+  });
+
+  it('keeps both bodies self-contained: no external scripts, fonts, images, or styles', () => {
+    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
+      expect(body).not.toMatch(/<script[^>]+src=/i);
+      expect(body).not.toMatch(/<link\b/i);
+      expect(body).not.toMatch(/<img\b/i);
+      expect(body).not.toMatch(/@import/i);
+      expect(body).not.toMatch(/@font-face/i);
+      // No CSS url() references: background images, fonts, or cursors would
+      // all need a resource domain the published widget CSP does not allow.
+      const style = body.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+      expect(style).toBeDefined();
+      expect(style).not.toMatch(/url\(/i);
+      expect(body.match(/<script/g)).toHaveLength(1);
+    }
+  });
+
+  it('renders the footer sentences in the required order with only Refresh underlined', () => {
+    const footer = USER_SESSION_WIDGET_HTML.match(/<footer class="footer">([\s\S]*?)<\/footer>/)?.[1];
+    expect(footer).toBeDefined();
+    const footerText = (footer || '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    expect(footerText).toBe(
+      'Refresh your leagues, seasons, and team names. Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
+    );
+    // The whole first sentence is the button; only the word "Refresh" is
+    // underlined inside it.
+    expect(footer).toContain(
+      '<button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button>'
+    );
+    expect(USER_SESSION_WIDGET_HTML).toContain('text-decoration-thickness: 1px;');
+    expect(USER_SESSION_WIDGET_HTML).toContain('text-underline-offset: 2px;');
+    // Refresh progress and outcome live in an accessible status region that is
+    // present from first paint, so assistive technology is already observing
+    // it when the first message lands.
+    expect(footer).toContain('<div class="status" id="refresh-status" role="status" aria-live="polite"></div>');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('.status:empty { display: none; }');
+  });
+
+  it('ships the compact header, sport bands, and fixed-height league rows', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('<span class="app-name">Your Leagues</span>');
+    expect(USER_SESSION_WIDGET_HTML).toContain('href="https://flaim.app/leagues?from=widget"');
+    expect(USER_SESSION_WIDGET_HTML).toContain('aria-label="Edit leagues"');
+    // Coarse pointers get the larger hit area.
+    expect(USER_SESSION_WIDGET_HTML).toContain('@media (pointer: coarse) {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('.edit-link { width: 44px; height: 44px; }');
+    expect(USER_SESSION_WIDGET_HTML).toContain('grid-template-columns: 60px minmax(0, 1fr);');
+    expect(USER_SESSION_WIDGET_HTML).toContain('.sport-group + .sport-group { margin-top: 12px; }');
+  });
+
+  it('carries monochrome Tabler sport icons with a trophy fallback and its license', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain('var SPORT_ICON_PATHS = {');
     expect(USER_SESSION_WIDGET_HTML).toContain('stroke="currentColor" stroke-width="1.5"');
     expect(USER_SESSION_WIDGET_HTML).toContain('renderSportIcon(sport)');
     expect(USER_SESSION_WIDGET_HTML).toContain('aria-hidden="true" focusable="false"');
     expect(USER_SESSION_WIDGET_HTML).toContain('Permission is hereby granted, free of charge');
     expect(USER_SESSION_WIDGET_HTML).toContain(
-      'Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, label)'
+      'Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, key)'
     );
     expect(USER_SESSION_WIDGET_HTML).not.toContain('var SPORT_EMOJI =');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('🏈');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('⚾');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('🏀');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('🏒');
+  });
+
+  it('drives dark mode from the host theme global with a media-query fallback', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('@media (prefers-color-scheme: dark) {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('html:not(.theme-light) {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('html.theme-dark {');
+    expect(USER_SESSION_WIDGET_HTML).toContain("root.classList.add('theme-' + theme)");
+    expect(USER_SESSION_WIDGET_HTML).toContain('window.openai.theme');
+    // Theme updates must survive the first render, unlike tool output.
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      "applyTheme(globals && globals.theme !== undefined ? globals.theme : readHostTheme());\n    if (hasRendered) return;"
+    );
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {
@@ -633,7 +699,8 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain('Flaim is connected, but no fantasy leagues are set up yet.');
     expect(USER_SESSION_WIDGET_HTML).toContain('id="connect-league-link"');
     expect(USER_SESSION_WIDGET_HTML).toContain("connectLeagueLink.addEventListener('click', openLeagues)");
-    expect(USER_SESSION_WIDGET_HTML).toContain('window.openai.openExternal({ href: LEAGUES_URL })');
+    expect(USER_SESSION_WIDGET_HTML).toContain('window.openai.openExternal({ href: url })');
+    expect(USER_SESSION_WIDGET_HTML).toContain('return openExternalUrl(LEAGUES_URL);');
   });
 
   it('refresh_leagues forwards the user auth and internal token to auth-worker', async () => {

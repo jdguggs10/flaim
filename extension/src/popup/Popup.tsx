@@ -136,7 +136,9 @@ const FALLBACK_SPORT_ICON: SportIconDefinition = {
 };
 
 function SportIcon({ sport }: { sport: string }) {
-  const definition = SPORT_ICONS.get(sport.toLowerCase()) ?? FALLBACK_SPORT_ICON;
+  // Discovered leagues come straight from the API response, so a missing
+  // sport must fall back rather than throw.
+  const definition = SPORT_ICONS.get(sport?.toLowerCase()) ?? FALLBACK_SPORT_ICON;
 
   return (
     <svg

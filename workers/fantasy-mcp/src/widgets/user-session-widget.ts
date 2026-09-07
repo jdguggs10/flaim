@@ -7,8 +7,10 @@
  *
  * Design constraints:
  * - No external scripts, fonts, images, or stylesheets (CSP-safe for iframe sandbox)
- * - 353px wide (ChatGPT text response template)
+ * - 353px maximum width, shrinking to its container (ChatGPT text response template)
  * - System fonts only
+ * - Light and dark palettes, driven by window.openai.theme with a
+ *   prefers-color-scheme fallback
  * - Aligns with flaim.app branding
  *
  * Data access - in order of priority:
@@ -22,18 +24,28 @@
  * - https://developers.openai.com/apps-sdk/build/mcp-server/
  */
 /**
- * Template URIs are immutable cache keys in ChatGPT: once a client has
- * rendered a URI, it may serve the cached body forever. Published bodies are
- * therefore never edited in place — a content change mints a new URI and
- * repoints the tool descriptor, while every published URI keeps serving its
- * original bytes. v1 is the original submission's URI, v2 is the published
- * v2.1 submission's URI (same body as v1), v3 adds the provider attribution
- * footer, and v4 replaces Unicode sport emoji with monochrome sport icons.
+ * Versioning rule:
+ *
+ * A published widget URI's *resource metadata* is frozen. OpenAI snapshots the
+ * read-result `_meta` (`ui.csp`, `openai/widgetDescription`, and
+ * `openai/widgetCSP`) at review time, so those blocks must stay byte-identical
+ * per URI in `../mcp/server.ts`.
+ *
+ * The *body* served at a published URI may change, as long as the change stays
+ * within the metadata that URI already declares. Backward-compatible content
+ * updates at an already-published resource URI do not require resubmission;
+ * cached client copies pick the new body up on their own. A new URI is only
+ * needed when the body would require metadata the published URI does not
+ * declare — for example a new redirect, connect, or resource domain.
+ *
+ * That is why there are exactly two bodies for three URIs. v1 and v2 declare
+ * only https://flaim.app as a redirect domain, so their body names the data
+ * providers as plain text. v3 additionally declares https://sports.yahoo.com,
+ * so its body links "Yahoo Fantasy" to the official Yahoo Fantasy site.
  */
 export const LEGACY_USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
 export const V2_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
-export const V3_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v4.html';
+export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
 
 export type RefreshResultKind =
   | 'success'
@@ -147,21 +159,159 @@ export function classifyRefreshResult(payload: unknown): RefreshResultClassifica
 }
 
 /**
- * Frozen v1 widget body. Published v1 clients read this exact document; keep
- * it byte-identical, matching the frozen v1 read-result _meta contract. All
- * widget changes go to the derived v2 body at the bottom of this file.
+ * Provider attribution: surfaces that display Yahoo Fantasy data credit
+ * "Fantasy data provided by Yahoo Fantasy". The credit is linked only where
+ * the URI's published widget CSP allows https://sports.yahoo.com as a redirect
+ * domain. ESPN and Sleeper are named voluntarily so the three providers read
+ * consistently; they stay plain text on every URI because no published widget
+ * CSP allows their domains.
  */
-export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
+const YAHOO_ATTRIBUTION_PLAIN = 'Yahoo Fantasy';
+const YAHOO_ATTRIBUTION_LINKED =
+  '<a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>';
+
+/**
+ * Inline SVG paths from Tabler Icons v3.41.1 (MIT), copyright Paweł Kuna.
+ * The widget stays self-contained, so it needs no resource-domain allowance.
+ */
+const TABLER_LICENSE_HTML = `<!--
+Tabler Icons v3.41.1
+Copyright (c) 2020-2026 Paweł Kuna
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->`;
+
+export interface UserSessionWidgetOptions {
+  /**
+   * Link the Yahoo Fantasy credit to the official Yahoo Fantasy site. Only
+   * enable this for a URI whose published widget CSP allows
+   * https://sports.yahoo.com as a redirect domain.
+   */
+  linkYahoo: boolean;
+}
+
+/**
+ * Build the widget document. The two variants differ by exactly one substring:
+ * the Yahoo Fantasy credit is either plain text or a link.
+ */
+export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): string {
+  const yahooCredit = options.linkYahoo ? YAHOO_ATTRIBUTION_LINKED : YAHOO_ATTRIBUTION_PLAIN;
+  return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=353" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Flaim</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    color-scheme: light;
+    --fg: #171717;
+    --bg: #ffffff;
+    --border: #e5e5e5;
+    --divider: #ededed;
+    --muted: #626262;
+    --hover: #f2f2f2;
+    --focus: #626262;
+    --band-bg: #f3f4f5;
+    --band-fg: #555555;
+    --row-line: #eeeeee;
+    --detail: #656565;
+    --gold: #dfc477;
+    --badge-default-bg: #faf0d2;
+    --badge-default-fg: #7b6223;
+    --badge-espn-bg: #fbeef0;
+    --badge-espn-fg: #a52c40;
+    --badge-yahoo-bg: #f4edf8;
+    --badge-yahoo-fg: #733491;
+    --badge-sleeper-bg: #edf5ef;
+    --badge-sleeper-fg: #34674a;
+    --footer-line: #ececec;
+    --footer-fg: #777777;
+    --credit-hover: #353535;
+    --status-fg: #47664f;
+    --status-error-fg: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not(.theme-light) {
+      color-scheme: dark;
+      --fg: #ededed;
+      --bg: #202020;
+      --border: #404040;
+      --divider: #363636;
+      --muted: #b7b7b7;
+      --hover: #343434;
+      --focus: #cccccc;
+      --band-bg: #2b2c2e;
+      --band-fg: #c2c2c2;
+      --row-line: #373737;
+      --detail: #b4b4b4;
+      --gold: #9a8142;
+      --badge-default-bg: #42391f;
+      --badge-default-fg: #ecd18b;
+      --badge-espn-bg: #44262d;
+      --badge-espn-fg: #ffb4c1;
+      --badge-yahoo-bg: #392741;
+      --badge-yahoo-fg: #dab4f1;
+      --badge-sleeper-bg: #253b2c;
+      --badge-sleeper-fg: #a4dfbb;
+      --footer-line: #363636;
+      --footer-fg: #a8a8a8;
+      --credit-hover: #e0e0e0;
+      --status-fg: #b7d7bf;
+      --status-error-fg: #f2b8b5;
+    }
+  }
+  html.theme-light { color-scheme: light; }
+  html.theme-dark {
+    color-scheme: dark;
+    --fg: #ededed;
+    --bg: #202020;
+    --border: #404040;
+    --divider: #363636;
+    --muted: #b7b7b7;
+    --hover: #343434;
+    --focus: #cccccc;
+    --band-bg: #2b2c2e;
+    --band-fg: #c2c2c2;
+    --row-line: #373737;
+    --detail: #b4b4b4;
+    --gold: #9a8142;
+    --badge-default-bg: #42391f;
+    --badge-default-fg: #ecd18b;
+    --badge-espn-bg: #44262d;
+    --badge-espn-fg: #ffb4c1;
+    --badge-yahoo-bg: #392741;
+    --badge-yahoo-fg: #dab4f1;
+    --badge-sleeper-bg: #253b2c;
+    --badge-sleeper-fg: #a4dfbb;
+    --footer-line: #363636;
+    --footer-fg: #a8a8a8;
+    --credit-hover: #e0e0e0;
+    --status-fg: #b7d7bf;
+    --status-error-fg: #f2b8b5;
+  }
   html,
   body {
-    width: 353px;
+    width: 100%;
     max-width: 353px;
     overflow-x: hidden;
     background: transparent;
@@ -170,160 +320,170 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     font-family: "Geist", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
     line-height: 1.5;
-    color: #0d0d0d;
-    padding: 0;
+    color: var(--fg);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
   .widget {
     position: relative;
-    width: 353px;
-    background: #fff;
+    width: 100%;
+    max-width: 353px;
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 24px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
-    border: 0.5px solid rgba(13, 13, 13, 0.15);
     overflow: hidden;
   }
   .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 16px 12px;
-    border-bottom: 1px solid rgba(13, 13, 13, 0.05);
+    gap: 8px;
+    padding: 6px 12px 6px 16px;
+    border-bottom: 1px solid var(--divider);
   }
   .app-name {
     font-size: 17px;
     line-height: 24px;
     font-weight: 500;
     letter-spacing: -0.4px;
-    color: #0d0d0d;
-  }
-  .header-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-  }
-  .refresh-button {
-    height: 28px;
-    min-width: 68px;
-    border: 1px solid rgba(13, 13, 13, 0.12);
-    border-radius: 999px;
-    background: #f8fafc;
-    color: #0d0d0d;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 1;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .refresh-button:disabled {
-    cursor: default;
-    opacity: 0.62;
   }
   .edit-link {
-    width: 24px;
-    height: 24px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: inherit;
     text-decoration: none;
-    color: #0d0d0d;
   }
+  .edit-link:hover { background: var(--hover); }
   .edit-link svg {
     width: 18px;
     height: 18px;
-    fill: currentColor;
   }
-  .sport-group {}
+  .sport-group + .sport-group { margin-top: 12px; }
   .sport-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px 8px;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--band-bg);
+    color: var(--band-fg);
+    font-size: 13px;
+    line-height: 22px;
+    font-weight: 500;
   }
   .sport-label {
-    font-size: 14px;
-    line-height: 20px;
-    font-weight: 500;
-    letter-spacing: -0.18px;
-    color: #5d5d5d;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
   }
-  .default-label {
-    font-size: 10px;
+  .sport-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: 22px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    font-size: 11px;
+    line-height: 16px;
     font-weight: 500;
+    letter-spacing: 0.15px;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #fff;
-    background: #fbbf24;
-    border: 0;
-    border-radius: 999px;
-    padding: 2px 8px;
-    line-height: 1.3;
   }
+  .badge-default {
+    background: var(--badge-default-bg);
+    color: var(--badge-default-fg);
+  }
+  .badge-espn { width: 60px; background: var(--badge-espn-bg); color: var(--badge-espn-fg); }
+  .badge-yahoo { width: 60px; background: var(--badge-yahoo-bg); color: var(--badge-yahoo-fg); }
+  .badge-sleeper { width: 60px; background: var(--badge-sleeper-bg); color: var(--badge-sleeper-fg); }
+  .league-list { list-style: none; }
   .league-row {
     position: relative;
-    display: flex;
+    height: 60px;
+    min-width: 0;
+    padding: 9px 16px;
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(13, 13, 13, 0.05);
+    column-gap: 10px;
   }
-  .league-row.is-last {
-    border-bottom: 0;
+  .league-row:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 86px;
+    right: 16px;
+    height: 1px;
+    background: var(--row-line);
   }
   .league-row.is-default::after {
     content: "";
     position: absolute;
     right: 0;
-    top: 0;
-    bottom: 0;
+    top: 8px;
+    bottom: 8px;
     width: 3px;
-    background: #fbbf24;
-    border-radius: 2px 0 0 2px;
+    border-radius: 3px 0 0 3px;
+    background: var(--gold);
   }
-  .platform-badge {
-    font-size: 10px;
-    font-weight: 500;
-    line-height: 14px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 4px 0;
-    border-radius: 999px;
-    color: #fff;
-    flex-shrink: 0;
-    width: 64px;
-    text-align: center;
-  }
-  .platform-espn { background: #c4122e; }
-  .platform-yahoo { background: #7b1fa2; }
-  .platform-sleeper { background: #137a45; }
-  .league-info { flex: 1; min-width: 0; }
+  .copy { min-width: 0; }
   .league-name {
     font-size: 15px;
     line-height: 20px;
-    font-weight: 400;
-    letter-spacing: -0.3px;
-    color: #0d0d0d;
+    letter-spacing: -0.25px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .league-detail {
-    margin-top: 2px;
-    font-size: 13px;
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    margin-top: 3px;
+    min-width: 0;
+    font-size: 12px;
     line-height: 18px;
-    font-weight: 400;
-    letter-spacing: -0.2px;
-    color: #5d5d5d;
+    color: var(--detail);
+  }
+  .league-year {
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .league-team {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .empty-state {
-    text-align: center;
     padding: 24px 16px;
-    color: #6b7280;
+    text-align: center;
     font-size: 13px;
+    color: var(--muted);
   }
   .empty-state a {
     display: inline-flex;
@@ -332,59 +492,94 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     min-height: 32px;
     margin-top: 12px;
     padding: 6px 12px;
+    border: 1px solid var(--border);
     border-radius: 999px;
-    background: #0b1222;
-    color: #fff;
-    font-weight: 600;
+    color: inherit;
+    font-weight: 500;
     text-decoration: none;
   }
+  .empty-state a:hover { background: var(--hover); }
   .loading {
-    text-align: center;
     padding: 24px 16px;
-    color: #9ca3af;
+    text-align: center;
     font-size: 13px;
+    color: var(--muted);
   }
-  .refresh-status {
-    display: none;
-    padding: 8px 16px;
-    border-top: 1px solid rgba(13, 13, 13, 0.05);
-    font-size: 12px;
+  .footer {
+    padding: 10px 16px 12px;
+    border-top: 1px solid var(--footer-line);
+    text-align: center;
+    font-size: 11px;
     line-height: 16px;
-    color: #5d5d5d;
+    color: var(--footer-fg);
   }
-  .refresh-status.is-visible { display: block; }
-  .refresh-status.is-error { color: #b91c1c; }
-  .refresh-status.is-success { color: #137a45; }
-  .refresh-status a {
+  .refresh {
+    display: inline;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
     color: inherit;
-    font-weight: 600;
+    font: inherit;
+    cursor: pointer;
+  }
+  .refresh:disabled { cursor: wait; }
+  .refresh-word,
+  .credit {
+    color: inherit;
     text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .refresh:hover .refresh-word,
+  .credit:hover { color: var(--credit-hover); }
+  .status {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--status-fg);
+  }
+  .status:empty { margin-top: 0; }
+  .status.is-error { color: var(--status-error-fg); }
+  .status a { color: inherit; text-decoration: underline; }
+  @media (pointer: coarse) {
+    .header { padding-top: 0; padding-bottom: 0; }
+    .edit-link { width: 44px; height: 44px; }
   }
 </style>
 </head>
 <body>
 <div class="widget">
-  <div class="header">
+  <header class="header">
     <span class="app-name">Your Leagues</span>
-    <div class="header-actions">
-      <button type="button" class="refresh-button" id="refresh-button">Refresh</button>
-      <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener" class="edit-link" aria-label="Edit leagues" id="edit-link">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M15.6729 2.32843C15.235 1.89052 14.525 1.89052 14.0871 2.32843L8.14992 8.26562C7.69093 8.72461 7.39319 9.32009 7.30139 9.96267L7.17851 10.8228L8.03865 10.6999C8.68123 10.6081 9.27671 10.3104 9.7357 9.8514L15.6729 3.91421C16.1108 3.47631 16.1108 2.76633 15.6729 2.32843ZM12.6729 0.914213C13.8918 -0.304738 15.8682 -0.304738 17.0871 0.914213C18.3061 2.13316 18.3061 4.10948 17.0871 5.32843L11.1499 11.2656C10.3849 12.0306 9.39247 12.5268 8.32149 12.6798L6.14142 12.9913C5.82983 13.0358 5.51546 12.931 5.29289 12.7084C5.07033 12.4859 4.96554 12.1715 5.01005 11.8599L5.32149 9.67983C5.47449 8.60885 5.97072 7.61639 6.7357 6.8514L12.6729 0.914213ZM8 1.00063C8.00043 1.55291 7.55306 2.00098 7.00078 2.00141C6.00227 2.00219 5.29769 2.00962 4.74651 2.06198C4.20685 2.11326 3.88488 2.20251 3.63803 2.32829C3.07354 2.61591 2.6146 3.07485 2.32698 3.63934C2.19279 3.90269 2.10062 4.25038 2.05118 4.85555C2.00078 5.47239 2 6.2647 2 7.40131V10.6013C2 11.7379 2.00078 12.5302 2.05118 13.1471C2.10062 13.7522 2.19279 14.0999 2.32698 14.3633C2.6146 14.9278 3.07354 15.3867 3.63803 15.6743C3.90138 15.8085 4.24907 15.9007 4.85424 15.9501C5.47108 16.0005 6.26339 16.0013 7.4 16.0013H10.6C11.7366 16.0013 12.5289 16.0005 13.1458 15.9501C13.7509 15.9007 14.0986 15.8085 14.362 15.6743C14.9265 15.3867 15.3854 14.9278 15.673 14.3633C15.7988 14.1164 15.8881 13.7945 15.9393 13.2548C15.9917 12.7036 15.9991 11.999 15.9999 11.0005C16.0003 10.4482 16.4484 10.0009 17.0007 10.0013C17.553 10.0017 18.0003 10.4498 17.9999 11.0021C17.9991 11.9803 17.9932 12.7821 17.9304 13.444C17.8664 14.1173 17.7385 14.715 17.455 15.2713C16.9757 16.2121 16.2108 16.977 15.27 17.4563C14.6777 17.7581 14.0375 17.8839 13.3086 17.9435C12.6008 18.0013 11.7266 18.0013 10.6428 18.0013H7.35717C6.27339 18.0013 5.39925 18.0013 4.69138 17.9435C3.96253 17.8839 3.32234 17.7581 2.73005 17.4563C1.78924 16.977 1.02433 16.2121 0.544968 15.2713C0.24318 14.679 0.117368 14.0388 0.0578183 13.3099C-1.77398e-05 12.6021 -9.75112e-06 11.7279 2.62458e-07 10.6441V7.3585C-9.75112e-06 6.27471 -1.77398e-05 5.40056 0.0578183 4.69268C0.117368 3.96383 0.24318 3.32365 0.544968 2.73135C1.02433 1.79054 1.78924 1.02564 2.73005 0.546275C3.28633 0.262836 3.88399 0.134924 4.55735 0.0709492C5.21919 0.00806886 6.02103 0.00217121 6.99922 0.00140845C7.55151 0.00097781 7.99957 0.448344 8 1.00063Z"></path>
-        </svg>
-      </a>
-    </div>
-  </div>
+    <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener" class="edit-link" aria-label="Edit leagues" title="Edit leagues" id="edit-link">
+      <svg class="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"></path>
+        <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z"></path>
+        <path d="M16 5l3 3"></path>
+      </svg>
+    </a>
+  </header>
   <div id="content">
     <div class="loading">Loading&hellip;</div>
   </div>
-  <div id="refresh-status" class="refresh-status" aria-live="polite"></div>
+  <footer class="footer">
+    <button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button> Fantasy data provided by ${yahooCredit}, ESPN, and Sleeper.
+    <div class="status" id="refresh-status" role="status" aria-live="polite"></div>
+  </footer>
 </div>
 <script>
 (function() {
   var VALID_PLATFORMS = { espn: true, yahoo: true, sleeper: true };
   var SPORT_ORDER = { baseball: 0, football: 1, basketball: 2, hockey: 3 };
-  var SPORT_EMOJI = { baseball: '⚾', football: '🏈', basketball: '🏀', hockey: '🏒' };
+  var SPORT_LABELS = { baseball: 'Baseball', football: 'Football', basketball: 'Basketball', hockey: 'Hockey' };
+  var SPORT_ICON_PATHS = {
+    football: '<path d="M15 9l-6 6"></path><path d="M10 12l2 2"></path><path d="M12 10l2 2"></path><path d="M8 21a5 5 0 0 0 -5 -5"></path><path d="M16 3c-7.18 0 -13 5.82 -13 13a5 5 0 0 0 5 5c7.18 0 13 -5.82 13 -13a5 5 0 0 0 -5 -5"></path><path d="M16 3a5 5 0 0 0 5 5"></path>',
+    baseball: '<path d="M5.636 18.364a9 9 0 1 0 12.728 -12.728a9 9 0 0 0 -12.728 12.728"></path><path d="M12.495 3.02a9 9 0 0 1 -9.475 9.475"></path><path d="M20.98 11.505a9 9 0 0 0 -9.475 9.475"></path><path d="M9 9l2 2"></path><path d="M13 13l2 2"></path><path d="M11 7l2 1"></path><path d="M7 11l1 2"></path><path d="M16 11l1 2"></path><path d="M11 16l2 1"></path>',
+    basketball: '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path><path d="M5.65 5.65l12.7 12.7"></path><path d="M5.65 18.35l12.7 -12.7"></path><path d="M12 3a9 9 0 0 0 9 9"></path><path d="M3 12a9 9 0 0 1 9 9"></path>',
+    hockey: '<path d="M5.905 5h3.418a1 1 0 0 1 .928 .629l1.143 2.856a3 3 0 0 0 2.207 1.83l4.717 .926a2.084 2.084 0 0 1 1.682 2.045v.714a1 1 0 0 1 -1 1h-13.895a1 1 0 0 1 -1 -1.1l.8 -8a1 1 0 0 1 1 -.9"></path><path d="M3 19h17a1 1 0 0 0 1 -1"></path><path d="M9 15v4"></path><path d="M15 15v4"></path>',
+    other: '<path d="M8 21l8 0"></path><path d="M12 17l0 4"></path><path d="M7 4l10 0"></path><path d="M17 4v8a5 5 0 0 1 -10 0v-8"></path><path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path><path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>'
+  };
   var LEAGUES_URL = 'https://flaim.app/leagues?from=widget';
   var WIDGET_WIDTH = 353;
   var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
@@ -564,61 +759,90 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     setTimeout(sendSizeChanged, 0);
   }
 
-  function openLegacyLeagues() {
+  // Theme: prefer the host global when it exposes one, otherwise leave the
+  // document on its prefers-color-scheme fallback.
+  function readHostTheme() {
+    try {
+      if (window.openai && window.openai.theme !== undefined) return window.openai.theme;
+    } catch (_) {}
+    return null;
+  }
+
+  function applyTheme(value) {
+    var root = document.documentElement;
+    if (!root || !root.classList) return;
+    var theme = value === 'dark' ? 'dark' : (value === 'light' ? 'light' : null);
+    root.classList.remove('theme-dark');
+    root.classList.remove('theme-light');
+    if (theme) root.classList.add('theme-' + theme);
+  }
+
+  function openNewTab(url) {
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (_) {}
+  }
+
+  function openFallbackUrl(url) {
     try {
       if (window.openai && typeof window.openai.openUrl === 'function') {
-        window.openai.openUrl(LEAGUES_URL);
+        window.openai.openUrl(url);
         return false;
       }
     } catch (_) {}
     try {
-      window.open(LEAGUES_URL, '_blank', 'noopener,noreferrer');
+      window.open(url, '_blank', 'noopener,noreferrer');
       return false;
     } catch (_) {}
     try {
-      window.location.href = LEAGUES_URL;
+      window.location.href = url;
     } catch (_) {}
     return false;
   }
 
-  function openLeagues(e) {
-    if (e && e.preventDefault) e.preventDefault();
+  function openExternalUrl(url) {
     try {
       if (window.openai && typeof window.openai.openExternal === 'function') {
-        var result = window.openai.openExternal({ href: LEAGUES_URL });
+        var result = window.openai.openExternal({ href: url });
         if (result && typeof result.catch === 'function') {
           // A resolved promise only tells us the host accepted the request;
           // rejection is the only observable signal where fallback is useful.
-          result.catch(function() { openLegacyLeagues(); });
+          result.catch(function() { openFallbackUrl(url); });
         }
-        if (result === false) return openLegacyLeagues();
+        if (result === false) return openFallbackUrl(url);
         return false;
       }
     } catch (_) {}
-    return openLegacyLeagues();
+    return openFallbackUrl(url);
+  }
+
+  function openLeagues(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    return openExternalUrl(LEAGUES_URL);
   }
 
   function setRefreshStatus(message, kind) {
     var status = document.getElementById('refresh-status');
     if (!status) return;
-    status.className = 'refresh-status' + (message ? ' is-visible' : '') + (kind ? ' is-' + kind : '');
+    status.className = 'status' + (kind ? ' is-' + kind : '');
     status.innerHTML = message || '';
     queueSizeChanged();
   }
 
   function setRefreshLoading(isLoading) {
     var button = document.getElementById('refresh-button');
-    if (!button) return;
-    button.disabled = !!isLoading;
-    button.textContent = isLoading ? 'Refreshing' : 'Refresh';
+    if (button) button.disabled = !!isLoading;
+    var word = document.getElementById('refresh-word');
+    if (word) word.textContent = isLoading ? 'Refreshing' : 'Refresh';
   }
 
   function render(data) {
     var container = document.getElementById('content');
+    if (!container) return;
     if (!data || !data.allLeagues || data.allLeagues.length === 0) {
       container.innerHTML =
         '<div class="empty-state">' +
-        'Flaim is connected, but no fantasy leagues are set up yet.<br>' +
+        'Flaim is connected, but no fantasy leagues are set up yet.<br />' +
         '<a href="' + LEAGUES_URL + '" target="_blank" rel="noopener" id="connect-league-link">Open My Leagues</a>' +
         '</div>';
       var connectLeagueLink = document.getElementById('connect-league-link');
@@ -630,7 +854,7 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 
     var leagues = data.allLeagues;
 
-    var defaultKeys = {};
+    var defaultKeys = Object.create(null);
     if (data.defaultLeagues) {
       Object.keys(data.defaultLeagues).forEach(function(sport) {
         var dl = data.defaultLeagues[sport];
@@ -640,10 +864,10 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
 
     var defaultSport = data.defaultSport || null;
 
-    var groups = {};
+    var groups = Object.create(null);
     var order = [];
     leagues.forEach(function(league) {
-      var sport = (league.sport || 'other').toLowerCase();
+      var sport = String(league.sport || 'other').toLowerCase();
       if (!groups[sport]) {
         groups[sport] = [];
         order.push(sport);
@@ -655,39 +879,52 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
       // Default sport always sorts first
       if (a === defaultSport && b !== defaultSport) return -1;
       if (b === defaultSport && a !== defaultSport) return 1;
-      var oa = SPORT_ORDER[a] !== undefined ? SPORT_ORDER[a] : 99;
-      var ob = SPORT_ORDER[b] !== undefined ? SPORT_ORDER[b] : 99;
+      var oa = Object.prototype.hasOwnProperty.call(SPORT_ORDER, a) ? SPORT_ORDER[a] : 99;
+      var ob = Object.prototype.hasOwnProperty.call(SPORT_ORDER, b) ? SPORT_ORDER[b] : 99;
       return oa - ob;
     });
 
     var html = '';
     order.forEach(function(sport) {
-      var isDefaultSport = sport === defaultSport;
-      html += '<div class="sport-group">';
-      html += '<div class="sport-header">';
-      html += '<span class="sport-label">' + esc(formatSportLabel(sport)) + '</span>';
-      if (isDefaultSport) html += '<span class="default-label">DEFAULTS</span>';
-      html += '</div>';
+      var label = formatSportLabel(sport);
+      html += '<section class="sport-group">';
+      html += '<h2 class="sport-header">';
+      html += '<span class="sport-label">' + renderSportIcon(sport) + '<span>' + esc(label) + '</span></span>';
+      if (sport === defaultSport) {
+        // The badge is decorative; the hidden text carries the same meaning
+        // for assistive technology.
+        html += '<span class="badge badge-default" aria-hidden="true">DEFAULT</span>';
+        html += '<span class="visually-hidden">Default sport</span>';
+      }
+      html += '</h2>';
+      html += '<ul class="league-list">';
       groups[sport].forEach(function(league) {
         var key = league.platform + ':' + league.leagueId + ':' + league.seasonYear;
-        var isDefault = !!defaultKeys[key];
-        var platform = VALID_PLATFORMS[league.platform] ? league.platform : 'espn';
-        var isLast = false;
-        if (sport === order[order.length - 1]) {
-          var group = groups[sport];
-          isLast = league === group[group.length - 1];
+        var isDefault = Object.prototype.hasOwnProperty.call(defaultKeys, key);
+        var platform = Object.prototype.hasOwnProperty.call(VALID_PLATFORMS, league.platform) ? league.platform : 'espn';
+        var name = String(league.leagueName || league.leagueId || '');
+        var team = league.teamName ? String(league.teamName) : '';
+        var year = league.seasonYear ? String(league.seasonYear) : '';
+        // Truncated names stay available in full to assistive technology, and
+        // the gold default edge gets a text equivalent here.
+        var described = [name];
+        if (year) described.push(year);
+        if (team) described.push(team);
+        if (isDefault) described.push('default ' + label.toLowerCase() + ' league');
+        html += '<li class="league-row' + (isDefault ? ' is-default' : '') + '" aria-label="' + escAttr(described.join(', ')) + '">';
+        html += '<span class="badge badge-' + platform + '">' + esc(league.platform || '') + '</span>';
+        html += '<div class="copy">';
+        html += '<div class="league-name" title="' + escAttr(name) + '">' + esc(name) + '</div>';
+        if (year || team) {
+          html += '<div class="league-detail">';
+          if (year) html += '<span class="league-year">' + esc(year) + '</span>';
+          if (year && team) html += '<span aria-hidden="true">·</span>';
+          if (team) html += '<span class="league-team" title="' + escAttr(team) + '">' + esc(team) + '</span>';
+          html += '</div>';
         }
-        html += '<div class="league-row' + (isDefault ? ' is-default' : '') + (isLast ? ' is-last' : '') + '">';
-        html += '<span class="platform-badge platform-' + platform + '">' + esc(league.platform || '') + '</span>';
-        html += '<div class="league-info">';
-        html += '<div class="league-name">' + esc(league.leagueName || league.leagueId || '') + '</div>';
-        var detail = [];
-        if (league.teamName) detail.push(league.teamName);
-        if (league.seasonYear) detail.push(String(league.seasonYear));
-        html += '<div class="league-detail">' + esc(detail.join(' \\u00B7 ')) + '</div>';
-        html += '</div></div>';
+        html += '</div></li>';
       });
-      html += '</div>';
+      html += '</ul></section>';
     });
 
     container.innerHTML = html;
@@ -701,17 +938,51 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     return d.innerHTML;
   }
 
+  function escAttr(s) {
+    return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function formatSportLabel(sport) {
+    var key = String(sport || 'other').toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(SPORT_LABELS, key)) return SPORT_LABELS[key];
     var label = String(sport || 'Other');
-    var title = label.charAt(0).toUpperCase() + label.slice(1);
-    var emoji = SPORT_EMOJI[label];
-    return emoji ? (emoji + ' ' + title) : title;
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  function renderSportIcon(sport) {
+    var key = String(sport || 'other').toLowerCase();
+    var paths = Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, key)
+      ? SPORT_ICON_PATHS[key]
+      : SPORT_ICON_PATHS.other;
+    return '<svg class="sport-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + paths + '</svg>';
   }
 
   var editLink = document.getElementById('edit-link');
   if (editLink) editLink.addEventListener('click', openLeagues);
   var refreshButton = document.getElementById('refresh-button');
   if (refreshButton) refreshButton.addEventListener('click', refreshLeagues);
+  // Present only on bodies whose published widget CSP allows the Yahoo
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var yahooLink = document.getElementById('yahoo-link');
+  if (yahooLink) {
+    yahooLink.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: yahooLink.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(yahooLink.href); });
+      }
+      if (opened === false) openNewTab(yahooLink.href);
+    });
+  }
 
   // Extract payload data from any wrapper format
   function unwrapPayload(obj) {
@@ -753,7 +1024,7 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
     if (e && e.preventDefault) e.preventDefault();
     if (!window.openai || typeof window.openai.callTool !== 'function') {
       setRefreshStatus('Open Flaim to manage leagues.', 'error');
-      openLegacyLeagues();
+      openFallbackUrl(LEAGUES_URL);
       return false;
     }
     setRefreshLoading(true);
@@ -784,23 +1055,26 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
         setRefreshStatus(classification.message, statusKind);
       }
     } catch (_) {
-      setRefreshStatus('Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.', 'error');
+      setRefreshStatus('Refresh failed. <a href="' + LEAGUES_URL + '" target="_blank" rel="noopener">Open leagues</a>.', 'error');
     } finally {
       setRefreshLoading(false);
     }
     return false;
   }
 
-  // ChatGPT compatibility: listen for openai:set_globals CustomEvent.
+  // ChatGPT compatibility: listen for openai:set_globals CustomEvent. Theme
+  // updates apply after the first render; tool output does not.
   window.addEventListener('openai:set_globals', function(event) {
+    var globals = event && event.detail && event.detail.globals;
+    applyTheme(globals && globals.theme !== undefined ? globals.theme : readHostTheme());
     if (hasRendered) return;
-    var globals = event.detail && event.detail.globals;
     if (globals && globals.toolOutput !== undefined) {
       tryToolOutput();
     }
   });
 
-  // ChatGPT compatibility: toolOutput may already be set.
+  // ChatGPT compatibility: theme and toolOutput may already be set.
+  applyTheme(readHostTheme());
   tryToolOutput();
   document.addEventListener('DOMContentLoaded', tryToolOutput);
 
@@ -838,165 +1112,21 @@ export const LEGACY_USER_SESSION_WIDGET_HTML = `<!DOCTYPE html>
   startMcpAppsLifecycle();
 })();
 </script>
+${TABLER_LICENSE_HTML}
 </body>
 </html>`;
-
-/**
- * Provider attribution (v3 only): surfaces that display Yahoo Fantasy data
- * credit "Fantasy data provided by Yahoo Fantasy", linked to an official
- * Yahoo Fantasy page where the surface supports links. ESPN and Sleeper are
- * named voluntarily so the three providers read consistently. The published
- * v1/v2 body above is frozen, so the v3 body derives from it by injection.
- */
-const PROVIDER_ATTRIBUTION_CSS = `  .attribution {
-    padding: 8px 16px 10px;
-    border-top: 1px solid rgba(13, 13, 13, 0.05);
-    font-size: 11px;
-    line-height: 14px;
-    text-align: center;
-    color: #9ca3af;
-  }
-  .attribution a {
-    color: inherit;
-    text-decoration: underline;
-  }
-`;
-
-const PROVIDER_ATTRIBUTION_HTML =
-  '<div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>';
-
-const REFRESH_STATUS_MARKER =
-  '<div id="refresh-status" class="refresh-status" aria-live="polite"></div>';
-
-/**
- * Replace a marker that must appear exactly once. Throwing at module init
- * makes tests and deploys fail loudly instead of silently shipping an
- * incomplete widget revision.
- */
-function injectOnce(html: string, marker: string, replacement: string): string {
-  const first = html.indexOf(marker);
-  if (first === -1 || html.indexOf(marker, first + marker.length) !== -1) {
-    throw new Error(`Widget marker is not unique: ${marker}`);
-  }
-  return html.replace(marker, replacement);
 }
 
-/** Frozen v3 body: the frozen v1/v2 body plus the attribution footer. */
-export const V3_USER_SESSION_WIDGET_HTML = injectOnce(
-  injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
-  REFRESH_STATUS_MARKER,
-  `${REFRESH_STATUS_MARKER}\n  ${PROVIDER_ATTRIBUTION_HTML}`,
-);
+/**
+ * Body served at the v1 and v2 URIs. Their published widget CSP allows only
+ * https://flaim.app as a redirect domain, so this body carries no other
+ * external link.
+ */
+export const LEGACY_USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({ linkYahoo: false });
 
 /**
- * Inline SVG paths from Tabler Icons v3.41.1 (MIT), copyright Paweł Kuna.
- * The widget stays self-contained, so it needs no resource-domain allowance.
+ * Body served at the v3 URI (the tool descriptor target) and at the
+ * version-less HTTP fallback routes. v3's published widget CSP also allows
+ * https://sports.yahoo.com, so the Yahoo Fantasy credit is a link here.
  */
-const SPORT_ICON_CSS = `  .sport-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .sport-icon {
-    width: 18px;
-    height: 18px;
-    flex: 0 0 auto;
-  }
-`;
-
-const SPORT_ICON_SCRIPT = `  var SPORT_ICON_PATHS = {
-    football: '<path d="M15 9l-6 6"></path><path d="M10 12l2 2"></path><path d="M12 10l2 2"></path><path d="M8 21a5 5 0 0 0 -5 -5"></path><path d="M16 3c-7.18 0 -13 5.82 -13 13a5 5 0 0 0 5 5c7.18 0 13 -5.82 13 -13a5 5 0 0 0 -5 -5"></path><path d="M16 3a5 5 0 0 0 5 5"></path>',
-    baseball: '<path d="M5.636 18.364a9 9 0 1 0 12.728 -12.728a9 9 0 0 0 -12.728 12.728"></path><path d="M12.495 3.02a9 9 0 0 1 -9.475 9.475"></path><path d="M20.98 11.505a9 9 0 0 0 -9.475 9.475"></path><path d="M9 9l2 2"></path><path d="M13 13l2 2"></path><path d="M11 7l2 1"></path><path d="M7 11l1 2"></path><path d="M16 11l1 2"></path><path d="M11 16l2 1"></path>',
-    basketball: '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path><path d="M5.65 5.65l12.7 12.7"></path><path d="M5.65 18.35l12.7 -12.7"></path><path d="M12 3a9 9 0 0 0 9 9"></path><path d="M3 12a9 9 0 0 1 9 9"></path>',
-    hockey: '<path d="M5.905 5h3.418a1 1 0 0 1 .928 .629l1.143 2.856a3 3 0 0 0 2.207 1.83l4.717 .926a2.084 2.084 0 0 1 1.682 2.045v.714a1 1 0 0 1 -1 1h-13.895a1 1 0 0 1 -1 -1.1l.8 -8a1 1 0 0 1 1 -.9"></path><path d="M3 19h17a1 1 0 0 0 1 -1"></path><path d="M9 15v4"></path><path d="M15 15v4"></path>',
-    other: '<path d="M8 21l8 0"></path><path d="M12 17l0 4"></path><path d="M7 4l10 0"></path><path d="M17 4v8a5 5 0 0 1 -10 0v-8"></path><path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path><path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>'
-  };`;
-
-const SPORT_EMOJI_MARKER =
-  `  var SPORT_EMOJI = { baseball: '⚾', football: '🏈', basketball: '🏀', hockey: '🏒' };`;
-const SPORT_HEADER_MARKER =
-  `      html += '<span class="sport-label">' + esc(formatSportLabel(sport)) + '</span>';`;
-const SPORT_HEADER_WITH_ICON =
-  `      html += '<span class="sport-label">' + renderSportIcon(sport) + '<span>' + esc(formatSportLabel(sport)) + '</span></span>';`;
-const SPORT_GROUPS_MARKER = '    var groups = {};';
-const SAFE_SPORT_GROUPS = '    var groups = Object.create(null);';
-const SPORT_ORDER_MARKER = `      var oa = SPORT_ORDER[a] !== undefined ? SPORT_ORDER[a] : 99;
-      var ob = SPORT_ORDER[b] !== undefined ? SPORT_ORDER[b] : 99;`;
-const SAFE_SPORT_ORDER = `      var oa = Object.prototype.hasOwnProperty.call(SPORT_ORDER, a) ? SPORT_ORDER[a] : 99;
-      var ob = Object.prototype.hasOwnProperty.call(SPORT_ORDER, b) ? SPORT_ORDER[b] : 99;`;
-const SPORT_LABEL_FUNCTION_MARKER = `  function formatSportLabel(sport) {
-    var label = String(sport || 'Other');
-    var title = label.charAt(0).toUpperCase() + label.slice(1);
-    var emoji = SPORT_EMOJI[label];
-    return emoji ? (emoji + ' ' + title) : title;
-  }`;
-const SPORT_LABEL_AND_ICON_FUNCTIONS = `  function formatSportLabel(sport) {
-    var label = String(sport || 'Other');
-    return label.charAt(0).toUpperCase() + label.slice(1);
-  }
-
-  function renderSportIcon(sport) {
-    var label = String(sport || 'other').toLowerCase();
-    var paths = Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, label)
-      ? SPORT_ICON_PATHS[label]
-      : SPORT_ICON_PATHS.other;
-    return '<svg class="sport-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + paths + '</svg>';
-  }`;
-
-const TABLER_LICENSE_HTML = `<!--
-Tabler Icons v3.41.1
-Copyright (c) 2020-2026 Paweł Kuna
-
-MIT License
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
--->`;
-
-/** Current v4 body: frozen v3 behavior with self-contained Tabler sport icons. */
-const V4_WITH_ICON_CSS = injectOnce(
-  V3_USER_SESSION_WIDGET_HTML,
-  '</style>',
-  `${SPORT_ICON_CSS}</style>`,
-);
-const V4_WITH_ICON_DATA = injectOnce(V4_WITH_ICON_CSS, SPORT_EMOJI_MARKER, SPORT_ICON_SCRIPT);
-const V4_WITH_ICON_HEADER = injectOnce(
-  V4_WITH_ICON_DATA,
-  SPORT_HEADER_MARKER,
-  SPORT_HEADER_WITH_ICON,
-);
-const V4_WITH_SAFE_GROUPS = injectOnce(
-  V4_WITH_ICON_HEADER,
-  SPORT_GROUPS_MARKER,
-  SAFE_SPORT_GROUPS,
-);
-const V4_WITH_SAFE_ORDER = injectOnce(
-  V4_WITH_SAFE_GROUPS,
-  SPORT_ORDER_MARKER,
-  SAFE_SPORT_ORDER,
-);
-const V4_WITH_ICON_RENDERER = injectOnce(
-  V4_WITH_SAFE_ORDER,
-  SPORT_LABEL_FUNCTION_MARKER,
-  SPORT_LABEL_AND_ICON_FUNCTIONS,
-);
-export const USER_SESSION_WIDGET_HTML = injectOnce(
-  V4_WITH_ICON_RENDERER,
-  '</body>',
-  `${TABLER_LICENSE_HTML}\n</body>`,
-);
+export const USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({ linkYahoo: true });

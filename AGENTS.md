@@ -81,6 +81,8 @@ This repo ships two ways: continuous deploy to production on merge to `main`, an
 
 Before opening a PR, classify the change. It is **gated** (do not merge while a directory review is in flight; track it against the active review-freeze issue) if it touches any of: tool count; tool names, `description:` strings, annotations, or server instructions; declared input/output schemas in `workers/fantasy-mcp/src/mcp/tools.ts`; shipped skill text under `.agents/skills/`; or a plugin manifest. Everything else — worker internals, additive fields inside passthrough response payloads, web, docs — merges normally, with `docs/CHANGELOG.md` updated in the same PR.
 
+A published widget resource body may change in place when the update is backward compatible; each published URI's resource read-result `_meta` (widget CSP, description, redirect domains) is part of the frozen surface and must stay byte-identical, so a body needing metadata its URI does not already declare needs a new URI instead.
+
 When unsure whether a change touches the frozen surface, treat it as gated and say so in the PR description.
 
 The gate is driven by OpenAI's versioned review model only. Anthropic's connector directory reads the live server and does not pin an approved contract — tools, schemas, descriptions, and scopes may change without resubmission there; only renaming the published listing or moving the endpoint URL is a directory-side event (see claude.com/docs/connectors/verification and /building/managing-your-listing).
