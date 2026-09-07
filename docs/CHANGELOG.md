@@ -4,10 +4,6 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
-### Gemini Rejected Callback Diagnostic
-
-- **Changed**: The temporary, failure-only registration signal records every rejected callback position from a bounded Gemini registration in one event. Path diagnostics are limited to Gemini's three observed Google redirect hosts with Flaim's endpoint suffix; they retain a bounded lowercase prefix before the first dynamic component, replace numeric identifiers, UUIDs, and opaque suffixes, and omit paths with no dynamic component. Oversized callback arrays omit the rejected-entry list instead of sampling it. Redirect acceptance is unchanged, and the signal will be removed after the complete callback set is captured.
-
 ### Opt-in Connector Discovery
 
 - **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
@@ -22,8 +18,8 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Gemini Custom Connector Callback
 
-- **Fixed**: Accept the production, test, and sandbox Google callback hosts that Gemini Spark registers together for Flaim's MCP endpoint. Only the numeric user-bound identifier varies; the three hosts and Flaim suffix are pinned, and sibling hosts, alternate paths, ports, queries, and fragments remain blocked.
-- **Removed**: The temporary failure-only Gemini redirect diagnostic after it identified the exact callback set.
+- **Fixed**: Accept all six callbacks Gemini Spark registers for Flaim's MCP endpoint: `/r/` and `/a/` user-bound paths on each of its exact production, test, and sandbox Google redirect hosts. Only the numeric identifier varies; sibling hosts, other paths, ports, queries, fragments, and alternate suffixes remain blocked.
+- **Removed**: All temporary Gemini redirect diagnostics after they identified the complete callback set.
 
 ### Custom Connector Docs
 
