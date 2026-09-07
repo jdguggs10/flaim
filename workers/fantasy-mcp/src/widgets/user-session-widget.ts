@@ -27,12 +27,13 @@
  * therefore never edited in place — a content change mints a new URI and
  * repoints the tool descriptor, while every published URI keeps serving its
  * original bytes. v1 is the original submission's URI, v2 is the published
- * v2.1 submission's URI (same body as v1), and v3 is the current descriptor
- * target whose body adds the provider attribution footer.
+ * v2.1 submission's URI (same body as v1), v3 adds the provider attribution
+ * footer, and v4 replaces Unicode sport emoji with monochrome sport icons.
  */
 export const LEGACY_USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
 export const V2_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
+export const V3_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
+export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v4.html';
 
 export type RefreshResultKind =
   | 'success'
@@ -868,21 +869,134 @@ const REFRESH_STATUS_MARKER =
   '<div id="refresh-status" class="refresh-status" aria-live="polite"></div>';
 
 /**
- * Replace a marker that must appear exactly once. Throwing (at module init,
- * so tests and deploys fail loudly) beats silently shipping a v2 widget
- * without the required attribution.
+ * Replace a marker that must appear exactly once. Throwing at module init
+ * makes tests and deploys fail loudly instead of silently shipping an
+ * incomplete widget revision.
  */
 function injectOnce(html: string, marker: string, replacement: string): string {
   const first = html.indexOf(marker);
   if (first === -1 || html.indexOf(marker, first + marker.length) !== -1) {
-    throw new Error(`Widget attribution marker is not unique: ${marker}`);
+    throw new Error(`Widget marker is not unique: ${marker}`);
   }
   return html.replace(marker, replacement);
 }
 
-/** Current (v3) widget body: the frozen v1/v2 body plus the attribution footer. */
-export const USER_SESSION_WIDGET_HTML = injectOnce(
+/** Frozen v3 body: the frozen v1/v2 body plus the attribution footer. */
+export const V3_USER_SESSION_WIDGET_HTML = injectOnce(
   injectOnce(LEGACY_USER_SESSION_WIDGET_HTML, '</style>', `${PROVIDER_ATTRIBUTION_CSS}</style>`),
   REFRESH_STATUS_MARKER,
   `${REFRESH_STATUS_MARKER}\n  ${PROVIDER_ATTRIBUTION_HTML}`,
+);
+
+/**
+ * Inline SVG paths from Tabler Icons v3.41.1 (MIT), copyright Paweł Kuna.
+ * The widget stays self-contained, so it needs no resource-domain allowance.
+ */
+const SPORT_ICON_CSS = `  .sport-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sport-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+  }
+`;
+
+const SPORT_ICON_SCRIPT = `  var SPORT_ICON_PATHS = {
+    football: '<path d="M15 9l-6 6"></path><path d="M10 12l2 2"></path><path d="M12 10l2 2"></path><path d="M8 21a5 5 0 0 0 -5 -5"></path><path d="M16 3c-7.18 0 -13 5.82 -13 13a5 5 0 0 0 5 5c7.18 0 13 -5.82 13 -13a5 5 0 0 0 -5 -5"></path><path d="M16 3a5 5 0 0 0 5 5"></path>',
+    baseball: '<path d="M5.636 18.364a9 9 0 1 0 12.728 -12.728a9 9 0 0 0 -12.728 12.728"></path><path d="M12.495 3.02a9 9 0 0 1 -9.475 9.475"></path><path d="M20.98 11.505a9 9 0 0 0 -9.475 9.475"></path><path d="M9 9l2 2"></path><path d="M13 13l2 2"></path><path d="M11 7l2 1"></path><path d="M7 11l1 2"></path><path d="M16 11l1 2"></path><path d="M11 16l2 1"></path>',
+    basketball: '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path><path d="M5.65 5.65l12.7 12.7"></path><path d="M5.65 18.35l12.7 -12.7"></path><path d="M12 3a9 9 0 0 0 9 9"></path><path d="M3 12a9 9 0 0 1 9 9"></path>',
+    hockey: '<path d="M5.905 5h3.418a1 1 0 0 1 .928 .629l1.143 2.856a3 3 0 0 0 2.207 1.83l4.717 .926a2.084 2.084 0 0 1 1.682 2.045v.714a1 1 0 0 1 -1 1h-13.895a1 1 0 0 1 -1 -1.1l.8 -8a1 1 0 0 1 1 -.9"></path><path d="M3 19h17a1 1 0 0 0 1 -1"></path><path d="M9 15v4"></path><path d="M15 15v4"></path>',
+    other: '<path d="M8 21l8 0"></path><path d="M12 17l0 4"></path><path d="M7 4l10 0"></path><path d="M17 4v8a5 5 0 0 1 -10 0v-8"></path><path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path><path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>'
+  };`;
+
+const SPORT_EMOJI_MARKER =
+  `  var SPORT_EMOJI = { baseball: '⚾', football: '🏈', basketball: '🏀', hockey: '🏒' };`;
+const SPORT_HEADER_MARKER =
+  `      html += '<span class="sport-label">' + esc(formatSportLabel(sport)) + '</span>';`;
+const SPORT_HEADER_WITH_ICON =
+  `      html += '<span class="sport-label">' + renderSportIcon(sport) + '<span>' + esc(formatSportLabel(sport)) + '</span></span>';`;
+const SPORT_GROUPS_MARKER = '    var groups = {};';
+const SAFE_SPORT_GROUPS = '    var groups = Object.create(null);';
+const SPORT_ORDER_MARKER = `      var oa = SPORT_ORDER[a] !== undefined ? SPORT_ORDER[a] : 99;
+      var ob = SPORT_ORDER[b] !== undefined ? SPORT_ORDER[b] : 99;`;
+const SAFE_SPORT_ORDER = `      var oa = Object.prototype.hasOwnProperty.call(SPORT_ORDER, a) ? SPORT_ORDER[a] : 99;
+      var ob = Object.prototype.hasOwnProperty.call(SPORT_ORDER, b) ? SPORT_ORDER[b] : 99;`;
+const SPORT_LABEL_FUNCTION_MARKER = `  function formatSportLabel(sport) {
+    var label = String(sport || 'Other');
+    var title = label.charAt(0).toUpperCase() + label.slice(1);
+    var emoji = SPORT_EMOJI[label];
+    return emoji ? (emoji + ' ' + title) : title;
+  }`;
+const SPORT_LABEL_AND_ICON_FUNCTIONS = `  function formatSportLabel(sport) {
+    var label = String(sport || 'Other');
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  function renderSportIcon(sport) {
+    var label = String(sport || 'other').toLowerCase();
+    var paths = Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, label)
+      ? SPORT_ICON_PATHS[label]
+      : SPORT_ICON_PATHS.other;
+    return '<svg class="sport-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + paths + '</svg>';
+  }`;
+
+const TABLER_LICENSE_HTML = `<!--
+Tabler Icons v3.41.1
+Copyright (c) 2020-2026 Paweł Kuna
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->`;
+
+/** Current v4 body: frozen v3 behavior with self-contained Tabler sport icons. */
+const V4_WITH_ICON_CSS = injectOnce(
+  V3_USER_SESSION_WIDGET_HTML,
+  '</style>',
+  `${SPORT_ICON_CSS}</style>`,
+);
+const V4_WITH_ICON_DATA = injectOnce(V4_WITH_ICON_CSS, SPORT_EMOJI_MARKER, SPORT_ICON_SCRIPT);
+const V4_WITH_ICON_HEADER = injectOnce(
+  V4_WITH_ICON_DATA,
+  SPORT_HEADER_MARKER,
+  SPORT_HEADER_WITH_ICON,
+);
+const V4_WITH_SAFE_GROUPS = injectOnce(
+  V4_WITH_ICON_HEADER,
+  SPORT_GROUPS_MARKER,
+  SAFE_SPORT_GROUPS,
+);
+const V4_WITH_SAFE_ORDER = injectOnce(
+  V4_WITH_SAFE_GROUPS,
+  SPORT_ORDER_MARKER,
+  SAFE_SPORT_ORDER,
+);
+const V4_WITH_ICON_RENDERER = injectOnce(
+  V4_WITH_SAFE_ORDER,
+  SPORT_LABEL_FUNCTION_MARKER,
+  SPORT_LABEL_AND_ICON_FUNCTIONS,
+);
+export const USER_SESSION_WIDGET_HTML = injectOnce(
+  V4_WITH_ICON_RENDERER,
+  '</body>',
+  `${TABLER_LICENSE_HTML}\n</body>`,
 );

@@ -9,6 +9,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: The exact opt-in MCP path `/mcp?auth=required` requires OAuth during connector discovery in production and preview for clients that need authentication at the initial handshake. The canonical `/mcp` resource and its default discovery behavior are unchanged.
 - **Verified**: Grok completes the Flaim authorization flow through the exact observed OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, and can use the authenticated `get_user_session` tool without calling `refresh_leagues`.
 
+### Consistent Sport Icons
+
+- **Changed**: Sport indicators use monochrome Tabler outline icons across league management, the public demo, the extension popup, and the new ChatGPT widget v4. Hockey uses the matching ice-skate icon. Existing sport labels remain, and icon-only popup indicators have accessible names.
+- **Preserved**: Published widget v1–v3 resources retain their existing bodies and metadata for older conversations. The v4 change is limited to sport icons.
+
 ### Gemini Custom Connector Callback
 
 - **Fixed**: Accept Gemini Spark's Google-hosted, user-bound OAuth callback for Flaim's production MCP endpoint. Only the numeric account identifier varies; the host and Flaim suffix are pinned, and alternate paths, ports, queries, and fragments remain blocked.

@@ -10,6 +10,8 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_HTML,
+  V3_USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
 } from '../../src/widgets/user-session-widget';
 import { CORRELATION_ID_HEADER, INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
@@ -405,12 +407,12 @@ describe('fantasy-mcp gateway integration', () => {
     expect(userSessionTool).toBeDefined();
     expect(userSessionTool?._meta?.ui).toEqual({ resourceUri: USER_SESSION_WIDGET_URI });
     expect(userSessionTool?._meta?.['openai/outputTemplate']).toBe(USER_SESSION_WIDGET_URI);
-    // The descriptor targets the v3 cache key: published clients cached on the
-    // v1/v2 URIs must never be repointed at mutated bytes, and the current
-    // descriptor must carry the attributed body. Literal pin on purpose.
-    expect(userSessionTool?._meta?.ui?.resourceUri).toBe('ui://widget/user-session-v3.html');
+    // The descriptor targets the v4 cache key. Published clients cached on
+    // v1-v3 keep their original immutable resources. Literal pin on purpose.
+    expect(userSessionTool?._meta?.ui?.resourceUri).toBe('ui://widget/user-session-v4.html');
     expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
+    expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(V3_USER_SESSION_WIDGET_URI);
     expect(userSessionTool?._meta?.['openai/widgetAccessible']).toBe(true);
     expect(userSessionTool?._meta?.['openai/resultCanProduceWidget']).toBe(true);
     expect(userSessionTool?._meta?.['openai/widgetDomain']).toBeUndefined();
@@ -533,7 +535,7 @@ describe('fantasy-mcp gateway integration', () => {
         hasDescription: false,
         redirectDomains: ['https://flaim.app'],
         hasAttribution: false,
-        frozen: true,
+        frozenLegacyMeta: true,
       },
       {
         uri: V2_USER_SESSION_WIDGET_URI,
@@ -542,16 +544,25 @@ describe('fantasy-mcp gateway integration', () => {
         hasDescription: true,
         redirectDomains: ['https://flaim.app'],
         hasAttribution: false,
-        frozen: true,
+        frozenLegacyMeta: true,
+      },
+      {
+        uri: V3_USER_SESSION_WIDGET_URI,
+        uriLiteral: 'ui://widget/user-session-v3.html',
+        body: V3_USER_SESSION_WIDGET_HTML,
+        hasDescription: true,
+        redirectDomains: ['https://flaim.app', 'https://sports.yahoo.com'],
+        hasAttribution: true,
+        frozenLegacyMeta: false,
       },
       {
         uri: USER_SESSION_WIDGET_URI,
-        uriLiteral: 'ui://widget/user-session-v3.html',
+        uriLiteral: 'ui://widget/user-session-v4.html',
         body: USER_SESSION_WIDGET_HTML,
         hasDescription: true,
         redirectDomains: ['https://flaim.app', 'https://sports.yahoo.com'],
         hasAttribution: true,
-        frozen: false,
+        frozenLegacyMeta: false,
       },
     ] as const;
     expect(new Set(listPayload.result?.resources?.map((item) => item.uri))).toEqual(
@@ -596,7 +607,7 @@ describe('fantasy-mcp gateway integration', () => {
         resource_domains: [],
         redirect_domains: widget.redirectDomains,
       });
-      if (widget.frozen) {
+      if (widget.frozenLegacyMeta) {
         // Frozen published contracts (v1: original submission; v2: v2.1
         // submission): the read-result _meta must stay byte-identical to the
         // snapshots OpenAI scanned — strict-equal on the whole object so no
@@ -625,26 +636,47 @@ describe('fantasy-mcp gateway integration', () => {
         expect(content?._meta?.['openai/widgetDescription']).toBe(
           'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
         );
-        // Provider attribution footer ships on the v3 body only.
+        // Provider attribution footer ships on v3 and later bodies.
         expect(content?.text).toContain(
           'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
         );
+        if (uri === V3_USER_SESSION_WIDGET_URI) {
+          // v3 is published too. Its complete resource metadata remains the
+          // exact object served before the descriptor moved to v4.
+          expect(content?._meta).toEqual({
+            ui: {
+              csp: {
+                connectDomains: [],
+                resourceDomains: [],
+              },
+            },
+            'openai/widgetDescription':
+              'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+            'openai/widgetCSP': {
+              connect_domains: [],
+              resource_domains: [],
+              redirect_domains: ['https://flaim.app', 'https://sports.yahoo.com'],
+            },
+          });
+        }
       }
     }
-    expect(widgetBodies).toHaveLength(3);
-    // v1 and v2 share the frozen body; v3 is that body plus the provider
-    // attribution footer.
+    expect(widgetBodies).toHaveLength(4);
+    // v1 and v2 share one frozen body. v3 adds provider attribution; v4 adds
+    // monochrome icons without mutating any prior body.
     expect(widgetBodies[1]).toBe(widgetBodies[0]);
     expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
+    expect(widgetBodies[3]).not.toBe(widgetBodies[2]);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
-  it('serves only the three static widget resources without authorization', async () => {
+  it('serves only the four static widget resources without authorization', async () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
     const expectedUris = [
       LEGACY_USER_SESSION_WIDGET_URI,
       V2_USER_SESSION_WIDGET_URI,
+      V3_USER_SESSION_WIDGET_URI,
       USER_SESSION_WIDGET_URI,
     ];
 
@@ -675,17 +707,19 @@ describe('fantasy-mcp gateway integration', () => {
       const readPayload = await parseJsonRpcResponse(readResponse);
       const content = readPayload.result?.contents?.find((item) => item.uri === uri);
       expect(content?.mimeType).toBe('text/html;profile=mcp-app');
-      expect(content?.text).toBe(
-        uri === USER_SESSION_WIDGET_URI
-          ? USER_SESSION_WIDGET_HTML
-          : LEGACY_USER_SESSION_WIDGET_HTML
-      );
+      const expectedBody = uri === USER_SESSION_WIDGET_URI
+        ? USER_SESSION_WIDGET_HTML
+        : uri === V3_USER_SESSION_WIDGET_URI
+          ? V3_USER_SESSION_WIDGET_HTML
+          : LEGACY_USER_SESSION_WIDGET_HTML;
+      expect(content?.text).toBe(expectedBody);
       widgetBodies.push(content?.text || '');
     }
-    expect(widgetBodies).toHaveLength(3);
-    // v1/v2 stay frozen; v3 adds the provider attribution footer.
+    expect(widgetBodies).toHaveLength(4);
+    // Every revision remains distinct where its published body changed.
     expect(widgetBodies[1]).toBe(widgetBodies[0]);
     expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
+    expect(widgetBodies[3]).not.toBe(widgetBodies[2]);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
@@ -701,7 +735,8 @@ describe('fantasy-mcp gateway integration', () => {
     const widgetUris = [
       { uri: LEGACY_USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget' },
       { uri: V2_USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v2' },
-      { uri: USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v3' },
+      { uri: V3_USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v3' },
+      { uri: USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v4' },
     ] as const;
 
     try {

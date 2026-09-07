@@ -44,6 +44,7 @@ import {
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { shouldProbeEspnHistoryAfterRefreshFailure } from '@/lib/espn-history-refresh';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
+import { SportIcon } from '@/components/site/sport-icon';
 import { getPreviousSeasonYear } from '@/lib/season-utils';
 import { getDeviceClass, type DeviceClass } from '@/lib/device';
 
@@ -164,13 +165,6 @@ interface UnifiedLeagueGroup {
   archived: boolean;     // true when this recurring league is suppressed (archived or hidden)
   archiveMode?: 'historical' | 'hidden'; // mode of the suppression when archived is true
 }
-
-const SPORT_OPTIONS: { value: Sport; label: string; emoji: string }[] = [
-  { value: 'football', label: 'Football', emoji: '\u{1F3C8}' },
-  { value: 'baseball', label: 'Baseball', emoji: '\u26BE' },
-  { value: 'basketball', label: 'Basketball', emoji: '\u{1F3C0}' },
-  { value: 'hockey', label: 'Hockey', emoji: '\u{1F3D2}' },
-];
 
 const EMPTY_ESPN_LEAGUES: League[] = [];
 const EMPTY_YAHOO_LEAGUES: YahooLeague[] = [];
@@ -1621,11 +1615,6 @@ function LeaguesPageContent() {
     }
   };
 
-  const getSportEmoji = (sport: string) => {
-    const option = SPORT_OPTIONS.find((s) => s.value === sport);
-    return option?.emoji || '\u{1F3C6}';
-  };
-
   const hasAnyLeagueGroups =
     leaguesBySport.active.length > 0 ||
     leaguesBySport.old.length > 0 ||
@@ -1928,7 +1917,7 @@ function LeaguesPageContent() {
                   <div key={sport} className="space-y-3">
                     {/* Sport Header with Default Star */}
                     <div className="flex items-center gap-2 font-medium text-muted-foreground">
-                      <span className="text-lg">{getSportEmoji(sport)}</span>
+                      <SportIcon sport={sport} className="h-[18px] w-[18px]" />
                       <span className="capitalize text-base">{sport}</span>
                       {defaultSport === sport ? (
                         <button

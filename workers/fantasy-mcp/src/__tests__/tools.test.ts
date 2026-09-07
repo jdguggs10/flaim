@@ -11,6 +11,8 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_HTML,
+  V3_USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import {
@@ -208,15 +210,16 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
-    // Published URIs are immutable ChatGPT cache keys: v1 and v2 are pinned
-    // to their scanned bytes forever, so the attributed body ships under a
-    // new v3 key and the descriptor points there.
+    // Published URIs are immutable ChatGPT cache keys. The icon revision gets
+    // a new v4 key while v1-v3 remain available at their original bytes.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
     expect(V2_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
-    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
+    expect(V3_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
+    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v4.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
+    expect(tool?.widgetUri).not.toBe(V3_USER_SESSION_WIDGET_URI);
   });
 
   it('keeps every downstream data tool and refresh free of widget attachments', () => {
@@ -238,22 +241,45 @@ describe('fantasy-mcp tools', () => {
     ).toBe('ca6160c5ccabd329e60885e6bfbe72b35ab48985fb1b6866fa64c0d657e2647b');
   });
 
+  it('pins the frozen v3 widget body to its immutable golden hash', () => {
+    expect(Buffer.byteLength(V3_USER_SESSION_WIDGET_HTML, 'utf8')).toBe(25431);
+    expect(
+      createHash('sha256').update(V3_USER_SESSION_WIDGET_HTML, 'utf8').digest('hex')
+    ).toBe('a5a09ea79d6082d5e64588ed0a48311a5d89223049264d1183deb78ff854b876');
+  });
+
   it('v3 widget carries the provider attribution footer; the legacy body stays frozen', () => {
     // Exact attribution markup is pinned deliberately — the credit line and
     // its Yahoo Fantasy link are a required product surface on v3.
-    expect(USER_SESSION_WIDGET_HTML).toContain(
+    expect(V3_USER_SESSION_WIDGET_HTML).toContain(
       '<div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>'
     );
-    expect(USER_SESSION_WIDGET_HTML).toContain('.attribution {');
+    expect(V3_USER_SESSION_WIDGET_HTML).toContain('.attribution {');
     // The frozen v1/v2 body must never pick the footer up.
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('Fantasy data provided by');
     expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('class="attribution"');
     // v3 differs from the frozen body only by the injected CSS and footer.
     expect(
-      USER_SESSION_WIDGET_HTML
+      V3_USER_SESSION_WIDGET_HTML
         .replace('  .attribution {\n    padding: 8px 16px 10px;\n    border-top: 1px solid rgba(13, 13, 13, 0.05);\n    font-size: 11px;\n    line-height: 14px;\n    text-align: center;\n    color: #9ca3af;\n  }\n  .attribution a {\n    color: inherit;\n    text-decoration: underline;\n  }\n', '')
         .replace('\n  <div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>', '')
     ).toBe(LEGACY_USER_SESSION_WIDGET_HTML);
+  });
+
+  it('v4 widget replaces sport emoji with self-contained monochrome icons', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('var SPORT_ICON_PATHS = {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('stroke="currentColor" stroke-width="1.5"');
+    expect(USER_SESSION_WIDGET_HTML).toContain('renderSportIcon(sport)');
+    expect(USER_SESSION_WIDGET_HTML).toContain('aria-hidden="true" focusable="false"');
+    expect(USER_SESSION_WIDGET_HTML).toContain('Permission is hereby granted, free of charge');
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      'Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, label)'
+    );
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('var SPORT_EMOJI =');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('🏈');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('⚾');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('🏀');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('🏒');
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {

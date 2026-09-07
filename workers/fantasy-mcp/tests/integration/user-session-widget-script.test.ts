@@ -34,10 +34,98 @@ function loadEmbeddedClassifier(): (payload: unknown) => RefreshResultClassifica
   return context.__classifyRefreshResult as (payload: unknown) => RefreshResultClassification;
 }
 
+function loadEmbeddedRenderer(): {
+  render: (data: unknown) => void;
+  content: { innerHTML: string };
+} {
+  const script = USER_SESSION_WIDGET_HTML.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  if (!script) throw new Error('Widget script not found');
+
+  const exposedScript = script.replace(
+    /\}\)\(\);\s*$/,
+    'globalThis.__render = render;\n})();',
+  );
+  const content = { innerHTML: '' };
+  const context: Record<string, unknown> = {
+    document: {
+      addEventListener() {},
+      body: { scrollHeight: 0 },
+      createElement() {
+        let text = '';
+        return {
+          set textContent(value: unknown) { text = String(value); },
+          get innerHTML() {
+            return text
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;');
+          },
+        };
+      },
+      getElementById(id: string) { return id === 'content' ? content : null; },
+      querySelector() { return null; },
+    },
+    URL,
+    setTimeout,
+  };
+  context.window = {
+    addEventListener() {},
+    parent: null,
+  };
+  (context.window as Record<string, unknown>).parent = context.window;
+
+  runInNewContext(exposedScript, context);
+  return {
+    render: context.__render as (data: unknown) => void,
+    content,
+  };
+}
+
 describe('user session widget script', () => {
   it('ships the classifier without module helper dependencies', () => {
     expect(USER_SESSION_WIDGET_HTML).not.toContain('__name');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('classifyRefreshResult.toString');
+  });
+
+  it('renders known and unknown sports with static icons while escaping sport text', () => {
+    const { render, content } = loadEmbeddedRenderer();
+    render({
+      allLeagues: [
+        {
+          platform: 'espn',
+          sport: 'football',
+          leagueId: 'known',
+          leagueName: 'Known league',
+          teamName: 'Known team',
+          seasonYear: 2026,
+        },
+        {
+          platform: 'espn',
+          sport: 'other<img src=x onerror=alert(1)>',
+          leagueId: 'unknown',
+          leagueName: 'Unknown league',
+          teamName: 'Unknown team',
+          seasonYear: 2026,
+        },
+        {
+          platform: 'espn',
+          sport: '__proto__',
+          leagueId: 'prototype-key',
+          leagueName: 'Prototype key league',
+          teamName: 'Prototype key team',
+          seasonYear: 2026,
+        },
+      ],
+      defaultLeagues: {},
+      defaultSport: null,
+    });
+
+    expect(content.innerHTML).toContain('M15 9l-6 6');
+    expect(content.innerHTML).toContain('M8 21l8 0');
+    expect(content.innerHTML).toContain('Football');
+    expect(content.innerHTML).toContain('Other&lt;img src=x onerror=alert(1)&gt;');
+    expect(content.innerHTML).not.toContain('<img src=x');
+    expect(content.innerHTML.match(/class="sport-icon"/g)).toHaveLength(3);
   });
 
   const cases: Array<{

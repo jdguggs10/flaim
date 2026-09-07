@@ -8,6 +8,8 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_HTML,
+  V3_USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
@@ -91,12 +93,13 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
   // Template URIs are immutable cache keys in ChatGPT, so published resources
   // keep serving their original bytes forever: v1 (original submission) and
   // v2 (published v2.1 submission) both serve the frozen body with their
-  // frozen _meta. v3 is the current descriptor target; its body adds the
-  // provider attribution footer.
+  // frozen _meta. v3 adds the provider attribution footer. v4 is the current
+  // descriptor target and replaces Unicode sport emoji with inline icons.
   const widgetResources = [
     ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
     ['user-session-widget-v2', V2_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
-    ['user-session-widget-v3', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v3', V3_USER_SESSION_WIDGET_URI, V3_USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v4', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
   ] as const;
 
   for (const [name, uri, widgetHtml] of widgetResources) {
@@ -109,7 +112,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
       async () => {
         // Structured log on a sample of widget resource reads so v1's share
         // of reads is computable (v1-retirement tracking, FLA-258) — log all
-        // three URIs, not just v1, so the denominator is available too.
+        // published URIs, not just v1, so the denominator is available too.
         // client_name is intentionally omitted: this path is public and
         // never goes through token introspection, so ctx.clientName is
         // always null here.
@@ -138,7 +141,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
             // read-result _meta must stay byte-identical to the snapshots
             // OpenAI scanned (v1: original submission; v2: v2.1 submission
             // incl. the FLA-177 descriptor additions). New additions go on
-            // the v3 URI only.
+            // v3 and later URIs only.
             _meta: {
               ui: {
                 csp: {
@@ -148,7 +151,7 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
               },
               ...(uri !== LEGACY_USER_SESSION_WIDGET_URI && {
                 // Plain-language widget summary for directory/host surfaces.
-                // Part of v2's frozen _meta (FLA-177); carried forward on v3.
+                // Part of v2's frozen _meta (FLA-177); carried forward later.
                 'openai/widgetDescription':
                   'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
               }),
@@ -159,10 +162,10 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
                 // widget domain — the widget is fully self-contained (empty
                 // connect/resource CSP), so a dedicated domain adds no capability;
                 // revisit only if a portal scan explicitly requires _meta.ui.domain.
-                // v3 additionally allowlists the Yahoo Fantasy attribution link
-                // target; the published v1/v2 _meta stays byte-identical.
+                // v3 and later additionally allowlist the Yahoo Fantasy
+                // attribution link target; v1/v2 _meta stays byte-identical.
                 redirect_domains:
-                  uri === USER_SESSION_WIDGET_URI
+                  uri === V3_USER_SESSION_WIDGET_URI || uri === USER_SESSION_WIDGET_URI
                     ? ['https://flaim.app', 'https://sports.yahoo.com']
                     : ['https://flaim.app'],
               },
