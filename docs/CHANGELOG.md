@@ -18,6 +18,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Changed**: AI setup docs group Perplexity, Gemini, and Grok settings and documentation links separately from the shared four-step custom connector setup.
 - **Changed**: Setup docs simplify hero navigation and name all three custom connector options in the AI page introduction.
 - **Changed**: Grok now has its own authenticated-discovery URL and setup steps, and the custom-connector HowTo includes the verified Grok flow.
+- **Changed**: The shared setup fields now have labeled copy buttons for the connector name and app-specific URLs.
 
 ### Claude League Setup
 
