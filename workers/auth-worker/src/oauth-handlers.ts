@@ -256,7 +256,17 @@ function logOAuthFailure(
 const KNOWN_GEMINI_REDIRECT_URI =
   /^https:\/\/(?:oauth-redirect-sandbox|oauth-redirect-test|oauth-redirect)\.googleusercontent\.com\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app(?![\s\S])/;
 
+const OBSERVED_GEMINI_REDIRECT_HOSTS = new Set([
+  'oauth-redirect-sandbox.googleusercontent.com',
+  'oauth-redirect-test.googleusercontent.com',
+  'oauth-redirect.googleusercontent.com',
+]);
+const MAX_GEMINI_REDIRECT_PROBE_ENTRIES = 12;
+const GEMINI_FLAIM_PATH_SUFFIX = '-api_flaim_app';
+const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
+
 interface RejectedGeminiRedirectProbe {
+  index: number;
   hostname?: string;
   host_category?: 'other';
   https: boolean;
@@ -273,6 +283,11 @@ interface RejectedGeminiRedirectProbe {
   encoded_path_syntax?: boolean;
 }
 
+interface RejectedRedirect {
+  index: number;
+  uri: unknown;
+}
+
 function rawRedirectParts(uri: string): { authority: string; path: string } | undefined {
   const match = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)([^?#]*)(?:\?[\s\S]*)?(?:#[\s\S]*)?(?![\s\S])/i.exec(uri);
   if (!match) return undefined;
@@ -286,8 +301,59 @@ function hasExplicitAuthorityPort(authority: string): boolean {
     : hostAndPort.includes(':');
 }
 
-function inspectRejectedGeminiRedirect(candidate: unknown): RejectedGeminiRedirectProbe {
+function isSafeStaticPathPrefix(prefix: string): boolean {
+  return /^\/[a-z/_-]*$/.test(prefix)
+    && prefix.split(/[\/_-]+/).filter(Boolean).every((atom) => atom.length <= 24);
+}
+
+function sanitizeObservedGeminiPath(path: string): string | undefined {
+  if (path.length > 256 || !/^[A-Za-z0-9\/_-]+\/?$/.test(path)) return undefined;
+
+  const trailingSlash = path.endsWith('/') ? '/' : '';
+  const pathWithoutSlash = trailingSlash ? path.slice(0, -1) : path;
+  if (!pathWithoutSlash.endsWith(GEMINI_FLAIM_PATH_SUFFIX)) return undefined;
+
+  const beforeSuffix = pathWithoutSlash.slice(0, -GEMINI_FLAIM_PATH_SUFFIX.length);
+  const uuid = UUID_PATTERN.exec(beforeSuffix);
+  const firstDigit = beforeSuffix.search(/[0-9]/);
+  const unsafeAtom = /[A-Za-z]+/g;
+  let unsafeAtomStart = -1;
+  for (const match of beforeSuffix.matchAll(unsafeAtom)) {
+    if (match[0] !== match[0].toLowerCase() || match[0].length > 24) {
+      unsafeAtomStart = match.index;
+      break;
+    }
+  }
+
+  const dynamicStarts = [
+    uuid?.index ?? -1,
+    firstDigit,
+    unsafeAtomStart,
+  ].filter((index) => index >= 0);
+  const dynamicStart = dynamicStarts.length > 0 ? Math.min(...dynamicStarts) : -1;
+
+  if (dynamicStart === -1) {
+    if (!isSafeStaticPathPrefix(beforeSuffix)) return undefined;
+    return `${beforeSuffix}<missing-id>${GEMINI_FLAIM_PATH_SUFFIX}${trailingSlash}`;
+  }
+
+  const staticPrefix = beforeSuffix.slice(0, dynamicStart);
+  if (!isSafeStaticPathPrefix(staticPrefix)) return undefined;
+
+  const dynamicPart = beforeSuffix.slice(dynamicStart);
+  let maskedDynamic = '<opaque>';
+  if (UUID_PATTERN.test(dynamicPart) && dynamicPart.match(UUID_PATTERN)?.[0] === dynamicPart) {
+    maskedDynamic = '<uuid>';
+  } else if (/^[0-9]+(?:[-_][0-9]+)*$/.test(dynamicPart)) {
+    maskedDynamic = dynamicPart.replace(/[0-9]+/g, '<id>');
+  }
+
+  return `${staticPrefix}${maskedDynamic}${GEMINI_FLAIM_PATH_SUFFIX}${trailingSlash}`;
+}
+
+function inspectRejectedGeminiRedirect(candidate: unknown, index: number): RejectedGeminiRedirectProbe {
   const fallback: RejectedGeminiRedirectProbe = {
+    index,
     host_category: 'other',
     https: false,
     credentials: false,
@@ -304,14 +370,11 @@ function inspectRejectedGeminiRedirect(candidate: unknown): RejectedGeminiRedire
     if (!raw) return fallback;
 
     const hostname = parsed.hostname.toLowerCase();
-    const trustedGoogleHost = hostname === 'googleusercontent.com'
-      || hostname.endsWith('.googleusercontent.com')
-      || hostname === 'google.com'
-      || hostname.endsWith('.google.com');
-    const safePath = /^\/r\/(user_bound_)?custom-mcp-(?:([0-9]+(?:[-_][0-9]+)*)-)?api_flaim_app(\/?)$/.exec(raw.path);
+    const observedGeminiHost = OBSERVED_GEMINI_REDIRECT_HOSTS.has(hostname);
 
     const result: RejectedGeminiRedirectProbe = {
-      ...(trustedGoogleHost ? { hostname } : { host_category: 'other' as const }),
+      index,
+      ...(observedGeminiHost ? { hostname } : { host_category: 'other' as const }),
       https: parsed.protocol === 'https:',
       credentials: Boolean(parsed.username || parsed.password),
       explicit_port: hasExplicitAuthorityPort(raw.authority),
@@ -319,14 +382,12 @@ function inspectRejectedGeminiRedirect(candidate: unknown): RejectedGeminiRedire
       fragment: candidate.includes('#'),
     };
 
-    if (safePath) {
-      const binding = safePath[1] || '';
-      const identifiers = safePath[2];
-      const slash = safePath[3] || '';
-      const maskedIdentifiers = identifiers
-        ? `${identifiers.replace(/[0-9]+/g, '<id>')}-`
-        : '<missing-id>-';
-      result.sanitized_path = `/r/${binding}custom-mcp-${maskedIdentifiers}api_flaim_app${slash}`;
+    if (observedGeminiHost && /-api_flaim_app\/?$/.test(raw.path)) {
+      const sanitizedPath = sanitizeObservedGeminiPath(raw.path);
+      if (sanitizedPath) result.sanitized_path = sanitizedPath;
+    }
+
+    if (result.sanitized_path) {
       return result;
     }
 
@@ -345,15 +406,12 @@ function inspectRejectedGeminiRedirect(candidate: unknown): RejectedGeminiRedire
 }
 
 /**
- * Temporary failure-only diagnostic for Gemini registrations. It records only
- * the first rejected entry, a trusted Google hostname, fixed URL-shape fields,
- * and a path whose numeric identifiers are replaced with `<id>`.
+ * Temporary failure-only diagnostic for Gemini registrations. It records all
+ * rejected entries when the request is small enough to inspect as a unit.
+ * Sanitized paths are emitted only for the three observed Google redirect
+ * hosts after identifiers and opaque components have been replaced.
  */
-function logRejectedGeminiRedirectProbe(
-  redirectUris: unknown,
-  rejectedUri: unknown,
-  rejectedIndex: number
-): void {
+function logRejectedGeminiRedirectProbe(redirectUris: unknown): void {
   try {
     if (!Array.isArray(redirectUris) || !redirectUris.some((candidate) => (
       typeof candidate === 'string' && KNOWN_GEMINI_REDIRECT_URI.test(candidate)
@@ -361,15 +419,38 @@ function logRejectedGeminiRedirectProbe(
       return;
     }
 
-    console.log(JSON.stringify({
-      schema_version: 1,
+    const baseEvent = {
+      schema_version: 2,
       service: 'auth-worker',
       component: 'oauth-provider',
       event: 'oauth_gemini_rejected_redirect_probe',
       outcome: 'failure',
       total_count: redirectUris.length,
-      rejected_index: rejectedIndex + 1,
-      rejected: inspectRejectedGeminiRedirect(rejectedUri),
+    };
+
+    if (redirectUris.length > MAX_GEMINI_REDIRECT_PROBE_ENTRIES) {
+      console.log(JSON.stringify({
+        ...baseEvent,
+        rejected_entries: 'omitted_excessive_redirect_count',
+      }));
+      return;
+    }
+
+    const rejectedRedirects = redirectUris.reduce<RejectedRedirect[]>((rejected, candidate, index) => {
+      let valid = false;
+      try {
+        valid = typeof candidate === 'string' && isValidRedirectUri(candidate);
+      } catch {
+        // Treat malformed runtime input as rejected without affecting DCR behavior.
+      }
+      if (!valid) rejected.push({ uri: candidate, index });
+      return rejected;
+    }, []);
+
+    console.log(JSON.stringify({
+      ...baseEvent,
+      rejected_count: rejectedRedirects.length,
+      rejected: rejectedRedirects.map(({ uri, index }) => inspectRejectedGeminiRedirect(uri, index + 1)),
     }));
   } catch {
     // Logging must never affect request behavior.
@@ -540,10 +621,9 @@ export async function handleClientRegistration(
 
   // Validate redirect_uris if provided
   const redirectUris = body.redirect_uris || [];
-  let redirectIndex = 0;
   for (const uri of redirectUris) {
     if (!isValidRedirectUri(uri)) {
-      logRejectedGeminiRedirectProbe(body.redirect_uris, uri, redirectIndex);
+      logRejectedGeminiRedirectProbe(body.redirect_uris);
       logOAuthFailure(request, env, 'oauth_registration_failed', {
         stage: 'redirect_uri_validation',
         failure_kind: 'validation',
@@ -558,7 +638,6 @@ export async function handleClientRegistration(
         headers: { 'Content-Type': 'application/json', ...corsHeaders }
       });
     }
-    redirectIndex += 1;
   }
 
   if (
