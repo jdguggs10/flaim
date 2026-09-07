@@ -2443,6 +2443,21 @@ export async function handleYahooDiscover(
       if (deniedBody) {
         console.log(`[yahoo-connect] discovery access_denied body: ${deniedBody}`);
       }
+      // A 5xx (or an otherwise unclassified status) carries Yahoo's own reason
+      // in the body, and logging only the status makes a deterministic upstream
+      // failure invisible. Diagnostics only: this slice is never matched on and
+      // never reaches the response, so yahooApiFailureResponse still sees the
+      // 403-only deniedBody. Same bounded, never-throwing read as above, and
+      // only one branch ever consumes the body.
+      const upstreamBody =
+        classification.kind === 'transient' || classification.kind === 'unexpected'
+          ? await apiResponse.text().then((b) => b.slice(0, 500)).catch(() => '')
+          : '';
+      if (upstreamBody) {
+        console.error(
+          `[yahoo-connect] discovery upstream ${apiResponse.status} body: ${upstreamBody}`
+        );
+      }
       console.error(`[yahoo-connect] Yahoo API error during discovery: ${apiResponse.status}`);
       return yahooApiFailureResponse(
         { status: apiResponse.status, headers: apiResponse.headers },
