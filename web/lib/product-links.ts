@@ -6,6 +6,8 @@ export const CLAUDE_CONNECTOR_DIRECTORY_URL =
 
 export const FLAIM_MCP_URL = "https://api.flaim.app/mcp";
 
+export const GROK_MCP_URL = `${FLAIM_MCP_URL}?auth=required`;
+
 export const PERPLEXITY_CONNECTOR_SETTINGS_URL =
   "https://www.perplexity.ai/account/connectors";
 

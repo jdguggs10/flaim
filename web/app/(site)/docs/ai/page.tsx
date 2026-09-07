@@ -11,6 +11,7 @@ import {
   GEMINI_CUSTOM_APPS_URL,
   GROK_CONNECTOR_HELP_URL,
   GROK_CONNECTOR_SETTINGS_URL,
+  GROK_MCP_URL,
   PERPLEXITY_CONNECTOR_HELP_URL,
   PERPLEXITY_CONNECTOR_SETTINGS_URL,
 } from "@/lib/product-links";
@@ -75,12 +76,26 @@ const HOW_TO_SCHEMAS = [
     name: "Add as Custom Connector",
     dateModified: "2026-09-07",
     description:
-      "Add Flaim Fantasy as a custom connector in an AI app such as Perplexity or Gemini.",
+      "Add Flaim Fantasy as a custom connector in Perplexity, Gemini, or Grok.",
     step: [
       "In your AI app, find its custom connector or custom app option.",
-      "Name it Flaim Fantasy if asked and use this address: " + FLAIM_MCP_URL + ".",
+      "Name it Flaim Fantasy if asked. Use " + FLAIM_MCP_URL + " for Perplexity or Gemini, or " + GROK_MCP_URL + " for Grok.",
       "If asked, select OAuth for authentication and Streamable HTTP for the connection type.",
       "Finish the app's enable or authorization flow, then sign in to your Flaim account if asked.",
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: "Connect Flaim Fantasy to Grok",
+    dateModified: "2026-09-07",
+    description:
+      "Add Flaim Fantasy as a custom connector in Grok and authorize your Flaim account.",
+    step: [
+      "Connect your ESPN, Yahoo, or Sleeper leagues to Flaim.",
+      "Open Grok Connectors and add a custom connector.",
+      "Name it Flaim Fantasy if asked and enter " + GROK_MCP_URL + ".",
+      "Finish authorization, then ask Grok what fantasy leagues you have.",
     ],
   },
 ].map((howTo) => ({
@@ -128,10 +143,6 @@ export default function AiGuidePage() {
             Connect your leagues first. Then open Flaim Fantasy in ChatGPT or
             Claude, or add it to Perplexity, Gemini or Grok as a custom
             connector.
-          </p>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
-            Grok setup is currently unavailable: Flaim sign-in is not completing
-            in Grok. See the app notes below before connecting.
           </p>
         </div>
       </section>
@@ -297,9 +308,8 @@ export default function AiGuidePage() {
             <article className="flex flex-col rounded-2xl border bg-background p-6">
               <h3 className="text-xl font-semibold">Grok</h3>
               <p className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">
-                Grok offers custom connectors, but Flaim sign-in is not currently
-                completing. A connector marked &quot;Connected&quot; does not yet
-                give Grok access to your leagues.
+                Grok can connect to Flaim as a custom connector. Use the
+                Grok-specific connector address in the shared setup below.
               </p>
               <div className="mt-6 grid gap-3">
                 <Button asChild>
@@ -340,9 +350,14 @@ export default function AiGuidePage() {
               </li>
               <li className="rounded-xl bg-muted/60 p-4">
                 <strong className="block text-foreground">2. Enter Flaim</strong>
-                Name it Flaim Fantasy if asked and use this address:{" "}
+                Name it Flaim Fantasy if asked. Use this address for Perplexity
+                or Gemini:{" "}
                 <code className="break-all rounded bg-background px-1 py-0.5 text-xs">
                   {FLAIM_MCP_URL}
+                </code>
+                . For Grok, use:{" "}
+                <code className="break-all rounded bg-background px-1 py-0.5 text-xs">
+                  {GROK_MCP_URL}
                 </code>
                 .
               </li>

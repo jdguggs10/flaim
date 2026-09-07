@@ -136,7 +136,7 @@ ChatGPT, Claude, and optional manual MCP clients connect to Flaim's MCP servers:
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 - **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 1-year inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum).
 
-The exact observed Grok OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, is accepted for registration and authorization. This callback acceptance does not establish completed end-to-end Grok connector support.
+The exact observed Grok OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, is accepted for registration and authorization. With the opt-in authenticated-discovery path, Grok completes the Flaim authorization flow and can use the authenticated `get_user_session` tool.
 
 **User flow**: Open Flaim Fantasy in ChatGPT or Claude, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
