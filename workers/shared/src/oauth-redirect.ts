@@ -86,6 +86,14 @@ function isPerplexityRedirectUri(uri: string): boolean {
   }
 }
 
+// Gemini Spark custom apps use a user-bound numeric identifier in a
+// Google-hosted callback whose suffix is derived from Flaim's production host.
+// Match the raw URI so normalization cannot hide alternate ports, dot segments,
+// encoded path separators, or other structural differences.
+function isGeminiSparkRedirectUri(uri: string): boolean {
+  return /^https:\/\/oauth-redirect\.googleusercontent\.com\/r\/user_bound_custom-mcp-[0-9]+-api_flaim_app(?![\s\S])/.test(uri);
+}
+
 // Cursor IDE uses cursor:// custom URI scheme for MCP OAuth
 // Pattern: cursor://anysphere.cursor-mcp/oauth/{id}/callback
 // Uses string operations only — URL constructor does not handle custom schemes.
@@ -107,6 +115,9 @@ export function isValidRedirectUri(uri: string): boolean {
 
   // Perplexity uses multiple domains (www.perplexity.ai, www.perplexity.com, enterprise.perplexity.ai, etc.)
   if (isPerplexityRedirectUri(uri)) return true;
+
+  // Gemini Spark custom apps use a user-bound callback on Google's exact host
+  if (isGeminiSparkRedirectUri(uri)) return true;
 
   // Cursor IDE uses a custom URI scheme
   if (isCursorRedirectUri(uri)) return true;

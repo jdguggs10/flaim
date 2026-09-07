@@ -4,6 +4,16 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Gemini Custom Connector Callback
+
+- **Fixed**: Accept Gemini Spark's Google-hosted, user-bound OAuth callback for Flaim's production MCP endpoint. Only the numeric account identifier varies; the host and Flaim suffix are pinned, and alternate paths, ports, queries, and fragments remain blocked.
+
+### Custom Connector Docs
+
+- **Changed**: AI setup docs group Perplexity, Gemini, and Grok settings and documentation links separately from the shared four-step custom connector setup.
+- **Changed**: Setup docs simplify hero navigation and name all three custom connector options in the AI page introduction.
+- **Clarified**: Grok remains listed with its settings and documentation links, but the guide flags that Flaim sign-in is not currently completing and excludes Grok from the custom-connector HowTo schema.
+
 ### Claude League Setup
 
 - **Added**: The Your Leagues AI Apps panel now offers the same direct Claude Connector Directory link as ChatGPT, so connected users can open either official Flaim Fantasy channel from setup.
