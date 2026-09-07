@@ -72,6 +72,7 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | `POST /connect/yahoo/discover` | Clerk JWT | Discover Yahoo leagues |
 | `GET /leagues/yahoo` | Clerk JWT | Get stored Yahoo leagues |
 | `GET /internal/leagues/yahoo` | Internal + Clerk JWT / OAuth / Eval key | Get stored Yahoo leagues for internal workers |
+| `POST /internal/backfill/yahoo-recovery` | Internal service token | Temporarily re-run paced Yahoo discovery for the fixed recovery cohort |
 | `DELETE /leagues/yahoo/:id` | Clerk JWT | Delete a Yahoo league |
 
 Yahoo callback stores the authorization-code token response directly and does not spend the returned refresh token during reconnect. Lazy refresh is the only backend path that uses Yahoo refresh tokens, which keeps reconnect aligned with the standard OAuth authorization-code flow and avoids consuming a brand-new refresh token before the first real post-expiry refresh.
@@ -101,6 +102,15 @@ Refresh diagnostics are emitted as structured, non-secret `yahoo-connect` log ev
 Credential rows are stamped with a non-secret app fingerprint (first 12 hex chars of SHA-256 of `YAHOO_CLIENT_ID`) identifying the Yahoo Developer app that minted the stored tokens. Tokens minted under one Yahoo app can never be refreshed with another app's client credentials, so before calling Yahoo the refresh path compares the stored fingerprint to the runtime one and, on mismatch, skips the doomed token call and returns `app_fingerprint_mismatch` (401, reconnect-required) with a `refresh_app_fingerprint_mismatch` diagnostic (`diagnostic_class: app_fingerprint_mismatch`). Legacy rows with a NULL fingerprint refresh as normal and are backfilled on their next successful refresh, which also stamps the fingerprint on reconnect saves and refresh-rotation writes. The raw client id, secrets, and tokens are never stored or logged.
 
 `/internal/connect/yahoo/credential-health` returns no access or refresh tokens. Its `refresh.state` can be `idle`, `in_progress`, `cooldown`, or `expired`; `cooldown` means an active short shared backoff marker from a rate-limit-like Yahoo token refresh failure. `leaseExpiresAt` is included when a lease owner and timestamp exist, including past timestamps for `expired` leases, while `retryAfterSeconds` is only included for active `in_progress` or `cooldown` waits. `lastUpdated` is `null` when the credential row has no update timestamp. When connected, `appFingerprint` reports the stored and runtime app fingerprints with a `status` of `match`, `mismatch`, `legacy_null` (row predates fingerprint stamping), or `unknown` (runtime client id not configured).
+
+The one-time Yahoo recovery endpoint is service-token only and processes at
+most one credential row per request. It defaults to a database-only dry run;
+live discovery requires explicit `{"dryRun":false}`. Pagination uses the
+opaque `nextCursor` returned by the prior response, selecting a fixed cohort
+created by `2026-09-07T11:04:00.000Z`. Live calls reuse the normal Yahoo sync
+lease, cooldown, telemetry, token-refresh, and archive-preserving league
+upsert paths. The endpoint refuses every request after
+`2026-09-15T04:00:00.000Z` and has no cron or configuration switch.
 
 ### Sleeper Connect
 
