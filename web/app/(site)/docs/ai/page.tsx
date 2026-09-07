@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { ChevronDown, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -128,16 +127,9 @@ export default function AiGuidePage() {
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">
             Connect your leagues first. Then open Flaim Fantasy in ChatGPT or
-            Claude, or add it to Perplexity as a custom connector.
+            Claude, or add it to Perplexity, Gemini or Grok as a custom
+            connector.
           </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <Link href="/leagues">First Connect Your Leagues</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/docs/platforms">Fantasy Platform Docs</Link>
-            </Button>
-          </div>
         </div>
       </section>
 
@@ -333,7 +325,9 @@ export default function AiGuidePage() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
               Shared setup
             </p>
-            <h3 className="mt-3 text-2xl font-semibold">Add Flaim Fantasy</h3>
+            <h3 className="mt-3 text-2xl font-semibold">
+              Add as Custom Connector
+            </h3>
             <ol className="mt-7 grid gap-4 text-sm leading-6 text-muted-foreground md:grid-cols-2">
               <li className="rounded-xl bg-muted/60 p-4">
                 <strong className="block text-foreground">1. Add a connector</strong>

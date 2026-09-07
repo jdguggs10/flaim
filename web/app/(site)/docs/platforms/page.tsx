@@ -122,9 +122,6 @@ export default function PlatformsGuidePage() {
             <Button asChild size="lg">
               <Link href="/leagues#platforms">Open Your Leagues</Link>
             </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/docs/ai">AI App Docs</Link>
-            </Button>
           </div>
         </div>
       </section>
