@@ -281,6 +281,8 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
     }
   }
   html.theme-light { color-scheme: light; }
+  /* Same values as the dark media block above. The host theme global sets
+     this class to override the OS preference; keep both copies in sync. */
   html.theme-dark {
     color-scheme: dark;
     --fg: #ededed;
@@ -907,7 +909,10 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
         var year = league.seasonYear ? String(league.seasonYear) : '';
         // Truncated names stay available in full to assistive technology, and
         // the gold default edge gets a text equivalent here.
+        var providerLabel = platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper';
+        if (league.platform !== platform) providerLabel = String(league.platform || '');
         var described = [name];
+        if (providerLabel) described.push(providerLabel);
         if (year) described.push(year);
         if (team) described.push(team);
         if (isDefault) described.push('default ' + label.toLowerCase() + ' league');

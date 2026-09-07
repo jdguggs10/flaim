@@ -20,12 +20,20 @@ type SportIconProps = IconProps & {
 };
 
 /**
- * A sport mark, decorative by default. Pair it with visible sport text, or
- * pass `aria-label` and `role="img"` to override the default `aria-hidden`
- * when the icon carries the meaning on its own.
+ * A sport mark. Decorative (aria-hidden) when paired with visible sport text;
+ * passing `aria-label` makes it an accessible image instead.
  */
 export function SportIcon({ sport, stroke = 1.5, ...props }: SportIconProps) {
   const Icon = SPORT_ICONS.get(sport?.toLowerCase()) ?? IconTrophy;
+  const labeled = Boolean(props["aria-label"]);
 
-  return <Icon aria-hidden="true" focusable="false" {...props} stroke={stroke} />;
+  return (
+    <Icon
+      aria-hidden={labeled ? undefined : true}
+      role={labeled ? "img" : undefined}
+      focusable="false"
+      {...props}
+      stroke={stroke}
+    />
+  );
 }

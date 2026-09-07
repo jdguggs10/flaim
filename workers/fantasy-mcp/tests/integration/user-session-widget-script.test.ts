@@ -223,7 +223,7 @@ describe('user session widget script', () => {
     // The gold right edge is decorative; the row label carries the meaning.
     expect(html).toContain('class="league-row is-default"');
     expect(html).toContain(
-      'aria-label="Sunday Night Football League, 2026, Rochester Rough Riders, default football league"'
+      'aria-label="Sunday Night Football League, ESPN, 2026, Rochester Rough Riders, default football league"'
     );
     expect(html.match(/is-default/g)).toHaveLength(1);
   });
@@ -308,7 +308,7 @@ describe('user session widget script', () => {
     // Quotes are neutralized, so the injected handler text can never close
     // the attribute it sits in. It stays inert text everywhere it appears.
     expect(html).toContain(
-      'aria-label="League&quot; onmouseover=&quot;alert(1), 2026, Team&#39; onfocus=&#39;alert(2)"'
+      'aria-label="League&quot; onmouseover=&quot;alert(1), ESPN, 2026, Team&#39; onfocus=&#39;alert(2)"'
     );
     expect(html).toContain('title="League&quot; onmouseover=&quot;alert(1)"');
     expect(html).toContain('title="Team&#39; onfocus=&#39;alert(2)"');
