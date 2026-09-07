@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ChevronDown, ExternalLink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { CopyableConnectorField } from "@/components/site/copyable-connector-field";
 import { GuideStepNavigation } from "@/components/site/guide-step-navigation";
 import {
   CHATGPT_APP_URL,
@@ -344,22 +345,24 @@ export default function AiGuidePage() {
               Add as Custom Connector
             </h3>
             <ol className="mt-7 grid gap-4 text-sm leading-6 text-muted-foreground md:grid-cols-2">
-              <li className="rounded-xl bg-muted/60 p-4">
+              <li className="rounded-xl bg-muted/60 p-4 md:col-span-2">
                 <strong className="block text-foreground">1. Add a connector</strong>
                 In your AI app, find its custom connector or custom app option.
               </li>
-              <li className="rounded-xl bg-muted/60 p-4">
+              <li className="rounded-xl bg-muted/60 p-4 md:col-span-2">
                 <strong className="block text-foreground">2. Enter Flaim</strong>
-                Name it Flaim Fantasy if asked. Use this address for Perplexity
-                or Gemini:{" "}
-                <code className="break-all rounded bg-background px-1 py-0.5 text-xs">
-                  {FLAIM_MCP_URL}
-                </code>
-                . For Grok, use:{" "}
-                <code className="break-all rounded bg-background px-1 py-0.5 text-xs">
-                  {GROK_MCP_URL}
-                </code>
-                .
+                <p className="mt-2">
+                  Name it Flaim Fantasy if asked, then use the address for your
+                  AI app.
+                </p>
+                <div className="mt-3 space-y-2">
+                  <CopyableConnectorField label="Name" value="Flaim Fantasy" />
+                  <CopyableConnectorField
+                    label="Perplexity and Gemini"
+                    value={FLAIM_MCP_URL}
+                  />
+                  <CopyableConnectorField label="Grok" value={GROK_MCP_URL} />
+                </div>
               </li>
               <li className="rounded-xl bg-muted/60 p-4">
                 <strong className="block text-foreground">
