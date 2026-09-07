@@ -12,6 +12,8 @@ const ALLOWED_REDIRECT_URIS = [
   // ChatGPT MCP connectors (dynamic per-app paths matched below)
   'https://chatgpt.com/connector_platform_oauth_redirect',
   'https://platform.openai.com/apps-manage/oauth',
+  // Grok custom connectors (exact hosted callback observed during registration)
+  'https://grok.com/connectors-oauth-exchange-code/',
   // Perplexity custom connectors (pattern matched below for all subdomains)
   // Littlebird custom connectors (exact production callback)
   'https://app.lilbird.co/mcp/oauth/callback',
