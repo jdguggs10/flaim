@@ -18,7 +18,7 @@ import {
 export const metadata: Metadata = {
   title: "Connect Flaim to ChatGPT, Claude & Other AI Apps",
   description:
-    "Connect Flaim to ChatGPT or Claude, or use custom connectors in Perplexity, Gemini, or Grok. Ask about your real ESPN, Yahoo, or Sleeper leagues.",
+    "Connect Flaim to ChatGPT or Claude. Find custom connector setup instructions and current availability for Perplexity, Gemini, and Grok.",
   alternates: {
     canonical: "https://flaim.app/docs/ai",
   },
@@ -75,7 +75,7 @@ const HOW_TO_SCHEMAS = [
     name: "Add as Custom Connector",
     dateModified: "2026-09-07",
     description:
-      "Add Flaim Fantasy as a custom connector in an AI app such as Perplexity, Gemini, or Grok.",
+      "Add Flaim Fantasy as a custom connector in an AI app such as Perplexity or Gemini.",
     step: [
       "In your AI app, find its custom connector or custom app option.",
       "Name it Flaim Fantasy if asked and use this address: " + FLAIM_MCP_URL + ".",
@@ -128,6 +128,10 @@ export default function AiGuidePage() {
             Connect your leagues first. Then open Flaim Fantasy in ChatGPT or
             Claude, or add it to Perplexity, Gemini or Grok as a custom
             connector.
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">
+            Grok setup is currently unavailable: Flaim sign-in is not completing
+            in Grok. See the app notes below before connecting.
           </p>
         </div>
       </section>
@@ -293,7 +297,9 @@ export default function AiGuidePage() {
             <article className="flex flex-col rounded-2xl border bg-background p-6">
               <h3 className="text-xl font-semibold">Grok</h3>
               <p className="mt-3 flex-1 text-sm leading-6 text-muted-foreground">
-                Add Flaim from Grok&apos;s Connectors area as a custom connector.
+                Grok offers custom connectors, but Flaim sign-in is not currently
+                completing. A connector marked &quot;Connected&quot; does not yet
+                give Grok access to your leagues.
               </p>
               <div className="mt-6 grid gap-3">
                 <Button asChild>

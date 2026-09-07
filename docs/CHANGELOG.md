@@ -12,6 +12,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 - **Changed**: AI setup docs group Perplexity, Gemini, and Grok settings and documentation links separately from the shared four-step custom connector setup.
 - **Changed**: Setup docs simplify hero navigation and name all three custom connector options in the AI page introduction.
+- **Clarified**: Grok remains listed with its settings and documentation links, but the guide flags that Flaim sign-in is not currently completing and excludes Grok from the custom-connector HowTo schema.
 
 ### Claude League Setup
 
