@@ -39,6 +39,17 @@ function integer(value, name, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
   return parsed;
 }
 
+export function isValidOpaqueCursor(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 512 ||
+      value.length % 4 === 1 || !/^[A-Za-z0-9_-]+$/.test(value)) return false;
+  try {
+    const decoded = Buffer.from(value, 'base64url');
+    return decoded.length > 0 && decoded.length <= 256 && decoded.every(byte => byte >= 0x20 && byte <= 0x7e);
+  } catch {
+    return false;
+  }
+}
+
 export function parseArgs(argv) {
   const options = { paceMs: DEFAULT_PACE_MS, cursor: null, cutoff: RECOVERY_CUTOFF, breakLock: false };
   let modeCount = 0;
@@ -57,7 +68,7 @@ export function parseArgs(argv) {
     else if (arg === '--checkpoint') options.checkpointPath = resolve(argv[++i] ?? '');
     else if (arg === '--cursor') {
       options.cursor = argv[++i];
-      if (!options.cursor || /\s/.test(options.cursor)) usage('--cursor must be a nonempty opaque string');
+      if (!isValidOpaqueCursor(options.cursor)) usage('--cursor must be a valid opaque cursor returned by the endpoint');
     }
     else if (arg === '--cutoff') options.cutoff = argv[++i];
     else if (arg === '--max-users') options.maxUsers = integer(argv[++i], '--max-users', { min: 1, max: 2_000 });
@@ -121,7 +132,8 @@ export async function readCheckpoint(path, options, deps = {}) {
     if (checkpoint.version !== 1 || checkpoint.environment !== options.environment ||
         checkpoint.endpoint !== ENDPOINTS[options.environment] || checkpoint.cutoff !== RECOVERY_CUTOFF ||
         checkpoint.expiresAt !== RECOVERY_EXPIRES_AT ||
-        !(checkpoint.cursor === null || (typeof checkpoint.cursor === 'string' && checkpoint.cursor.length > 0)) ||
+        !(checkpoint.cursor === null || isValidOpaqueCursor(checkpoint.cursor)) ||
+        (checkpoint.uncertain && !(checkpoint.uncertain.cursor === null || isValidOpaqueCursor(checkpoint.uncertain.cursor))) ||
         !checkpoint.totals || !Number.isSafeInteger(checkpoint.totals.attempted) ||
         !Number.isSafeInteger(checkpoint.totals.succeeded) || !Number.isSafeInteger(checkpoint.totals.failed) ||
         !Array.isArray(checkpoint.deferred)) {
@@ -184,7 +196,10 @@ export function validateResponse(raw, expectedCursor, expectedDryRun) {
       (raw.cursor ?? null) !== expectedCursor) {
     throw new Error('endpoint returned an invalid recovery envelope');
   }
-  const nextCursor = stringOrNull(raw.nextCursor);
+  const nextCursor = raw.nextCursor == null ? null : raw.nextCursor;
+  if (nextCursor !== null && !isValidOpaqueCursor(nextCursor)) {
+    throw new Error('endpoint returned an invalid nextCursor');
+  }
   if (nextCursor !== null && nextCursor === expectedCursor) {
     throw new Error('endpoint nextCursor did not advance');
   }

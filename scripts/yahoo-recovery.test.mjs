@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -17,6 +17,9 @@ import {
   runBatch,
 } from './yahoo-recovery.mjs';
 
+const CURSOR_1 = Buffer.from('user_001').toString('base64url');
+const CURSOR_2 = Buffer.from('user_002').toString('base64url');
+
 function options(path, overrides = {}) {
   return {
     environment: 'preview', checkpointPath: path, cutoff: RECOVERY_CUTOFF,
@@ -26,10 +29,9 @@ function options(path, overrides = {}) {
 }
 
 function envelope(cursor, overrides = {}) {
-  const sequence = cursor === null ? 1 : Number(cursor.split('-').at(-1)) + 1;
   return {
     outcome: 'dry_run', dryRun: true, cutoff: RECOVERY_CUTOFF,
-    expiresAt: RECOVERY_EXPIRES_AT, cursor, nextCursor: `cursor-${sequence}`,
+    expiresAt: RECOVERY_EXPIRES_AT, cursor, nextCursor: cursor === null ? CURSOR_1 : CURSOR_2,
     ...(cursor === null ? { eligibleUsers: 10 } : {}),
     candidate: { userIdMasked: 'user_abc...', createdAt: '2026-01-01T00:00:00Z', leagueRows: 0, sync: {} },
     ...overrides,
@@ -50,6 +52,24 @@ test('CLI fixes hosts and cutoff and bounds apply', () => {
   assert.throws(() => parseArgs(['--env', 'prod', '--checkpoint', '/tmp/x', '--apply']), /max-users/);
   assert.throws(() => parseArgs(['--env', 'prod', '--checkpoint', '/tmp/x', '--dry-run', '--apply', '--max-users', '1']), /exactly one mode/);
   assert.throws(() => parseArgs(['--env', 'prod', '--checkpoint', '/tmp/x', '--dry-run', '--cutoff', '2026-09-08T00:00:00Z']), /fixed recovery cutoff/);
+  assert.equal(parseArgs(['--env', 'prod', '--checkpoint', '/tmp/x', '--dry-run', '--cursor', CURSOR_1]).cursor, CURSOR_1);
+  assert.throws(() => parseArgs(['--env', 'prod', '--checkpoint', '/tmp/x', '--dry-run', '--cursor', 'AAAA']), /valid opaque cursor/);
+  assert.throws(() => parseArgs(['--env', 'prod', '--checkpoint', '/tmp/x', '--dry-run', '--cursor', 'A'.repeat(516)]), /valid opaque cursor/);
+});
+
+test('persisted cursor is validated before any apply request', async () => {
+  const path = await temporaryCheckpoint();
+  await runBatch(options(path, { maxUsers: 1 }), 'token', {
+    fetch: async () => Response.json(envelope(null)), log: () => {},
+  });
+  const checkpoint = JSON.parse(await readFile(path, 'utf8'));
+  checkpoint.cursor = 'AAAA';
+  await writeFile(path, `${JSON.stringify(checkpoint)}\n`);
+  let requests = 0;
+  await assert.rejects(runBatch(options(path, { mode: 'apply', maxUsers: 1 }), 'token', {
+    fetch: async () => { requests += 1; }, log: () => {},
+  }), /checkpoint does not match/);
+  assert.equal(requests, 0);
 });
 
 test('token is read from stdin once and rejects multiple fields', async () => {
@@ -69,7 +89,7 @@ test('dry-run is serial and paces only between completed requests', async () => 
   const checkpoint = await runBatch(options(path), 'token', {
     fetch, sleep: async ms => sleeps.push(ms), log: () => {},
   });
-  assert.deepEqual(calls.map(call => call.body), [{ dryRun: true }, { dryRun: true, cursor: 'cursor-1' }]);
+  assert.deepEqual(calls.map(call => call.body), [{ dryRun: true }, { dryRun: true, cursor: CURSOR_1 }]);
   assert.deepEqual(sleeps, [2_000]);
   assert.equal(checkpoint.cursor, null);
   assert.equal(checkpoint.totals.attempted, 0);
@@ -91,10 +111,10 @@ test('dry-run followed by canary starts at the unchanged apply cursor', async ()
   const checkpoint = await runBatch(options(path, { mode: 'canary', maxUsers: 1 }), 'token', { fetch, log: () => {} });
   assert.deepEqual(bodies, [
     { dryRun: true },
-    { dryRun: true, cursor: 'cursor-1' },
+    { dryRun: true, cursor: CURSOR_1 },
     { dryRun: false },
   ]);
-  assert.equal(checkpoint.cursor, 'cursor-1');
+  assert.equal(checkpoint.cursor, CURSOR_1);
   assert.equal(checkpoint.totals.attempted, 1);
 });
 
@@ -150,7 +170,7 @@ test('uncertain apply requires dry-run reconciliation before explicit resolution
     },
   });
   const resolved = await resolveUncertain(options(path, { mode: 'resolve', resolution: 'processed' }));
-  assert.equal(resolved.cursor, 'cursor-1');
+  assert.equal(resolved.cursor, CURSOR_1);
   assert.equal(resolved.uncertain, null);
 });
 
