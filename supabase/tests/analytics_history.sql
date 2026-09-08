@@ -2,6 +2,8 @@
 --
 -- Run only against a reset local database. The proof deliberately uses a
 -- transaction and rolls every synthetic fixture back:
+--   docker cp supabase/migrations/20260802131749_add_sync_recent_dashboard_payload.sql \
+--     supabase_db_flaim:/tmp/analytics_dashboard_raw_reference.sql
 --   docker cp supabase/tests/analytics_history.sql supabase_db_flaim:/tmp/analytics_history.sql
 --   docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/analytics_history.sql
 --
@@ -10,6 +12,13 @@
 -- blocking or serialization.
 
 begin;
+
+-- Restore the last raw-only dashboard reader inside this rollback-only
+-- transaction. Without this independent reference, comparing the canonical
+-- wrapper to dashboard_payload_history() would only compare the function to
+-- itself and could not prove pre-prune metric parity. The included historical
+-- migration also refreshes snapshots, but both changes roll back below.
+\i /tmp/analytics_dashboard_raw_reference.sql
 
 -- Keep today's synthetic seed events for raw-after-marker parity after the
 -- controlled oldest-row boundary fixture has been removed.

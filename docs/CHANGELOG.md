@@ -58,10 +58,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### ET-Day Analytics History Preservation (FLA-265)
 
-- **Added**: A pre-backfill forward refinement retains nullable platform and sport in ET user-day summaries, preserving future attributed-provider/sport cohort analysis without changing current dashboard metrics. The migration rejects populated or initialized history rather than silently mislabelling older summaries. No hosted backfill, schedule, or reader switch is activated.
+- **Changed**: The canonical analytics dashboard payload now delegates to the proven ET-history implementation. Fresh local resets initialize synthetic history through yesterday before the first snapshot refresh; hosted backfill and scheduling remain separately controlled operations.
+- **Added**: A pre-backfill forward refinement retains nullable platform and sport in ET user-day summaries, preserving future attributed-provider/sport cohort analysis without changing current dashboard metrics. The migration rejects populated or initialized history rather than silently mislabelling older summaries.
 - **Added**: An owner-only permanent aggregate preserves MCP call counts at America/New_York day and user grain while retaining environment, authentication type, and nullable client identity. A private singleton records the explicit initial history date and last fully closed ET day; its serialized close/backfill function catches up missed days, rejects partial or no-longer-fully-retained ranges, and advances the marker only after replacement succeeds.
-- **Added**: An inactive owner-only `dashboard_payload_history(boolean)` parity sibling reads the aggregate through its marker and raw events after it without overlap. It fails closed until the first explicit backfill succeeds or when the marker falls beyond the recoverable raw window.
-- **Changed**: In the sibling payload only, historical health summary and per-tool health use exact trailing 30-day raw events and disclose `health_window_days: 30`. Existing seven-day health, recent 1/7/30-day usage, UTC client mix, operational metrics, raw 90-day retention, active dashboard payload, snapshot refresh, and cron schedules are unchanged.
+- **Added**: An owner-only `dashboard_payload_history(boolean)` implementation reads the aggregate through its marker and raw events after it without overlap. It fails closed until the first explicit backfill succeeds or when the marker falls beyond the recoverable raw window.
+- **Changed**: Historical health summary and per-tool health use exact trailing 30-day raw events and disclose `health_window_days: 30`. Existing seven-day health, recent 1/7/30-day usage, UTC client mix, operational metrics, raw 90-day retention, snapshot refresh signatures, and cron schedules are unchanged.
 
 ### Sleeper Connected-League Authorization (FLA-104)
 

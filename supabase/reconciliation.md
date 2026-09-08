@@ -181,6 +181,17 @@ non-owner `EXECUTE` grants. The migration adds no policy, index outside the new
 primary key, extension, or scheduled job. Its cron activation is the two-phase
 operation described in `README.md`.
 
+The FLA-265 history migrations add an owner-only ET user-day aggregate, a
+serialized close marker and function, and the history-backed payload
+implementation. The forward reader migration
+`20260908202843_activate_analytics_history_reader.sql` makes
+`analytics.dashboard_payload(boolean)` a thin security-invoker wrapper over
+that implementation. It preserves the established function owner and ACL,
+changes no relation or schedule, and performs no refresh while migration-owned
+state is uninitialized. Fresh resets initialize their synthetic marker in
+`seed.sql` before materializing dashboard snapshots; hosted initialization and
+scheduling remain separately reviewed operations.
+
 The FLA-308 forward migration
 `20260827004306_add_espn_history_jobs.sql` adds the service-role-only
 `espn_history_jobs` table, its primary/unique/indexed job access paths, and

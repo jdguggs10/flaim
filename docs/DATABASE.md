@@ -138,15 +138,15 @@ catch-up closes against that state. Both relations use RLS with no policies;
 the close function and relations grant no access to Data API roles,
 `service_role`, or `analytics_readonly`.
 
-`dashboard_payload_history(boolean)` is an inactive owner-only sibling of the
-current payload. After an explicit initial backfill, it combines aggregate rows
-through the marker with raw rows after the marker. It fails closed before that
+`dashboard_payload_history(boolean)` is the owner-only implementation behind
+the canonical `dashboard_payload(boolean)` wrapper. After initialization, it
+combines aggregate rows through the marker with raw rows after the marker. It fails closed before that
 initialization or when the marker is too stale for the raw 90-day window to
 bridge safely. Its historical health summary and per-tool health use an exact
 30-day raw window, disclosed as `health_window_days: 30`; recent rolling usage,
 seven-day health, UTC client mix, and operational keys keep their current
-sources. The existing `dashboard_payload()` and snapshot refresh functions are
-unchanged.
+sources. Snapshot refresh functions keep their existing signatures and now
+materialize the history-backed payload.
 
 Both snapshot relations carry the same two variants: id=1 excludes internal
 accounts, id=2 includes them.
