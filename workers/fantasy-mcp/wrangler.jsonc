@@ -49,6 +49,18 @@
         {
           "pattern": "api.flaim.app/.well-known/openai-apps-challenge",
           "zone_name": "flaim.app"
+        },
+        // Unmatched paths on api.flaim.app fall through to Cloudflare's default
+        // for the zone (no origin) and return 522, not a 404 from this Worker.
+        // Every public path fantasy-mcp serves on the custom domain needs its
+        // own explicit route entry here.
+        {
+          "pattern": "api.flaim.app/widgets/*",
+          "zone_name": "flaim.app"
+        },
+        {
+          "pattern": "api.flaim.app/health",
+          "zone_name": "flaim.app"
         }
       ],
       // Service bindings for platform workers

@@ -288,6 +288,9 @@ Workers use custom routes via `api.flaim.app`:
 - `/auth/*` → auth-worker
 - `/fantasy/*` → fantasy-mcp (unified gateway)
 - `/mcp*` → fantasy-mcp (primary MCP endpoint, POST required; non-POST returns `405`)
+- `/widgets/*`, `/health` → fantasy-mcp (unprefixed paths served directly on the custom domain)
+
+Every unprefixed path fantasy-mcp serves on `api.flaim.app` needs its own route entry in `wrangler.jsonc`; a path with no matching route falls through to a nonexistent origin and returns Cloudflare 522, not a 404 from the Worker.
 
 Note: `espn-client` is called internally via service binding for MCP traffic, but the web app uses its `/onboarding/*` endpoints via the public workers.dev URL.
 
