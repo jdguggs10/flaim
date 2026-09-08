@@ -82,6 +82,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
         {
           src: 'https://flaim.app/icon-light.png',
           mimeType: 'image/png',
+          theme: 'light',
+        },
+        {
+          src: 'https://flaim.app/icon-dark.png',
+          mimeType: 'image/png',
+          theme: 'dark',
         },
       ],
     },
