@@ -223,22 +223,6 @@ chain resolution existed. Operator-triggered only — there is no cron.
   `lease_lost`) and per-run counts; only `blocked` maps to a non-200 status
   (409), so drive it off the JSON `outcome`, not the HTTP code.
 
-### Yahoo incident recovery (temporary)
-
-The auth worker exposes a temporary operator endpoint at
-`POST /auth/internal/backfill/yahoo-recovery`, guarded only by
-`X-Flaim-Internal-Token`. It re-runs normal Yahoo discovery for accounts in a
-fixed pre-closeout cohort, one account per request. Requests default to a
-database-only dry run; live work requires `{"dryRun":false}` and advances with
-the opaque `nextCursor` returned by the prior response.
-
-The path does not delete league rows or change archive, hidden, or default
-state. It reuses each user's Yahoo sync lease and cooldown. Responses expose
-only masked user IDs and sanitized provider status, including explicit stop
-signals for a renewed app-level denial or Yahoo rate limit. There is no cron,
-schema change, or permanent configuration. The endpoint expires in code after
-`2026-09-15T04:00:00.000Z`.
-
 ## ESPN API Reference
 
 Host: `https://lm-api-reads.fantasy.espn.com`
