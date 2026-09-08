@@ -379,6 +379,23 @@ function buildDraftResultsResponse(): unknown {
   };
 }
 
+function buildDraftPlayersResponse(): unknown {
+  return {
+    fantasy_content: {
+      players: {
+        '0': {
+          player: [[
+            { player_key: '449.p.101' },
+            { player_id: '101' },
+            { name: { full: 'Drafted Player' } },
+          ]],
+        },
+        count: 1,
+      },
+    },
+  };
+}
+
 describe('yahoo cross-sport handler characterization tests', () => {
   const getCredsMock = getYahooCredentials as MockedFunction<typeof getYahooCredentials>;
   const fetchMock = yahooFetch as MockedFunction<typeof yahooFetch>;
@@ -390,7 +407,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
   describe('get_draft', () => {
     it.each(scenarios)('$label routes the requested sport and season through Yahoo draftresults', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildDraftResultsResponse()));
+      fetchMock.mockImplementation(async (path) => jsonResponse(
+        path.includes('/draftresults') ? buildDraftResultsResponse() : buildDraftPlayersResponse(),
+      ));
 
       const result = await handlers.get_draft(
         {} as never,
@@ -412,6 +431,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
             round: 1,
             selectionTeamId: '449.l.123.t.2',
             playerId: '449.p.101',
+            playerName: 'Drafted Player',
             placement: { status: 'confirmed', source: 'provider_pick' },
           }],
         },

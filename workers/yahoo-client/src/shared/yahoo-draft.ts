@@ -29,6 +29,11 @@ export interface YahooDraftResults {
   warnings?: string[];
 }
 
+export interface YahooPlayerNames {
+  valid: boolean;
+  byPlayerKey: Map<string, string>;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -91,6 +96,64 @@ function playerName(result: Record<string, unknown>): string | undefined {
   const name = result.name;
   if (isRecord(name)) return nonEmptyString(name.full);
   return nonEmptyString(name);
+}
+
+function draftResultRows(raw: unknown): Record<string, unknown>[] {
+  const leagueArray = getPath(raw, ['fantasy_content', 'league']);
+  const rawResults = unwrapLeague(leagueArray).draft_results;
+  if (!Array.isArray(rawResults) && !isRecord(rawResults)) return [];
+
+  return asArray(rawResults as Record<string, unknown> | unknown[])
+    .map(draftResultRecord)
+    .filter((result): result is Record<string, unknown> => result !== undefined);
+}
+
+/**
+ * Draft results can carry both a short numeric `player_id` and the full,
+ * season-specific `player_key`. The public pick keeps its established ID,
+ * while this map retains the full key needed for an exact Players collection
+ * lookup.
+ */
+export function extractYahooDraftPlayerKeys(raw: unknown): Map<string, string> {
+  const keysByPlayerId = new Map<string, string>();
+
+  for (const result of draftResultRows(raw)) {
+    const playerKey = nonEmptyString(result.player_key);
+    if (!playerKey?.includes('.p.')) continue;
+
+    const playerId = nonEmptyString(result.player_id) ?? playerKey;
+    keysByPlayerId.set(playerId, playerKey);
+    keysByPlayerId.set(playerKey, playerKey);
+  }
+
+  return keysByPlayerId;
+}
+
+/** Parse the metadata returned by Yahoo's `/players;player_keys=...` collection. */
+export function parseYahooPlayerNames(raw: unknown): YahooPlayerNames {
+  const players = getPath(raw, ['fantasy_content', 'players']);
+  if (!Array.isArray(players) && !isRecord(players)) {
+    return { valid: false, byPlayerKey: new Map() };
+  }
+
+  const byPlayerKey = new Map<string, string>();
+  for (const wrapper of asArray(players as Record<string, unknown> | unknown[])) {
+    if (!isRecord(wrapper) || !Array.isArray(wrapper.player)) continue;
+
+    const metadata = wrapper.player[0];
+    if (!Array.isArray(metadata)) continue;
+
+    let player: Record<string, unknown> = {};
+    for (const item of metadata) {
+      if (isRecord(item)) player = { ...player, ...item };
+    }
+
+    const playerKey = nonEmptyString(player.player_key);
+    const name = playerName(player);
+    if (playerKey && name) byPlayerKey.set(playerKey, name);
+  }
+
+  return { valid: true, byPlayerKey };
 }
 
 /**

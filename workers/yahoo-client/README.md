@@ -104,7 +104,9 @@ Yahoo auth and rate-limit failures return `success: false` with the matching HTT
 
 ### Draft Results (`get_draft`)
 
-All four Yahoo sports register `get_draft` against `/league/{league_key}/draftresults`. Valid rows return the provider's round, selecting `team_key`, player identity when supplied, and auction cost only when Yahoo explicitly identifies the draft as auction. Yahoo's generic `live` draft type does not distinguish snake from auction, so it normalizes to `unknown`. The documented `pick` field is not treated as an authoritative overall position, and the handler does not derive current ownership or future slots. A legitimate empty draft-results resource returns an empty pre-draft result. Access failures, including `YAHOO_ACCESS_DENIED`, remain errors rather than becoming empty success. This path is fixture-tested only until Yahoo access is restored.
+All four Yahoo sports register `get_draft` against `/league/{league_key}/draftresults`. Valid rows return the provider's round, selecting `team_key`, player identity when supplied, and auction cost only when Yahoo explicitly identifies the draft as auction. When a valid pick has an ID but no inline name, the handler resolves full Yahoo player keys through bounded, sequential Players collection batches and adds `playerName` without changing `playerId`. Missing or failed name lookups preserve the confirmed picks and add a `DRAFT_PLAYER_NAMES_PARTIAL` or `DRAFT_PLAYER_NAMES_UNAVAILABLE` warning.
+
+Yahoo's generic `live` draft type does not distinguish snake from auction, so it normalizes to `unknown`. The documented `pick` field is not treated as an authoritative overall position, and the handler does not derive current ownership or future slots. A legitimate empty draft-results resource returns an empty pre-draft result. Access failures on the primary draft-results request, including `YAHOO_ACCESS_DENIED`, remain errors rather than becoming empty success. Automated coverage uses provider-shaped fixtures; it does not establish update timing during an active draft.
 
 ## Yahoo API Specifics
 
