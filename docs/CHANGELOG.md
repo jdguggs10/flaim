@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Draft Player Names
+
+- **Fixed**: Yahoo draft results resolve missing player names through bounded player-key lookups, so confirmed selections can include names for every drafting team. If Yahoo cannot resolve all names, the response preserves confirmed picks and explicitly reports the incomplete lookup.
+
 ### MCP Server Icon Theming (FLA-350)
 
 - **Fixed**: The `fantasy-mcp` server declares both `icon-light.png` (`theme: 'light'`) and `icon-dark.png` (`theme: 'dark'`) per the MCP Icon spec (SEP-973), so clients that honor `theme` show the light-colored logo variant on a dark background instead of the dark logo washing out.
