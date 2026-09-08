@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### MCP Server Icon Theming (FLA-350)
+
+- **Fixed**: The `fantasy-mcp` server declares both `icon-light.png` (`theme: 'light'`) and `icon-dark.png` (`theme: 'dark'`) per the MCP Icon spec (SEP-973), so clients that honor `theme` show the light-colored logo variant on a dark background instead of the dark logo washing out.
+
 ### API Domain Routes (FLA-348)
 
 - **Fixed**: The unprefixed `/health` check and the `/widgets/*` (including `/widgets/user-session`) fallback paths now have explicit Worker Routes on `api.flaim.app`, so they reach the fantasy-mcp gateway instead of returning Cloudflare 522 for a route with no matching origin.
