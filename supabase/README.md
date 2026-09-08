@@ -136,15 +136,18 @@ The table has RLS enabled with no policies and is
 owner-only, including no access for `service_role` or `analytics_readonly`.
 
 `analytics.history_rollup_state` is an owner-only singleton recording the
-explicit initial history date and the last fully closed ET day. It lands
-uninitialized. `public.close_mcp_user_daily_et(date, date)` performs the first
-backfill and later catch-up closes under that row's lock, rejects open days or
+explicit initial history date and the last fully closed ET day. The migration
+lands it uninitialized; the synthetic seed initializes it through yesterday
+before creating dashboard snapshots.
+`public.close_mcp_user_daily_et(date, date)` performs the first backfill and
+later catch-up closes under that row's lock, rejects open days or
 ranges outside the fully available raw window, and advances the marker only
 after the replacement succeeds. The first call must declare its history start
 instead of inferring an all-time claim from the oldest raw row.
 
-`analytics.dashboard_payload_history(boolean)` is an owner-only parity sibling,
-not the active dashboard function. Once history is initialized, it reads the
+`analytics.dashboard_payload_history(boolean)` is the owner-only history
+implementation behind the canonical `analytics.dashboard_payload(boolean)`
+wrapper. Once history is initialized, it reads the
 ET aggregate through the marker and raw ET days strictly after it. It fails
 closed when history is uninitialized or too stale to bridge from retained raw
 events. Existing raw recent-use windows, UTC `client_mix`, seven-day health,
@@ -155,10 +158,11 @@ window. `user_concentration` keeps call-count ranking; equal-call user rank
 order remains unspecified, while equal-weight client modes use a stable lexical
 tie-break after ignoring NULL client names.
 
-Neither migration backfills data, replaces `analytics.dashboard_payload()`,
-refreshes a snapshot, creates a cron job, or activates a schedule. Initial
-backfill, parity acceptance, reader switching, and scheduling are separate
-promotion gates.
+The additive table/function migrations do not backfill data, refresh a
+snapshot, create a cron job, or activate a schedule. A later forward migration
+makes the thin history wrapper canonical for fresh environments; the seed
+initializes only synthetic local history. Hosted backfill, reader promotion,
+and scheduling remain explicit operational changes.
 
 The forward platform/sport refinement likewise performs no backfill or
 activation. It locks the progress state and aggregate, and refuses initialized
@@ -176,11 +180,12 @@ does not prove preservation is running. Failed jobs and a marker that has not
 advanced by the next scheduled close require timely operator notification.
 Activating a job and inspecting one successful run is not ongoing monitoring.
 
-The reviewed activation artifacts live outside the migration path:
+The reviewed scheduling artifact lives outside the migration path:
 `cron/analytics-history.sql` schedules history preservation only after an
-explicit initial close/backfill has been verified,
-while `cron/analytics-history-cutover.sql` performs the separately gated reader
-switch. Before an approved cutover, capture the exact existing
+explicit initial close/backfill has been verified. The one-time guarded
+`cron/analytics-history-cutover.sql` artifact is retained as the production
+rollout record, but fresh environments receive the reader through the forward
+migration. Before using that historical artifact, capture the exact existing
 `analytics.dashboard_payload(boolean)` definition as the rollback source.
 Restoring that raw-only definition is history-safe only while raw events still
 cover the full declared history; after pruning, it cannot reconstruct or serve
@@ -214,8 +219,9 @@ The migration adds:
   dashboard variant, so a scheduler can run the external row and the
   internal-inclusive row on different cadences.
 
-`analytics.dashboard_payload()` is unchanged, including its `sync_recent` key,
-which stays as a consumer fallback while databases are still being migrated.
+`analytics.dashboard_payload()` remains the complete consumer contract,
+including its `sync_recent` key, but now delegates to the history-backed
+implementation.
 The no-argument `analytics.refresh_dashboard_snapshot()` is retained as a
 compatibility and local-seed wrapper that refreshes both variants.
 

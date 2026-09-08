@@ -9,6 +9,8 @@ declare
   actual_count bigint;
   expected_count bigint;
   relation_name text;
+  wrapper_payload jsonb;
+  history_payload jsonb;
 begin
   select count(*) into actual_count
   from pg_class c
@@ -56,9 +58,35 @@ begin
   where n.nspname = 'analytics' and p.prokind = 'f';
   -- dashboard_payload, refresh_dashboard_snapshot(), the FLA-264 per-variant
   -- refresh_dashboard_snapshot(boolean), provider_flags_payload, and
-  -- refresh_provider_flags_snapshot, plus the inactive history payload.
+  -- refresh_provider_flags_snapshot, plus the active history implementation.
   if actual_count <> 6 then
     raise exception 'expected 6 analytics functions, found %', actual_count;
+  end if;
+
+  -- The public dashboard contract is a deliberately thin wrapper over the
+  -- owner-only history implementation. CREATE OR REPLACE must retain the
+  -- original owner and default ACL while keeping an invoker-safe empty path.
+  if not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    join pg_language l on l.oid = p.prolang
+    where n.nspname = 'analytics'
+      and p.proname = 'dashboard_payload'
+      and p.pronargs = 1
+      and l.lanname = 'sql'
+      and p.provolatile = 's'
+      and not p.prosecdef
+      and p.proconfig @> array['search_path=""']
+      and pg_get_userbyid(p.proowner) = 'postgres'
+      and coalesce(p.proacl, acldefault('f', p.proowner))
+        @> acldefault('f', p.proowner)
+      and acldefault('f', p.proowner)
+        @> coalesce(p.proacl, acldefault('f', p.proowner))
+      and regexp_replace(p.prosrc, '\s+', '', 'g')
+        = 'selectanalytics.dashboard_payload_history(include_internal);'
+  ) then
+    raise exception 'dashboard_payload is not the canonical history wrapper';
   end if;
 
   select count(*) into actual_count
@@ -434,7 +462,6 @@ begin
       ('public.archived_leagues', 1),
       ('public.mcp_tool_events', 3),
       ('public.mcp_user_daily', 1),
-      ('public.mcp_user_daily_et', 0),
       ('public.mcp_tool_daily', 3),
       ('public.provider_sync_state', 2),
       ('analytics.dashboard_snapshot', 2),
@@ -508,6 +535,76 @@ begin
     and computed_at is not null;
   if actual_count <> 2 then
     raise exception 'dashboard snapshot seed proof failed';
+  end if;
+
+  if not exists (
+    select 1
+    from analytics.history_rollup_state s
+    where s.id
+      and s.initial_history_start_et_day
+        = (now() at time zone 'America/New_York')::date - 1
+      and s.last_closed_et_day
+        = (now() at time zone 'America/New_York')::date - 1
+  ) then
+    raise exception 'seed did not initialize ET history through yesterday';
+  end if;
+
+  if exists (
+    (select et_day, env, user_id, auth_type, client_name, platform, sport, call_count
+     from public.mcp_user_daily_et
+     except all
+     select (e.ts at time zone 'America/New_York')::date,
+       e.env, e.user_id, e.auth_type, e.client_name, e.platform, e.sport,
+       count(*)
+     from public.mcp_tool_events e
+     where (e.ts at time zone 'America/New_York')::date
+       <= (now() at time zone 'America/New_York')::date - 1
+     group by 1, 2, 3, 4, 5, 6, 7)
+    union all
+    (select (e.ts at time zone 'America/New_York')::date,
+       e.env, e.user_id, e.auth_type, e.client_name, e.platform, e.sport,
+       count(*)
+     from public.mcp_tool_events e
+     where (e.ts at time zone 'America/New_York')::date
+       <= (now() at time zone 'America/New_York')::date - 1
+     group by 1, 2, 3, 4, 5, 6, 7
+     except all
+     select et_day, env, user_id, auth_type, client_name, platform, sport, call_count
+     from public.mcp_user_daily_et)
+  ) then
+    raise exception 'seeded ET summaries diverge from closed-day raw events';
+  end if;
+
+  for wrapper_payload, history_payload in
+    select analytics.dashboard_payload(include_internal),
+      analytics.dashboard_payload_history(include_internal)
+    from (values (false), (true)) variants(include_internal)
+  loop
+    if (wrapper_payload - 'user_concentration')
+         is distinct from (history_payload - 'user_concentration')
+       or exists (
+         (select value
+          from jsonb_array_elements(wrapper_payload -> 'user_concentration')
+          except all
+          select value
+          from jsonb_array_elements(history_payload -> 'user_concentration'))
+         union all
+         (select value
+          from jsonb_array_elements(history_payload -> 'user_concentration')
+          except all
+          select value
+          from jsonb_array_elements(wrapper_payload -> 'user_concentration'))
+       ) then
+      raise exception 'canonical dashboard wrapper diverges from its history implementation';
+    end if;
+  end loop;
+
+  if exists (
+    select 1
+    from analytics.dashboard_snapshot
+    where (payload ->> 'health_window_days')::integer is distinct from 30
+  ) then
+    raise exception 'seeded dashboard snapshots do not disclose the 30-day health window';
   end if;
 
   if not (select analytics.dashboard_payload(false) ? 'sync_recent') then
@@ -662,6 +759,13 @@ begin
   where version = '20260827004306';
   if actual_count <> 1 then
     raise exception 'ESPN history jobs migration history row is missing';
+  end if;
+
+  select count(*) into actual_count
+  from supabase_migrations.schema_migrations
+  where version = '20260908202843';
+  if actual_count <> 1 then
+    raise exception 'analytics history reader migration history row is missing';
   end if;
 end
 $proof$;
@@ -979,6 +1083,17 @@ select jsonb_pretty(jsonb_build_object(
     ),
     'provider_flags_snapshots', (
       select count(*) from analytics.provider_flags_snapshot
+    ),
+    'et_history_rows', (select count(*) from public.mcp_user_daily_et),
+    'et_history_start', (
+      select initial_history_start_et_day
+      from analytics.history_rollup_state
+      where id
+    ),
+    'et_history_closed_through', (
+      select last_closed_et_day
+      from analytics.history_rollup_state
+      where id
     )
   )
 )) as reproducibility_snapshot;

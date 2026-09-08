@@ -9,6 +9,7 @@ set -euo pipefail
 readonly DB_CONTAINER="supabase_db_flaim"
 readonly ACTIVATE_SQL="supabase/cron/analytics-history.sql"
 readonly CUTOVER_SQL="supabase/cron/analytics-history-cutover.sql"
+readonly RAW_DASHBOARD_SQL="supabase/migrations/20260802131749_add_sync_recent_dashboard_payload.sql"
 readonly CLOSE_JOB="mcp-et-history-close"
 readonly CLOSE_COMMAND="select public.close_mcp_user_daily_et();"
 readonly GUARD_USER="history-guard-close"
@@ -54,6 +55,17 @@ reset_history_state() {
   "
 }
 
+restore_seed_history_state() {
+  reset_history_state
+  psql_quiet "
+    select public.close_mcp_user_daily_et(
+      (now() at time zone 'America/New_York')::date - 1,
+      (now() at time zone 'America/New_York')::date - 1
+    );
+    select analytics.refresh_dashboard_snapshot();
+  "
+}
+
 clear_guard_fixture() {
   psql_quiet "
     delete from public.mcp_tool_events
@@ -69,11 +81,17 @@ restore_payload() {
   fi
 }
 
+install_raw_payload() {
+  docker exec -i "${DB_CONTAINER}" \
+    psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - \
+    < "${RAW_DASHBOARD_SQL}" >/dev/null
+}
+
 cleanup() {
   restore_payload || true
   clear_history_job || true
   clear_guard_fixture || true
-  reset_history_state || true
+  restore_seed_history_state || true
   rm -rf "${tmp_dir}"
 }
 trap cleanup EXIT
@@ -115,13 +133,16 @@ await_command_success() {
 
 clear_history_job
 clear_guard_fixture
-reset_history_state
+restore_seed_history_state
 
-# Save the exact pre-cutover body. The cutover artifact deliberately preserves
-# owner/ACL, and the local proof restores this body on every exit path.
+# Save the canonical wrapper so this production-artifact proof can restore the
+# reset contract on every exit path. Then install the last raw-only reader as
+# the production cutover's true before-state; its refresh is safe because the
+# seeded marker is initialized.
 psql_value "
   select pg_get_functiondef('analytics.dashboard_payload(boolean)'::regprocedure);
 " > "${original_payload_sql}"
+install_raw_payload
 payload_before="$(psql_value "
   select md5(pg_get_functiondef('analytics.dashboard_payload(boolean)'::regprocedure));
 ")"
@@ -130,6 +151,7 @@ identity_before="$(psql_value "
   from pg_proc
   where oid = 'analytics.dashboard_payload(boolean)'::regprocedure;
 ")"
+reset_history_state
 
 # 1. No acknowledgement and then acknowledged-but-uninitialized both leave no
 # job behind. Each invocation lacks ON_ERROR_STOP by design.

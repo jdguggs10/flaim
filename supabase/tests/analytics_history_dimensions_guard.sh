@@ -18,7 +18,43 @@ psql_exec() {
     psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres "$@"
 }
 
+capture_reset_history_state() {
+  psql_exec -Atq -c "
+    select jsonb_build_object(
+      'aggregate', coalesce(
+        (
+          select jsonb_agg(
+            to_jsonb(d)
+            order by
+              d.et_day,
+              d.env,
+              d.user_id,
+              d.auth_type,
+              d.client_name nulls first,
+              d.platform nulls first,
+              d.sport nulls first,
+              d.call_count
+          )
+          from public.mcp_user_daily_et as d
+        ),
+        '[]'::jsonb
+      ),
+      'marker', coalesce(
+        (
+          select jsonb_agg(to_jsonb(s) order by s.id)
+          from analytics.history_rollup_state as s
+        ),
+        '[]'::jsonb
+      )
+    )::text;
+  "
+}
+
+readonly EXPECTED_RESET_HISTORY_STATE="$(capture_reset_history_state)"
+
 assert_reset_posture() {
+  local actual_reset_history_state
+
   psql_exec -q -c "
     do \$assert\$
     declare
@@ -49,20 +85,15 @@ assert_reset_posture() {
         raise exception 'dimension guard left unexpected unique grain: %', actual_constraint;
       end if;
 
-      if exists (
+      if not exists (
         select 1
         from analytics.history_rollup_state as s
         where s.id
-          and (
-            s.initial_history_start_et_day is not null
-            or s.last_closed_et_day is not null
-          )
+          and s.initial_history_start_et_day is not null
+          and s.last_closed_et_day is not null
+          and s.initial_history_start_et_day <= s.last_closed_et_day
       ) then
-        raise exception 'dimension guard left analytics history initialized';
-      end if;
-
-      if exists (select 1 from public.mcp_user_daily_et) then
-        raise exception 'dimension guard left aggregate rows behind';
+        raise exception 'dimension guard did not retain initialized analytics history';
       end if;
 
       if exists (
@@ -73,9 +104,21 @@ assert_reset_posture() {
     end;
     \$assert\$;
   " >/dev/null
+
+  actual_reset_history_state="$(capture_reset_history_state)"
+  if [[ "${actual_reset_history_state}" != "${EXPECTED_RESET_HISTORY_STATE}" ]]; then
+    printf 'Dimension migration guard changed the seeded history rows or marker.\n' >&2
+    exit 1
+  fi
 }
 
 readonly RESTORE_OLD_GRAIN_SQL="
+  truncate public.mcp_user_daily_et;
+  update analytics.history_rollup_state
+    set initial_history_start_et_day = null,
+        last_closed_et_day = null,
+        updated_at = now()
+    where id;
   alter table public.mcp_user_daily_et
     drop constraint mcp_user_daily_et_grain;
   alter table public.mcp_user_daily_et

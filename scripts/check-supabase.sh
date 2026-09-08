@@ -24,6 +24,8 @@ readonly TOKEN_RPC_PROOF_SQL="supabase/tests/token_rpc.sql"
 readonly PROVIDER_FLAGS_PROOF_SQL="supabase/tests/provider_flags.sql"
 readonly ESPN_HISTORY_JOBS_PROOF_SQL="supabase/tests/espn_history_jobs.sql"
 readonly ACCOUNT_DELETIONS_PROOF_SQL="supabase/tests/account_deletions.sql"
+readonly RAW_DASHBOARD_MIGRATION_SQL="supabase/migrations/20260802131749_add_sync_recent_dashboard_payload.sql"
+readonly CONTAINER_RAW_DASHBOARD_MIGRATION_SQL="/tmp/analytics_dashboard_raw_reference.sql"
 readonly CRON_PRODUCTION_SQL="supabase/cron/production.sql"
 readonly CRON_CUTOVER_SQL="supabase/cron/production-cadence-cutover.sql"
 readonly CUTOVER_GUARD_PROOF_SH="supabase/tests/cutover_guard.sh"
@@ -193,6 +195,10 @@ for reset_number in 1 2; do
 
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ESPN_HISTORY_JOBS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ACCOUNT_DELETIONS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
+  docker cp \
+    "${RAW_DASHBOARD_MIGRATION_SQL}" \
+    "${DB_CONTAINER}:${CONTAINER_RAW_DASHBOARD_MIGRATION_SQL}" \
+    >/dev/null
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < supabase/tests/analytics_history.sql >> "${tmp_dir}/snapshot-${reset_number}.txt"
 done
 
