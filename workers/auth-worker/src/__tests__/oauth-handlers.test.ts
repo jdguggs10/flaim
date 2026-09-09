@@ -52,6 +52,23 @@ const grokInvalidRedirectUris = [
   'https://grok.com/connectors-oauth-exchange-code/\n',
   'https://grok.com/connectors-oauth-exchange-code/\r\n',
 ];
+const cursorAgentsRedirectUri = 'https://www.cursor.com/agents/mcp/oauth/callback';
+const cursorAgentsInvalidRedirectUris = [
+  'https://cursor.com/agents/mcp/oauth/callback',
+  'https://www.cursor.com/agents/mcp/oauth/callback/',
+  'https://sub.cursor.com/agents/mcp/oauth/callback',
+  'https://www.cursor.com.evil.example/agents/mcp/oauth/callback',
+  'https://www.cursor.com/agents/mcp/oauth/callback/extra',
+  'https://www.cursor.com/agents/mcp/oauth/callback?next=https://evil.example',
+  'https://www.cursor.com/agents/mcp/oauth/callback#fragment',
+  'http://www.cursor.com/agents/mcp/oauth/callback',
+  'https://user@www.cursor.com/agents/mcp/oauth/callback',
+  'https://www.cursor.com:443/agents/mcp/oauth/callback',
+  'https://www.cursor.com/ignored/../agents/mcp/oauth/callback',
+  'https://www.cursor.com/agents/mcp/oauth/callback/%2e%2e/',
+  'https://www.cursor.com/agents/mcp/oauth/callback\n',
+  'https://www.cursor.com/agents/mcp/oauth/callback\r\n',
+];
 const geminiSparkInvalidRedirectUris = [
   ...geminiSparkRedirectHosts.flatMap((host) => geminiSparkRedirectPrefixes.flatMap((prefix) => {
     const path = `/${prefix}/user_bound_custom-mcp-123456789012345678901-api_flaim_app`;
@@ -255,6 +272,39 @@ describe('oauth-handlers', () => {
     }
   );
 
+  it('registers the exact Cursor web/agents callback as a public client', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [cursorAgentsRedirectUri],
+      token_endpoint_auth_method: 'none',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      redirect_uris?: string[];
+      token_endpoint_auth_method?: string;
+    };
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.redirect_uris).toEqual([cursorAgentsRedirectUri]);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
+  it.each(cursorAgentsInvalidRedirectUris)(
+    'rejects a structurally different Cursor web/agents callback during DCR: %s',
+    async (redirectUri) => {
+      const res = await handleClientRegistration(buildRegisterRequest({
+        redirect_uris: [redirectUri],
+      }), env, corsHeaders);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string };
+      expect(body.error).toBe('invalid_redirect_uri');
+    }
+  );
+
   it('keeps omitted non-Perplexity DCR clients public', async () => {
     const res = await handleClientRegistration(buildRegisterRequest(), env, corsHeaders);
 
@@ -413,6 +463,24 @@ describe('oauth-handlers', () => {
 
   it.each(grokInvalidRedirectUris)(
     'rejects a structurally different Grok callback during authorization: %s',
+    async (redirectUri) => {
+      const req = new Request(
+        'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        '&code_challenge=abc123&code_challenge_method=S256'
+      );
+      const res = await handleAuthorize(req, env);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string; error_description?: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toBe('redirect_uri is not in the allowed list');
+    }
+  );
+
+  it.each(cursorAgentsInvalidRedirectUris)(
+    'rejects a structurally different Cursor web/agents callback during authorization: %s',
     async (redirectUri) => {
       const req = new Request(
         'https://api.flaim.app/authorize?response_type=code&client_id=test' +
@@ -590,6 +658,26 @@ describe('oauth-handlers', () => {
       redirectUri: grokRedirectUri,
       scope: 'mcp:read',
       codeChallenge: 'grok-challenge',
+    }));
+  });
+
+  it('starts a PKCE read-only authorization for the exact Cursor web/agents callback', async () => {
+    const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      `&redirect_uri=${encodeURIComponent(cursorAgentsRedirectUri)}` +
+      '&scope=mcp%3Aread&code_challenge=cursor-agents-challenge&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.pathname).toBe('/oauth/consent');
+    expect(location.searchParams.get('scope')).toBe('mcp:read');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      redirectUri: cursorAgentsRedirectUri,
+      scope: 'mcp:read',
+      codeChallenge: 'cursor-agents-challenge',
     }));
   });
 
@@ -1576,6 +1664,17 @@ describe('redirect URI validation', () => {
 
   it.each(grokInvalidRedirectUris)(
     'rejects structurally different Grok callback: %s',
+    (uri) => {
+      expect(isValidRedirectUri(uri)).toBe(false);
+    }
+  );
+
+  it('accepts only the exact Cursor web/agents callback', () => {
+    expect(isValidRedirectUri(cursorAgentsRedirectUri)).toBe(true);
+  });
+
+  it.each(cursorAgentsInvalidRedirectUris)(
+    'rejects structurally different Cursor web/agents callback: %s',
     (uri) => {
       expect(isValidRedirectUri(uri)).toBe(false);
     }
