@@ -10,6 +10,10 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     // request validation end-to-end while asserting it never runs before the
     // two auth gates have passed.
     parseYahooSupportRequest: vi.fn(actual.parseYahooSupportRequest),
+    // Business logic is stubbed here: these tests own routing, auth and
+    // status mapping. The snapshot itself is covered by
+    // yahoo-support-inspect.test.ts.
+    runYahooSupportInspect: vi.fn(),
   };
 });
 
@@ -23,13 +27,33 @@ vi.mock('../oauth-handlers', async () => {
 
 import app from '../index-hono';
 import { validateOAuthToken } from '../oauth-handlers';
-import { parseYahooSupportRequest } from '../yahoo-support-diagnostics';
+import {
+  parseYahooSupportRequest,
+  runYahooSupportInspect,
+  type YahooSupportInspectReport,
+} from '../yahoo-support-diagnostics';
+
+const INSPECT_PATH = '/auth/internal/support/yahoo/inspect';
 
 const SUPPORT_PATHS = [
-  '/auth/internal/support/yahoo/inspect',
+  INSPECT_PATH,
   '/auth/internal/support/yahoo/diagnose',
   '/auth/internal/support/yahoo/refresh',
 ] as const;
+
+// Diagnose and refresh are still Session-1 stubs; inspect is implemented.
+const STUB_PATHS = SUPPORT_PATHS.filter((path) => path !== INSPECT_PATH);
+
+const INSPECT_OK_REPORT: YahooSupportInspectReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  providers: { yahoo: true, espn: false, sleeper: false },
+  yahooCredential: { connected: false, hasCredentials: false },
+  yahooLeagues: { rowCount: 0, distinctSeasons: 0, oldestUpdatedAt: null, newestUpdatedAt: null },
+  sync: [],
+  flaimSessions: { activeCount: 0, mostRecentExpiresAt: null, clientNames: [] },
+};
 
 const ISSUER = 'https://flaim-test.clerk.accounts.dev';
 const KEY_ID = 'yahoo-support-routes-test-key';
@@ -130,6 +154,7 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(validateOAuthToken).mockResolvedValue(null);
+  vi.mocked(runYahooSupportInspect).mockResolvedValue(INSPECT_OK_REPORT);
   // Clerk JWKS lookup — the only network call these tests can trigger.
   vi.stubGlobal('fetch', vi.fn(async () => new Response(
     JSON.stringify({ keys: [publicJwk] }),
@@ -266,8 +291,10 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
   it('reaches the handler with both secrets and a valid body', async () => {
     const res = await app.fetch(makeRequest(path, bothTokens()), baseEnv);
 
-    expect(res.status).toBe(501);
-    await expect(res.json()).resolves.toEqual({ outcome: 'not_implemented' });
+    // Past both gates and through validation. What the handler then answers is
+    // per-route and asserted below.
+    expect([403, 500]).not.toContain(res.status);
+    await expect(res.json()).resolves.toHaveProperty('outcome');
     expect(parseYahooSupportRequest).toHaveBeenCalledTimes(1);
   });
 
@@ -303,6 +330,61 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
 
     expect([404, 405]).toContain(res.status);
     expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+  });
+});
+
+// Unchanged from Session 1: these two routes are still unimplemented stubs.
+describe.each(STUB_PATHS)('POST %s (unimplemented stub)', (path) => {
+  it('answers 501 once both secrets and the body validate', async () => {
+    const res = await app.fetch(makeRequest(path, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(501);
+    await expect(res.json()).resolves.toEqual({ outcome: 'not_implemented' });
+    expect(runYahooSupportInspect).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${INSPECT_PATH} (implemented)`, () => {
+  it('runs the inspect snapshot and returns the report verbatim', async () => {
+    const res = await app.fetch(makeRequest(INSPECT_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(INSPECT_OK_REPORT);
+    expect(runYahooSupportInspect).toHaveBeenCalledTimes(1);
+    expect(runYahooSupportInspect).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID },
+    );
+  });
+
+  it('maps a failed snapshot to 500 without inventing an error body', async () => {
+    const failed = { outcome: 'failed', userMasked: 'user_3Ie...', error: 'snapshot_failed' } as const;
+    vi.mocked(runYahooSupportInspect).mockResolvedValue(failed);
+
+    const res = await app.fetch(makeRequest(INSPECT_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual(failed);
+  });
+
+  it('does not run the snapshot when the body fails validation', async () => {
+    const res = await app.fetch(
+      makeRequest(INSPECT_PATH, bothTokens(), JSON.stringify({ userId: 'admin' })),
+      baseEnv,
+    );
+
+    expect(res.status).toBe(400);
+    expect(runYahooSupportInspect).not.toHaveBeenCalled();
+  });
+
+  it('does not run the snapshot when authentication fails', async () => {
+    const res = await app.fetch(
+      makeRequest(INSPECT_PATH, { 'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN }),
+      baseEnv,
+    );
+
+    expect(res.status).toBe(403);
+    expect(runYahooSupportInspect).not.toHaveBeenCalled();
   });
 });
 

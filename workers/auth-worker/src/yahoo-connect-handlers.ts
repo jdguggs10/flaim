@@ -1777,6 +1777,117 @@ export async function handleYahooCredentials(
 }
 
 /**
+ * The connected-account credential-health body, shared by the
+ * `/internal/connect/yahoo/credential-health` route and the operator support
+ * inspect snapshot. Non-secret by construction: no access token, no refresh
+ * token, no raw lease owner id.
+ */
+export interface YahooCredentialHealthReport {
+  connected: true;
+  hasCredentials: true;
+  platform: 'yahoo';
+  checkedAt: string;
+  lastUpdated: string | null;
+  yahooGuidPresent: boolean;
+  appFingerprint: {
+    stored: string | null;
+    runtime: string | null;
+    status: YahooAppFingerprintStatus;
+  };
+  accessToken: {
+    expiresAt: string;
+    expiresInSeconds: number | undefined;
+    needsRefresh: boolean;
+    state: 'needs_refresh' | 'fresh';
+  };
+  refresh: {
+    state: YahooPublicRefreshState;
+    leaseExpiresAt?: string;
+    retryAfterSeconds?: number;
+  };
+}
+
+/**
+ * Pure projection of stored credential state onto the credential-health report.
+ * Reads nothing and renews nothing — every input is supplied by the caller.
+ */
+export function buildYahooCredentialHealthReport(
+  credentials: YahooCredentialHealth,
+  runtimeAppFingerprint: string | undefined,
+  now: Date
+): YahooCredentialHealthReport {
+  const nowMs = now.getTime();
+  const refreshState = yahooRefreshState(credentials, nowMs);
+  // Keep the internal lease-state enum distinct from the external diagnostic contract.
+  const responseRefreshState = publicYahooRefreshState(refreshState);
+  const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, nowMs);
+  const refresh: YahooCredentialHealthReport['refresh'] = {
+    state: responseRefreshState,
+  };
+  if (refreshState !== 'none' && credentials.refreshLeaseExpiresAt) {
+    refresh.leaseExpiresAt = credentials.refreshLeaseExpiresAt.toISOString();
+  }
+  if ((refreshState === 'cooldown' || refreshState === 'in_progress') && leaseRemainingSeconds !== undefined) {
+    refresh.retryAfterSeconds = leaseRemainingSeconds;
+  }
+
+  return {
+    connected: true,
+    hasCredentials: true,
+    platform: 'yahoo',
+    checkedAt: now.toISOString(),
+    lastUpdated: credentials.updatedAt?.toISOString() ?? null,
+    yahooGuidPresent: credentials.yahooGuidPresent,
+    // Fingerprints are non-secret SHA-256 prefixes of the Yahoo client id;
+    // 'mismatch' means stored tokens were minted by a different Yahoo app.
+    appFingerprint: {
+      stored: credentials.appFingerprint ?? null,
+      runtime: runtimeAppFingerprint ?? null,
+      status: yahooAppFingerprintStatus(credentials.appFingerprint, runtimeAppFingerprint),
+    },
+    accessToken: {
+      expiresAt: credentials.expiresAt.toISOString(),
+      expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt, nowMs),
+      needsRefresh: credentials.needsRefresh,
+      state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
+    },
+    refresh,
+  };
+}
+
+/**
+ * The subset of the Yahoo connect environment credential health needs. Widened
+ * from `YahooConnectEnv` only in that `YAHOO_CLIENT_ID` may be absent — the
+ * runtime fingerprint is then simply `null`, which is exactly what the operator
+ * support module (whose env carries Yahoo credentials optionally) needs.
+ */
+export type YahooCredentialHealthEnv = Pick<YahooConnectEnv, 'SUPABASE_URL' | 'SUPABASE_SERVICE_KEY'> & {
+  YAHOO_CLIENT_ID?: string;
+};
+
+/**
+ * Read-only credential-health snapshot for one account, for callers that want
+ * the report rather than an HTTP response. Returns null when the account has no
+ * stored Yahoo credential row.
+ *
+ * Deliberately never calls the token path: this reads stored state and must not
+ * mutate, renew, or lease anything.
+ */
+export async function readYahooCredentialHealthReport(
+  env: YahooCredentialHealthEnv,
+  userId: string,
+  now: Date = new Date()
+): Promise<YahooCredentialHealthReport | null> {
+  const storage = YahooStorage.fromEnvironment(env);
+  const credentials = await storage.getYahooCredentialHealth(userId);
+  if (!credentials) {
+    return null;
+  }
+  const runtimeAppFingerprint = await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID);
+  return buildYahooCredentialHealthReport(credentials, runtimeAppFingerprint, now);
+}
+
+/**
  * GET /internal/connect/yahoo/credential-health
  *
  * Returns non-secret Yahoo credential timing and refresh lease state for
@@ -1813,46 +1924,10 @@ export async function handleYahooCredentialHealth(
     }
 
     const checkedAtDate = new Date();
-    const checkedAtNowMs = checkedAtDate.getTime();
-    const refreshState = yahooRefreshState(credentials, checkedAtNowMs);
-    // Keep the internal lease-state enum distinct from the external diagnostic contract.
-    const responseRefreshState = publicYahooRefreshState(refreshState);
-    const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, checkedAtNowMs);
-    const refresh: { state: string; leaseExpiresAt?: string; retryAfterSeconds?: number } = {
-      state: responseRefreshState,
-    };
-    if (refreshState !== 'none' && credentials.refreshLeaseExpiresAt) {
-      refresh.leaseExpiresAt = credentials.refreshLeaseExpiresAt.toISOString();
-    }
-    if ((refreshState === 'cooldown' || refreshState === 'in_progress') && leaseRemainingSeconds !== undefined) {
-      refresh.retryAfterSeconds = leaseRemainingSeconds;
-    }
-    const checkedAt = checkedAtDate.toISOString();
     const runtimeAppFingerprint = await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID);
 
     return new Response(
-      JSON.stringify({
-        connected: true,
-        hasCredentials: true,
-        platform: 'yahoo',
-        checkedAt,
-        lastUpdated: credentials.updatedAt?.toISOString() ?? null,
-        yahooGuidPresent: credentials.yahooGuidPresent,
-        // Fingerprints are non-secret SHA-256 prefixes of the Yahoo client id;
-        // 'mismatch' means stored tokens were minted by a different Yahoo app.
-        appFingerprint: {
-          stored: credentials.appFingerprint ?? null,
-          runtime: runtimeAppFingerprint ?? null,
-          status: yahooAppFingerprintStatus(credentials.appFingerprint, runtimeAppFingerprint),
-        },
-        accessToken: {
-          expiresAt: credentials.expiresAt.toISOString(),
-          expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt, checkedAtNowMs),
-          needsRefresh: credentials.needsRefresh,
-          state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
-        },
-        refresh,
-      }),
+      JSON.stringify(buildYahooCredentialHealthReport(credentials, runtimeAppFingerprint, checkedAtDate)),
       {
         status: 200,
         headers: {
