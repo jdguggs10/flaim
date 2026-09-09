@@ -2808,6 +2808,16 @@ export function logYahooDiscoveryDropIfAny(
   // `leagueMissingKeyOrName` for a different reason would otherwise stay
   // just as invisible on this path as before FLA-365.
   const skippedAnything = Object.values(stats.skipped).some((count) => count > 0);
+  // The `count || 0` swallow (Yahoo omits or zeroes a collection's `count`
+  // while the collection itself holds real indexed entries) can happen at
+  // any of the three nested levels, not just leagues — a swallowed
+  // `gamesWrapper.count` means the per-game loop never runs at all, so
+  // nothing below it (including league counts) ever gets a chance to
+  // disagree either. Checked at all three levels for that reason.
+  const declaredZeroButIndexedPositive =
+    (stats.declared.users === 0 && stats.indexed.users > 0)
+    || (stats.declared.games === 0 && stats.indexed.games > 0)
+    || (stats.declared.leagues === 0 && stats.indexed.leagues > 0);
   // Declared/indexed are account-level running totals across every game, so
   // this specific check can be masked if only one of several games in the
   // account hits the swallow: e.g. game A declares 2/indexes 2 while game B
@@ -2815,8 +2825,9 @@ export function logYahooDiscoveryDropIfAny(
   // does not have this blind spot for the *sport-code* and *shape* cases
   // above; only this literal count-swallow signal is coarser than per-game.
   const suspicious =
-    skippedAnything
-    || (stats.declared.leagues === 0 && stats.indexed.leagues > 0)
+    stats.envelope !== 'valid'
+    || skippedAnything
+    || declaredZeroButIndexedPositive
     || stats.threw;
   if (!suspicious) return;
 
@@ -2826,8 +2837,9 @@ export function logYahooDiscoveryDropIfAny(
       service: 'auth-worker',
       source,
       user_id: maskUserId(userId),
-      declared_leagues: stats.declared.leagues,
-      indexed_leagues: stats.indexed.leagues,
+      envelope: stats.envelope,
+      declared: stats.declared,
+      indexed: stats.indexed,
       accepted_leagues: stats.accepted,
       unsupported_sport_codes: stats.unsupportedGameCodes,
       skipped: stats.skipped,
