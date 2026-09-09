@@ -10,6 +10,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: The routes require two independent service secrets, the shared internal service token and a dedicated support token, because they take their target account from the request body rather than from a session. They fail closed when either secret is unconfigured, and no end-user credential is an alternative to either.
 - **Limited**: Internal-service only, and not part of the public API or MCP surface: no tool, schema, or client-visible contract changed. Reads name their columns explicitly, so league, team, and token columns never enter a response, and both responses and audit logs carry only a masked account id, closed-set error codes, statuses, and counts.
 
+### Funnel Day History (FLA-358)
+
+- **Added**: `analytics.funnel_daily` records one row per America/New_York day and funnel stage. The existing five-minute dashboard snapshot refresh upserts today's rows from the payload it just stored, so an open day tracks intraday and a completed day keeps the value observed at its final refresh. The funnel was previously current-state only, with no trend for any stage.
+- **Preserved**: The dashboard payload, its `funnel` key, the `analytics.funnel_snapshot` view, the provider-flags path, and the cron schedule are unchanged. Only the scheduled no-argument refresh writes history; the explicit boolean overload, which can rebuild the internal-excluding row, does not.
+- **Preserved**: No backfill. Disconnects hard-delete their league and credential rows, so reconstructing earlier days from `created_at` would undercount each of them by everyone who has since disconnected; history begins at the first scheduled refresh after the migration lands.
+
 ### MAU Trend Line (FLA-357)
 
 - **Added**: Each `usage_trend` day in the analytics dashboard payload carries `mau_30d`, a rolling 30-day distinct-user count built from the same preserved ET-day history and the same window shape as the existing `wau_7d`, plus `mau_30d_partial` disclosing the days whose 30-day window reaches back before history begins. Every other key, window, and source in the payload is unchanged, and the current-value `rolling.mau` scalar keeps its trailing-720-hour meaning.
