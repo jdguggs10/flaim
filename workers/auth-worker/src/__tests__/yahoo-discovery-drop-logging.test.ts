@@ -199,6 +199,29 @@ describe('logYahooDiscoveryDropIfAny', () => {
     }
   );
 
+  // Logging must never affect request behavior: both call sites sit inside a
+  // try/catch that turns a thrown error into a 500 for the client, so this
+  // function must never let an internal failure propagate — even one it
+  // can't anticipate today, like a future YahooParseStats field that
+  // JSON.stringify can't serialize.
+  it('never throws, even if JSON.stringify itself fails', () => {
+    const stats = validStats();
+    stats.skipped.unsupportedSportCode = 1;
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    // Force a real JSON.stringify failure via a field JSON can't represent,
+    // without needing YahooParseStats to actually declare one yet.
+    (stats as unknown as { unsupportedGameCodes: unknown }).unsupportedGameCodes = circular;
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(() => logYahooDiscoveryDropIfAny(USER_ID, stats, 'discovery')).not.toThrow();
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0].join(' ')).not.toContain(USER_ID);
+
+    errorSpy.mockRestore();
+  });
+
   it('never logs the unmasked user id', () => {
     const stats = validStats();
     stats.skipped.unsupportedSportCode = 1;
