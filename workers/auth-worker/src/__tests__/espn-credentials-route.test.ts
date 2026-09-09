@@ -328,6 +328,61 @@ describe('caller-supplied ESPN league mutations', () => {
     expect(mockStorage.setLeagues).not.toHaveBeenCalled();
   });
 
+  it('rejects a bulk replacement whose seasonYear is not an integer before taking the lease', async () => {
+    const token = await signedClerkToken();
+
+    // A numeric string is the dangerous shape: storage keys a surviving league
+    // on `season_year`, which the integer column always reads back as a number,
+    // so "2026" would never match 2026 and the league's created_at would be
+    // reset as if it were new.
+    const res = await app.fetch(
+      makeMutationRequest('/auth/leagues', token, 'POST', {
+        leagues: [{ leagueId: 'league-1', sport: 'football', seasonYear: '2026', teamId: '1' }],
+      }),
+      baseEnv
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: expect.stringContaining('leagues[0] seasonYear'),
+    });
+    expect(mutationMocks.begin).not.toHaveBeenCalled();
+    expect(mockStorage.setLeagues).not.toHaveBeenCalled();
+  });
+
+  it('rejects a bulk replacement whose leagueId is not a string', async () => {
+    const token = await signedClerkToken();
+
+    const res = await app.fetch(
+      makeMutationRequest('/auth/leagues', token, 'POST', {
+        leagues: [{ leagueId: 12345, sport: 'football', seasonYear: 2026 }],
+      }),
+      baseEnv
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: expect.stringContaining('leagues[0] leagueId'),
+    });
+    expect(mockStorage.setLeagues).not.toHaveBeenCalled();
+  });
+
+  it('stores a well-typed replacement, including a league with no seasonYear', async () => {
+    const token = await signedClerkToken();
+    const leagues = [
+      { leagueId: 'league-1', sport: 'football', seasonYear: 2026, teamId: '1' },
+      { leagueId: 'league-2', sport: 'baseball', teamId: '2' },
+    ];
+
+    const res = await app.fetch(
+      makeMutationRequest('/auth/leagues', token, 'POST', { leagues }),
+      baseEnv
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockStorage.setLeagues).toHaveBeenCalledWith('user_public_route_test', leagues);
+  });
+
   it('blocks sequential manual additions at the boundary and still settles the lease', async () => {
     mockStorage.getLeagues.mockResolvedValueOnce(Array.from({ length: 1000 }, (_, index) => ({
       leagueId: `league-${index}`,
