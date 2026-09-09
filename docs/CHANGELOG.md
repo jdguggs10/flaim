@@ -7,6 +7,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Yahoo Full-Game Discovery (FLA-355)
 
 - **Fixed**: Yahoo league discovery now requests full fantasy games explicitly, preserving supported football, baseball, basketball, and hockey history while avoiding an upstream Yahoo server error observed on an unfiltered all-history request.
+- **Added**: A temporary, service-token-only endpoint can retry one member of the cryptographically committed 59-account recovery cohort per request. It defaults to a database-only dry run, reuses the normal Yahoo refresh guardrails and persistence path, and expires on September 9.
 
 ### Yahoo Draft Player Names
 
