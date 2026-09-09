@@ -24,6 +24,8 @@
   //   takes the dev-instance value, --env prod takes the prod-instance
   //   value; they are never the same secret)
   // Optional vars:
+  // - SUPPORT_TOOL_TOKEN (second secret required by /internal/support/*, on top
+  //   of INTERNAL_SERVICE_TOKEN; when unset those routes fail closed with 500)
   // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 31536000 in code; set only to override)
   // - OAUTH_CLIENT_REGISTRATION_SIGNING_KEY (defaults to SUPABASE_SERVICE_KEY;
   //   set a dedicated stable secret in preview/prod so Supabase key rotation
