@@ -147,7 +147,7 @@ const FAQS = [
   {
     question: "Does Flaim support college sports or other fantasy formats?",
     answer:
-      "No, not yet. Flaim currently supports NFL, MLB, NBA, and NHL leagues only. College leagues and other fantasy formats won't show up when you connect an account.",
+      "No, not yet. Flaim currently supports fantasy football, baseball, basketball, and hockey leagues only. College leagues and other fantasy formats won't show up when you connect an account.",
   },
 ] as const;
 
