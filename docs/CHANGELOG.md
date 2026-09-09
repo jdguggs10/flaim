@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Shared Logging Redaction (FLA-363)
+
+- **Fixed**: Three log lines shared by every normal Yahoo refresh/discovery request, and by the FLA-360 support tool's `diagnose`/`refresh` actions, no longer carry free-form upstream text or a raw driver error object. Found during the FLA-360 cross-model audit. Token-refresh failures log the existing closed-set `diagnosticClass` instead of Yahoo's raw `error_description`; a discovery `access_denied` 403 logs only the boolean app-level-denial classification instead of up to 500 raw characters of Yahoo's response body; a league-upsert failure logs the Postgres/PostgREST error `code` only, never the raw driver error object (whose `message`/`details` can name the conflicting `league_key` on a unique-violation). No response or behavior change — log content only.
+
 ### ESPN Connection Timestamps (FLA-359)
 
 - **Added**: `public.espn_credentials` gains `created_at timestamptz not null default now()`, the creation timestamp `yahoo_credentials` and `sleeper_connections` already had. ESPN previously recorded only `updated_at`, which every credential re-sync moves, so nothing said when an ESPN connection was first established.

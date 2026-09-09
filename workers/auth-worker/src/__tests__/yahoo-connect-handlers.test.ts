@@ -811,6 +811,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('returns error when refresh fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -835,11 +836,21 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(401);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
+      // The client-facing error_description is unchanged (FLA-363 only touches
+      // the console.error log line, not the response Flaim returns to callers).
       expect(body.error_description).toBe('Refresh token expired');
       expect(body.upstream_status).toBe(400);
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
+
+      // FLA-363: the logged line carries the closed-set diagnostic class, never
+      // Yahoo's free-form error_description text.
+      const loggedRefreshFailureLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes('Yahoo token refresh failed'));
+      expect(loggedRefreshFailureLine).toContain('yahoo_permanent');
+      expect(loggedRefreshFailureLine).not.toContain('Refresh token expired');
     });
 
     it('classifies unexpected Yahoo refresh errors without retry metadata', async () => {
@@ -3171,6 +3182,7 @@ describe('yahoo-connect-handlers', () => {
       // Yahoo"; the non-retryable path shows error_description verbatim.
       // Regression: this path used to say only "Yahoo API returned 403", which
       // is what a brand-new Yahoo user saw during draft season.
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'fresh-token',
@@ -3199,11 +3211,22 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retry_after).toBeUndefined();
       expect(body.upstream_status).toBe(403);
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+
+      // FLA-363: the access_denied body is read for classification only — the
+      // log carries the boolean it decided, never Yahoo's raw response text.
+      const loggedLines = logSpy.mock.calls.map((call) => String(call[0]));
+      expect(loggedLines).toContain(
+        '[yahoo-connect] discovery access_denied body classified: appLevelDenial=true'
+      );
+      for (const line of loggedLines) {
+        expect(line).not.toContain('not authorized to perform this action');
+      }
     });
 
     it('keeps the generic message on a resource-level 403 during discovery', async () => {
       // A 403 about a specific resource is not the platform-wide denial and
       // must not be dressed up as one.
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'fresh-token',
@@ -3227,6 +3250,15 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Yahoo API returned 403');
       expect(body.retryable).toBeUndefined();
       expect(body.upstream_status).toBe(403);
+
+      // FLA-363: still classified (not app-level here), still never the raw body.
+      const loggedLines = logSpy.mock.calls.map((call) => String(call[0]));
+      expect(loggedLines).toContain(
+        '[yahoo-connect] discovery access_denied body classified: appLevelDenial=false'
+      );
+      for (const line of loggedLines) {
+        expect(line).not.toContain('not allowed to view this league');
+      }
     });
 
     it('stores historical multi-sport league and team associations', async () => {
