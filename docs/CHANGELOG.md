@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Discovery Drop Logging (FLA-365)
+
+- **Added**: The normal persisted Yahoo discovery path and the read-only reconciliation path now emit one structured warning log (`yahoo_discovery_drop`) whenever a discovery response may have had real league data silently dropped — an unrecognized sport code, a declared-zero-but-populated level, or a parse exception. Previously this was only visible via the FLA-360 support tool's `diagnose` action, and only when an operator went looking for a specific account. Counts and Yahoo-global sport codes only; never a league key, league name, team name, or customer identifier.
+
 ### Cursor Web/Cloud Agents OAuth Callback (FLA-367)
 
 - **Fixed**: Accept Cursor's fixed web and Cloud/Background Agents OAuth callback, `https://www.cursor.com/agents/mcp/oauth/callback`, for registration and authorization. Prompted by a support report that tools listed (11 discovered) but every authenticated call failed with `invalid_redirect_uri`. Cursor's separate desktop-IDE `cursor://` callback was already accepted and is unchanged.
