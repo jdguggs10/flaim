@@ -120,11 +120,9 @@ The separately controlled production schedule defines:
 | `dashboard-snapshot` | `*/5 * * * *` | `analytics.refresh_dashboard_snapshot()` |
 | `provider-flags-snapshot` | `*/5 * * * *` | `analytics.refresh_provider_flags_snapshot()` |
 
-That table is the phase 1 posture defined by `cron/production.sql`. The FLA-264
-phase 2 cutover — `dashboard-snapshot` hourly against
-`analytics.refresh_dashboard_snapshot(false)` plus a nightly
-`dashboard-snapshot-internal` — is defined separately in
-`cron/production-cadence-cutover.sql` and is gated on consumer verification.
+That table is the canonical posture defined by `cron/production.sql`. Both
+analytics jobs remain on five-minute schedules; the no-argument dashboard
+function controls which dashboard row is rebuilt.
 
 ## Intentional and environment-managed differences
 
@@ -171,15 +169,22 @@ the same id=1/id=2 variant contract as `dashboard_snapshot` and its own
 `analytics.refresh_provider_flags_snapshot()` functions, and a
 `analytics.refresh_dashboard_snapshot(boolean)` overload that refreshes a
 single dashboard variant. The no-argument `refresh_dashboard_snapshot()` is
-restated as a wrapper over that overload and still refreshes both variants.
+restated and still refreshes both variants.
 `analytics.dashboard_payload(boolean)` is untouched, including its
-`sync_recent` key, which remains as a consumer fallback during rollout.
+`sync_recent` key.
 
 The new relation grants `SELECT` to `analytics_readonly` and to nothing else;
 the new functions are security invokers with a fixed empty search path and no
 non-owner `EXECUTE` grants. The migration adds no policy, index outside the new
-primary key, extension, or scheduled job. Its cron activation is the two-phase
-operation described in `README.md`.
+primary key, extension, or scheduled job.
+
+The later FLA-264 forward migration
+`20260909005730_compute_single_inclusive_dashboard_snapshot.sql` replaces only
+the no-argument refresh body. It computes the internal-inclusive dashboard
+payload once and upserts id=2, leaving the existing external id=1 row
+unchanged. The boolean overload remains available to rebuild either variant
+explicitly. The migration changes no payload function, provider-flags object,
+privilege, relation, or schedule.
 
 The FLA-265 history migrations add an owner-only ET user-day aggregate, a
 serialized close marker and function, and the history-backed payload

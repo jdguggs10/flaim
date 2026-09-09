@@ -68,6 +68,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: An owner-only `dashboard_payload_history(boolean)` implementation reads the aggregate through its marker and raw events after it without overlap. It fails closed until the first explicit backfill succeeds or when the marker falls beyond the recoverable raw window.
 - **Changed**: Historical health summary and per-tool health use exact trailing 30-day raw events and disclose `health_window_days: 30`. Existing seven-day health, recent 1/7/30-day usage, UTC client mix, operational metrics, raw 90-day retention, snapshot refresh signatures, and cron schedules are unchanged.
 
+### Inclusive Dashboard Refresh (FLA-264)
+
+- **Changed**: The five-minute dashboard refresh computes the internal-inclusive human analytics payload once and updates only snapshot row id=2. The external row remains available for explicit comparison or manual recovery through the existing boolean refresh overload.
+- **Preserved**: Dashboard and provider-flags cron schedules remain every five minutes. Provider flags keep their independent relation, refresh function, variants, permissions, and freshness timestamp.
+- **Removed**: The superseded hourly/nightly dashboard cutover artifact and its dedicated guard test.
+
 ### Sleeper Connected-League Authorization (FLA-104)
 
 - **Changed**: Sleeper league-scoped MCP reads now verify the requested league, sport, and season against the authenticated user's stored, discovered records for their current configured Sleeper identity before calling Sleeper's public API. The authorization lookup does not run provider discovery or enrich legacy rows. Historical discovered seasons remain available; explicitly hidden leagues remain unavailable. League-wide analysis inside an authorized league, including opponent rosters and matchups, is unchanged.
