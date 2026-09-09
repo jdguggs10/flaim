@@ -2547,7 +2547,9 @@ export async function handleYahooDiscover(
     }
 
     const rawData = await apiResponse.json();
-    const leagues = parseYahooLeaguesResponse(rawData);
+    const discoveryStats = createYahooParseStats();
+    const leagues = parseYahooLeaguesResponse(rawData, discoveryStats);
+    logYahooDiscoveryDropIfAny(userId, discoveryStats, 'discovery');
 
     console.log(`[yahoo-connect] Discovered ${leagues.length} leagues for user ${maskUserId(userId)}`);
 
@@ -2691,7 +2693,10 @@ export async function fetchYahooLeaguesReadOnly(
     }
 
     const rawData = await apiResponse.json();
-    return { status: 'ok', leagues: parseYahooLeaguesResponse(rawData) };
+    const reconciliationStats = createYahooParseStats();
+    const leagues = parseYahooLeaguesResponse(rawData, reconciliationStats);
+    logYahooDiscoveryDropIfAny(userId, reconciliationStats, 'reconciliation');
+    return { status: 'ok', leagues };
   } catch (error) {
     console.error('[yahoo-connect] Read-only discovery error:', error instanceof Error ? error.message : error);
     const errorCode = error instanceof Error && error.name === 'TimeoutError' ? 'yahoo_timeout' : 'server_error';
@@ -2773,6 +2778,47 @@ export function createYahooParseStats(): YahooParseStats {
     threw: false,
     thrownErrorName: null,
   };
+}
+
+/**
+ * One structured warning when discovery may have silently dropped real
+ * league data: an unrecognized sport code (Yahoo added, or this account
+ * uses, a game type not in SPORT_CODE_MAP — the failure mode a real
+ * customer hit, see FLA-365), a declared-zero-but-indexed-populated level
+ * (the `count || 0` swallow case), or a thrown parse exception that still
+ * returned partial results. Fires from both the normal persisted discovery
+ * path and the read-only reconciliation path — the same drop can happen in
+ * either, and both should be equally findable in Cloudflare Logs rather
+ * than invisible until an operator thinks to run the FLA-360 support
+ * diagnostic tool. Never logs a league key, league name, or team name —
+ * only counts and Yahoo-global (not customer) sport codes.
+ */
+export function logYahooDiscoveryDropIfAny(
+  userId: string,
+  stats: YahooParseStats,
+  source: 'discovery' | 'reconciliation'
+): void {
+  const suspicious =
+    stats.skipped.unsupportedSportCode > 0
+    || (stats.declared.leagues === 0 && stats.indexed.leagues > 0)
+    || stats.threw;
+  if (!suspicious) return;
+
+  console.warn(
+    JSON.stringify({
+      event: 'yahoo_discovery_drop',
+      service: 'auth-worker',
+      source,
+      user_id: maskUserId(userId),
+      declared_leagues: stats.declared.leagues,
+      indexed_leagues: stats.indexed.leagues,
+      accepted_leagues: stats.accepted,
+      unsupported_sport_codes: stats.unsupportedGameCodes,
+      unsupported_sport_code_count: stats.skipped.unsupportedSportCode,
+      threw: stats.threw,
+      thrown_error_name: stats.thrownErrorName,
+    })
+  );
 }
 
 const YAHOO_INDEXED_KEY_PATTERN = /^\d+$/;

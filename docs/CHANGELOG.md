@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Discovery Drop Logging (FLA-365)
+
+- **Added**: The normal persisted Yahoo discovery path and the read-only reconciliation path now emit one structured warning log (`yahoo_discovery_drop`) whenever a discovery response may have had real league data silently dropped — an unrecognized sport code, a declared-zero-but-populated level, or a parse exception. Previously this was only visible via the FLA-360 support tool's `diagnose` action, and only when an operator went looking for a specific account. Counts and Yahoo-global sport codes only; never a league key, league name, team name, or customer identifier.
+
 ### Supported Sports FAQ (FLA-365)
 
 - **Added**: A "Does Flaim support college sports or other fantasy formats?" entry on the `/docs/sports` FAQ, stating plainly that Flaim currently supports NFL, MLB, NBA, and NHL leagues only. Prompted by a real support case where a customer's Yahoo college-football leagues silently failed to sync — this documents the existing, already-shipped scope; it does not change any behavior.
