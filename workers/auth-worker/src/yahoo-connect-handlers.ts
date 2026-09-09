@@ -1045,9 +1045,12 @@ async function getValidYahooAccessToken(
       secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
       ...requestDiagnosticFields,
     });
+    // `result.error` is Yahoo's short OAuth error code (a closed set); deliberately
+    // excludes `result.error_description`, which is free-form upstream text and can
+    // carry more than a closed error code (FLA-363). `diagnosticClass` is the same
+    // closed-set classification already computed above and sent to logDiagnostic.
     console.error(
-      `[yahoo-connect] Yahoo token refresh failed for user ${maskUserId(userId)}: ${result.error}${statusSuffix}` +
-        (result.error_description ? ` - ${result.error_description}` : '')
+      `[yahoo-connect] Yahoo token refresh failed for user ${maskUserId(userId)}: ${result.error}${statusSuffix} (${diagnosticClass})`
     );
 
     if (failureKind === 'transient_http' || failureKind === 'transient_text') {
@@ -2520,8 +2523,13 @@ export async function handleYahooDiscover(
         classification.kind === 'access_denied'
           ? await apiResponse.text().then((b) => b.slice(0, 500)).catch(() => '')
           : '';
+      // `deniedBody` is Yahoo's raw response text and stays unlogged (FLA-363);
+      // `isYahooAppLevelDenialBody` is the same closed boolean classification
+      // `yahooApiFailureResponse` uses below to pick the response wording.
       if (deniedBody) {
-        console.log(`[yahoo-connect] discovery access_denied body: ${deniedBody}`);
+        console.log(
+          `[yahoo-connect] discovery access_denied body classified: appLevelDenial=${isYahooAppLevelDenialBody(deniedBody)}`
+        );
       }
       // A 5xx (or an otherwise unclassified status) carries Yahoo's own reason
       // in the body, and logging only the status makes a deterministic upstream

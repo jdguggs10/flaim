@@ -268,6 +268,70 @@ describe('YahooStorage archive surface', () => {
       ).rejects.toThrow('Failed to upsert Yahoo league');
       expect(upsert).toHaveBeenCalledOnce();
     });
+
+    // FLA-363: a unique-violation's `message`/`details` can name the conflicting
+    // league_key verbatim (Postgres embeds the offending column values in the
+    // text). Only the closed-set `.code` may reach the log.
+    it('logs only the Postgres error code on an unrelated upsert failure, never the raw error object', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const single = vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: '23505',
+          message: 'duplicate key value violates unique constraint "yahoo_leagues_clerk_user_id_league_key_season_year_key"',
+          details: 'Key (clerk_user_id, league_key, season_year)=(u, nfl.l.99999, 2025) already exists.',
+        },
+      });
+      const select = vi.fn().mockReturnValue({ single });
+      const upsert = vi.fn().mockReturnValue({ select });
+      mockFrom.mockReturnValue({ upsert });
+
+      await expect(
+        storage.upsertYahooLeague({
+          clerkUserId: 'u', sport: 'football', seasonYear: 2025,
+          leagueKey: 'nfl.l.99999', leagueName: 'Zombie', recurringLeagueId: '300.l.10',
+        })
+      ).rejects.toThrow('Failed to upsert Yahoo league');
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      const logged = errorSpy.mock.calls[0].join(' ');
+      expect(logged).toContain('code=23505');
+      expect(logged).not.toContain('nfl.l.99999');
+      expect(logged).not.toContain('already exists');
+      expect(logged).not.toContain('duplicate key');
+
+      errorSpy.mockRestore();
+    });
+
+    // FLA-363: the missing-column retry warning is expected/benign (schema
+    // predates a migration), but previously interpolated the raw league_key
+    // into the message for no operational reason — dropped entirely.
+    it('does not log the raw league_key when retrying without recurring_league_id', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      let call = 0;
+      const single = vi.fn().mockImplementation(async () => {
+        call += 1;
+        if (call === 1) {
+          return { data: null, error: { code: '42703', message: 'column yahoo_leagues.recurring_league_id does not exist' } };
+        }
+        return { data: { id: 'row-1' }, error: null };
+      });
+      const select = vi.fn().mockReturnValue({ single });
+      const upsert = vi.fn().mockReturnValue({ select });
+      mockFrom.mockReturnValue({ upsert });
+
+      await storage.upsertYahooLeague({
+        clerkUserId: 'u', sport: 'football', seasonYear: 2025,
+        leagueKey: 'nfl.l.99999', leagueName: 'Zombie', recurringLeagueId: '300.l.10',
+      });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      const logged = warnSpy.mock.calls[0].join(' ');
+      expect(logged).toContain('code=42703');
+      expect(logged).not.toContain('nfl.l.99999');
+
+      warnSpy.mockRestore();
+    });
   });
 
   // ===========================================================================
