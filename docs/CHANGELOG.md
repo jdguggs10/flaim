@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Cursor Web/Cloud Agents OAuth Callback (FLA-367)
+
+- **Fixed**: Accept Cursor's fixed web and Cloud/Background Agents OAuth callback, `https://www.cursor.com/agents/mcp/oauth/callback`, for registration and authorization. Prompted by a support report that tools listed (11 discovered) but every authenticated call failed with `invalid_redirect_uri`. Cursor's separate desktop-IDE `cursor://` callback was already accepted and is unchanged.
+
 ### Supported Sports FAQ (FLA-365)
 
 - **Added**: A "Does Flaim support college sports or other fantasy formats?" entry on the `/docs/sports` FAQ, stating plainly that Flaim currently supports NFL, MLB, NBA, and NHL leagues only. Prompted by a real support case where a customer's Yahoo college-football leagues silently failed to sync — this documents the existing, already-shipped scope; it does not change any behavior.
