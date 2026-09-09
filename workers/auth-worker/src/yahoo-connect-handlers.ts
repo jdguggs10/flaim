@@ -2047,6 +2047,11 @@ async function refreshAccessToken(
 // =============================================================================
 
 const YAHOO_FANTASY_API_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
+// Yahoo can fail an otherwise valid unfiltered all-history discovery. Flaim
+// supports full fantasy leagues, so filter at the games collection before
+// expanding leagues and teams.
+const YAHOO_LEAGUE_DISCOVERY_URL =
+  `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_types=full/leagues;out=teams?format=json`;
 
 // Cap the renew-chain walk so a malformed/looping pointer set can't fetch
 // unbounded league metas. Yahoo Fantasy Sports has run since ~2001 (~25 NFL
@@ -2410,8 +2415,7 @@ export async function handleYahooDiscover(
 
     // Call Yahoo API to discover leagues
     // Request leagues with teams subresource to get user's team info
-    const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues;out=teams?format=json`;
-    const apiResponse = await fetch(apiUrl, {
+    const apiResponse = await fetch(YAHOO_LEAGUE_DISCOVERY_URL, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -2590,8 +2594,7 @@ export async function fetchYahooLeaguesReadOnly(
       accessToken = tokenResult.accessToken;
     }
 
-    const apiUrl = `${YAHOO_FANTASY_API_URL}/users;use_login=1/games/leagues;out=teams?format=json`;
-    const apiResponse = await fetch(apiUrl, {
+    const apiResponse = await fetch(YAHOO_LEAGUE_DISCOVERY_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(10000),
     });
