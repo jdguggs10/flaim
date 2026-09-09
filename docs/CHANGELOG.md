@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Supported Sports FAQ (FLA-365)
+
+- **Added**: A "Does Flaim support college sports or other fantasy formats?" entry on the `/docs/sports` FAQ, stating plainly that Flaim currently supports NFL, MLB, NBA, and NHL leagues only. Prompted by a real support case where a customer's Yahoo college-football leagues silently failed to sync — this documents the existing, already-shipped scope; it does not change any behavior.
+
 ### Operator Support Diagnostics (FLA-360)
 
 - **Added**: Three internal auth-worker routes — `/internal/support/yahoo/inspect`, `/internal/support/yahoo/diagnose`, and `/internal/support/yahoo/refresh` — investigate a single account's Yahoo sync state without an active session for that account. Inspect projects a redacted snapshot of stored state, diagnose makes at most two bounded read-only Yahoo discovery calls and reports what they mean, and refresh runs the ordinary guarded league refresh and reports the saved state either side of it.
