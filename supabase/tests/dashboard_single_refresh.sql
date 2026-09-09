@@ -233,6 +233,50 @@ begin
   if funnel_recorded is distinct from funnel_expected then
     raise exception 'real funnel stages were altered by the stale-stage cleanup delete';
   end if;
+
+  -- FLA-358: an empty-but-present funnel array must trip the same guard as a
+  -- missing key. Unlike the ghost-stage case above, there is no lower-level
+  -- row to inject here — the only way to make refresh_dashboard_snapshot()
+  -- see an empty array is to make analytics.dashboard_payload(boolean) itself
+  -- return one. Temporarily replace it with a stub that does exactly that.
+  -- CREATE OR REPLACE FUNCTION is transactional DDL, so this file's outer
+  -- `rollback;` restores the real function afterward; nothing is left
+  -- stubbed in the database.
+  select jsonb_agg(to_jsonb(d) order by d.et_day, d.stage)
+    into funnel_history_before
+  from analytics.funnel_daily as d;
+
+  create or replace function analytics.dashboard_payload(include_internal boolean)
+  returns jsonb
+  language sql
+  stable
+  security invoker
+  set search_path to ''
+  as $stub$
+    select jsonb_build_object('funnel', '[]'::jsonb);
+  $stub$;
+
+  begin
+    perform analytics.refresh_dashboard_snapshot();
+    raise exception 'FLA-358 regression: an empty funnel array did not raise; the stale-stage cleanup delete would have wiped today''s funnel_daily history';
+  exception
+    when sqlstate '55000' then
+      if sqlerrm !~ 'funnel history cannot be recorded' then
+        raise exception 'empty-funnel guard raised sqlstate 55000 with an unexpected message: %', sqlerrm;
+      end if;
+  end;
+
+  -- The failed call must leave no trace: refresh_dashboard_snapshot() raises
+  -- before it ever touches funnel_daily, and the exception block above rolls
+  -- back to its savepoint, so even the dashboard_snapshot id=2 upsert that
+  -- ran before the guard fired should not survive.
+  select jsonb_agg(to_jsonb(d) order by d.et_day, d.stage)
+    into funnel_history_after
+  from analytics.funnel_daily as d;
+
+  if funnel_history_after is distinct from funnel_history_before then
+    raise exception 'the empty-funnel guard fired but funnel_daily history changed anyway';
+  end if;
 end;
 $proof$;
 

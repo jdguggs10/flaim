@@ -130,13 +130,27 @@ begin
   returning payload into inclusive_payload;
 
   -- FLA-358. A missing key means the payload contract changed underneath this
-  -- function; fail loudly rather than record an empty day.
-  if inclusive_payload -> 'funnel' is null then
+  -- function; an empty array is just as dangerous even though the key is
+  -- present, because the stale-stage cleanup delete below computes
+  -- `stage not in (<today's funnel stages>)`, and `not in (<empty set>)` is
+  -- true for every row — a transient upstream bug that empties the funnel
+  -- array would wipe every already-recorded funnel_daily row for today, not
+  -- just skip recording a new one. Fail loudly rather than record, or erase,
+  -- an empty day.
+  if inclusive_payload -> 'funnel' is null
+     or jsonb_array_length(inclusive_payload -> 'funnel') = 0
+  then
     raise exception using
       errcode = '55000',
       message = 'dashboard payload has no funnel key; funnel history cannot be recorded';
   end if;
 
+  -- If dashboard_payload's funnel array ever contained the same stage twice
+  -- (a hypothetical bug in that function, not this one — its stage list is
+  -- hardcoded today), this ON CONFLICT DO UPDATE would hard-fail with
+  -- Postgres's "ON CONFLICT DO UPDATE command cannot affect row a second
+  -- time", aborting the whole refresh transaction. Accepted as-is: guarding
+  -- against it would mean validating an unrelated function's output shape.
   insert into analytics.funnel_daily (
     et_day,
     stage,
