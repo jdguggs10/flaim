@@ -420,6 +420,47 @@ describe('runYahooSupportRefresh', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  // Cross-model review caught this: unlike inspect/diagnose, a throw from the
+  // refresh call itself was not wrapped, so it would skip the audit log below
+  // and reach the caller as a bare unhandled 500 rather than this module's
+  // stable failure shape.
+  it('collapses a thrown error from the guarded refresh call to a stable refresh_failed shape', async () => {
+    const state = savedState();
+    const events: string[] = [];
+    const supabase = fakeSupabase(state, events);
+    const refresh = vi.fn(async () => {
+      throw new Error('upstream said: league_key nfl.l.999999 already exists');
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const report = await runYahooSupportRefresh(
+      env,
+      { userId: USER_ID },
+      { now: () => NOW_MS, supabase: supabase.client, refresh: refresh as unknown as typeof refreshLeaguesForUser }
+    );
+
+    expect(report).toEqual({
+      outcome: 'failed',
+      userMasked: MASKED_USER_ID,
+      error: 'refresh_failed',
+    });
+    // The audit log still fires — a thrown error must not silently skip it.
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(logSpy.mock.calls[0][0] as string)).toMatchObject({
+      event: 'yahoo_support_refresh',
+      outcome: 'failed',
+    });
+    // Name only: the thrown message (which here quotes a league key) must
+    // never reach any log call.
+    const allLoggedText = [...errorSpy.mock.calls, ...logSpy.mock.calls].flat().join(' ');
+    expect(allLoggedText).not.toContain('nfl.l.999999');
+    expect(allLoggedText).not.toContain('league_key');
+
+    errorSpy.mockRestore();
+    logSpy.mockRestore();
+  });
+
   it('names every column it reads and never selects an identifier or a token', async () => {
     const { supabase, result } = run({ savedRowsAfter: 2 });
     await result;

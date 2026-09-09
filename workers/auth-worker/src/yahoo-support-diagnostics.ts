@@ -667,7 +667,7 @@ export type YahooSupportRefreshReport =
       provider: SanitizedProviderResult;
       after: YahooSupportRefreshSnapshot;
     }
-  | { outcome: 'failed'; userMasked: string; error: 'refresh_result_missing' | 'snapshot_failed' };
+  | { outcome: 'failed'; userMasked: string; error: 'refresh_result_missing' | 'snapshot_failed' | 'refresh_failed' };
 
 export type YahooSupportRefreshDependencies = {
   now?: () => number;
@@ -760,24 +760,39 @@ export async function runYahooSupportRefresh(
   let report: YahooSupportRefreshReport;
   let provider: SanitizedProviderResult | null = null;
 
-  const before = await readRefreshSnapshot(supabase, request.userId);
-  if (!before) {
-    report = { outcome: 'failed', userMasked, error: 'snapshot_failed' };
-  } else {
-    const result = await refresh(env, request.userId, ['yahoo'], {}, correlationId, 'scheduled');
-    const yahoo = result.results.yahoo;
-    if (!yahoo) {
-      // No provider result means the refresh never ran the Yahoo leg at all.
-      // Deliberately no "after" read: there is nothing whose change it could
-      // attribute, and any difference would be someone else's write.
-      report = { outcome: 'failed', userMasked, error: 'refresh_result_missing' };
+  try {
+    const before = await readRefreshSnapshot(supabase, request.userId);
+    if (!before) {
+      report = { outcome: 'failed', userMasked, error: 'snapshot_failed' };
     } else {
-      provider = sanitizeProviderResult(yahoo);
-      const after = await readRefreshSnapshot(supabase, request.userId);
-      report = after
-        ? { outcome: 'ok', userMasked, correlationId, before, provider, after }
-        : { outcome: 'failed', userMasked, error: 'snapshot_failed' };
+      const result = await refresh(env, request.userId, ['yahoo'], {}, correlationId, 'scheduled');
+      const yahoo = result.results.yahoo;
+      if (!yahoo) {
+        // No provider result means the refresh never ran the Yahoo leg at all.
+        // Deliberately no "after" read: there is nothing whose change it could
+        // attribute, and any difference would be someone else's write.
+        report = { outcome: 'failed', userMasked, error: 'refresh_result_missing' };
+      } else {
+        provider = sanitizeProviderResult(yahoo);
+        const after = await readRefreshSnapshot(supabase, request.userId);
+        report = after
+          ? { outcome: 'ok', userMasked, correlationId, before, provider, after }
+          : { outcome: 'failed', userMasked, error: 'snapshot_failed' };
+      }
     }
+  } catch (error) {
+    // Name only, matching diagnose's discipline: a thrown message from the
+    // guarded refresh path (or a Supabase driver) can quote upstream or
+    // database detail. Without this catch, a throw here would both skip the
+    // audit log below and reach the caller as a bare unhandled 500 instead of
+    // this module's stable failure shape — readRefreshSnapshot already
+    // catches its own errors and returns null, so this is specifically
+    // catching `refresh` (refreshLeaguesForUser) itself.
+    console.error(
+      '[yahoo-support] Refresh failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+    report = { outcome: 'failed', userMasked, error: 'refresh_failed' };
   }
 
   console.log(

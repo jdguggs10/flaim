@@ -1116,8 +1116,9 @@ api.post('/internal/usage-event', async (c) => {
 // exactly why they carry a second secret. Never add getInternalUserId here, and
 // never accept a Clerk JWT / eval key / MCP token as an alternative.
 //
-// Ordering is load-bearing: internal gate -> support gate -> body validation ->
-// business logic. Nothing before the gates may read or parse the body.
+// Ordering is load-bearing: internal gate -> support gate -> rate limit (for
+// diagnose/refresh only) -> body validation -> business logic. Nothing before
+// the gates may read or parse the body.
 //
 // Inspect is strictly read-only. Diagnose reaches Yahoo — capped at two
 // discovery calls, plus one credential-renewal call outside that budget when
