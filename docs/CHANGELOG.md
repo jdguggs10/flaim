@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Retention Partial-Week Flag (FLA-361)
+
+- **Fixed**: `retention_weekly.week_partial_start` in the analytics dashboard payload now compares against the authoritative day tracking began, not a minimum over the ET-day rows that happen to exist. A covered day with zero calls at the very start of tracking is invisible to a row-presence minimum, so a fully covered first week could be reported as partial. This is the same fix, for the same reason, that FLA-357 applied to `mau_30d_partial` — the one other place the payload discloses left-truncation. Currently inert: both values resolve to the same date in production, so no emitted flag changes. Payload shape, keys, windows, and sources are unchanged.
+
 ### ESPN Connection Timestamps (FLA-359)
 
 - **Added**: `public.espn_credentials` gains `created_at timestamptz not null default now()`, the creation timestamp `yahoo_credentials` and `sleeper_connections` already had. ESPN previously recorded only `updated_at`, which every credential re-sync moves, so nothing said when an ESPN connection was first established.
