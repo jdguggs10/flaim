@@ -19,8 +19,14 @@
 --
 -- Two additive keys per `usage_trend` row, and nothing else:
 --   * `mau_30d`          distinct users over `(et_day - 29 .. et_day]`
---   * `mau_30d_partial`  true while that window reaches back before the first
---                        day of available history
+--   * `mau_30d_partial`  true while that window reaches back before
+--                        history_start_et_day (the authoritative tracking-
+--                        start day from analytics.history_rollup_state,
+--                        already read into a local variable above — NOT a
+--                        bounds.lo-style MIN over rows present in
+--                        history_user_days, which would understate coverage
+--                        on a zero-activity day at the very start of
+--                        tracking; caught in cross-model review)
 --
 -- Every other key, window, source, and failure mode is unchanged. The scalar
 -- `rolling.mau` is deliberately untouched: it is a different measurement
@@ -169,11 +175,21 @@ begin
             ) as mau_30d,
             -- Left-truncation disclosure, same contract as retention_weekly's
             -- week_partial_start: the window is 30 calendar days wide, but
-            -- history only starts at bounds.lo, so any day within the first 29
-            -- covers fewer than 30 real days and is NOT comparable to a later
-            -- one. The value stays real (it is a true distinct count over the
-            -- days that exist); the flag says the window is short.
-            (d.et_day - 29 < (select lo from bounds)) as mau_30d_partial,
+            -- history only starts at history_start_et_day, so any day within
+            -- the first 29 covers fewer than 30 real days and is NOT
+            -- comparable to a later one. The value stays real (it is a true
+            -- distinct count over the days that exist); the flag says the
+            -- window is short.
+            --
+            -- Deliberately history_start_et_day (the plpgsql variable read
+            -- from analytics.history_rollup_state above), NOT bounds.lo:
+            -- bounds.lo is min(et_day) over ROWS PRESENT in
+            -- history_user_days, which understates true coverage on any
+            -- zero-activity day at the very start of tracking (a real,
+            -- covered day with no rows is invisible to a row-presence MIN).
+            -- history_start_et_day is the authoritative day tracking began,
+            -- regardless of whether that day happened to have any calls.
+            (d.et_day - 29 < history_start_et_day) as mau_30d_partial,
             coalesce(nw.new_users, 0)::int as new_users,
             (coalesce(da.dau, 0) - coalesce(nw.new_users, 0))::int
               as returning_users
