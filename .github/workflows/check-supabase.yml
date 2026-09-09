@@ -42,8 +42,17 @@ jobs:
       # The contract check greps with ripgrep, which this runner image does not
       # ship. Without it the source guards exit 127, which an `if rg ...` reads
       # as "nothing matched" — so they passed by being absent, not by being met.
+      #
+      # `apt-get update` refreshes every apt source pre-configured on this
+      # runner image, not just the one ripgrep lives in — including a Google
+      # Chrome repo this job has no use for. Ubuntu 24's apt treats a hash
+      # mismatch on ANY source as fatal (older apt just ignored it and used
+      # cached data), so a transient bad file on Google's end fails this whole
+      # step even though every source ripgrep actually needs is fine. `|| true`
+      # tolerates a broken third-party source; `apt-get install` still fails on
+      # its own merits if ripgrep itself is genuinely unavailable.
       - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
+        run: sudo apt-get update || true; sudo apt-get install -y ripgrep
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
