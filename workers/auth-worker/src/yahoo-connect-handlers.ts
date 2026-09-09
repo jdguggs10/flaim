@@ -2547,7 +2547,9 @@ export async function handleYahooDiscover(
     }
 
     const rawData = await apiResponse.json();
-    const leagues = parseYahooLeaguesResponse(rawData);
+    const discoveryStats = createYahooParseStats();
+    const leagues = parseYahooLeaguesResponse(rawData, discoveryStats);
+    logYahooDiscoveryDropIfAny(userId, discoveryStats, 'discovery');
 
     console.log(`[yahoo-connect] Discovered ${leagues.length} leagues for user ${maskUserId(userId)}`);
 
@@ -2691,7 +2693,10 @@ export async function fetchYahooLeaguesReadOnly(
     }
 
     const rawData = await apiResponse.json();
-    return { status: 'ok', leagues: parseYahooLeaguesResponse(rawData) };
+    const reconciliationStats = createYahooParseStats();
+    const leagues = parseYahooLeaguesResponse(rawData, reconciliationStats);
+    logYahooDiscoveryDropIfAny(userId, reconciliationStats, 'reconciliation');
+    return { status: 'ok', leagues };
   } catch (error) {
     console.error('[yahoo-connect] Read-only discovery error:', error instanceof Error ? error.message : error);
     const errorCode = error instanceof Error && error.name === 'TimeoutError' ? 'yahoo_timeout' : 'server_error';
@@ -2775,6 +2780,96 @@ export function createYahooParseStats(): YahooParseStats {
   };
 }
 
+/**
+ * One structured warning when discovery may have silently dropped real
+ * league data: an unrecognized sport code (Yahoo added, or this account
+ * uses, a game type not in SPORT_CODE_MAP — the failure mode a real
+ * customer hit, see FLA-365), a declared-zero-but-indexed-populated level
+ * (the `count || 0` swallow case), or a thrown parse exception that still
+ * returned partial results. Fires from both the normal persisted discovery
+ * path and the read-only reconciliation path — the same drop can happen in
+ * either, and both should be equally findable in Cloudflare Logs rather
+ * than invisible until an operator thinks to run the FLA-360 support
+ * diagnostic tool. Never logs a league key, league name, or team name —
+ * only counts and Yahoo-global (not customer) sport codes.
+ */
+export function logYahooDiscoveryDropIfAny(
+  userId: string,
+  stats: YahooParseStats,
+  source: 'discovery' | 'reconciliation'
+): void {
+  // Logging must never affect request behavior — the same principle
+  // logSetupSignal (workers/shared/src/logging.ts) already enforces
+  // elsewhere in this codebase. Both callers of this function sit inside a
+  // try/catch that turns any thrown error into a 500 for the client, so a
+  // throw in here would fail a discovery that had already succeeded. None
+  // of today's fields can realistically make JSON.stringify throw, but a
+  // future field addition to YahooParseStats shouldn't be able to take the
+  // request down with it either. (Not reusing logSetupSignal itself: its
+  // schema is allowlist-only flat string/number/boolean fields and can't
+  // represent the nested declared/indexed/skipped objects or the
+  // unsupported-game-codes array this event needs.)
+  try {
+    // Every `stats.skipped.*` counter, by construction, only increments when
+    // Yahoo's own declared count says an entry should be there and it turns
+    // out malformed or missing — none of them ever fire for a genuinely empty
+    // account (a zero declared count skips that loop body entirely). So any
+    // nonzero skip counter is a real anomaly worth surfacing, not just the
+    // unsupported-sport-code case this was first written for: a future Yahoo
+    // response-shape change that trips `leagueMissingShape` or
+    // `leagueMissingKeyOrName` for a different reason would otherwise stay
+    // just as invisible on this path as before FLA-365.
+    const skippedAnything = Object.values(stats.skipped).some((count) => count > 0);
+    // The `count || 0` swallow (Yahoo omits or zeroes a collection's `count`
+    // while the collection itself holds real indexed entries) can happen at
+    // any of the three nested levels, not just leagues — a swallowed
+    // `gamesWrapper.count` means the per-game loop never runs at all, so
+    // nothing below it (including league counts) ever gets a chance to
+    // disagree either. Checked at all three levels for that reason.
+    const declaredZeroButIndexedPositive =
+      (stats.declared.users === 0 && stats.indexed.users > 0)
+      || (stats.declared.games === 0 && stats.indexed.games > 0)
+      || (stats.declared.leagues === 0 && stats.indexed.leagues > 0);
+    // Declared/indexed are account-level running totals across every game, so
+    // this specific check can be masked if only one of several games in the
+    // account hits the swallow: e.g. game A declares 2/indexes 2 while game B
+    // declares 0/indexes 3 nets to declared=2 > 0 overall. `skippedAnything`
+    // does not have this blind spot for the *sport-code* and *shape* cases
+    // above; only this literal count-swallow signal is coarser than per-game.
+    const suspicious =
+      stats.envelope !== 'valid'
+      || skippedAnything
+      || declaredZeroButIndexedPositive
+      || stats.threw;
+    if (!suspicious) return;
+
+    console.warn(
+      JSON.stringify({
+        event: 'yahoo_discovery_drop',
+        service: 'auth-worker',
+        source,
+        user_id: maskUserId(userId),
+        envelope: stats.envelope,
+        declared: stats.declared,
+        indexed: stats.indexed,
+        accepted_leagues: stats.accepted,
+        unsupported_sport_codes: stats.unsupportedGameCodes,
+        skipped: stats.skipped,
+        threw: stats.threw,
+        thrown_error_name: stats.thrownErrorName,
+      })
+    );
+  } catch (error) {
+    // Name only, same discipline as everywhere else in this file — and the
+    // whole point is that this catch exists so the exception never reaches
+    // the caller's own try/catch.
+    console.error(
+      '[yahoo-connect] logYahooDiscoveryDropIfAny failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+  }
+}
+
 const YAHOO_INDEXED_KEY_PATTERN = /^\d+$/;
 
 /**
@@ -2817,11 +2912,14 @@ function countIndexedEntries(wrapper: unknown): number {
  *   }
  * }
  *
- * `stats` is a strictly optional out-parameter. Omitting it — as every
- * production caller does — leaves behavior byte-identical to before FLA-360:
- * no control flow depends on it, and the indexed-entry counting it enables is
- * never reached. Exported for test visibility only; it is not a new caller
- * surface.
+ * `stats` is a strictly optional out-parameter: no control flow depends on
+ * it, and the indexed-entry counting it enables is skipped entirely when
+ * omitted, so callers that don't pass it get byte-identical behavior to
+ * before FLA-360. It started as test-visibility-only, but as of FLA-365
+ * `handleYahooDiscover` and `fetchYahooLeaguesReadOnly` are real production
+ * callers too — they pass `stats` to `logYahooDiscoveryDropIfAny`, so a
+ * silent drop is findable in Cloudflare Logs on the normal persisted paths,
+ * not only through the FLA-360 support tool's `diagnose` action.
  */
 export function parseYahooLeaguesResponse(data: unknown, stats?: YahooParseStats): DiscoveredYahooLeague[] {
   const leagues: DiscoveredYahooLeague[] = [];

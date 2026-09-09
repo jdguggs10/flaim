@@ -140,6 +140,8 @@ The exact observed Grok OAuth callback, `https://grok.com/connectors-oauth-excha
 
 Gemini Spark registers six callbacks together: `/r/` and `/a/` user-bound paths on each of its production, test, and sandbox Google redirect hosts. Flaim accepts only those exact hosts and path forms with Gemini's numeric identifier and Flaim production-host suffix; sibling hosts and structural URI variations remain rejected.
 
+Cursor's docs publish two fixed OAuth callbacks: `http://localhost:8787/callback` for the desktop app, already covered by the generic loopback rule (`/callback` is an allowed loopback path), and `https://www.cursor.com/agents/mcp/oauth/callback` for web and Cloud/Background Agents, accepted as an exact match. Separately, Flaim also matches Cursor's older `cursor://anysphere.cursor-*/oauth/{id}/callback` custom-scheme redirect structurally, for continuity with earlier desktop-IDE versions.
+
 **User flow**: Open Flaim Fantasy in ChatGPT or Claude, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
 ## MCP Tools

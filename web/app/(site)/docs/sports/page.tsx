@@ -144,6 +144,11 @@ const FAQS = [
     answer:
       "No. Flaim's league analysis is read-only. It cannot edit lineups, add or drop players, submit waiver claims or trades, or change league settings. Refresh only updates Flaim's own list of connected leagues.",
   },
+  {
+    question: "Does Flaim support college sports or other fantasy formats?",
+    answer:
+      "No, not yet. Flaim currently supports fantasy football, baseball, basketball, and hockey leagues only. College leagues and other fantasy formats won't show up when you connect an account.",
+  },
 ] as const;
 
 function CoverageStatus({ supported }: { supported: boolean }) {
@@ -171,7 +176,7 @@ export default function SportsGuidePage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "FAQPage",
-            dateModified: "2026-08-15",
+            dateModified: "2026-09-09",
             mainEntity: FAQS.map((faq) => ({
               "@type": "Question",
               name: faq.question,

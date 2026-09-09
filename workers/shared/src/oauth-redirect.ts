@@ -14,6 +14,9 @@ const ALLOWED_REDIRECT_URIS = [
   'https://platform.openai.com/apps-manage/oauth',
   // Grok custom connectors (exact hosted callback observed during registration)
   'https://grok.com/connectors-oauth-exchange-code/',
+  // Cursor web + Cloud/Background Agents (fixed callback per Cursor's MCP docs,
+  // distinct from the cursor:// desktop-IDE scheme handled by isCursorRedirectUri)
+  'https://www.cursor.com/agents/mcp/oauth/callback',
   // Perplexity custom connectors (pattern matched below for all subdomains)
   // Littlebird custom connectors (exact production callback)
   'https://app.lilbird.co/mcp/oauth/callback',

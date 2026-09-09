@@ -13,6 +13,18 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Preserved**: Yahoo and Sleeper are untouched — their league writers already upsert on real column constraints and never delete a surviving row. Normal ESPN discovery was also already correct: it goes through the fenced `persist_espn_league_with_lease` RPC, which updates in place.
 - **Limited**: No backfill. Rows that exist when the migration runs carry the migration's own run time, not their true creation time, and nothing in the database records the real value; treat them as censored at that timestamp rather than as connections made that day.
 
+### Yahoo Discovery Drop Logging (FLA-365)
+
+- **Added**: The normal persisted Yahoo discovery path and the read-only reconciliation path now emit one structured warning log (`yahoo_discovery_drop`) whenever a discovery response may have had real league data silently dropped — an unrecognized sport code, a declared-zero-but-populated level, or a parse exception. Previously this was only visible via the FLA-360 support tool's `diagnose` action, and only when an operator went looking for a specific account. Counts and Yahoo-global sport codes only; never a league key, league name, team name, or customer identifier.
+
+### Cursor Web/Cloud Agents OAuth Callback (FLA-367)
+
+- **Fixed**: Accept Cursor's fixed web and Cloud/Background Agents OAuth callback, `https://www.cursor.com/agents/mcp/oauth/callback`, for registration and authorization. Prompted by a support report that tools listed (11 discovered) but every authenticated call failed with `invalid_redirect_uri`. Cursor's separate desktop-IDE `cursor://` callback was already accepted and is unchanged.
+
+### Supported Sports FAQ (FLA-365)
+
+- **Added**: A "Does Flaim support college sports or other fantasy formats?" entry on the `/docs/sports` FAQ, stating plainly that Flaim currently supports NFL, MLB, NBA, and NHL leagues only. Prompted by a real support case where a customer's Yahoo college-football leagues silently failed to sync — this documents the existing, already-shipped scope; it does not change any behavior.
+
 ### Operator Support Diagnostics (FLA-360)
 
 - **Added**: Three internal auth-worker routes — `/internal/support/yahoo/inspect`, `/internal/support/yahoo/diagnose`, and `/internal/support/yahoo/refresh` — investigate a single account's Yahoo sync state without an active session for that account. Inspect projects a redacted snapshot of stored state, diagnose makes at most two bounded read-only Yahoo discovery calls and reports what they mean, and refresh runs the ordinary guarded league refresh and reports the saved state either side of it.
