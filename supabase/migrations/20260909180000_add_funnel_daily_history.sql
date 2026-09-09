@@ -178,6 +178,13 @@ begin
   -- delete to today's et_day only — past days are frozen, historically
   -- accurate observations of what was actually measured at the time, and
   -- must never be retroactively edited.
+  --
+  -- Relies on `stage text not null` above: `stage not in (subquery)` would
+  -- silently match zero rows (NOT IN short-circuits to unknown) if the
+  -- subquery ever produced a null stage, but the insert just above would
+  -- already have aborted the whole transaction on that same null first. If a
+  -- future refactor ever reorders these two statements, re-verify this still
+  -- holds.
   delete from analytics.funnel_daily
   where et_day = (now() at time zone 'America/New_York')::date
     and stage not in (
