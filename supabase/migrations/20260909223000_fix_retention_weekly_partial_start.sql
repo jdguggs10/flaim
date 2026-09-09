@@ -1,31 +1,41 @@
--- FLA-361: compute `retention_weekly.week_partial_start` against the
--- authoritative `history_start_et_day` instead of a MIN over rows present in
--- `history_user_days`.
+-- FLA-361: derive `retention_weekly` from the authoritative
+-- `history_start_et_day` instead of a MIN over the rows present in
+-- `history_user_days`. Two places in the same subquery, one root cause.
 --
--- Same bug class the FLA-357 migration (20260909143000) fixed for
--- `mau_30d_partial`, in the one other place the payload discloses
--- left-truncation. `bounds.first_day` is `min(et_day)` over ROWS PRESENT, so a
--- real, covered ET day with zero calls at the very start of tracking is
--- invisible to it. That understates coverage and can mark a fully covered first
--- week as partial. `history_start_et_day` — already read from
+-- `history_start_et_day` — read from
 -- `analytics.history_rollup_state.initial_history_start_et_day` at the top of
--- this function — is the day tracking actually began, calls or not.
+-- this function — is the day tracking actually began, calls or not. The old
+-- `bounds` CTE was `min(et_day)` over ROWS PRESENT, so a real, covered ET day
+-- with zero calls at the very start of tracking was invisible to it:
+--
+--   1. `week_partial_start` compared each week start against `bounds.first_day`,
+--      which understates coverage and can mark a fully covered first week as
+--      partial. Same bug class the FLA-357 migration (20260909143000) fixed for
+--      `mau_30d_partial`, in the one other place the payload discloses
+--      left-truncation.
+--   2. The `weeks` series itself started at `date_trunc('week', min(et_day))`.
+--      If the entire first tracked calendar week had zero calls, that week has
+--      no rows at all and was silently omitted from the output instead of being
+--      emitted as a zero-querier week flagged partial. Worse than (1): the row
+--      is missing, not just mis-flagged.
+--
+-- `bounds` is now unreferenced and removed; both call sites read
+-- `history_start_et_day` directly.
 --
 -- Currently inert: in production `initial_history_start_et_day` and
--- `min(et_day)` both resolve to 2026-06-27, so no emitted flag changes today.
--- This is a latent-correctness fix, not a data correction.
+-- `min(et_day)` both resolve to 2026-06-27, so no emitted row or flag changes
+-- today. This is a latent-correctness fix, not a data correction.
 --
 -- Full CREATE OR REPLACE of the current body, copied verbatim from
 -- 20260909143000_add_mau_30d_usage_trend.sql (still the latest definition of
 -- this function in the migration path; 20260909180000 replaces
 -- `refresh_dashboard_snapshot()`, a different function). Diffed before and
--- after: the only SQL change is the `week_partial_start` expression. Payload
--- shape, keys, windows, sources, and failure modes are unchanged, so
--- consumers and the shape-based proofs need no update.
---
--- `bounds.first_day` is deliberately left in place: it keeps the diff to the
--- one expression this fix is about, and the `min(et_day)` it wraps is still
--- computed for `first_wk` regardless.
+-- after: the only SQL changes are the `weeks` and `week_partial_start`
+-- expressions. Payload shape, keys, windows, sources, and failure modes are
+-- unchanged, so consumers and the shape-based proofs need no update.
+-- `supabase/tests/analytics_history.sql` gains a fixture that regression-tests
+-- both fixes: tracking starts mid-week with the whole first calendar week
+-- empty, so the pre-fix function would drop that week and mis-flag the next.
 --
 -- Hosted application and any snapshot refresh remain separate approval gates.
 
@@ -205,20 +215,29 @@ begin
               now() at time zone 'America/New_York'
             )::date as wk
           ),
-          bounds as (
-            select
-              min(et_day) as first_day,
-              date_trunc('week', min(et_day))::date as first_wk
-            from history_user_days
-          ),
           weeks as (
+            -- FLA-361 (second fix, same root cause): the series starts at the
+            -- week containing history_start_et_day, not at
+            -- date_trunc('week', min(et_day)) over the rows that happen to
+            -- exist. If the whole first tracked calendar week had zero calls it
+            -- contributes no rows to history_user_days, and the row-presence
+            -- MIN dropped that real, covered week out of the output entirely
+            -- rather than emitting it as a zero-querier partial week. The
+            -- earliest row is now always the week tracking began in.
+            --
+            -- history_start_et_day cannot be null here (the guard at the top of
+            -- this function raises otherwise), so the old
+            -- `where first_wk is not null` empty-history guard is gone with the
+            -- bounds CTE it read: with no user-days at all the series still
+            -- describes the weeks tracking covered, each with zero queriers,
+            -- which is what a leading or interior zero-activity week already
+            -- returned.
             select generate_series(
-              first_wk,
-              (select wk from this_wk),
+              date_trunc('week', history_start_et_day)::date,
+              t.wk,
               '7 days'
             )::date as wk
-            from bounds
-            where first_wk is not null
+            from this_wk as t
           ),
           cohorts as (
             select wk, count(*) as queriers
@@ -250,9 +269,9 @@ begin
                 1
               )
             end as return_pct,
-            -- FLA-361: the authoritative tracking-start day, not
-            -- bounds.first_day (a MIN over rows present). Same reasoning
-            -- as mau_30d_partial above.
+            -- FLA-361 (first fix): the authoritative tracking-start day, not
+            -- the removed bounds.first_day (a MIN over rows present). Same
+            -- reasoning as mau_30d_partial above.
             (w.wk < history_start_et_day) as week_partial_start,
             (w.wk >= t.wk) as week_open,
             (w.wk < t.wk and w.wk + 7 >= t.wk) as next_week_open
