@@ -7,6 +7,8 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Yahoo Discovery Drop Logging (FLA-365)
 
 - **Added**: The normal persisted Yahoo discovery path and the read-only reconciliation path now emit one structured warning log (`yahoo_discovery_drop`) whenever a discovery response may have had real league data silently dropped — an unrecognized sport code, a declared-zero-but-populated level, or a parse exception. Previously this was only visible via the FLA-360 support tool's `diagnose` action, and only when an operator went looking for a specific account. Counts and Yahoo-global sport codes only; never a league key, league name, team name, or customer identifier.
+- **Added**: A regression test locking in that an account with a CFB league alongside a supported-sport league still syncs the supported league — the parser drops an unrecognized sport code per-game, never account-wide. No behavior changed; this guards against a future refactor turning that per-game skip into a whole-account failure.
+- **Added**: Auth-worker README documents that Yahoo's `game_types=full` discovery filter is not scoped to Flaim's four supported sports. Yahoo Fantasy College Football (`cfb`) is a confirmed source of unsupported-sport-code drops in production; the legacy `pnfl`/`pmlb`/`pnba`/`pnhl` "Plus" codes (pre-2010 football/baseball) are noted as an unconfirmed historical edge case.
 
 ### Cursor Web/Cloud Agents OAuth Callback (FLA-367)
 

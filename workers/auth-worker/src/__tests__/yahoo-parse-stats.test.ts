@@ -562,6 +562,54 @@ describe('unsupportedGameCodes', () => {
   });
 });
 
+/**
+ * The exact shape Gerry asked about directly: Flaim doesn't support CFB, but
+ * an account with a CFB league alongside a supported-sport league must still
+ * get its supported league synced — the unsupported game must not take the
+ * rest of the account down with it. `oneUserWithGames`'s per-game `continue`
+ * (yahoo-connect-handlers.ts) already gives us this for free; this test locks
+ * it in against a real accept/drop mix instead of only ever exercising each
+ * outcome in isolation.
+ */
+describe('mixed accounts: a supported sport alongside an unsupported one', () => {
+  const MIXED_SPORT_FIXTURE = oneUserWithGames({
+    count: 2,
+    0: {
+      game: [
+        { code: 'nfl', season: '2026' },
+        { leagues: { count: 1, 0: { league: [{ league_key: '461.l.1', name: 'Football League' }] } } },
+      ],
+    },
+    1: {
+      game: [
+        { code: 'cfb', season: '2026' },
+        { leagues: { count: 1, 0: { league: [{ league_key: 'cfb.l.1', name: 'CFB League' }] } } },
+      ],
+    },
+  });
+
+  it('returns only the supported league, dropping the CFB one', () => {
+    const { leagues } = statsFor(MIXED_SPORT_FIXTURE);
+
+    expect(leagues).toEqual([
+      expect.objectContaining({ sport: 'football', leagueKey: '461.l.1', leagueName: 'Football League' }),
+    ]);
+  });
+
+  it('accepts the supported league while counting the CFB one as an unsupported-sport skip', () => {
+    const { stats } = statsFor(MIXED_SPORT_FIXTURE);
+
+    expect(stats.accepted).toBe(1);
+    expect(stats.acceptedSports).toEqual({ football: 1 });
+    expect(stats.skipped).toEqual(onlySkip('unsupportedSportCode'));
+    expect(stats.unsupportedGameCodes).toEqual(['cfb']);
+    // Both games' leagues were declared/indexed; only one was accepted — the
+    // parser-gap signal stays meaningful even in a partial-drop account.
+    expect(stats.declared.leagues).toBe(2);
+    expect(stats.indexed.leagues).toBe(2);
+  });
+});
+
 describe('the thrown-error path', () => {
   class SentinelParseError extends Error {
     override name = 'SentinelParseError';
