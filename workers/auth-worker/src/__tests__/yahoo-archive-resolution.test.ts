@@ -172,7 +172,7 @@ describe('Yahoo recurring-id resolution', () => {
       // Chain: 449.l.10 -> (renew 423_10) 423.l.10 -> (renew "" ) root.
       mockFetch.mockImplementation(async (input) => {
         const url = String(input);
-        if (url.includes('/users;use_login=1/games/leagues')) {
+        if (url.includes('/users;use_login=1/games;game_types=full/leagues')) {
           return jsonResponse(discoveryResponse('449.l.10', '2025', '423_10'));
         }
         if (url === `${YAHOO_API}/league/423.l.10?format=json`) {
@@ -199,7 +199,7 @@ describe('Yahoo recurring-id resolution', () => {
       // Bulk discovery has no renew → first meta fetch fails (404) → fallback.
       mockFetch.mockImplementation(async (input) => {
         const url = String(input);
-        if (url.includes('/users;use_login=1/games/leagues')) {
+        if (url.includes('/users;use_login=1/games;game_types=full/leagues')) {
           return jsonResponse(discoveryResponse('449.l.99', '2025', ''));
         }
         return new Response(null, { status: 404 });
@@ -222,7 +222,7 @@ describe('Yahoo recurring-id resolution', () => {
       const metaFetchCounts = new Map<string, number>();
       mockFetch.mockImplementation(async (input) => {
         const url = String(input);
-        if (url.includes('/users;use_login=1/games/leagues')) {
+        if (url.includes('/users;use_login=1/games;game_types=full/leagues')) {
           return jsonResponse(
             twoLeagueDiscoveryResponse(
               '2025',

@@ -2857,11 +2857,13 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.acquireRefreshLease).not.toHaveBeenCalled();
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockFetch.mock.calls[0][0]).toContain('/users;use_login=1/games/leagues');
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_types=full/leagues;out=teams?format=json'
+      );
       const yahooApiRequest = mockFetch.mock.calls[0][1] as RequestInit;
       expect(yahooApiRequest.body).toBeUndefined();
       const body = (await response.json()) as Record<string, unknown>;
-      expect(body.success).toBe(true);
+      expect(body).toMatchObject({ success: true, count: 0, leagues: [] });
     });
 
     it('loser waits and proceeds with fresh token after winner finishes', async () => {
@@ -3227,7 +3229,7 @@ describe('yahoo-connect-handlers', () => {
       expect(body.upstream_status).toBe(403);
     });
 
-    it('stores Yahoo team_key during league discovery', async () => {
+    it('stores historical multi-sport league and team associations', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'fresh-token',
@@ -3247,24 +3249,51 @@ describe('yahoo-connect-handlers', () => {
                     { guid: 'guid-123' },
                     {
                       games: {
-                        count: 1,
+                        count: 2,
                         0: {
                           game: [
-                            { code: 'nfl', season: '2025' },
+                            { code: 'nfl', season: '2026', game_type: 'full' },
                             {
                               leagues: {
                                 count: 1,
                                 0: {
                                   league: [
-                                    { league_key: '449.l.123', name: 'Test Yahoo League' },
+                                    { league_key: '461.l.123', name: 'Football League', renew: '' },
                                     {
                                       teams: {
                                         count: 1,
                                         0: {
                                           team: [[
-                                            { team_key: '449.l.123.t.3' },
+                                            { team_key: '461.l.123.t.3' },
                                             { team_id: '3' },
-                                            { name: 'Gerry Team' },
+                                            { name: 'Football Team' },
+                                          ]],
+                                        },
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                            },
+                          ],
+                        },
+                        1: {
+                          game: [
+                            { code: 'mlb', season: '2007', game_type: 'full' },
+                            {
+                              leagues: {
+                                count: 1,
+                                0: {
+                                  league: [
+                                    { league_key: '175.l.456', name: 'Baseball League', renew: '' },
+                                    {
+                                      teams: {
+                                        count: 1,
+                                        0: {
+                                          team: [[
+                                            { team_key: '175.l.456.t.7' },
+                                            { team_id: '7' },
+                                            { name: 'Baseball Team' },
                                           ]],
                                         },
                                       },
@@ -3289,19 +3318,52 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      expect(mockStorage.upsertYahooLeague).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clerkUserId: 'user_123',
-          leagueKey: '449.l.123',
-          teamId: '3',
-          teamKey: '449.l.123.t.3',
-          teamName: 'Gerry Team',
-        })
-      );
+      expect(mockStorage.upsertYahooLeague).toHaveBeenCalledTimes(2);
+      expect(mockStorage.upsertYahooLeague.mock.calls.map(([league]) => ({
+        sport: league.sport,
+        seasonYear: league.seasonYear,
+        leagueKey: league.leagueKey,
+        teamId: league.teamId,
+        teamKey: league.teamKey,
+        teamName: league.teamName,
+      }))).toEqual([
+        {
+          sport: 'football', seasonYear: 2026, leagueKey: '461.l.123',
+          teamId: '3', teamKey: '461.l.123.t.3', teamName: 'Football Team',
+        },
+        {
+          sport: 'baseball', seasonYear: 2007, leagueKey: '175.l.456',
+          teamId: '7', teamKey: '175.l.456.t.7', teamName: 'Baseball Team',
+        },
+      ]);
     });
   });
 
   describe('fetchYahooLeaguesReadOnly', () => {
+    it('uses the same full-game discovery filter and preserves an empty result', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ fantasy_content: { users: { count: 0 } } }),
+          { status: 200 }
+        )
+      );
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toEqual({ status: 'ok', leagues: [] });
+      expect(mockFetch).toHaveBeenCalledOnce();
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_types=full/leagues;out=teams?format=json'
+      );
+    });
+
     it('classifies a timed-out leagues fetch as yahoo_timeout after a successful token refresh (FLA-188)', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',

@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Full-Game Discovery (FLA-355)
+
+- **Fixed**: Yahoo league discovery now requests full fantasy games explicitly, preserving supported football, baseball, basketball, and hockey history while avoiding an upstream Yahoo server error observed when other game types are included.
+
 ### Yahoo Draft Player Names
 
 - **Fixed**: Yahoo draft results resolve missing player names through bounded player-key lookups, so confirmed selections can include names for every drafting team. If Yahoo cannot resolve all names, the response preserves confirmed picks and explicitly reports the incomplete lookup.
