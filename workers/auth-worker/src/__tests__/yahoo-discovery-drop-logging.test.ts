@@ -70,8 +70,33 @@ describe('logYahooDiscoveryDropIfAny', () => {
       declared_leagues: 2,
       accepted_leagues: 0,
       unsupported_sport_codes: ['cfb'],
-      unsupported_sport_code_count: 1,
+      skipped: { unsupportedSportCode: 1 },
     });
+  });
+
+  // The trigger isn't limited to the one category this was first written
+  // for — any nonzero skip counter is equally anomalous (see the comment on
+  // logYahooDiscoveryDropIfAny), so a *different* future Yahoo response-shape
+  // surprise is just as findable as an unmapped sport code.
+  it.each([
+    'userMissingShape',
+    'gamesCollectionMissing',
+    'gameMissingShape',
+    'leaguesCollectionMissing',
+    'unparseableSeason',
+    'leagueMissingShape',
+    'leagueMissingKeyOrName',
+  ] as const)('warns when %s is the only nonzero skip counter', (category) => {
+    const stats = createYahooParseStats();
+    stats.declared = { users: 1, games: 1, leagues: 1 };
+    stats.indexed = { users: 1, games: 1, leagues: 1 };
+    stats.skipped[category] = 1;
+    stats.accepted = 0;
+
+    logYahooDiscoveryDropIfAny(USER_ID, stats, 'discovery');
+
+    const event = loggedEvent();
+    expect((event.skipped as Record<string, number>)[category]).toBe(1);
   });
 
   it('warns on a declared-zero-but-indexed-populated level (the count||0 swallow case)', () => {
@@ -85,6 +110,30 @@ describe('logYahooDiscoveryDropIfAny', () => {
     const event = loggedEvent();
     expect(event.declared_leagues).toBe(0);
     expect(event.indexed_leagues).toBe(3);
+  });
+
+  // Known, pre-existing, accepted limitation (flagged in cross-model review):
+  // declared/indexed are account-level running totals across every game in
+  // the account, so a swallow in one game can be masked by a normal game
+  // that parsed fine. The other two signals (any nonzero skip counter, and
+  // `threw`) don't share this blind spot — this is specific to the literal
+  // declared-vs-indexed comparison. Documented here, not fixed: a real fix
+  // needs per-game stats, a bigger change than this PR's scope.
+  it('KNOWN GAP: a count-swallow in one game can be masked by another game in the same account', () => {
+    const stats = createYahooParseStats();
+    // Game A: declared 2, indexed 2 (parsed fine). Game B: declared 0,
+    // indexed 3 (swallowed). Aggregated: declared=2 > 0, so the literal
+    // declared-vs-indexed check alone does not fire for this account.
+    stats.declared = { users: 1, games: 2, leagues: 2 };
+    stats.indexed = { users: 1, games: 2, leagues: 5 };
+    stats.accepted = 2;
+
+    logYahooDiscoveryDropIfAny(USER_ID, stats, 'discovery');
+
+    // This assertion exists to make the gap explicit rather than silently
+    // relying on no test covering it — nothing here currently notices that
+    // indexed (5) exceeds accepted (2) when no skip counter also fired.
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 
   it('warns when the parser threw, even though it still returned partial results', () => {
