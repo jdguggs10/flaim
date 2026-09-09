@@ -12,8 +12,10 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     parseYahooSupportRequest: vi.fn(actual.parseYahooSupportRequest),
     // Business logic is stubbed here: these tests own routing, auth and
     // status mapping. The snapshot itself is covered by
-    // yahoo-support-inspect.test.ts.
+    // yahoo-support-inspect.test.ts, and the diagnosis by
+    // yahoo-support-diagnose.test.ts.
     runYahooSupportInspect: vi.fn(),
+    runYahooSupportDiagnose: vi.fn(),
   };
 });
 
@@ -29,20 +31,24 @@ import app from '../index-hono';
 import { validateOAuthToken } from '../oauth-handlers';
 import {
   parseYahooSupportRequest,
+  runYahooSupportDiagnose,
   runYahooSupportInspect,
+  type YahooSupportDiagnoseReport,
   type YahooSupportInspectReport,
 } from '../yahoo-support-diagnostics';
 
 const INSPECT_PATH = '/auth/internal/support/yahoo/inspect';
+const DIAGNOSE_PATH = '/auth/internal/support/yahoo/diagnose';
 
 const SUPPORT_PATHS = [
   INSPECT_PATH,
-  '/auth/internal/support/yahoo/diagnose',
+  DIAGNOSE_PATH,
   '/auth/internal/support/yahoo/refresh',
 ] as const;
 
-// Diagnose and refresh are still Session-1 stubs; inspect is implemented.
-const STUB_PATHS = SUPPORT_PATHS.filter((path) => path !== INSPECT_PATH);
+// Refresh is still a Session-1 stub; inspect and diagnose are implemented.
+const IMPLEMENTED_PATHS: readonly string[] = [INSPECT_PATH, DIAGNOSE_PATH];
+const STUB_PATHS = SUPPORT_PATHS.filter((path) => !IMPLEMENTED_PATHS.includes(path));
 
 const INSPECT_OK_REPORT: YahooSupportInspectReport = {
   outcome: 'ok',
@@ -53,6 +59,19 @@ const INSPECT_OK_REPORT: YahooSupportInspectReport = {
   yahooLeagues: { rowCount: 0, distinctSeasons: 0, oldestUpdatedAt: null, newestUpdatedAt: null },
   sync: [],
   flaimSessions: { activeCount: 0, mostRecentExpiresAt: null, clientNames: [] },
+};
+
+const DIAGNOSE_OK_REPORT: YahooSupportDiagnoseReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  diagnosis: { stage: 'not_connected' },
+  interpretation: {
+    category: 'not_connected',
+    summary: 'This account has no stored Yahoo credential row, so there is nothing for Flaim to sync from.',
+    nextAction: 'Ask the customer to connect Yahoo from the Flaim web app, then re-run inspect.',
+  },
 };
 
 const ISSUER = 'https://flaim-test.clerk.accounts.dev';
@@ -155,6 +174,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(validateOAuthToken).mockResolvedValue(null);
   vi.mocked(runYahooSupportInspect).mockResolvedValue(INSPECT_OK_REPORT);
+  vi.mocked(runYahooSupportDiagnose).mockResolvedValue(DIAGNOSE_OK_REPORT);
   // Clerk JWKS lookup — the only network call these tests can trigger.
   vi.stubGlobal('fetch', vi.fn(async () => new Response(
     JSON.stringify({ keys: [publicJwk] }),
@@ -333,7 +353,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
   });
 });
 
-// Unchanged from Session 1: these two routes are still unimplemented stubs.
+// Unchanged from Session 1: refresh is still an unimplemented stub.
 describe.each(STUB_PATHS)('POST %s (unimplemented stub)', (path) => {
   it('answers 501 once both secrets and the body validate', async () => {
     const res = await app.fetch(makeRequest(path, bothTokens()), baseEnv);
@@ -341,6 +361,7 @@ describe.each(STUB_PATHS)('POST %s (unimplemented stub)', (path) => {
     expect(res.status).toBe(501);
     await expect(res.json()).resolves.toEqual({ outcome: 'not_implemented' });
     expect(runYahooSupportInspect).not.toHaveBeenCalled();
+    expect(runYahooSupportDiagnose).not.toHaveBeenCalled();
   });
 });
 
@@ -385,6 +406,51 @@ describe(`POST ${INSPECT_PATH} (implemented)`, () => {
 
     expect(res.status).toBe(403);
     expect(runYahooSupportInspect).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${DIAGNOSE_PATH} (implemented)`, () => {
+  it('runs the real diagnosis instead of the Session-1 stub', async () => {
+    const res = await app.fetch(makeRequest(DIAGNOSE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(DIAGNOSE_OK_REPORT);
+    expect(runYahooSupportDiagnose).toHaveBeenCalledTimes(1);
+    expect(runYahooSupportDiagnose).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID },
+    );
+    expect(runYahooSupportInspect).not.toHaveBeenCalled();
+  });
+
+  it('maps a failed diagnostic to 500 without inventing an error body', async () => {
+    const failed = { outcome: 'failed', userMasked: 'user_3Ie...', error: 'diagnostic_failed' } as const;
+    vi.mocked(runYahooSupportDiagnose).mockResolvedValue(failed);
+
+    const res = await app.fetch(makeRequest(DIAGNOSE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual(failed);
+  });
+
+  it('does not run the diagnosis when the body fails validation', async () => {
+    const res = await app.fetch(
+      makeRequest(DIAGNOSE_PATH, bothTokens(), JSON.stringify({ userId: 'admin' })),
+      baseEnv,
+    );
+
+    expect(res.status).toBe(400);
+    expect(runYahooSupportDiagnose).not.toHaveBeenCalled();
+  });
+
+  it('does not run the diagnosis when authentication fails', async () => {
+    const res = await app.fetch(
+      makeRequest(DIAGNOSE_PATH, { 'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN }),
+      baseEnv,
+    );
+
+    expect(res.status).toBe(403);
+    expect(runYahooSupportDiagnose).not.toHaveBeenCalled();
   });
 });
 

@@ -8,7 +8,13 @@
  * `runYahooSupportInspect` is strictly read-only: it reads stored state and
  * projects a redacted snapshot. It never renews a credential, never touches sync
  * state, and never writes leagues — see the non-goal tests that pin each of
- * those. Diagnose and refresh land in later changes.
+ * those.
+ *
+ * `runYahooSupportDiagnose` is the one action that reaches Yahoo. It renews the
+ * credential through the existing guarded token path and makes at most
+ * MAX_YAHOO_DIAGNOSTIC_REQUESTS bounded GETs, and it still writes nothing: no
+ * league rows, no sync state. Refresh — the only action that persists — lands
+ * in a later change.
  *
  * Redaction is enforced at the query, not the response: every read names its
  * columns explicitly, so a customer league key, league name, team name, or a
@@ -17,9 +23,18 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
+  diagnoseYahooDiscovery,
   readYahooCredentialHealthReport,
+  MAX_YAHOO_DIAGNOSTIC_REQUESTS,
+  type YahooConnectEnv,
   type YahooCredentialHealthReport,
+  type YahooSupportDiagnosis,
 } from './yahoo-connect-handlers';
+
+// Re-exported so existing callers/tests importing the budget constant from
+// this module (the public support-diagnostics surface) don't need to know
+// it's actually enforced in yahoo-connect-handlers.ts.
+export { MAX_YAHOO_DIAGNOSTIC_REQUESTS };
 
 export const CLERK_USER_ID_PATTERN = /^user_[A-Za-z0-9]{20,64}$/;
 
@@ -32,11 +47,6 @@ function maskUserId(userId: string): string {
   return `${userId.slice(0, 8)}...`;
 }
 const MAX_REQUEST_BYTES = 1024;
-/**
- * Hard ceiling on Yahoo round trips a single diagnose call may make. Exported
- * now so the diagnostic implementation and its tests share one budget constant.
- */
-export const MAX_YAHOO_DIAGNOSTIC_REQUESTS = 2;
 
 export interface YahooSupportEnv {
   SUPABASE_URL: string;
@@ -325,6 +335,256 @@ export async function runYahooSupportInspect(
       service: 'auth-worker',
       user_id: userMasked,
       outcome: report.outcome,
+      correlation_id: correlationId,
+    })
+  );
+
+  return report;
+}
+
+// =============================================================================
+// DIAGNOSE — bounded Yahoo probe plus an operator-readable interpretation
+// =============================================================================
+
+/**
+ * What the diagnosis means, in the operator's language.
+ *
+ * `summary` and `nextAction` are written to be pasted straight into a Linear
+ * comment: one plain sentence each, no customer identifiers, no raw provider
+ * payload. The only provider strings that may appear are Yahoo-global game
+ * codes, which are not customer data.
+ */
+export interface DiagnoseInterpretation {
+  category:
+    | 'not_connected'
+    | 'credential_renewal_rejected'
+    | 'data_reachable'
+    | 'filter_excludes_account'
+    | 'genuinely_empty_account'
+    | 'parser_dropped_all'
+    | 'declared_count_zero_with_entries'
+    | 'malformed_payload'
+    | 'throttled'
+    | 'unexplained_empty_result';
+  summary: string;
+  nextAction: string;
+}
+
+export type YahooSupportDiagnoseReport =
+  | {
+      outcome: 'ok';
+      userMasked: string;
+      checkedAt: string;
+      correlationId: string;
+      diagnosis: YahooSupportDiagnosis;
+      interpretation: DiagnoseInterpretation;
+    }
+  | { outcome: 'failed'; userMasked: string; error: 'diagnostic_failed' };
+
+export type YahooSupportDiagnoseDependencies = {
+  now?: () => number;
+  diagnose?: typeof diagnoseYahooDiscovery;
+};
+
+/** Yahoo answers a throttled caller with 429, or with its own legacy 999. */
+const YAHOO_THROTTLE_STATUSES = new Set([429, 999]);
+
+/**
+ * Turn a diagnosis into a category, in a fixed priority order.
+ *
+ * The order is the whole point: several stats signals can co-occur on one
+ * payload, and reading them in a different order would tell the operator a
+ * different story about the same account. Renewal failure outranks anything
+ * observed downstream, throttling outranks payload shape (a throttled response
+ * is malformed for an uninteresting reason), and among the parser signals the
+ * more specific explanation wins over the more general one.
+ */
+function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpretation {
+  if (diagnosis.stage === 'not_connected') {
+    return {
+      category: 'not_connected',
+      summary: 'This account has no stored Yahoo credential row, so there is nothing for Flaim to sync from.',
+      nextAction: 'Ask the customer to connect Yahoo from the Flaim web app, then re-run inspect.',
+    };
+  }
+
+  if (diagnosis.stage === 'credential_refresh_failed') {
+    if (diagnosis.appFingerprintMismatch) {
+      return {
+        category: 'credential_renewal_rejected',
+        summary:
+          'The stored Yahoo tokens were minted by a different Yahoo app than this worker is configured with, so no renewal of them can ever succeed.',
+        nextAction:
+          'Ask the customer to reconnect Yahoo, and check whether other accounts carry the same stale fingerprint before closing.',
+      };
+    }
+
+    if (diagnosis.retryable) {
+      const wait =
+        typeof diagnosis.retryAfterSeconds === 'number'
+          ? `${diagnosis.retryAfterSeconds} seconds`
+          : 'a short while';
+      return {
+        category: 'credential_renewal_rejected',
+        summary: `Yahoo credential renewal was temporarily unavailable (${diagnosis.errorCode}); a refresh lease or cooldown is currently held for this account.`,
+        nextAction: `Wait ${wait}, then re-run diagnose once. Do not loop.`,
+      };
+    }
+
+    const upstream =
+      typeof diagnosis.upstreamStatus === 'number' ? `, upstream HTTP ${diagnosis.upstreamStatus}` : '';
+    return {
+      category: 'credential_renewal_rejected',
+      summary: `Yahoo rejected the stored credential (${diagnosis.errorCode}${upstream}), so the grant is dead and cannot be recovered server-side.`,
+      nextAction: 'Ask the customer to disconnect and reconnect Yahoo; no refresh will help until they do.',
+    };
+  }
+
+  const primary = diagnosis.calls[0];
+  if (!primary) {
+    return {
+      category: 'unexplained_empty_result',
+      summary: 'The diagnostic completed without recording a discovery call, which should not happen.',
+      nextAction: 'Escalate: this is a defect in the diagnostic itself, not in the account.',
+    };
+  }
+
+  if (primary.httpStatus !== null && YAHOO_THROTTLE_STATUSES.has(primary.httpStatus)) {
+    return {
+      category: 'throttled',
+      summary: `Yahoo throttled the discovery request (HTTP ${primary.httpStatus}), so nothing can be concluded about this account yet.`,
+      nextAction: 'Back off, then re-run diagnose once. Never loop.',
+    };
+  }
+
+  const stats = primary.stats;
+  // `!stats` cannot occur alongside a 200-with-envelope from the probe itself;
+  // it is here so a malformed diagnosis can never be read as a parse result.
+  if (!primary.ok || !primary.bodyIsJson || !primary.bodyLooksLikeEnvelope || !stats || stats.threw) {
+    const status = primary.httpStatus === null ? 'no response' : `HTTP ${primary.httpStatus}`;
+    const detail = stats?.threw
+      ? `the parser threw ${stats.thrownErrorName ?? 'an error'}`
+      : `body category ${primary.errorSnippetCategory}`;
+    return {
+      category: 'malformed_payload',
+      summary: `Yahoo's discovery response was not a usable fantasy_content envelope (${status}, ${detail}).`,
+      nextAction:
+        'File a bug with the status and body category only — never the body itself — and compare it against the earlier Yahoo discovery-500 history.',
+    };
+  }
+
+  if (stats.accepted > 0) {
+    return {
+      category: 'data_reachable',
+      summary: `Yahoo returned ${stats.accepted} parseable league(s) for this account, so discovery works end to end and only the saved rows are missing.`,
+      nextAction: 'Run refresh --confirm for this account, then verify the saved league row count increased.',
+    };
+  }
+
+  if (stats.declared.games === 0) {
+    const fallback = diagnosis.calls[1];
+    if (fallback && fallback.ok && fallback.stats && fallback.stats.accepted > 0) {
+      return {
+        category: 'filter_excludes_account',
+        summary: `Yahoo reports no full-type games for this account, yet the unfiltered current-season football query returns ${fallback.stats.accepted} league(s) — the game_types=full discovery filter is excluding this account's real data.`,
+        nextAction:
+          'File a new bug against the discovery filter and attach this diagnosis. Do not run refresh: it takes the same filtered path and would save nothing.',
+      };
+    }
+
+    return {
+      category: 'genuinely_empty_account',
+      summary:
+        'Yahoo returns no games and no leagues for this account under both the filtered discovery query and the narrower current-season fallback.',
+      nextAction:
+        'Confirm with the customer which Yahoo identity holds their leagues; on this evidence it is not a Flaim-side defect.',
+    };
+  }
+
+  if (stats.declared.leagues > 0 && stats.skipped.unsupportedSportCode > 0) {
+    const codes = stats.unsupportedGameCodes.length > 0
+      ? stats.unsupportedGameCodes.join(', ')
+      : 'none recorded';
+    return {
+      category: 'parser_dropped_all',
+      summary: `Yahoo reported ${stats.declared.leagues} league(s), but every game used a sport code Flaim does not map (${codes}), so the parser dropped all of them.`,
+      nextAction: 'File a parser bug to map the listed Yahoo game codes, then re-run diagnose to confirm.',
+    };
+  }
+
+  if (stats.declared.leagues === 0 && stats.indexed.leagues > 0) {
+    return {
+      category: 'declared_count_zero_with_entries',
+      summary: `Yahoo declared a league count of zero while the payload actually carried ${stats.indexed.leagues} league entr${stats.indexed.leagues === 1 ? 'y' : 'ies'}, so the count-driven walk swallowed a populated level.`,
+      nextAction:
+        "File a parser bug: the leagues walk must count the entries present rather than trust Yahoo's count field.",
+    };
+  }
+
+  return {
+    category: 'unexplained_empty_result',
+    summary:
+      'Yahoo returned a well-formed envelope with games but no parseable leagues, and none of the known drop signals fired.',
+    nextAction: 'Escalate with this diagnosis attached; the stats block rules out every known failure shape.',
+  };
+}
+
+/**
+ * Diagnose one account's Yahoo discovery and interpret the result.
+ *
+ * Reaches Yahoo (through `diagnoseYahooDiscovery`, which owns the guarded
+ * renewal and the hard request budget) but persists nothing. Any thrown error
+ * collapses to a bare `diagnostic_failed`: the operator gets a stable shape,
+ * and a driver or provider message never rides out on an error path.
+ */
+export async function runYahooSupportDiagnose(
+  env: YahooSupportEnv,
+  request: YahooSupportRequest,
+  dependencies: YahooSupportDiagnoseDependencies = {}
+): Promise<YahooSupportDiagnoseReport> {
+  const now = dependencies.now ?? Date.now;
+  const diagnose = dependencies.diagnose ?? diagnoseYahooDiscovery;
+  const userMasked = maskUserId(request.userId);
+  const correlationId = crypto.randomUUID();
+  const checkedAt = new Date(now()).toISOString();
+
+  let report: YahooSupportDiagnoseReport;
+  let stage: YahooSupportDiagnosis['stage'] | null = null;
+  let yahooRequestCount = 0;
+
+  try {
+    // The support env carries the Yahoo client fields as optional; the worker
+    // env always supplies them, and the token path independently refuses to
+    // call Yahoo when they are missing.
+    const diagnosis = await diagnose(env as YahooConnectEnv, request.userId, correlationId);
+    stage = diagnosis.stage;
+    yahooRequestCount = diagnosis.stage === 'completed' ? diagnosis.requestCount : 0;
+    report = {
+      outcome: 'ok',
+      userMasked,
+      checkedAt,
+      correlationId,
+      diagnosis,
+      interpretation: interpretDiagnosis(diagnosis),
+    };
+  } catch (error) {
+    // Name only. Unlike inspect's own labelled read errors, anything thrown
+    // here can come from the provider path, where a message may quote a body.
+    console.error(
+      '[yahoo-support] Diagnose failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+    report = { outcome: 'failed', userMasked, error: 'diagnostic_failed' };
+  }
+
+  console.log(
+    JSON.stringify({
+      event: 'yahoo_support_diagnose',
+      service: 'auth-worker',
+      user_id: userMasked,
+      outcome: report.outcome,
+      stage,
+      yahoo_request_count: yahooRequestCount,
       correlation_id: correlationId,
     })
   );
