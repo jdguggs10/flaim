@@ -24,8 +24,10 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'r';
-  if actual_count <> 4 then
-    raise exception 'expected 4 analytics tables, found %', actual_count;
+  -- dashboard_snapshot, internal_users, provider_flags_snapshot,
+  -- history_rollup_state, and the FLA-358 funnel_daily history.
+  if actual_count <> 5 then
+    raise exception 'expected 5 analytics tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -101,8 +103,9 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'i';
-  if actual_count <> 4 then
-    raise exception 'expected 4 analytics indexes, found %', actual_count;
+  -- Four primary keys plus the FLA-358 funnel_daily (et_day, stage) grain.
+  if actual_count <> 5 then
+    raise exception 'expected 5 analytics indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -220,6 +223,69 @@ begin
   ) then
     raise exception
       'the single provider_flags_snapshot grant is not analytics_readonly SELECT';
+  end if;
+
+  -- FLA-358: funnel history takes the same posture. It is readable by the
+  -- internal dashboard role (unlike public.mcp_user_daily_et, which is
+  -- owner-only because it lives in the exposed schema and stores per-user
+  -- rows), and writable by nobody but the owner. The analytics schema's default
+  -- privileges would grant SELECT implicitly, so prove the stated ACL rather
+  -- than trusting the default.
+  select count(*) into actual_count
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join lateral aclexplode(
+    coalesce(c.relacl, acldefault('r', c.relowner))
+  ) a
+  where n.nspname = 'analytics'
+    and c.relname = 'funnel_daily'
+    and case a.grantee
+      when 0 then 'PUBLIC'
+      else pg_get_userbyid(a.grantee)
+    end <> pg_get_userbyid(c.relowner);
+  if actual_count <> 1 then
+    raise exception
+      'funnel_daily has % non-owner grants, expected exactly 1',
+      actual_count;
+  end if;
+
+  if not has_table_privilege(
+       'analytics_readonly',
+       'analytics.funnel_daily',
+       'SELECT'
+     )
+     or exists (
+       select 1
+       from unnest(array[
+         'anon',
+         'authenticated',
+         'service_role',
+         'analytics_readonly'
+       ]) as r(role_name)
+       where has_table_privilege(r.role_name, 'analytics.funnel_daily', 'INSERT')
+          or has_table_privilege(r.role_name, 'analytics.funnel_daily', 'UPDATE')
+          or has_table_privilege(r.role_name, 'analytics.funnel_daily', 'DELETE')
+     ) then
+    raise exception
+      'funnel_daily must be analytics_readonly SELECT and owner-only writes';
+  end if;
+
+  -- RLS with no policies would hide every row from analytics_readonly, which
+  -- has no BYPASSRLS. Keeping it off is deliberate, not an oversight. The
+  -- role's own role_rows CTE further below folds rolbypassrls into a
+  -- determinism hash, but that only proves the value is stable across two
+  -- resets, not that it is actually false — assert that directly here, next
+  -- to the RLS-off check it justifies.
+  if (select relrowsecurity from pg_class where oid = 'analytics.funnel_daily'::regclass)
+  then
+    raise exception 'funnel_daily must not enable RLS; its only reader would see nothing';
+  end if;
+
+  if coalesce(
+    (select rolbypassrls from pg_roles where rolname = 'analytics_readonly'),
+    true
+  ) then
+    raise exception 'analytics_readonly must not have BYPASSRLS; funnel_daily''s RLS-off posture depends on it';
   end if;
 
   -- The refresh path is owner-only, and never reachable as a definer shortcut.
@@ -535,6 +601,26 @@ begin
     and computed_at is not null;
   if actual_count <> 2 then
     raise exception 'dashboard snapshot seed proof failed';
+  end if;
+
+  -- FLA-358: the migration creates funnel_daily empty and never backfills. The
+  -- seed's own scheduled-path refresh is what fills today, and it must record
+  -- one row per stage of the stored inclusive funnel, for that ET day only.
+  select count(*) into actual_count from analytics.funnel_daily;
+  if actual_count <> (
+    select jsonb_array_length(payload -> 'funnel')
+    from analytics.dashboard_snapshot
+    where id = 2
+  ) then
+    raise exception 'seeded funnel_daily does not hold one row per funnel stage';
+  end if;
+
+  if exists (
+    select 1
+    from analytics.funnel_daily
+    where et_day <> (now() at time zone 'America/New_York')::date
+  ) then
+    raise exception 'funnel_daily contains a day the seed never observed';
   end if;
 
   if not exists (
@@ -1085,6 +1171,7 @@ select jsonb_pretty(jsonb_build_object(
       select count(*) from analytics.provider_flags_snapshot
     ),
     'et_history_rows', (select count(*) from public.mcp_user_daily_et),
+    'funnel_daily_rows', (select count(*) from analytics.funnel_daily),
     'et_history_start', (
       select initial_history_start_et_day
       from analytics.history_rollup_state

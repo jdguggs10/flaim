@@ -257,6 +257,52 @@ explicit id=1 restoration path.
 Applying either migration to any hosted database and activating cron remain
 separate approval gates.
 
+## Funnel day history
+
+`20260909180000_add_funnel_daily_history.sql` adds `analytics.funnel_daily`,
+one row per America/New_York day and funnel stage, and makes the existing
+no-argument `analytics.refresh_dashboard_snapshot()` upsert today's rows from
+the payload it just stored. The funnel was previously current-state only: the
+`analytics.funnel_snapshot` view and the payload's `funnel` key are both
+recomputed from live tables on every read, so no stage had a trend.
+
+The write reuses the payload returned by the snapshot upsert instead of calling
+`analytics.dashboard_payload(...)` a second time, so the recorded stages cannot
+drift from the ones the dashboard displays and the payload is still computed
+once per run. Because the snapshot job runs every five minutes, the ET day is
+the natural key: an open day tracks intraday and a completed day holds the value
+observed at its final refresh of that day, which is a periodic snapshot rather
+than a midnight-exact close. No close step is needed, because nothing this table
+reads is pruned.
+
+Only the scheduled no-argument path writes history. The
+`analytics.refresh_dashboard_snapshot(boolean)` overload can rebuild the
+external row id=1, whose funnel excludes internal users, and must not mix that
+population into the same key. The write shares the refresh transaction with no
+exception handler on purpose: its only realistic failures are operator-visible
+schema or grant changes, and suppressing them would silently produce the gapped
+history the table exists to prevent.
+
+The table is created empty and is never backfilled. `espn_leagues`,
+`yahoo_leagues`, `sleeper_leagues`, and `sleeper_connections` are hard-deleted
+on disconnect and by `public.purge_account_data()`, so reconstructing past days
+from `created_at` would undercount every one of them by everyone who has since
+disconnected. History begins at the first scheduled refresh after the migration
+lands.
+
+`analytics_readonly` receives `SELECT` and nothing else, matching
+`provider_flags_snapshot` rather than the owner-only `public.mcp_user_daily_et`:
+this relation lives in the schema that is outside the Data API, holds only
+aggregate stage counts that role can already read at current value, and carries
+no user identifiers. RLS stays off deliberately — with no policies it would hide
+every row from that role.
+
+`supabase/tests/dashboard_single_refresh.sql` proves the recorded rows equal the
+stored inclusive funnel, that repeating the refresh updates in place instead of
+appending, and that the boolean overload writes no history.
+`supabase/tests/reproducibility.sql` proves the ACL, the absence of RLS, and
+that the seed's own refresh is what populates the single seeded day.
+
 ## Demo platform contract
 
 The forward migration `20260805112500_add_platform_to_demo_tables.sql` makes
