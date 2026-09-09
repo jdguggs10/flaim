@@ -2464,6 +2464,45 @@ async function settleLeagueMutationForUser(
   });
 }
 
+/**
+ * Type-check one caller-supplied league object from `POST`/`PUT /leagues`.
+ *
+ * The request body is cast, never parsed, so nothing else checks the types the
+ * storage layer keys and writes on. A `seasonYear` that arrives as the string
+ * `"2025"` is the dangerous case: `setLeagues` matches a surviving league on an
+ * identity key built from `season_year`, which is a Postgres `integer` and so
+ * always reads back as a number. `"2025"` and `2025` produce different keys, the
+ * league looks brand new, and its `created_at` is reset — exactly the corruption
+ * FLA-359 fixed. `leagueId` and `sport` are text columns and carry the same
+ * hazard in the other direction (a numeric `leagueId` is stored as text and
+ * afterwards reads back as a string).
+ *
+ * Returns a description of the first problem, or `null` when the object is
+ * usable. Rejecting beats coercing: this endpoint is Clerk-authenticated and its
+ * callers can send well-typed JSON, whereas a silent `parseInt` would guess at
+ * what the caller meant and write the guess to durable storage.
+ */
+function describeInvalidManualLeague(league: unknown): string | null {
+  if (typeof league !== 'object' || league === null || Array.isArray(league)) {
+    return 'must be an object';
+  }
+  const { leagueId, sport, seasonYear } = league as Record<string, unknown>;
+  if (typeof leagueId !== 'string' || leagueId.length === 0) {
+    return 'leagueId must be a non-empty string';
+  }
+  if (typeof sport !== 'string' || sport.length === 0) {
+    return 'sport must be a non-empty string';
+  }
+  if (
+    seasonYear !== undefined &&
+    seasonYear !== null &&
+    (typeof seasonYear !== 'number' || !Number.isInteger(seasonYear))
+  ) {
+    return 'seasonYear must be an integer or null';
+  }
+  return null;
+}
+
 async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Promise<Response> {
   const env = c.env;
   const url = new URL(c.req.url);
@@ -2491,6 +2530,18 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       return c.json({
         error: `Caller-supplied league replacement is limited to ${MAX_MANUAL_ESPN_LEAGUE_ROWS} rows`
       }, 400);
+    }
+
+    // Type-check after the row bound, so an oversized body is rejected without
+    // walking it, and before the lease, so a malformed request never fences a
+    // mutation it cannot perform.
+    for (const [index, league] of leagues.entries()) {
+      const problem = describeInvalidManualLeague(league);
+      if (problem) {
+        return c.json({
+          error: `Invalid request: leagues[${index}] ${problem}`
+        }, 400);
+      }
     }
 
     let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;

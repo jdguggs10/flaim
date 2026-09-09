@@ -342,6 +342,30 @@ describe('EspnSupabaseStorage', () => {
       expect(rows[0].created_at).toBe(ORIGINAL_CREATED_AT);
     });
 
+    it('keeps a NULL created_at on an existing row instead of stamping it as new', async () => {
+      // `espn_leagues.created_at` is nullable. A row carrying NULL is real,
+      // existing data; skipping it would make the league look brand new and
+      // restamp it with "now" — the same corruption this path exists to stop,
+      // reached from the other side.
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: null,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1', teamName: 'Renamed' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].created_at).toBeNull();
+      expect(rows[0].team_name).toBe('Renamed');
+    });
+
     it('aborts without deleting when the timestamp pre-read fails', async () => {
       const insert = vi.fn().mockResolvedValue({ error: null });
       const deleteEq = vi.fn().mockResolvedValue({ error: null });

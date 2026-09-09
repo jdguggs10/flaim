@@ -27,10 +27,13 @@ const LEAGUE_PAGE_SIZE = 500;
  * already fixed by the caller, so it is not part of the key.
  *
  * Callers must pass `season_year` exactly as it is written to the row (the
- * insert payload normalizes a falsy season to `null`), or a preserved row will
- * not be recognized as the same league.
+ * insert payload normalizes a nullish season to `null` with the same `??`
+ * semantics used here), or a preserved row will not be recognized as the same
+ * league. The caller-supplied season is type-checked at the API boundary, so a
+ * numeric string never reaches this key, where it would silently fail to match
+ * the number the `integer` column reads back.
  */
-export function espnLeagueIdentityKey(
+function espnLeagueIdentityKey(
   sport: string,
   leagueId: string,
   seasonYear: number | null | undefined
@@ -388,9 +391,15 @@ export class EspnSupabaseStorage {
    * failure: this read happens immediately before a destructive delete, and
    * deleting rows whose timestamps we could not capture is exactly the data
    * loss we are trying to stop.
+   *
+   * `created_at` is a nullable column, so the map's values are `string | null`
+   * and presence of the key — not truthiness of the value — is what says "this
+   * league already existed". A row whose `created_at` is NULL is real data, and
+   * dropping it here would restamp it as new, reopening the bug from the other
+   * side.
    */
-  private async getLeagueCreatedAtMap(clerkUserId: string): Promise<Map<string, string> | null> {
-    const createdAtByLeague = new Map<string, string>();
+  private async getLeagueCreatedAtMap(clerkUserId: string): Promise<Map<string, string | null> | null> {
+    const createdAtByLeague = new Map<string, string | null>();
     let afterId = 0;
     while (true) {
       const { data, error } = await this.supabase
@@ -412,12 +421,18 @@ export class EspnSupabaseStorage {
         season_year: number | null;
         created_at: string | null;
       }>) {
-        if (!row.created_at) continue;
         const key = espnLeagueIdentityKey(row.sport, row.league_id, row.season_year);
-        const existing = createdAtByLeague.get(key);
+        if (!createdAtByLeague.has(key)) {
+          createdAtByLeague.set(key, row.created_at);
+          continue;
+        }
         // The unique index makes duplicates impossible in practice; if one ever
-        // slips through, the earliest timestamp is the honest answer.
-        if (!existing || Date.parse(row.created_at) < Date.parse(existing)) {
+        // slips through, the earliest timestamp is the honest answer, and a NULL
+        // beats every timestamp: the row records no creation time, and picking
+        // one of its siblings' would invent the number this fix exists to avoid.
+        const existing = createdAtByLeague.get(key) ?? null;
+        if (existing === null) continue;
+        if (row.created_at === null || Date.parse(row.created_at) < Date.parse(existing)) {
           createdAtByLeague.set(key, row.created_at);
         }
       }
@@ -469,14 +484,19 @@ export class EspnSupabaseStorage {
 
       // Then insert new leagues. `created_at` is set on every row rather than
       // left to the column default: a bulk insert whose objects do not all
-      // carry the same keys resolves the missing ones to NULL by default, and
-      // a NULL creation time is worse than the reset we are fixing.
+      // carry the same keys resolves the missing ones to NULL by default, so
+      // an unset key would blank a timestamp we meant to preserve. A NULL is
+      // written only when the row we are replacing already carried one.
       const now = new Date().toISOString();
       const leagueData = leagues.map(league => {
-        const seasonYear = league.seasonYear || null;
-        const preservedCreatedAt = createdAtByLeague.get(
-          espnLeagueIdentityKey(league.sport, league.leagueId, seasonYear)
-        );
+        const seasonYear = league.seasonYear ?? null;
+        const key = espnLeagueIdentityKey(league.sport, league.leagueId, seasonYear);
+        // Presence in the map, not a truthy value: a league whose row carried a
+        // NULL `created_at` still existed, so it keeps its NULL instead of being
+        // stamped as new. Only a league with no entry at all is genuinely new.
+        const createdAt = createdAtByLeague.has(key)
+          ? createdAtByLeague.get(key) ?? null
+          : now;
         return {
           clerk_user_id: clerkUserId,
           league_id: league.leagueId,
@@ -485,7 +505,7 @@ export class EspnSupabaseStorage {
           team_name: league.teamName || null,
           league_name: league.leagueName || null,
           season_year: seasonYear,
-          created_at: preservedCreatedAt ?? now,
+          created_at: createdAt,
         };
       });
 

@@ -336,6 +336,15 @@ already cover new columns, so `reproducibility.sql`'s relation, index, and
 grant assertions are unchanged; only the runtime-computed column hash moves,
 and it moves identically across both resets.
 
+`ADD COLUMN` is metadata-only here — `now()` is STABLE, so Postgres evaluates it
+once and stores it as a table-level default instead of rewriting the table — but
+it still takes an `ACCESS EXCLUSIVE` lock for the moment it runs, and it queues
+every other reader and writer behind it while it waits for that lock. The
+migration therefore sets `lock_timeout = '5s'` for its own transaction, so a
+long-running transaction holding a conflicting lock fails the migration fast
+instead of stalling the ESPN credential path for as long as that transaction
+lives.
+
 ## Demo platform contract
 
 The forward migration `20260805112500_add_platform_to_demo_tables.sql` makes

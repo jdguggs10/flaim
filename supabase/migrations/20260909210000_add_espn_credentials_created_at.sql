@@ -21,9 +21,13 @@
 --   * `not null default now()`. The default mirrors the sibling credential
 --     tables; `not null` is deliberately stricter than they are, because a
 --     nullable creation timestamp would reintroduce the exact "we cannot tell
---     when" gap this migration exists to close. Postgres 11+ stores the
---     default as a table-level attribute, so this is a metadata-only change
---     with no table rewrite.
+--     when" gap this migration exists to close. Postgres 11+ stores a
+--     non-volatile default as a table-level attribute, evaluated once at
+--     ADD COLUMN time and handed to existing rows on read, so this is a
+--     metadata-only change with no table rewrite. `now()` qualifies: it is
+--     STABLE, not VOLATILE. It is not a literal constant — it is evaluated,
+--     just only once — which is why every pre-existing row ends up sharing
+--     this migration's run time (see the limitation note below).
 --   * No trigger and no application write. `EspnSupabaseStorage.setCredentials`
 --     is the only writer, and it inserts a row only when none exists and
 --     otherwise UPDATEs an explicit column list that does not name
@@ -45,8 +49,21 @@
 --   tenure or cohorts must treat pre-migration rows as censored at this
 --   timestamp rather than as same-day connections.
 
+begin;
+
+-- The ADD COLUMN itself is metadata-only, but it still takes an
+-- ACCESS EXCLUSIVE lock on `espn_credentials` for the moment it runs, and
+-- while it waits for that lock it queues every other reader and writer behind
+-- it. If a long-running transaction already holds a conflicting lock, an
+-- unbounded wait would take the ESPN credential path down for as long as that
+-- transaction lives. Fail fast instead: give up after 5s and let the migration
+-- be retried at a quieter moment.
+set local lock_timeout = '5s';
+
 alter table public.espn_credentials
   add column created_at timestamptz not null default now();
 
 comment on column public.espn_credentials.created_at is
   $$When this ESPN connection was established. Rows that predate this column carry the FLA-359 migration run time, not a true creation time, because none was recorded anywhere; treat them as censored at that timestamp rather than as connections made that day. Written only by the column default, so it never moves for the life of a row.$$;
+
+commit;
