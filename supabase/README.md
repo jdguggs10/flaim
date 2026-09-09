@@ -175,6 +175,18 @@ An already-populated environment needs a separately
 reviewed rebuild while complete raw coverage is still available; clearing its
 marker or labelling old rows with NULL dimensions is not a recovery procedure.
 
+The FLA-357 migration adds two keys to each `usage_trend` day and changes
+nothing else: `mau_30d`, a rolling 30-day distinct-user count computed from the
+same `history_user_days` set and the same correlated-subquery shape as the
+existing `wau_7d`, and `mau_30d_partial`, true while that 30-day window reaches
+back before the first day of available history. The flag follows
+`retention_weekly`'s `week_partial_start` contract: the value stays a real
+distinct count over the days that exist, and the flag discloses that the window
+is shorter than 30 days rather than nulling or hiding the row. The scalar
+`rolling.mau` is deliberately unchanged — it measures a trailing 720 hours at
+snapshot time, not 30 complete ET days, and remains the payload's current-value
+MAU.
+
 History-job monitoring must be independent of dashboard refresh success. The
 raw bridge intentionally tolerates missed closes, so a fresh snapshot alone
 does not prove preservation is running. Failed jobs and a marker that has not

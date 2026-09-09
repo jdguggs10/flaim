@@ -10,6 +10,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: The routes require two independent service secrets, the shared internal service token and a dedicated support token, because they take their target account from the request body rather than from a session. They fail closed when either secret is unconfigured, and no end-user credential is an alternative to either.
 - **Limited**: Internal-service only, and not part of the public API or MCP surface: no tool, schema, or client-visible contract changed. Reads name their columns explicitly, so league, team, and token columns never enter a response, and both responses and audit logs carry only a masked account id, closed-set error codes, statuses, and counts.
 
+### MAU Trend Line (FLA-357)
+
+- **Added**: Each `usage_trend` day in the analytics dashboard payload carries `mau_30d`, a rolling 30-day distinct-user count built from the same preserved ET-day history and the same window shape as the existing `wau_7d`, plus `mau_30d_partial` disclosing the days whose 30-day window reaches back before history begins. Every other key, window, and source in the payload is unchanged, and the current-value `rolling.mau` scalar keeps its trailing-720-hour meaning.
+
 ### Yahoo Full-Game Discovery (FLA-355)
 
 - **Fixed**: Yahoo league discovery now requests full fantasy games explicitly, preserving supported football, baseball, basketball, and hockey history while avoiding an upstream Yahoo server error observed on an unfiltered all-history request.

@@ -28,14 +28,31 @@ create temp table history_seed_events as select * from public.mcp_tool_events;
 -- complete tied-row multiset, while checking rank/cumulative math separately.
 create function pg_temp.history_comparable_payload(payload jsonb)
 returns jsonb language sql as $$
-  select (payload - 'health_summary' - 'tool_health' - 'health_window_days' - 'user_concentration')
-    || jsonb_build_object('user_concentration', (
-      select coalesce(jsonb_agg(row_data order by row_data::text), '[]'::jsonb)
-      from (
-        select value - 'rank' - 'cumulative_pct' as row_data
-        from jsonb_array_elements(payload -> 'user_concentration')
-      ) rows
-    ));
+  select (payload - 'health_summary' - 'tool_health' - 'health_window_days' - 'user_concentration' - 'usage_trend')
+    || jsonb_build_object(
+      'user_concentration', (
+        select coalesce(jsonb_agg(row_data order by row_data::text), '[]'::jsonb)
+        from (
+          select value - 'rank' - 'cumulative_pct' as row_data
+          from jsonb_array_elements(payload -> 'user_concentration')
+        ) rows
+      ),
+      -- FLA-357 added mau_30d/mau_30d_partial to each usage_trend row on
+      -- dashboard_payload_history() only — the raw dashboard_payload()
+      -- reference this function is compared against will never have them.
+      -- Strip both before comparing so an intentionally additive field
+      -- doesn't read as a payload divergence. (history_preserved_payload
+      -- below deliberately does NOT strip these — it compares
+      -- dashboard_payload_history() against itself pre/post prune, where
+      -- mau_30d actually staying unchanged is exactly what's being proved.)
+      'usage_trend', (
+        select coalesce(jsonb_agg(row_data order by row_data ->> 'et_day'), '[]'::jsonb)
+        from (
+          select value - 'mau_30d' - 'mau_30d_partial' as row_data
+          from jsonb_array_elements(payload -> 'usage_trend')
+        ) rows
+      )
+    );
 $$;
 
 create function pg_temp.history_preserved_payload(payload jsonb)
