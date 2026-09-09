@@ -200,6 +200,27 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
 }
 
 /**
+ * Bounds diagnose/refresh to 15 calls/60s per action, deliberately keyed on
+ * the action alone rather than `${action}:${userId}` — a per-target key would
+ * let repeated calls across rotating target ids evade the limit entirely,
+ * which defeats the point for a route whose target id is caller-supplied.
+ * `inspect` is pure DB reads and does not need this.
+ */
+async function enforceSupportRateLimit(c: Context<{ Bindings: Env }>, action: 'diagnose' | 'refresh') {
+  const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
+  if (success) return null;
+
+  return c.json(
+    {
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many support requests. Please try again later.',
+    },
+    429,
+    { 'Retry-After': '60' }
+  );
+}
+
+/**
  * Consistent refresh response (FLA-121): when every requested provider was
  * blocked by an active cooldown, surface a whole-response 429 refresh_cooldown
  * with retry_after and a Retry-After header instead of a 200 wrapper.
@@ -1098,9 +1119,12 @@ api.post('/internal/usage-event', async (c) => {
 // Ordering is load-bearing: internal gate -> support gate -> body validation ->
 // business logic. Nothing before the gates may read or parse the body.
 //
-// Inspect is strictly read-only. Diagnose reaches Yahoo but persists nothing
-// and is capped at two provider round trips. Refresh is the only one that
-// writes, and it writes only through the ordinary refreshLeaguesForUser path.
+// Inspect is strictly read-only. Diagnose reaches Yahoo — capped at two
+// discovery calls, plus one credential-renewal call outside that budget when
+// the token needs it — but never persists league or sync-state data. Refresh
+// is the only one that writes, and it writes only through the ordinary
+// refreshLeaguesForUser path. diagnose/refresh (not inspect) are also
+// rate-limited per action, independent of which account is targeted.
 // =============================================================================
 
 api.post('/internal/support/yahoo/inspect', async (c) => {
@@ -1120,6 +1144,9 @@ api.post('/internal/support/yahoo/diagnose', async (c) => {
   const gate = await requireSupportRoute(c);
   if (gate) return gate;
 
+  const rateLimited = await enforceSupportRateLimit(c, 'diagnose');
+  if (rateLimited) return rateLimited;
+
   const validation = await parseYahooSupportRequest(c.req.raw);
   if ('error' in validation) {
     return c.json(validation.error.body, validation.error.status);
@@ -1132,6 +1159,9 @@ api.post('/internal/support/yahoo/diagnose', async (c) => {
 api.post('/internal/support/yahoo/refresh', async (c) => {
   const gate = await requireSupportRoute(c);
   if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'refresh');
+  if (rateLimited) return rateLimited;
 
   const validation = await parseYahooSupportRequest(c.req.raw);
   if ('error' in validation) {

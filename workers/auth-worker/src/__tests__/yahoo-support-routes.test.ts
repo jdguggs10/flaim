@@ -413,6 +413,18 @@ describe(`POST ${INSPECT_PATH} (implemented)`, () => {
     expect(res.status).toBe(403);
     expect(runYahooSupportInspect).not.toHaveBeenCalled();
   });
+
+  // Deliberate: inspect is pure explicit-column DB reads, never touches
+  // Yahoo, and never writes — unlike diagnose/refresh it carries no budget
+  // to protect, so it is not rate-limited.
+  it('is not rate-limited even when the limiter would deny every key', async () => {
+    const alwaysDenied = { ...baseEnv, CREDENTIALS_RATE_LIMITER: { limit: async () => ({ success: false }) } };
+
+    const res = await app.fetch(makeRequest(INSPECT_PATH, bothTokens()), alwaysDenied);
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportInspect).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe(`POST ${DIAGNOSE_PATH} (implemented)`, () => {
@@ -457,6 +469,33 @@ describe(`POST ${DIAGNOSE_PATH} (implemented)`, () => {
 
     expect(res.status).toBe(403);
     expect(runYahooSupportDiagnose).not.toHaveBeenCalled();
+  });
+
+  // Keyed on the action, not the target user id: rotating which account is
+  // targeted must not let a caller evade the limit.
+  it('rate-limits after the auth gate but before running the diagnosis', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: { limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:diagnose' })) },
+    };
+
+    const res = await app.fetch(makeRequest(DIAGNOSE_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(runYahooSupportDiagnose).not.toHaveBeenCalled();
+  });
+
+  it('does not rate-limit under the diagnose key when the internal token is wrong', async () => {
+    const spy = vi.fn(async () => ({ success: true }));
+    const env = { ...baseEnv, CREDENTIALS_RATE_LIMITER: { limit: spy } };
+
+    const res = await app.fetch(
+      makeRequest(DIAGNOSE_PATH, { 'X-Flaim-Internal-Token': 'wrong', 'X-Flaim-Support-Token': SUPPORT_TOOL_TOKEN }),
+      env,
+    );
+
+    expect(res.status).toBe(403);
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 
@@ -507,6 +546,20 @@ describe(`POST ${REFRESH_PATH} (implemented)`, () => {
     );
 
     expect(res.status).toBe(403);
+    expect(runYahooSupportRefresh).not.toHaveBeenCalled();
+  });
+
+  // Its own key, separate from diagnose's: a burst of diagnose calls must not
+  // exhaust the budget refresh needs to actually persist a fix.
+  it('rate-limits refresh independently of diagnose', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: { limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:refresh' })) },
+    };
+
+    const res = await app.fetch(makeRequest(REFRESH_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
     expect(runYahooSupportRefresh).not.toHaveBeenCalled();
   });
 });

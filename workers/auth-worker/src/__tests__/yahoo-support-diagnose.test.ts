@@ -687,7 +687,11 @@ describe('runYahooSupportDiagnose', () => {
       expect(interpretation.category).toBe('genuinely_empty_account');
     });
 
-    it('classifies a genuinely empty account when the fallback itself failed', async () => {
+    // A fallback that itself failed answered nothing — it must never be read as
+    // confirmation the account is empty. Regression test for a real bug found
+    // in cross-model review: the original classifier treated "fallback did not
+    // find leagues" and "fallback did not succeed" as the same signal.
+    it('reports the account as inconclusive, not empty, when the fallback itself failed', async () => {
       const interpretation = await categoryOf(
         completed([
           completedCall({ stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }) }),
@@ -695,7 +699,39 @@ describe('runYahooSupportDiagnose', () => {
         ])
       );
 
-      expect(interpretation.category).toBe('genuinely_empty_account');
+      expect(interpretation.category).toBe('fallback_inconclusive');
+      expect(interpretation.summary).not.toMatch(/not a flaim-side defect/i);
+      expect(interpretation.nextAction).toMatch(/re-run diagnose/i);
+    });
+
+    it('reports the account as inconclusive when the fallback times out with no response', async () => {
+      const interpretation = await categoryOf(
+        completed([
+          completedCall({ stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }) }),
+          completedCall({ label: 'football_current_season', httpStatus: null, ok: false, stats: null, errorSnippetCategory: 'unparseable' }),
+        ])
+      );
+
+      expect(interpretation.category).toBe('fallback_inconclusive');
+    });
+
+    it('reports the account as inconclusive when the fallback body is malformed', async () => {
+      const interpretation = await categoryOf(
+        completed([
+          completedCall({ stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }) }),
+          completedCall({
+            label: 'football_current_season',
+            httpStatus: 200,
+            ok: true,
+            bodyIsJson: true,
+            bodyLooksLikeEnvelope: false,
+            stats: null,
+            errorSnippetCategory: 'yahoo_error_json',
+          }),
+        ])
+      );
+
+      expect(interpretation.category).toBe('fallback_inconclusive');
     });
 
     it('classifies a parser gap and names the unmapped game codes', async () => {

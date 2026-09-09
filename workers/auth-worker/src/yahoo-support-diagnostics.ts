@@ -376,6 +376,7 @@ export interface DiagnoseInterpretation {
     | 'data_reachable'
     | 'filter_excludes_account'
     | 'genuinely_empty_account'
+    | 'fallback_inconclusive'
     | 'parser_dropped_all'
     | 'declared_count_zero_with_entries'
     | 'malformed_payload'
@@ -498,10 +499,39 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
 
   if (stats.declared.games === 0) {
     const fallback = diagnosis.calls[1];
-    if (fallback && fallback.ok && fallback.stats && fallback.stats.accepted > 0) {
+
+    // The fallback exists to answer one question: does this account genuinely
+    // have no data? It can only answer that if it itself came back as a valid,
+    // parseable envelope. A fallback that errored, timed out, or came back
+    // malformed answered nothing — reporting "genuinely empty" on that basis
+    // would tell an operator (and possibly a customer) the account has no data
+    // when the truth is the second probe simply failed to find out.
+    const fallbackAnswered =
+      fallback !== undefined
+      && fallback.ok
+      && fallback.bodyIsJson
+      && fallback.bodyLooksLikeEnvelope
+      && fallback.stats !== null
+      && !fallback.stats.threw;
+
+    if (!fallbackAnswered) {
+      const status = fallback === undefined
+        ? 'no fallback call was recorded'
+        : fallback.httpStatus === null
+          ? 'no response'
+          : `HTTP ${fallback.httpStatus}, body category ${fallback.errorSnippetCategory}`;
+      return {
+        category: 'fallback_inconclusive',
+        summary: `Yahoo reports no full-type games for this account, but the confirming current-season fallback probe did not itself succeed (${status}), so whether this account genuinely has no data is unresolved.`,
+        nextAction:
+          'Re-run diagnose once. If it keeps failing, investigate the fallback request itself before telling the customer anything — do not report this account as empty on inconclusive evidence.',
+      };
+    }
+
+    if (fallback.stats!.accepted > 0) {
       return {
         category: 'filter_excludes_account',
-        summary: `Yahoo reports no full-type games for this account, yet the unfiltered current-season football query returns ${fallback.stats.accepted} league(s) — the game_types=full discovery filter is excluding this account's real data.`,
+        summary: `Yahoo reports no full-type games for this account, yet the unfiltered current-season football query returns ${fallback.stats!.accepted} league(s) — the game_types=full discovery filter is excluding this account's real data.`,
         nextAction:
           'File a new bug against the discovery filter and attach this diagnosis. Do not run refresh: it takes the same filtered path and would save nothing.',
       };
@@ -548,9 +578,15 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
  * Diagnose one account's Yahoo discovery and interpret the result.
  *
  * Reaches Yahoo (through `diagnoseYahooDiscovery`, which owns the guarded
- * renewal and the hard request budget) but persists nothing. Any thrown error
- * collapses to a bare `diagnostic_failed`: the operator gets a stable shape,
- * and a driver or provider message never rides out on an error path.
+ * renewal and the hard discovery-call budget) but never persists league data
+ * or sync state: no `upsertYahooLeague`, no `settle()`/`acquireLease()`, no
+ * call into `refreshLeaguesForUser`/`handleYahooDiscover`. It does still
+ * exercise the ordinary credential-renewal write when the token needs it —
+ * that mutation is inherent to reusing the real renewal path unmodified, not
+ * an exception to "never persists," which here means never persists *league
+ * or sync-state* data. Any thrown error collapses to a bare
+ * `diagnostic_failed`: the operator gets a stable shape, and a driver or
+ * provider message never rides out on an error path.
  */
 export async function runYahooSupportDiagnose(
   env: YahooSupportEnv,

@@ -3206,9 +3206,15 @@ export const MAX_YAHOO_DIAGNOSTIC_REQUESTS = 2;
  * Diagnose why Yahoo league discovery produces nothing for one account.
  *
  * Read-only against Flaim state, and bounded to at most
- * MAX_YAHOO_DIAGNOSTIC_REQUESTS Yahoo round trips. Credential renewal runs
- * through the existing guarded token path unmodified, so the usual lease,
- * cooldown, and app-fingerprint protections all still apply.
+ * MAX_YAHOO_DIAGNOSTIC_REQUESTS Yahoo *discovery* calls (runYahooDiagnosticCall
+ * below never logs a raw response body — transport failures log the error
+ * name only). Credential renewal is a separate call outside that budget: it
+ * runs through the existing guarded token path unmodified, so the usual
+ * lease, cooldown, and app-fingerprint protections all still apply, and so
+ * does that path's own pre-existing logging (yahoo-connect-handlers.ts,
+ * `getValidYahooAccessToken`'s failure log) — reused deliberately, not
+ * suppressed, since a support-triggered renewal that logged differently from
+ * every other renewal would be a worse diagnostic, not a better one.
  */
 export async function diagnoseYahooDiscovery(
   env: YahooConnectEnv,
