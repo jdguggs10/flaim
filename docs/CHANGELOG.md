@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Temporary Yahoo Recovery Route Removal (FLA-355)
+
+- **Removed**: The temporary `POST /internal/backfill/yahoo-recovery` route and its `yahoo-targeted-recovery.ts` module. It repaired an exact 59-account cohort left with zero synced leagues by an earlier Yahoo discovery bug and self-expired on 2026-09-09T12:00 UTC (every call had been returning 410 since); this removes the now-dead code rather than leaving it live. No behavior change — the route was already inert.
+
 ### Yahoo Shared Logging Redaction (FLA-363)
 
 - **Fixed**: Three log lines shared by every normal Yahoo refresh/discovery request, and by the FLA-360 support tool's `diagnose`/`refresh` actions, no longer carry free-form upstream text or a raw driver error object. Found during the FLA-360 cross-model audit. Token-refresh failures log the existing closed-set `diagnosticClass` instead of Yahoo's raw `error_description`; a discovery `access_denied` 403 logs only the boolean app-level-denial classification instead of up to 500 raw characters of Yahoo's response body; a league-upsert failure logs the Postgres/PostgREST error `code` only, never the raw driver error object (whose `message`/`details` can name the conflicting `league_key` on a unique-violation). No response or behavior change — log content only.

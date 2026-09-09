@@ -45,11 +45,10 @@ export { MAX_YAHOO_DIAGNOSTIC_REQUESTS };
 
 export const CLERK_USER_ID_PATTERN = /^user_[A-Za-z0-9]{20,64}$/;
 
-// Duplicated locally rather than imported from yahoo-targeted-recovery.ts (a
-// temporary FLA-355 module already past its expiry and slated for removal) or
-// from any other of the ~13 modules that already carry their own private copy
-// — that duplication is this codebase's existing convention for a one-line
-// helper, not something worth a new shared package to avoid.
+// Duplicated locally rather than imported from any of the ~13 other modules
+// that already carry their own private copy — that duplication is this
+// codebase's existing convention for a one-line helper, not something worth
+// a new shared package to avoid.
 function maskUserId(userId: string): string {
   return `${userId.slice(0, 8)}...`;
 }
