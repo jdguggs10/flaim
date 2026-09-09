@@ -303,6 +303,39 @@ appending, and that the boolean overload writes no history.
 `supabase/tests/reproducibility.sql` proves the ACL, the absence of RLS, and
 that the seed's own refresh is what populates the single seeded day.
 
+## ESPN connection creation time
+
+`20260909210000_add_espn_credentials_created_at.sql` adds
+`created_at timestamptz not null default now()` to `public.espn_credentials`.
+That table carried only `updated_at`, making it the one connection-owning table
+with no creation timestamp: `yahoo_credentials` and `sleeper_connections` both
+carry `created_at`, as does `espn_leagues`. Because `updated_at` moves on every
+credential re-sync, nothing recorded when an ESPN connection was first
+established, so ESPN was absent from any tenure or cohort question the other
+two platforms answer trivially.
+
+`not null` is deliberately stricter than the sibling tables, whose `created_at`
+is nullable: a nullable creation timestamp would leave the same "we cannot tell
+when" gap open. Nothing writes the column. `EspnSupabaseStorage.setCredentials`
+is the only writer of the table, and it inserts only when no row exists and
+otherwise UPDATEs an explicit column list that omits `created_at`, so the
+default stamps first connection and nothing moves it afterwards. A disconnect
+hard-deletes the row, so a later reconnect correctly stamps a new time.
+
+Rows that exist when the migration runs receive the migration's own run time,
+not their true creation time, and there is no honest way to recover it:
+`updated_at` has already moved for anyone who re-synced, and
+`espn_leagues.created_at` was itself reset by manual league replacement until
+the same change fixed it. Following the no-backfill principle of the funnel
+history above, ESPN connection history is honest from this migration forward,
+and readers must treat earlier rows as censored at that timestamp rather than
+as same-day connections. The column carries a `COMMENT` saying so.
+
+The migration adds no index, constraint, trigger, or grant. Table privileges
+already cover new columns, so `reproducibility.sql`'s relation, index, and
+grant assertions are unchanged; only the runtime-computed column hash moves,
+and it moves identically across both resets.
+
 ## Demo platform contract
 
 The forward migration `20260805112500_add_platform_to_demo_tables.sql` makes

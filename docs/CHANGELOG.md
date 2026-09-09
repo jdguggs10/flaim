@@ -4,6 +4,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Connection Timestamps (FLA-359)
+
+- **Added**: `public.espn_credentials` gains `created_at timestamptz not null default now()`, the creation timestamp `yahoo_credentials` and `sleeper_connections` already had. ESPN previously recorded only `updated_at`, which every credential re-sync moves, so nothing said when an ESPN connection was first established.
+- **Fixed**: Replacing a user's ESPN leagues no longer resets `espn_leagues.created_at` for leagues that survive the replace. The endpoint deletes and re-inserts every row, so an edit to one league restamped all of them as new; the replace now reads each league's existing timestamp first and writes it back, and stamps the current time only on leagues that are genuinely new. A failure to read those timestamps aborts before the delete rather than destroying values it could not capture.
+- **Preserved**: Yahoo and Sleeper are untouched — their league writers already upsert on real column constraints and never delete a surviving row. Normal ESPN discovery was also already correct: it goes through the fenced `persist_espn_league_with_lease` RPC, which updates in place.
+- **Limited**: No backfill. Rows that exist when the migration runs carry the migration's own run time, not their true creation time, and nothing in the database records the real value; treat them as censored at that timestamp rather than as connections made that day.
+
 ### Operator Support Diagnostics (FLA-360)
 
 - **Added**: Three internal auth-worker routes — `/internal/support/yahoo/inspect`, `/internal/support/yahoo/diagnose`, and `/internal/support/yahoo/refresh` — investigate a single account's Yahoo sync state without an active session for that account. Inspect projects a redacted snapshot of stored state, diagnose makes at most two bounded read-only Yahoo discovery calls and reports what they mean, and refresh runs the ordinary guarded league refresh and reports the saved state either side of it.

@@ -247,6 +247,129 @@ describe('EspnSupabaseStorage', () => {
     });
   });
 
+  describe('setLeagues created_at preservation', () => {
+    const ORIGINAL_CREATED_AT = '2025-08-01T12:00:00.000Z';
+
+    function mockLeagueReplace(existingRows: Array<Record<string, unknown>>) {
+      const insert = vi.fn().mockResolvedValue({ error: null });
+      const deleteEq = vi.fn().mockResolvedValue({ error: null });
+      const del = vi.fn().mockReturnValue({ eq: deleteEq });
+      const read = makeLeagueRead(existingRows);
+      mockFrom.mockImplementation((table: string) =>
+        table === 'espn_leagues'
+          ? { select: read.select, delete: del, insert }
+          : {}
+      );
+      return { insert, del };
+    }
+
+    it('carries the original created_at forward for a league that survives the replace', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      // Same league identity, edited team name — the connection did not change.
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1', teamName: 'Renamed' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].created_at).toBe(ORIGINAL_CREATED_AT);
+      expect(rows[0].team_name).toBe('Renamed');
+    });
+
+    it('stamps a fresh created_at only on leagues that are genuinely new', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1' },
+        { leagueId: '222', sport: 'baseball', seasonYear: 2025, teamId: 't2' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows[0].created_at).toBe(ORIGINAL_CREATED_AT);
+      expect(rows[1].created_at).not.toBe(ORIGINAL_CREATED_AT);
+      expect(typeof rows[1].created_at).toBe('string');
+    });
+
+    it('treats a different season of the same league as a new row', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2026, teamId: 't1' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows[0].created_at).not.toBe(ORIGINAL_CREATED_AT);
+    });
+
+    it('matches a seasonless league, which is stored as a null season_year', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: null,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', teamId: 't1' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows[0].season_year).toBeNull();
+      expect(rows[0].created_at).toBe(ORIGINAL_CREATED_AT);
+    });
+
+    it('aborts without deleting when the timestamp pre-read fails', async () => {
+      const insert = vi.fn().mockResolvedValue({ error: null });
+      const deleteEq = vi.fn().mockResolvedValue({ error: null });
+      const del = vi.fn().mockReturnValue({ eq: deleteEq });
+      const failingChain: Record<string, ReturnType<typeof vi.fn>> = {};
+      failingChain.eq = vi.fn().mockImplementation(() => failingChain);
+      failingChain.gt = vi.fn().mockImplementation(() => failingChain);
+      failingChain.order = vi.fn().mockImplementation(() => failingChain);
+      failingChain.limit = vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'connection reset' },
+      });
+      mockFrom.mockImplementation((table: string) =>
+        table === 'espn_leagues'
+          ? { select: vi.fn().mockReturnValue(failingChain), delete: del, insert }
+          : {}
+      );
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1' },
+      ])).resolves.toBe(false);
+
+      // The rows we could not read must still be there.
+      expect(del).not.toHaveBeenCalled();
+      expect(insert).not.toHaveBeenCalled();
+    });
+  });
+
   it('removeLeague clears only the deleted sport default when league ids collide across sports', async () => {
     const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
 
