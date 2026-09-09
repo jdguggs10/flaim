@@ -618,6 +618,10 @@ select public.close_mcp_user_daily_et(
   (now() at time zone 'America/New_York')::date - 1
 );
 
+-- The scheduled no-argument path intentionally refreshes only the
+-- internal-inclusive human row. Initialize the retained external comparison
+-- row explicitly once, then exercise the canonical scheduled path for id=2.
+select analytics.refresh_dashboard_snapshot(false);
 select analytics.refresh_dashboard_snapshot();
 
 -- The migration populates the provider-flags snapshot against an empty

@@ -84,9 +84,10 @@ docker cp supabase/tests/token_rpc.sql supabase_db_flaim:/tmp/token_rpc.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/token_rpc.sql
 docker cp supabase/tests/provider_flags.sql supabase_db_flaim:/tmp/provider_flags.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/provider_flags.sql
+docker cp supabase/tests/dashboard_single_refresh.sql supabase_db_flaim:/tmp/dashboard_single_refresh.sql
+docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/dashboard_single_refresh.sql
 docker cp supabase/tests/espn_history_jobs.sql supabase_db_flaim:/tmp/espn_history_jobs.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/espn_history_jobs.sql
-bash supabase/tests/cutover_guard.sh
 corepack pnpm exec supabase db lint --local --schema public,analytics --level warning --fail-on error
 corepack pnpm exec supabase db advisors --local --type security --level warn --fail-on error
 corepack pnpm exec supabase db diff --local --schema public,analytics
@@ -195,16 +196,7 @@ the preserved older days and must not be presented as a complete rollback.
 
 The forward migration
 `20260813012740_split_analytics_snapshot_cadence.sql` splits the analytics
-refresh into two relations on independent cadences.
-
-`analytics.refresh_dashboard_snapshot()` computes the whole dashboard payload
-twice per run. Nothing in that payload needs five-minute freshness except
-`sync_recent`, the provider-outcome signal an internal monitoring consumer
-polls to detect provider outages. That key reads `public.provider_sync_state`
-over a trailing six-hour window and touches none of the event tables the rest
-of the payload scans.
-
-The migration adds:
+refresh into two independent relations. It adds:
 
 - `analytics.provider_flags_snapshot`, with the same two-variant contract as
   `dashboard_snapshot` (id=1 external-only, id=2 internal-inclusive) and its
@@ -216,63 +208,28 @@ The migration adds:
 - `analytics.refresh_provider_flags_snapshot()`, which replaces both variants
   in one statement so they share a transaction timestamp.
 - `analytics.refresh_dashboard_snapshot(boolean)`, which refreshes one
-  dashboard variant, so a scheduler can run the external row and the
-  internal-inclusive row on different cadences.
+  dashboard variant explicitly.
 
 `analytics.dashboard_payload()` remains the complete consumer contract,
 including its `sync_recent` key, but now delegates to the history-backed
 implementation.
-The no-argument `analytics.refresh_dashboard_snapshot()` is retained as a
-compatibility and local-seed wrapper that refreshes both variants.
 
 The new relation is granted `SELECT` to `analytics_readonly` and to nothing
 else; the new functions are security invokers with a fixed empty search path
 and no non-owner `EXECUTE` grants. The migration creates no cron job.
 
-### Two-phase cron cutover
+`20260909005730_compute_single_inclusive_dashboard_snapshot.sql` then changes
+the no-argument `analytics.refresh_dashboard_snapshot()` compatibility entry
+point to compute the internal-inclusive human payload once and upsert only
+dashboard row id=2. Row id=1 remains unchanged rather than being deleted; the
+boolean overload can still rebuild either row explicitly for comparison or
+rollback. The migration does not change function ownership, privileges, the
+provider-flags path, or cron.
 
-The consumer of this signal rejects a snapshot timestamp older than 30 minutes
-and skips provider-specific checks when it does. Endpoint-failure notification
-does not replace those checks. Reducing the dashboard cadence before that
-consumer reads the dedicated snapshot would interrupt provider-outage
-monitoring. The order is therefore load-bearing:
-
-1. **Phase 1 — `cron/production.sql`.** Adds `provider-flags-snapshot` at
-   `*/5` while `dashboard-snapshot` keeps its `*/5` cadence. Both signals stay
-   fresh and no consumer changes behavior. This file remains safe to re-run.
-2. **Phase 2 — `cron/production-cadence-cutover.sql`.** Moves the external
-   dashboard row to hourly and the internal-inclusive row to nightly. The
-   whole file is one transaction, so a failed precondition rolls the schedule
-   changes back rather than merely printing an error — `psql` runs the
-   statements after a failed one unless `ON_ERROR_STOP` is set, so a guard
-   that only raises is not a guard. It requires the relation to exist, the
-   phase 1 job to be active at `*/5` running exactly the expected command,
-   that command to have succeeded at least twice in the last 20 minutes, both
-   variants to be fresh, and an explicit in-session acknowledgement of the
-   consumer verification it cannot check itself.
-
-   The execution-history check matters because the phase 1 migration
-   populates the relation itself: fresh rows prove nothing about whether the
-   schedule is firing. It matches on the command as well as the job id,
-   because `cron.schedule()` updates a job with an existing name in place and
-   keeps its `jobid`, while `cron.job_run_details` records the command each
-   historical run executed — so a job id alone lets successes from a previous,
-   unrelated command vouch for a refresh that has never run.
-
-`scripts/check-supabase.sh` asserts this posture. Statically: the canonical
-schedule file stays in phase 1, the scheduled command and the guard's expected
-command cannot drift apart, and the cutover file keeps its transaction and its
-command-matched history check. Behaviorally, `tests/cutover_guard.sh` runs the
-real artifact against the local scheduler and requires that it activates
-nothing with preconditions unmet, activates nothing when the only successful
-history belongs to a previous command, and activates exactly the two expected
-schedules once every precondition genuinely holds. After phase 2 has been
-applied and verified in production, update `cron/production.sql` and those
-assertions together.
-
-The internal-inclusive dashboard variant is not on the alerting path. Once
-phase 2 is applied it ages to roughly 24 hours; the provider-flags variant of
-that same distinction stays at five minutes.
+`cron/production.sql` keeps both `dashboard-snapshot` and
+`provider-flags-snapshot` at `*/5`. The provider consumer receives its rows and
+freshness timestamp only from `provider_flags_snapshot`; the dashboard is not
+an alerting fallback.
 
 `supabase/tests/provider_flags.sql` proves, in a rolled-back transaction, that
 the dedicated payload equals the dashboard payload's `sync_recent` key for both
@@ -280,9 +237,13 @@ variants, that each refresh function stamps only its own relation's
 `computed_at`, that the per-variant dashboard refresh rebuilds one row and
 leaves the other alone, and that an empty or aged-out sync state yields empty
 arrays rather than invented provider rows.
+`supabase/tests/dashboard_single_refresh.sql` proves that the no-argument
+refresh contains one inclusive payload call, leaves id=1 and provider flags
+unchanged, rebuilds id=2 correctly, and preserves the boolean overload as the
+explicit id=1 restoration path.
 
-Applying this migration to any hosted database, and activating either cron
-phase, remain separate approval gates.
+Applying either migration to any hosted database and activating cron remain
+separate approval gates.
 
 ## Demo platform contract
 

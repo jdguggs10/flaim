@@ -151,14 +151,13 @@ materialize the history-backed payload.
 Both snapshot relations carry the same two variants: id=1 excludes internal
 accounts, id=2 includes them.
 
-`analytics.refresh_dashboard_snapshot()` refreshes both dashboard variants;
-`analytics.refresh_dashboard_snapshot(boolean)` refreshes one, so the two
-variants can run on different cadences.
+`analytics.refresh_dashboard_snapshot()` computes the internal-inclusive human
+payload once and refreshes dashboard row id=2. The existing
+`analytics.refresh_dashboard_snapshot(boolean)` overload can refresh either
+variant explicitly; id=1 remains available for comparison or manual recovery.
 `analytics.refresh_provider_flags_snapshot()` refreshes the provider snapshot,
 whose payload is the same provider-outcome data as the dashboard payload's
-`sync_recent` key but with its own `computed_at`. Splitting it out lets the
-signal that needs five-minute freshness keep it while the expensive dashboard
-payload does not.
+`sync_recent` key but with its own `computed_at`.
 
 ## Scheduled maintenance
 
@@ -175,10 +174,6 @@ Their definitions live in `supabase/cron/production.sql`, outside the
 migration path. A local reset or preview database therefore does not activate
 background work, and activating a job on a hosted database is a separate
 approval gate from the migration that adds the function it calls.
-
-Reducing the dashboard refresh cadence is a separate, gated second phase in
-`supabase/cron/production-cadence-cutover.sql`; see `supabase/README.md` for
-why the order matters and what the guard checks.
 
 The ET-history migrations add no cron job. The explicit initial close/backfill
 must precede the scheduling gate in `supabase/cron/analytics-history.sql`.
