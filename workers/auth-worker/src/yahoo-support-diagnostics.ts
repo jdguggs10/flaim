@@ -10,11 +10,13 @@
  * state, and never writes leagues — see the non-goal tests that pin each of
  * those.
  *
- * `runYahooSupportDiagnose` is the one action that reaches Yahoo. It renews the
- * credential through the existing guarded token path and makes at most
- * MAX_YAHOO_DIAGNOSTIC_REQUESTS bounded GETs, and it still writes nothing: no
- * league rows, no sync state. Refresh — the only action that persists — lands
- * in a later change.
+ * `runYahooSupportDiagnose` reaches Yahoo but still writes nothing. It renews
+ * the credential through the existing guarded token path and makes at most
+ * MAX_YAHOO_DIAGNOSTIC_REQUESTS bounded GETs: no league rows, no sync state.
+ *
+ * `runYahooSupportRefresh` is the only action that persists, and it owns none
+ * of that persistence: it calls `refreshLeaguesForUser` with a scheduled sync's
+ * own arguments and reports the saved state either side of it.
  *
  * Redaction is enforced at the query, not the response: every read names its
  * columns explicitly, so a customer league key, league name, team name, or a
@@ -22,6 +24,11 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import {
+  refreshLeaguesForUser,
+  sanitizeProviderResult,
+  type SanitizedProviderResult,
+} from './league-refresh';
 import {
   diagnoseYahooDiscovery,
   readYahooCredentialHealthReport,
@@ -130,6 +137,28 @@ export interface YahooSupportSyncSnapshot {
   lastDurationMs: number | null;
   lastSyncSource: string | null;
   syncLeaseExpiresAt: string | null;
+}
+
+/**
+ * The only column list any support read of `provider_sync_state` may use.
+ * Shared by inspect (all providers) and refresh (the yahoo row, before and
+ * after), so a column can never be added to one reader's list alone.
+ */
+const PROVIDER_SYNC_STATE_COLUMNS =
+  'provider,last_attempt_at,last_success_at,last_failure_at,last_error_code,last_league_count,last_duration_ms,last_sync_source,sync_lease_expires_at';
+
+function toSyncSnapshot(row: Record<string, unknown>): YahooSupportSyncSnapshot {
+  return {
+    provider: typeof row.provider === 'string' ? row.provider : 'unknown',
+    lastAttemptAt: stringOrNull(row.last_attempt_at),
+    lastSuccessAt: stringOrNull(row.last_success_at),
+    lastFailureAt: stringOrNull(row.last_failure_at),
+    lastErrorCode: stringOrNull(row.last_error_code),
+    lastLeagueCount: numberOrNull(row.last_league_count),
+    lastDurationMs: numberOrNull(row.last_duration_ms),
+    lastSyncSource: stringOrNull(row.last_sync_source),
+    syncLeaseExpiresAt: stringOrNull(row.sync_lease_expires_at),
+  };
 }
 
 export interface YahooSupportLeagueSnapshot {
@@ -250,9 +279,7 @@ export async function runYahooSupportInspect(
           .eq('clerk_user_id', request.userId),
         supabase
           .from('provider_sync_state')
-          .select(
-            'provider,last_attempt_at,last_success_at,last_failure_at,last_error_code,last_league_count,last_duration_ms,last_sync_source,sync_lease_expires_at'
-          )
+          .select(PROVIDER_SYNC_STATE_COLUMNS)
           .eq('clerk_user_id', request.userId),
         // Never access_token / refresh_token.
         supabase
@@ -301,19 +328,7 @@ export async function runYahooSupportInspect(
         oldestUpdatedAt: leagueTimestamps.oldest,
         newestUpdatedAt: leagueTimestamps.newest,
       },
-      sync: syncRows
-        .map((row) => ({
-          provider: typeof row.provider === 'string' ? row.provider : 'unknown',
-          lastAttemptAt: stringOrNull(row.last_attempt_at),
-          lastSuccessAt: stringOrNull(row.last_success_at),
-          lastFailureAt: stringOrNull(row.last_failure_at),
-          lastErrorCode: stringOrNull(row.last_error_code),
-          lastLeagueCount: numberOrNull(row.last_league_count),
-          lastDurationMs: numberOrNull(row.last_duration_ms),
-          lastSyncSource: stringOrNull(row.last_sync_source),
-          syncLeaseExpiresAt: stringOrNull(row.sync_lease_expires_at),
-        }))
-        .sort((a, b) => a.provider.localeCompare(b.provider)),
+      sync: syncRows.map(toSyncSnapshot).sort((a, b) => a.provider.localeCompare(b.provider)),
       flaimSessions: {
         activeCount: sessions.count ?? sessionRows.length,
         mostRecentExpiresAt: sessionExpiries.newest,
@@ -585,6 +600,159 @@ export async function runYahooSupportDiagnose(
       outcome: report.outcome,
       stage,
       yahoo_request_count: yahooRequestCount,
+      correlation_id: correlationId,
+    })
+  );
+
+  return report;
+}
+
+// =============================================================================
+// REFRESH — the normal guarded refresh, with proof of what changed
+// =============================================================================
+
+/**
+ * The saved state refresh is meant to move: how many Yahoo league rows exist,
+ * and what the yahoo sync row says. `sync` is null only when no
+ * `provider_sync_state` row exists for this account yet — an account that has
+ * never attempted a Yahoo sync.
+ */
+export interface YahooSupportRefreshSnapshot {
+  leagueRows: number;
+  sync: YahooSupportSyncSnapshot | null;
+}
+
+export type YahooSupportRefreshReport =
+  | {
+      outcome: 'ok';
+      userMasked: string;
+      correlationId: string;
+      before: YahooSupportRefreshSnapshot;
+      provider: SanitizedProviderResult;
+      after: YahooSupportRefreshSnapshot;
+    }
+  | { outcome: 'failed'; userMasked: string; error: 'refresh_result_missing' | 'snapshot_failed' };
+
+export type YahooSupportRefreshDependencies = {
+  now?: () => number;
+  refresh?: typeof refreshLeaguesForUser;
+  supabase?: SupabaseClient;
+};
+
+/**
+ * Both halves of the before/after pair, from the same column lists inspect uses.
+ * Never `league_key` / `league_name` / `team_name` / `team_key`: a count is the
+ * only thing this action needs from `yahoo_leagues`.
+ *
+ * Returns null on a read failure rather than throwing, so the caller can keep
+ * the guarded refresh call outside any catch of its own — a failure inside that
+ * call must not be reported as a failed snapshot.
+ */
+async function readRefreshSnapshot(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<YahooSupportRefreshSnapshot | null> {
+  try {
+    return await readRefreshSnapshotOrThrow(supabase, userId);
+  } catch (error) {
+    // Message only — it is built by unwrapRead from a label and a driver code.
+    console.error(
+      '[yahoo-support] Refresh snapshot failed:',
+      error instanceof Error ? error.message : 'unknown error'
+    );
+    return null;
+  }
+}
+
+async function readRefreshSnapshotOrThrow(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<YahooSupportRefreshSnapshot> {
+  const [leagues, sync] = await Promise.all([
+    supabase.from('yahoo_leagues').select('season_year', { count: 'exact' }).eq('clerk_user_id', userId),
+    supabase
+      .from('provider_sync_state')
+      .select(PROVIDER_SYNC_STATE_COLUMNS)
+      .eq('clerk_user_id', userId)
+      .eq('provider', 'yahoo'),
+  ]);
+
+  unwrapRead(leagues, 'yahoo_leagues');
+  unwrapRead(sync, 'provider_sync_state');
+
+  const leagueRows = (leagues.data ?? []) as unknown[];
+  const syncRows = (sync.data ?? []) as Array<Record<string, unknown>>;
+  return {
+    leagueRows: leagues.count ?? leagueRows.length,
+    sync: syncRows.length > 0 ? toSyncSnapshot(syncRows[0]) : null,
+  };
+}
+
+/**
+ * Run the normal Yahoo league refresh for one account and prove what it changed.
+ *
+ * Unlike diagnose, this classifies nothing: by the time an operator runs it they
+ * already know why (diagnose said the data is reachable). Its entire job is to
+ * run the ordinary path and show the before/after difference.
+ *
+ * The refresh call is `refreshLeaguesForUser` with exactly the arguments a
+ * scheduled sync uses, so every existing guard applies unmodified — lease,
+ * cooldown, provider call, `settle()`, persistence. There is no support-specific
+ * refresh path and there must never be one: an operator-triggered refresh that
+ * behaved differently from the customer's own would prove nothing about the
+ * customer's own.
+ *
+ * The "after" snapshot is read strictly after that call resolves. Reading it
+ * concurrently would race the persistence the refresh is doing and could show
+ * the operator a half-written state as the outcome.
+ */
+export async function runYahooSupportRefresh(
+  env: YahooSupportEnv,
+  request: YahooSupportRequest,
+  dependencies: YahooSupportRefreshDependencies = {}
+): Promise<YahooSupportRefreshReport> {
+  const now = dependencies.now ?? Date.now;
+  const refresh = dependencies.refresh ?? refreshLeaguesForUser;
+  const userMasked = maskUserId(request.userId);
+  const correlationId = crypto.randomUUID();
+  const startedAt = now();
+
+  const supabase =
+    dependencies.supabase ??
+    createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
+
+  let report: YahooSupportRefreshReport;
+  let provider: SanitizedProviderResult | null = null;
+
+  const before = await readRefreshSnapshot(supabase, request.userId);
+  if (!before) {
+    report = { outcome: 'failed', userMasked, error: 'snapshot_failed' };
+  } else {
+    const result = await refresh(env, request.userId, ['yahoo'], {}, correlationId, 'scheduled');
+    const yahoo = result.results.yahoo;
+    if (!yahoo) {
+      // No provider result means the refresh never ran the Yahoo leg at all.
+      // Deliberately no "after" read: there is nothing whose change it could
+      // attribute, and any difference would be someone else's write.
+      report = { outcome: 'failed', userMasked, error: 'refresh_result_missing' };
+    } else {
+      provider = sanitizeProviderResult(yahoo);
+      const after = await readRefreshSnapshot(supabase, request.userId);
+      report = after
+        ? { outcome: 'ok', userMasked, correlationId, before, provider, after }
+        : { outcome: 'failed', userMasked, error: 'snapshot_failed' };
+    }
+  }
+
+  console.log(
+    JSON.stringify({
+      event: 'yahoo_support_refresh',
+      service: 'auth-worker',
+      user_id: userMasked,
+      outcome: report.outcome,
+      status: provider?.status ?? null,
+      league_count: provider?.leagueCount ?? null,
+      duration_ms: now() - startedAt,
       correlation_id: correlationId,
     })
   );

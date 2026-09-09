@@ -7,8 +7,11 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { YAHOO_APP_REVIEW_OUTAGE_MESSAGE } from '@flaim/worker-shared';
-import { refreshLeaguesForUser, type ProviderRefreshResult } from './league-refresh';
+import {
+  refreshLeaguesForUser,
+  sanitizeProviderResult,
+  type SanitizedProviderResult,
+} from './league-refresh';
 
 export const YAHOO_TARGETED_RECOVERY_EXPIRES_AT = '2026-09-09T12:00:00.000Z';
 export const YAHOO_TARGETED_RECOVERY_MANIFEST_SIZE = 59;
@@ -45,15 +48,8 @@ interface RecoverySnapshot {
   };
 }
 
-export interface YahooTargetedRecoveryProviderResult {
-  status: 'success' | 'skipped' | 'error';
-  httpStatus?: number;
-  error?: string;
-  retryAfterSeconds?: number;
-  upstreamStatus?: number;
-  leagueCount?: number;
-  stopReason: 'provider_denied' | 'rate_limited' | null;
-}
+/** The sanitizer now lives with the refresh result it projects. */
+export type YahooTargetedRecoveryProviderResult = SanitizedProviderResult;
 
 export type YahooTargetedRecoverySummary =
   | {
@@ -218,31 +214,6 @@ async function readSnapshotFromClient(supabase: SupabaseClient, target: string):
       lastErrorCode: syncResult.data?.last_error_code ?? null,
       syncLeaseExpiresAt: syncResult.data?.sync_lease_expires_at ?? null,
     },
-  };
-}
-
-function asNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined || value === '') return undefined;
-  const number = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(number) ? number : undefined;
-}
-
-function sanitizeProviderResult(result: ProviderRefreshResult): YahooTargetedRecoveryProviderResult {
-  const details = isRecord(result.details) ? result.details : {};
-  const retryAfterSeconds = asNumber(result.retryAfter ?? details.retry_after);
-  const upstreamStatus = asNumber(details.upstream_status);
-  const leagueCount = asNumber(details.count);
-  const providerDenied = upstreamStatus === 403 &&
-    result.error_description === YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery;
-  const rateLimited = upstreamStatus === 429 || upstreamStatus === 999;
-  return {
-    status: result.status,
-    ...(result.httpStatus !== undefined ? { httpStatus: result.httpStatus } : {}),
-    ...(result.error ? { error: result.error } : {}),
-    ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
-    ...(upstreamStatus !== undefined ? { upstreamStatus } : {}),
-    ...(leagueCount !== undefined ? { leagueCount } : {}),
-    stopReason: providerDenied ? 'provider_denied' : rateLimited ? 'rate_limited' : null,
   };
 }
 

@@ -100,6 +100,7 @@ import {
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
+  runYahooSupportRefresh,
   type YahooSupportEnv,
 } from './yahoo-support-diagnostics';
 import { handleClerkAccountDeletionWebhook, type ClerkWebhookEnv } from './clerk-webhook';
@@ -1097,10 +1098,9 @@ api.post('/internal/usage-event', async (c) => {
 // Ordering is load-bearing: internal gate -> support gate -> body validation ->
 // business logic. Nothing before the gates may read or parse the body.
 //
-// Inspect is implemented and strictly read-only. Diagnose is implemented and
-// reaches Yahoo, but persists nothing and is capped at two provider round
-// trips. The refresh implementation lands in a follow-up change; that handler
-// answers 501 once a request clears both gates and validation.
+// Inspect is strictly read-only. Diagnose reaches Yahoo but persists nothing
+// and is capped at two provider round trips. Refresh is the only one that
+// writes, and it writes only through the ordinary refreshLeaguesForUser path.
 // =============================================================================
 
 api.post('/internal/support/yahoo/inspect', async (c) => {
@@ -1138,7 +1138,8 @@ api.post('/internal/support/yahoo/refresh', async (c) => {
     return c.json(validation.error.body, validation.error.status);
   }
 
-  return c.json({ outcome: 'not_implemented' }, 501);
+  const report = await runYahooSupportRefresh(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
 });
 
 // =============================================================================

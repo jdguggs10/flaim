@@ -25,6 +25,7 @@ import {
   UPSTREAM_BACKOFF_COOLDOWN_SECONDS,
   type SyncSource,
 } from './sync-state';
+import { YAHOO_APP_REVIEW_OUTAGE_MESSAGE } from '@flaim/worker-shared';
 
 export const REFRESH_PLATFORMS = ['espn', 'yahoo', 'sleeper'] as const;
 export type RefreshPlatform = typeof REFRESH_PLATFORMS[number];
@@ -467,6 +468,61 @@ export function cooldownSecondsForResult(result: ProviderRefreshResult): number 
       : UPSTREAM_BACKOFF_COOLDOWN_SECONDS;
   }
   return NORMAL_REFRESH_COOLDOWN_SECONDS;
+}
+
+/**
+ * A `ProviderRefreshResult` reduced to what is safe to hand back to an internal
+ * caller: a closed-set status, a closed-set error code, numeric statuses and a
+ * count.
+ *
+ * Deliberately absent are `error_description` and `details`. Both are free-form:
+ * `error_description` carries `errorDescription(error, ...)` above, which is a
+ * thrown message and can quote a provider body or a Postgres constraint
+ * violation naming a customer's league key; `details` is whatever the provider
+ * path chose to attach. Only the two numbers this projection needs are lifted
+ * out of `details`, by name.
+ */
+export interface SanitizedProviderResult {
+  status: ProviderStatus;
+  httpStatus?: number;
+  error?: string;
+  retryAfterSeconds?: number;
+  upstreamStatus?: number;
+  leagueCount?: number;
+  stopReason: 'provider_denied' | 'rate_limited' | null;
+}
+
+function asNumber(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+/**
+ * Project one provider result into the sanitized shape above.
+ *
+ * Lives here rather than in a caller because it is a projection of this module's
+ * own `ProviderRefreshResult`: every internal route that reports what a refresh
+ * did should report the same fields, and adding a field to the result type
+ * should not silently start leaking it from one of them.
+ */
+export function sanitizeProviderResult(result: ProviderRefreshResult): SanitizedProviderResult {
+  const details = isRecord(result.details) ? result.details : {};
+  const retryAfterSeconds = asNumber(result.retryAfter ?? details.retry_after);
+  const upstreamStatus = asNumber(details.upstream_status);
+  const leagueCount = asNumber(details.count);
+  const providerDenied = upstreamStatus === 403 &&
+    result.error_description === YAHOO_APP_REVIEW_OUTAGE_MESSAGE.discovery;
+  const rateLimited = upstreamStatus === 429 || upstreamStatus === 999;
+  return {
+    status: result.status,
+    ...(result.httpStatus !== undefined ? { httpStatus: result.httpStatus } : {}),
+    ...(result.error ? { error: result.error } : {}),
+    ...(retryAfterSeconds !== undefined ? { retryAfterSeconds } : {}),
+    ...(upstreamStatus !== undefined ? { upstreamStatus } : {}),
+    ...(leagueCount !== undefined ? { leagueCount } : {}),
+    stopReason: providerDenied ? 'provider_denied' : rateLimited ? 'rate_limited' : null,
+  };
 }
 
 function leagueCountFromResult(result: ProviderRefreshResult): number | undefined {

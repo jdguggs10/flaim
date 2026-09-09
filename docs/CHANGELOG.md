@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Operator Support Diagnostics (FLA-360)
+
+- **Added**: Three internal auth-worker routes — `/internal/support/yahoo/inspect`, `/internal/support/yahoo/diagnose`, and `/internal/support/yahoo/refresh` — investigate a single account's Yahoo sync state without an active session for that account. Inspect projects a redacted snapshot of stored state, diagnose makes at most two bounded read-only Yahoo discovery calls and reports what they mean, and refresh runs the ordinary guarded league refresh and reports the saved state either side of it.
+- **Added**: The routes require two independent service secrets, the shared internal service token and a dedicated support token, because they take their target account from the request body rather than from a session. They fail closed when either secret is unconfigured, and no end-user credential is an alternative to either.
+- **Limited**: Internal-service only, and not part of the public API or MCP surface: no tool, schema, or client-visible contract changed. Reads name their columns explicitly, so league, team, and token columns never enter a response, and both responses and audit logs carry only a masked account id, closed-set error codes, statuses, and counts.
+
 ### Yahoo Full-Game Discovery (FLA-355)
 
 - **Fixed**: Yahoo league discovery now requests full fantasy games explicitly, preserving supported football, baseball, basketball, and hockey history while avoiding an upstream Yahoo server error observed on an unfiltered all-history request.
