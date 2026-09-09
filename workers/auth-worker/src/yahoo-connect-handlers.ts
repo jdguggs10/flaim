@@ -26,6 +26,7 @@ import {
   type YahooLeague,
 } from './yahoo-storage';
 import { getFrontendUrl, resolvePreviewOrigin } from './preview-url';
+import { getDefaultSeasonYear } from './season-utils';
 import {
   computeYahooAppFingerprint,
   yahooAppFingerprintStatus,
@@ -1777,6 +1778,117 @@ export async function handleYahooCredentials(
 }
 
 /**
+ * The connected-account credential-health body, shared by the
+ * `/internal/connect/yahoo/credential-health` route and the operator support
+ * inspect snapshot. Non-secret by construction: no access token, no refresh
+ * token, no raw lease owner id.
+ */
+export interface YahooCredentialHealthReport {
+  connected: true;
+  hasCredentials: true;
+  platform: 'yahoo';
+  checkedAt: string;
+  lastUpdated: string | null;
+  yahooGuidPresent: boolean;
+  appFingerprint: {
+    stored: string | null;
+    runtime: string | null;
+    status: YahooAppFingerprintStatus;
+  };
+  accessToken: {
+    expiresAt: string;
+    expiresInSeconds: number | undefined;
+    needsRefresh: boolean;
+    state: 'needs_refresh' | 'fresh';
+  };
+  refresh: {
+    state: YahooPublicRefreshState;
+    leaseExpiresAt?: string;
+    retryAfterSeconds?: number;
+  };
+}
+
+/**
+ * Pure projection of stored credential state onto the credential-health report.
+ * Reads nothing and renews nothing — every input is supplied by the caller.
+ */
+export function buildYahooCredentialHealthReport(
+  credentials: YahooCredentialHealth,
+  runtimeAppFingerprint: string | undefined,
+  now: Date
+): YahooCredentialHealthReport {
+  const nowMs = now.getTime();
+  const refreshState = yahooRefreshState(credentials, nowMs);
+  // Keep the internal lease-state enum distinct from the external diagnostic contract.
+  const responseRefreshState = publicYahooRefreshState(refreshState);
+  const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, nowMs);
+  const refresh: YahooCredentialHealthReport['refresh'] = {
+    state: responseRefreshState,
+  };
+  if (refreshState !== 'none' && credentials.refreshLeaseExpiresAt) {
+    refresh.leaseExpiresAt = credentials.refreshLeaseExpiresAt.toISOString();
+  }
+  if ((refreshState === 'cooldown' || refreshState === 'in_progress') && leaseRemainingSeconds !== undefined) {
+    refresh.retryAfterSeconds = leaseRemainingSeconds;
+  }
+
+  return {
+    connected: true,
+    hasCredentials: true,
+    platform: 'yahoo',
+    checkedAt: now.toISOString(),
+    lastUpdated: credentials.updatedAt?.toISOString() ?? null,
+    yahooGuidPresent: credentials.yahooGuidPresent,
+    // Fingerprints are non-secret SHA-256 prefixes of the Yahoo client id;
+    // 'mismatch' means stored tokens were minted by a different Yahoo app.
+    appFingerprint: {
+      stored: credentials.appFingerprint ?? null,
+      runtime: runtimeAppFingerprint ?? null,
+      status: yahooAppFingerprintStatus(credentials.appFingerprint, runtimeAppFingerprint),
+    },
+    accessToken: {
+      expiresAt: credentials.expiresAt.toISOString(),
+      expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt, nowMs),
+      needsRefresh: credentials.needsRefresh,
+      state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
+    },
+    refresh,
+  };
+}
+
+/**
+ * The subset of the Yahoo connect environment credential health needs. Widened
+ * from `YahooConnectEnv` only in that `YAHOO_CLIENT_ID` may be absent — the
+ * runtime fingerprint is then simply `null`, which is exactly what the operator
+ * support module (whose env carries Yahoo credentials optionally) needs.
+ */
+export type YahooCredentialHealthEnv = Pick<YahooConnectEnv, 'SUPABASE_URL' | 'SUPABASE_SERVICE_KEY'> & {
+  YAHOO_CLIENT_ID?: string;
+};
+
+/**
+ * Read-only credential-health snapshot for one account, for callers that want
+ * the report rather than an HTTP response. Returns null when the account has no
+ * stored Yahoo credential row.
+ *
+ * Deliberately never calls the token path: this reads stored state and must not
+ * mutate, renew, or lease anything.
+ */
+export async function readYahooCredentialHealthReport(
+  env: YahooCredentialHealthEnv,
+  userId: string,
+  now: Date = new Date()
+): Promise<YahooCredentialHealthReport | null> {
+  const storage = YahooStorage.fromEnvironment(env);
+  const credentials = await storage.getYahooCredentialHealth(userId);
+  if (!credentials) {
+    return null;
+  }
+  const runtimeAppFingerprint = await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID);
+  return buildYahooCredentialHealthReport(credentials, runtimeAppFingerprint, now);
+}
+
+/**
  * GET /internal/connect/yahoo/credential-health
  *
  * Returns non-secret Yahoo credential timing and refresh lease state for
@@ -1813,46 +1925,10 @@ export async function handleYahooCredentialHealth(
     }
 
     const checkedAtDate = new Date();
-    const checkedAtNowMs = checkedAtDate.getTime();
-    const refreshState = yahooRefreshState(credentials, checkedAtNowMs);
-    // Keep the internal lease-state enum distinct from the external diagnostic contract.
-    const responseRefreshState = publicYahooRefreshState(refreshState);
-    const leaseRemainingSeconds = boundedPositiveSecondsUntil(credentials.refreshLeaseExpiresAt, checkedAtNowMs);
-    const refresh: { state: string; leaseExpiresAt?: string; retryAfterSeconds?: number } = {
-      state: responseRefreshState,
-    };
-    if (refreshState !== 'none' && credentials.refreshLeaseExpiresAt) {
-      refresh.leaseExpiresAt = credentials.refreshLeaseExpiresAt.toISOString();
-    }
-    if ((refreshState === 'cooldown' || refreshState === 'in_progress') && leaseRemainingSeconds !== undefined) {
-      refresh.retryAfterSeconds = leaseRemainingSeconds;
-    }
-    const checkedAt = checkedAtDate.toISOString();
     const runtimeAppFingerprint = await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID);
 
     return new Response(
-      JSON.stringify({
-        connected: true,
-        hasCredentials: true,
-        platform: 'yahoo',
-        checkedAt,
-        lastUpdated: credentials.updatedAt?.toISOString() ?? null,
-        yahooGuidPresent: credentials.yahooGuidPresent,
-        // Fingerprints are non-secret SHA-256 prefixes of the Yahoo client id;
-        // 'mismatch' means stored tokens were minted by a different Yahoo app.
-        appFingerprint: {
-          stored: credentials.appFingerprint ?? null,
-          runtime: runtimeAppFingerprint ?? null,
-          status: yahooAppFingerprintStatus(credentials.appFingerprint, runtimeAppFingerprint),
-        },
-        accessToken: {
-          expiresAt: credentials.expiresAt.toISOString(),
-          expiresInSeconds: nonNegativeSecondsUntil(credentials.expiresAt, checkedAtNowMs),
-          needsRefresh: credentials.needsRefresh,
-          state: credentials.needsRefresh ? 'needs_refresh' : 'fresh',
-        },
-        refresh,
-      }),
+      JSON.stringify(buildYahooCredentialHealthReport(credentials, runtimeAppFingerprint, checkedAtDate)),
       {
         status: 200,
         headers: {
@@ -2624,6 +2700,101 @@ export async function fetchYahooLeaguesReadOnly(
 }
 
 /**
+ * Optional diagnostic tally for one `parseYahooLeaguesResponse` walk (FLA-360).
+ *
+ * Collected by the real parser rather than by a second diagnostic walk: a
+ * parallel walk would drift from the persisted path, and the whole value of the
+ * support diagnostic is that it reports what the persisted path actually did.
+ *
+ * Nothing here is customer data. `unsupportedGameCodes` holds Yahoo-global game
+ * codes ('pickem', 'nflp', ...), never league or team identifiers, and
+ * `thrownErrorName` holds `Error.name` only — never `.message`, which can echo
+ * payload content.
+ */
+export interface YahooParseStats {
+  envelope: 'valid' | 'missing_fantasy_content' | 'missing_users';
+  /** Yahoo's own `count` field at each level, summed across parents. */
+  declared: { users: number; games: number; leagues: number };
+  /**
+   * Entries actually present at each level, counted independently of Yahoo's
+   * `count`. `declared.X === 0 && indexed.X > 0` is the signature of a
+   * `count || 0` default swallowing a populated level.
+   */
+  indexed: { users: number; games: number; leagues: number };
+  skipped: {
+    userMissingShape: number;
+    gamesCollectionMissing: number;
+    gameMissingShape: number;
+    leaguesCollectionMissing: number;
+    unsupportedSportCode: number;
+    unparseableSeason: number;
+    leagueMissingShape: number;
+    leagueMissingKeyOrName: number;
+  };
+  unsupportedGameCodes: string[];
+  acceptedSports: Record<string, number>;
+  acceptedSeasonRange: { min: number; max: number } | null;
+  /** Always equals the length of the array the parser returned. */
+  accepted: number;
+  threw: boolean;
+  thrownErrorName: string | null;
+}
+
+/**
+ * Cap on distinct unsupported game codes retained. Yahoo's game-code vocabulary
+ * is small; a cap keeps a malformed payload from growing the report unbounded.
+ */
+const MAX_UNSUPPORTED_GAME_CODES = 20;
+
+/**
+ * A fresh, empty stats collector. `envelope` starts at
+ * `'missing_fantasy_content'` — the truthful "envelope validation never got
+ * anywhere" state — and is advanced as the parser clears each envelope check.
+ */
+export function createYahooParseStats(): YahooParseStats {
+  return {
+    envelope: 'missing_fantasy_content',
+    declared: { users: 0, games: 0, leagues: 0 },
+    indexed: { users: 0, games: 0, leagues: 0 },
+    skipped: {
+      userMissingShape: 0,
+      gamesCollectionMissing: 0,
+      gameMissingShape: 0,
+      leaguesCollectionMissing: 0,
+      unsupportedSportCode: 0,
+      unparseableSeason: 0,
+      leagueMissingShape: 0,
+      leagueMissingKeyOrName: 0,
+    },
+    unsupportedGameCodes: [],
+    acceptedSports: {},
+    acceptedSeasonRange: null,
+    accepted: 0,
+    threw: false,
+    thrownErrorName: null,
+  };
+}
+
+const YAHOO_INDEXED_KEY_PATTERN = /^\d+$/;
+
+/**
+ * Count a Yahoo indexed collection's real entries.
+ *
+ * Yahoo returns collections as objects keyed `"0"`, `"1"`, ... alongside a
+ * sibling `count`. This counts the numeric keys, so a wrong or missing `count`
+ * becomes visible instead of silently truncating the walk. Called only when a
+ * stats collector is supplied — the persisted path pays nothing for it.
+ */
+function countIndexedEntries(wrapper: unknown): number {
+  if (wrapper === null || typeof wrapper !== 'object') return 0;
+  let count = 0;
+  for (const key of Object.keys(wrapper as Record<string, unknown>)) {
+    if (YAHOO_INDEXED_KEY_PATTERN.test(key)) count += 1;
+  }
+  return count;
+}
+
+/**
  * Parse Yahoo's deeply nested JSON response into our league format
  *
  * Yahoo's response structure is:
@@ -2645,8 +2816,14 @@ export async function fetchYahooLeaguesReadOnly(
  *     }
  *   }
  * }
+ *
+ * `stats` is a strictly optional out-parameter. Omitting it — as every
+ * production caller does — leaves behavior byte-identical to before FLA-360:
+ * no control flow depends on it, and the indexed-entry counting it enables is
+ * never reached. Exported for test visibility only; it is not a new caller
+ * surface.
  */
-function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
+export function parseYahooLeaguesResponse(data: unknown, stats?: YahooParseStats): DiscoveredYahooLeague[] {
   const leagues: DiscoveredYahooLeague[] = [];
 
   try {
@@ -2656,56 +2833,126 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
     if (!fantasyContent) return leagues;
 
     const users = fantasyContent.users;
-    if (!users) return leagues;
+    if (!users) {
+      if (stats) stats.envelope = 'missing_users';
+      return leagues;
+    }
+
+    if (stats) {
+      stats.envelope = 'valid';
+      stats.indexed.users = countIndexedEntries(users);
+      stats.declared.users = users.count || 0;
+    }
 
     // Users is an object with numeric keys and a count
     const userCount = users.count || 0;
     for (let userIdx = 0; userIdx < userCount; userIdx++) {
       const userWrapper = users[userIdx];
-      if (!userWrapper?.user) continue;
+      if (!userWrapper?.user) {
+        if (stats) stats.skipped.userMissingShape += 1;
+        continue;
+      }
 
       // user is an array where [0] is user info, [1] has games
       const userArray = userWrapper.user;
-      if (!Array.isArray(userArray) || userArray.length < 2) continue;
+      if (!Array.isArray(userArray) || userArray.length < 2) {
+        if (stats) stats.skipped.userMissingShape += 1;
+        continue;
+      }
 
       const gamesWrapper = userArray[1]?.games;
-      if (!gamesWrapper) continue;
+      if (!gamesWrapper) {
+        if (stats) stats.skipped.gamesCollectionMissing += 1;
+        continue;
+      }
+
+      if (stats) {
+        stats.indexed.games += countIndexedEntries(gamesWrapper);
+        stats.declared.games += gamesWrapper.count || 0;
+      }
 
       const gameCount = gamesWrapper.count || 0;
       for (let gameIdx = 0; gameIdx < gameCount; gameIdx++) {
         const gameWrapper = gamesWrapper[gameIdx];
-        if (!gameWrapper?.game) continue;
+        if (!gameWrapper?.game) {
+          if (stats) stats.skipped.gameMissingShape += 1;
+          continue;
+        }
 
         // game is an array where [0] is game info, [1] has leagues
         const gameArray = gameWrapper.game;
-        if (!Array.isArray(gameArray) || gameArray.length < 2) continue;
+        if (!Array.isArray(gameArray) || gameArray.length < 2) {
+          if (stats) stats.skipped.gameMissingShape += 1;
+          continue;
+        }
 
         const gameInfo = gameArray[0];
         const leaguesWrapper = gameArray[1]?.leagues;
-        if (!leaguesWrapper) continue;
+        if (!leaguesWrapper) {
+          if (stats) stats.skipped.leaguesCollectionMissing += 1;
+          continue;
+        }
+
+        // Counted before the sport/season gate below, and deliberately so: a
+        // game dropped for an unsupported sport code still carries leagues
+        // Yahoo reported, and "declared.leagues > 0 with accepted === 0" is
+        // exactly the parser-gap signal the diagnostic looks for.
+        if (stats) {
+          stats.indexed.leagues += countIndexedEntries(leaguesWrapper);
+          stats.declared.leagues += leaguesWrapper.count || 0;
+        }
 
         // Extract game info
         const gameCode = gameInfo?.code?.toLowerCase();
         const season = parseInt(gameInfo?.season, 10);
         const sport = SPORT_CODE_MAP[gameCode];
 
-        if (!sport || isNaN(season)) continue;
+        if (!sport || isNaN(season)) {
+          // Exactly one counter per skipped game. An unsupported sport code
+          // takes precedence: when Flaim cannot map the sport, the season is
+          // moot, and conflating the two would blur the parser-gap signal.
+          if (stats) {
+            if (!sport) {
+              stats.skipped.unsupportedSportCode += 1;
+              if (
+                typeof gameCode === 'string'
+                && gameCode.length > 0
+                && stats.unsupportedGameCodes.length < MAX_UNSUPPORTED_GAME_CODES
+                && !stats.unsupportedGameCodes.includes(gameCode)
+              ) {
+                stats.unsupportedGameCodes.push(gameCode);
+              }
+            } else {
+              stats.skipped.unparseableSeason += 1;
+            }
+          }
+          continue;
+        }
 
         // Parse leagues for this game
         const leagueCount = leaguesWrapper.count || 0;
         for (let leagueIdx = 0; leagueIdx < leagueCount; leagueIdx++) {
           const leagueWrapper = leaguesWrapper[leagueIdx];
-          if (!leagueWrapper?.league) continue;
+          if (!leagueWrapper?.league) {
+            if (stats) stats.skipped.leagueMissingShape += 1;
+            continue;
+          }
 
           // league is an array where [0] is league info
           const leagueArray = leagueWrapper.league;
-          if (!Array.isArray(leagueArray) || leagueArray.length < 1) continue;
+          if (!Array.isArray(leagueArray) || leagueArray.length < 1) {
+            if (stats) stats.skipped.leagueMissingShape += 1;
+            continue;
+          }
 
           const leagueInfo = leagueArray[0];
           const leagueKey = leagueInfo?.league_key;
           const leagueName = leagueInfo?.name;
 
-          if (!leagueKey || !leagueName) continue;
+          if (!leagueKey || !leagueName) {
+            if (stats) stats.skipped.leagueMissingKeyOrName += 1;
+            continue;
+          }
 
           // Capture Yahoo's prior-season renew pointer when present in the bulk
           // response. `renew` lets the chain walk skip the first per-league meta
@@ -2758,12 +3005,284 @@ function parseYahooLeaguesResponse(data: unknown): DiscoveredYahooLeague[] {
             teamName,
             renew,
           });
+
+          if (stats) {
+            stats.accepted += 1;
+            stats.acceptedSports[sport] = (stats.acceptedSports[sport] ?? 0) + 1;
+            stats.acceptedSeasonRange = stats.acceptedSeasonRange === null
+              ? { min: season, max: season }
+              : {
+                  min: Math.min(stats.acceptedSeasonRange.min, season),
+                  max: Math.max(stats.acceptedSeasonRange.max, season),
+                };
+          }
         }
       }
     }
   } catch (parseError) {
+    // Partial results are still returned, exactly as before: whatever was
+    // accumulated before the throw is real data Yahoo sent.
+    if (stats) {
+      stats.threw = true;
+      // Name only. A parse error's message can quote the payload that caused it.
+      stats.thrownErrorName = parseError instanceof Error ? parseError.name : 'unknown';
+    }
     console.error('[yahoo-connect] Error parsing Yahoo response:', parseError);
   }
 
   return leagues;
+}
+
+// =============================================================================
+// SUPPORT DIAGNOSTICS (FLA-360)
+//
+// A bounded, read-only sibling of fetchYahooLeaguesReadOnly above. Same
+// renewal-then-fetch mechanics, but it records what happened at each step
+// instead of returning leagues, and it never persists anything: no
+// upsertYahooLeague, no SyncStateStorage, no settle()/acquireLease(), no
+// refreshLeaguesForUser, no handleYahooDiscover.
+//
+// This lives here, rather than in yahoo-support-diagnostics.ts, so that
+// getValidYahooAccessToken stays module-private. The support module never
+// touches a token. Do not "fix" that by exporting the token function.
+//
+// Raw Yahoo response bodies never leave runYahooDiagnosticCall's local scope —
+// only a status, a shape verdict, a category, and counts do.
+// =============================================================================
+
+export interface YahooDiagnosticCall {
+  label: 'full_games' | 'football_current_season';
+  url: string;
+  httpStatus: number | null;
+  ok: boolean;
+  bodyIsJson: boolean;
+  /** True when the body has a truthy `fantasy_content` top-level key. */
+  bodyLooksLikeEnvelope: boolean;
+  /** A category for the body, never any of the body itself. */
+  errorSnippetCategory: 'none' | 'yahoo_error_json' | 'html' | 'empty' | 'unparseable';
+  stats: YahooParseStats | null;
+  parsedLeagueCount: number | null;
+  durationMs: number;
+}
+
+export type YahooSupportDiagnosis =
+  | { stage: 'not_connected' }
+  | {
+      stage: 'credential_refresh_failed';
+      errorCode: string;
+      upstreamStatus?: number;
+      retryable?: boolean;
+      retryAfterSeconds?: number;
+      appFingerprintMismatch: boolean;
+    }
+  | { stage: 'completed'; calls: YahooDiagnosticCall[]; requestCount: number };
+
+const YAHOO_DIAGNOSTIC_TIMEOUT_MS = 10000;
+
+/**
+ * The narrower fallback query: one sport, one season, no `game_types` filter.
+ * A function only because the season year moves with the calendar; it takes no
+ * caller input, so the diagnostic still has exactly two fixed URLs.
+ */
+function yahooFootballCurrentSeasonUrl(): string {
+  return `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_codes=nfl;seasons=${getDefaultSeasonYear('football')}/leagues;out=teams?format=json`;
+}
+
+/** The parser's own first gate: a truthy `fantasy_content` on a JSON object. */
+function looksLikeYahooEnvelope(parsed: unknown): boolean {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false;
+  return Boolean((parsed as { fantasy_content?: unknown }).fantasy_content);
+}
+
+/** Yahoo's JSON error bodies carry a top-level `error` (sometimes `description`). */
+function looksLikeYahooErrorJson(parsed: unknown): boolean {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false;
+  const record = parsed as Record<string, unknown>;
+  return 'error' in record || 'description' in record;
+}
+
+/**
+ * One bounded Yahoo GET, recorded as a diagnostic observation.
+ *
+ * Never throws: a transport failure or timeout becomes a call record with a
+ * null status, so the caller's request budget and report stay well-defined.
+ */
+async function runYahooDiagnosticCall(
+  label: YahooDiagnosticCall['label'],
+  url: string,
+  accessToken: string
+): Promise<YahooDiagnosticCall> {
+  const startedAt = Date.now();
+  const call: YahooDiagnosticCall = {
+    label,
+    url,
+    httpStatus: null,
+    ok: false,
+    bodyIsJson: false,
+    bodyLooksLikeEnvelope: false,
+    errorSnippetCategory: 'unparseable',
+    stats: null,
+    parsedLeagueCount: null,
+    durationMs: 0,
+  };
+
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(YAHOO_DIAGNOSTIC_TIMEOUT_MS),
+    });
+    call.httpStatus = response.status;
+    call.ok = response.ok;
+
+    // Read the body exactly once, as text, and parse the text. A Response body
+    // can only be consumed once, and classification needs both the raw text
+    // (emptiness, HTML sniffing) and the parse verdict.
+    const rawBody = await response.text();
+    const trimmed = rawBody.trim();
+
+    let parsed: unknown;
+    let parseThrew = false;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      parseThrew = true;
+    }
+
+    call.bodyIsJson = !parseThrew;
+    call.bodyLooksLikeEnvelope = !parseThrew && looksLikeYahooEnvelope(parsed);
+
+    // Category rule, first match wins:
+    //   'empty'            trimmed body has zero length
+    //   'html'             trimmed body starts with '<' — covers '<!DOCTYPE ...'
+    //                      and any bare tag, in any case, since only the '<'
+    //                      is matched. Checked before the JSON verdict because
+    //                      HTML never parses as JSON and 'html' says more.
+    //   'unparseable'      JSON.parse threw
+    //   'yahoo_error_json' parsed, no fantasy_content, carries an error marker
+    //   'none'             anything else — in practice the expected envelope,
+    //                      whether or not it then yielded any leagues
+    if (trimmed.length === 0) {
+      call.errorSnippetCategory = 'empty';
+    } else if (trimmed.startsWith('<')) {
+      call.errorSnippetCategory = 'html';
+    } else if (parseThrew) {
+      call.errorSnippetCategory = 'unparseable';
+    } else if (!call.bodyLooksLikeEnvelope && looksLikeYahooErrorJson(parsed)) {
+      call.errorSnippetCategory = 'yahoo_error_json';
+    } else {
+      call.errorSnippetCategory = 'none';
+    }
+
+    if (call.httpStatus === 200 && call.bodyLooksLikeEnvelope) {
+      const stats = createYahooParseStats();
+      // Only the count escapes; the parsed leagues themselves are discarded.
+      const parsedLeagues = parseYahooLeaguesResponse(parsed, stats);
+      call.stats = stats;
+      call.parsedLeagueCount = parsedLeagues.length;
+    }
+  } catch (error) {
+    // Transport failure or timeout — there is no body to classify. Name only:
+    // a fetch error's message can quote the URL and upstream detail.
+    console.error(
+      `[yahoo-connect] Support diagnostic call ${label} failed:`,
+      error instanceof Error ? error.name : 'unknown error'
+    );
+  }
+
+  call.durationMs = Date.now() - startedAt;
+  return call;
+}
+
+/**
+ * Hard ceiling on Yahoo round trips a single diagnose call may make. Defined
+ * here (where it's enforced) rather than in yahoo-support-diagnostics.ts,
+ * which imports it back — that module already depends on this one for
+ * diagnoseYahooDiscovery and readYahooCredentialHealthReport, so defining the
+ * constant here keeps that a one-way dependency instead of a cycle.
+ */
+export const MAX_YAHOO_DIAGNOSTIC_REQUESTS = 2;
+
+/**
+ * Diagnose why Yahoo league discovery produces nothing for one account.
+ *
+ * Read-only against Flaim state, and bounded to at most
+ * MAX_YAHOO_DIAGNOSTIC_REQUESTS Yahoo *discovery* calls (runYahooDiagnosticCall
+ * below never logs a raw response body — transport failures log the error
+ * name only). Credential renewal is a separate call outside that budget: it
+ * runs through the existing guarded token path unmodified, so the usual
+ * lease, cooldown, and app-fingerprint protections all still apply, and so
+ * does that path's own pre-existing logging (yahoo-connect-handlers.ts,
+ * `getValidYahooAccessToken`'s failure log) — reused deliberately, not
+ * suppressed, since a support-triggered renewal that logged differently from
+ * every other renewal would be a worse diagnostic, not a better one.
+ */
+export async function diagnoseYahooDiscovery(
+  env: YahooConnectEnv,
+  userId: string,
+  correlationId?: string
+): Promise<YahooSupportDiagnosis> {
+  const storage = YahooStorage.fromEnvironment(env);
+  const credentials = await storage.getYahooCredentials(userId);
+  if (!credentials) return { stage: 'not_connected' };
+
+  // Unconditional, unlike fetchYahooLeaguesReadOnly's `if (needsRefresh)`.
+  // getValidYahooAccessToken short-circuits cheaply on a fresh token, so this
+  // costs nothing extra while proving the renewal path itself works for the
+  // account under investigation — the single most common support question.
+  const tokenResult = await getValidYahooAccessToken(
+    storage,
+    userId,
+    env,
+    credentials,
+    correlationId,
+    'support'
+  );
+
+  if ('error' in tokenResult) {
+    // Stop here, deliberately: calling a Yahoo resource with a token we could
+    // not renew would add a second, misleading failure on top of the real one.
+    return {
+      stage: 'credential_refresh_failed',
+      errorCode: tokenResult.error,
+      ...(typeof tokenResult.upstreamStatus === 'number'
+        ? { upstreamStatus: tokenResult.upstreamStatus }
+        : {}),
+      ...(typeof tokenResult.retryable === 'boolean' ? { retryable: tokenResult.retryable } : {}),
+      ...(Number.isFinite(Number(tokenResult.retryAfter))
+        ? { retryAfterSeconds: Number(tokenResult.retryAfter) }
+        : {}),
+      appFingerprintMismatch: tokenResult.error === YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH,
+    };
+  }
+
+  const calls: YahooDiagnosticCall[] = [];
+  const primary = await runYahooDiagnosticCall(
+    'full_games',
+    YAHOO_LEAGUE_DISCOVERY_URL,
+    tokenResult.accessToken
+  );
+  calls.push(primary);
+
+  // The fallback resolves exactly one ambiguity and no other: Yahoo answered
+  // 200 with a well-formed envelope, and still nothing parsed out of it. Then
+  // and only then is it worth asking the same account a narrower question, to
+  // separate "genuinely empty" from "the game_types=full filter excludes this
+  // account". Any other shape is already a conclusive answer.
+  const resolvesAmbiguity =
+    primary.httpStatus === 200
+    && primary.bodyIsJson
+    && primary.bodyLooksLikeEnvelope
+    && primary.stats?.accepted === 0;
+
+  if (resolvesAmbiguity && calls.length < MAX_YAHOO_DIAGNOSTIC_REQUESTS) {
+    calls.push(
+      await runYahooDiagnosticCall(
+        'football_current_season',
+        yahooFootballCurrentSeasonUrl(),
+        tokenResult.accessToken
+      )
+    );
+  }
+
+  return { stage: 'completed', calls, requestCount: calls.length };
 }

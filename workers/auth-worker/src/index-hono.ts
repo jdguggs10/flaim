@@ -96,6 +96,13 @@ import {
   runYahooTargetedRecovery,
   type YahooTargetedRecoveryEnv,
 } from './yahoo-targeted-recovery';
+import {
+  parseYahooSupportRequest,
+  runYahooSupportDiagnose,
+  runYahooSupportInspect,
+  runYahooSupportRefresh,
+  type YahooSupportEnv,
+} from './yahoo-support-diagnostics';
 import { handleClerkAccountDeletionWebhook, type ClerkWebhookEnv } from './clerk-webhook';
 
 // =============================================================================
@@ -125,6 +132,11 @@ export interface Env {
   DEMO_API_KEY?: string;   // Static API key for public demo chat
   DEMO_USER_ID?: string;   // Clerk user ID that the demo API key resolves to
   INTERNAL_SERVICE_TOKEN?: string;
+  // Second, dedicated secret gating the operator support-diagnostic routes
+  // (/internal/support/*). Checked IN ADDITION to INTERNAL_SERVICE_TOKEN, so a
+  // leak of the widely-shared service token alone cannot target an arbitrary
+  // account. Preview and prod hold different values.
+  SUPPORT_TOOL_TOKEN?: string;
   // Scheduled league rollover reconciliation (FLA-161) — dry-run only.
   RECONCILIATION_ENABLED?: string;          // 'true' to run; anything else no-ops
   RECONCILIATION_DRY_RUN?: string;          // must be 'true' (default); writes do not exist
@@ -164,6 +176,7 @@ type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: unkno
 const EVAL_RUN_HEADER = 'X-Flaim-Eval-Run';
 const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
 const INTERNAL_SERVICE_TOKEN_HEADER = 'X-Flaim-Internal-Token';
+const SUPPORT_TOOL_TOKEN_HEADER = 'X-Flaim-Support-Token';
 const MASKED_ESPN_SWID = '{********-****-****-****-************}';
 const MASKED_ESPN_S2 = '************';
 // Abuse boundary for caller-supplied league rows only. Server-controlled ESPN
@@ -180,6 +193,27 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
     {
       error: 'rate_limit_exceeded',
       error_description: 'Too many refresh requests. Please try again later.',
+    },
+    429,
+    { 'Retry-After': '60' }
+  );
+}
+
+/**
+ * Bounds diagnose/refresh to 15 calls/60s per action, deliberately keyed on
+ * the action alone rather than `${action}:${userId}` — a per-target key would
+ * let repeated calls across rotating target ids evade the limit entirely,
+ * which defeats the point for a route whose target id is caller-supplied.
+ * `inspect` is pure DB reads and does not need this.
+ */
+async function enforceSupportRateLimit(c: Context<{ Bindings: Env }>, action: 'diagnose' | 'refresh') {
+  const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
+  if (success) return null;
+
+  return c.json(
+    {
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many support requests. Please try again later.',
     },
     429,
     { 'Retry-After': '60' }
@@ -584,6 +618,48 @@ async function requireInternalService(request: Request, env: Env): Promise<Inter
 
   if (!(await constantTimeEqual(providedToken, env.INTERNAL_SERVICE_TOKEN))) {
     return { error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`, status: 403 };
+  }
+
+  return null;
+}
+
+/**
+ * Second gate for operator support routes. Deliberately a separate secret from
+ * INTERNAL_SERVICE_TOKEN: support routes accept an arbitrary target user id from
+ * the request body, so they require two independent secrets rather than the one
+ * every internal caller already holds. Fails closed when unconfigured.
+ */
+async function requireSupportAuth(request: Request, env: Env): Promise<InternalAuthFailure | null> {
+  if (!env.SUPPORT_TOOL_TOKEN) {
+    return { error: 'Support tool authentication is not configured', status: 500 };
+  }
+
+  const providedToken = request.headers.get(SUPPORT_TOOL_TOKEN_HEADER);
+  if (!providedToken) {
+    return { error: `Missing or invalid ${SUPPORT_TOOL_TOKEN_HEADER}`, status: 403 };
+  }
+
+  if (!(await constantTimeEqual(providedToken, env.SUPPORT_TOOL_TOKEN))) {
+    return { error: `Missing or invalid ${SUPPORT_TOOL_TOKEN_HEADER}`, status: 403 };
+  }
+
+  return null;
+}
+
+/**
+ * Both support gates, in order, as one call — so the double gate cannot be
+ * half-applied to a route by accident. Returns the response to send, or null
+ * when the caller is allowed through.
+ */
+async function requireSupportRoute(c: Context<{ Bindings: Env }>): Promise<Response | null> {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const supportError = await requireSupportAuth(c.req.raw, c.env);
+  if (supportError) {
+    return c.json({ error: supportError.error }, supportError.status);
   }
 
   return null;
@@ -1028,6 +1104,73 @@ api.post('/internal/usage-event', async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// =============================================================================
+// SUPPORT DIAGNOSTICS (FLA-360) — permanent, operator-only
+//
+// Two independent secrets are required: the shared INTERNAL_SERVICE_TOKEN *and*
+// the dedicated SUPPORT_TOOL_TOKEN. Unlike every other identity-resolving route,
+// these take the target user id from the request body, because their entire
+// purpose is investigating an account whose own session has expired. That is
+// exactly why they carry a second secret. Never add getInternalUserId here, and
+// never accept a Clerk JWT / eval key / MCP token as an alternative.
+//
+// Ordering is load-bearing: internal gate -> support gate -> rate limit (for
+// diagnose/refresh only) -> body validation -> business logic. Nothing before
+// the gates may read or parse the body.
+//
+// Inspect is strictly read-only. Diagnose reaches Yahoo — capped at two
+// discovery calls, plus one credential-renewal call outside that budget when
+// the token needs it — but never persists league or sync-state data. Refresh
+// is the only one that writes, and it writes only through the ordinary
+// refreshLeaguesForUser path. diagnose/refresh (not inspect) are also
+// rate-limited per action, independent of which account is targeted.
+// =============================================================================
+
+api.post('/internal/support/yahoo/inspect', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const validation = await parseYahooSupportRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportInspect(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+api.post('/internal/support/yahoo/diagnose', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'diagnose');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportDiagnose(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+api.post('/internal/support/yahoo/refresh', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'refresh');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportRefresh(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
 });
 
 // =============================================================================
@@ -2721,6 +2864,9 @@ api.notFound((c) => {
       '/internal/connect/yahoo/credentials': 'GET - Get Yahoo access token for internal workers',
       '/connect/yahoo/status': 'GET - Check Yahoo connection status',
       '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
+      '/internal/support/yahoo/inspect': 'POST - Operator support snapshot for one Yahoo account (two service secrets)',
+      '/internal/support/yahoo/diagnose': 'POST - Operator support diagnosis of Yahoo league discovery (two service secrets)',
+      '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
       '/internal/user/preferences': 'GET - Get user preferences for internal workers',
       '/user/preferences/default-sport': 'POST - Set user default sport',
