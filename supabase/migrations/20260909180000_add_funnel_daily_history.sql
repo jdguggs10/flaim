@@ -105,7 +105,6 @@ alter table analytics.funnel_daily owner to postgres;
 revoke all privileges on table analytics.funnel_daily
 from public, anon, authenticated, service_role, analytics_readonly;
 
-grant all privileges on table analytics.funnel_daily to postgres;
 grant select on table analytics.funnel_daily to analytics_readonly;
 
 -- CREATE OR REPLACE of the scheduled refresh. On 2026-09-09 the live hosted
@@ -156,6 +155,21 @@ begin
   set sort_order = excluded.sort_order,
       users = excluded.users,
       computed_at = excluded.computed_at;
+
+  -- A stage renamed or removed from the payload's funnel array (only
+  -- possible through a future migration changing the funnel SQL; stage names
+  -- are hardcoded, not user data) must not leave today's row for the old
+  -- stage frozen forever at a stale value: that would silently corrupt
+  -- exactly the historical accuracy this table exists to provide. Scope the
+  -- delete to today's et_day only — past days are frozen, historically
+  -- accurate observations of what was actually measured at the time, and
+  -- must never be retroactively edited.
+  delete from analytics.funnel_daily
+  where et_day = (now() at time zone 'America/New_York')::date
+    and stage not in (
+      select f.value ->> 'stage'
+      from jsonb_array_elements(inclusive_payload -> 'funnel') as f(value)
+    );
 end;
 $function$;
 

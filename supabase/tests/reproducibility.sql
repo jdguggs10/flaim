@@ -271,10 +271,21 @@ begin
   end if;
 
   -- RLS with no policies would hide every row from analytics_readonly, which
-  -- has no BYPASSRLS. Keeping it off is deliberate, not an oversight.
+  -- has no BYPASSRLS. Keeping it off is deliberate, not an oversight. The
+  -- role's own role_rows CTE further below folds rolbypassrls into a
+  -- determinism hash, but that only proves the value is stable across two
+  -- resets, not that it is actually false — assert that directly here, next
+  -- to the RLS-off check it justifies.
   if (select relrowsecurity from pg_class where oid = 'analytics.funnel_daily'::regclass)
   then
     raise exception 'funnel_daily must not enable RLS; its only reader would see nothing';
+  end if;
+
+  if coalesce(
+    (select rolbypassrls from pg_roles where rolname = 'analytics_readonly'),
+    true
+  ) then
+    raise exception 'analytics_readonly must not have BYPASSRLS; funnel_daily''s RLS-off posture depends on it';
   end if;
 
   -- The refresh path is owner-only, and never reachable as a definer shortcut.

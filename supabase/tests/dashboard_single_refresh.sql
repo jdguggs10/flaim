@@ -172,6 +172,67 @@ begin
   if funnel_history_after is distinct from funnel_history_before then
     raise exception 'boolean refresh path wrote funnel_daily history';
   end if;
+
+  -- FLA-358: a stage renamed or removed from the payload's funnel array must
+  -- never leave a stale row frozen under today's et_day. The real payload's
+  -- stages are hardcoded, so a stage cannot actually vanish from the live
+  -- computation here; instead prove the DELETE directly by inserting a
+  -- synthetic stage that will never appear in a real payload and confirming
+  -- the next scheduled refresh removes it while every real stage stays
+  -- correct. A second synthetic row planted on a different, past et_day
+  -- proves the `where et_day = today` scoping actually works and not just
+  -- that some deletion happens: past days are frozen observations and must
+  -- never be retroactively edited.
+  insert into analytics.funnel_daily (et_day, stage, sort_order, users, computed_at)
+  values (today_et, 'history-proof-ghost-stage', 999, 0, now());
+
+  insert into analytics.funnel_daily (et_day, stage, sort_order, users, computed_at)
+  values (today_et - 1, 'history-proof-ghost-stage', 999, 0, now());
+
+  perform analytics.refresh_dashboard_snapshot();
+
+  select * into strict id2_after
+  from analytics.dashboard_snapshot
+  where id = 2;
+
+  if exists (
+    select 1
+    from analytics.funnel_daily
+    where et_day = today_et
+      and stage = 'history-proof-ghost-stage'
+  ) then
+    raise exception 'stale ghost stage for today survived the scheduled refresh';
+  end if;
+
+  if not exists (
+    select 1
+    from analytics.funnel_daily
+    where et_day = today_et - 1
+      and stage = 'history-proof-ghost-stage'
+  ) then
+    raise exception 'refresh deleted a past-day row; the today-only scoping is broken';
+  end if;
+
+  select jsonb_agg(to_jsonb(d) order by d.sort_order) into funnel_recorded
+  from (
+    select stage, sort_order, users
+    from analytics.funnel_daily
+    where et_day = today_et
+  ) as d;
+
+  select jsonb_agg(
+           jsonb_build_object(
+             'stage', f.value ->> 'stage',
+             'sort_order', (f.value ->> 'sort_order')::integer,
+             'users', (f.value ->> 'users')::integer
+           )
+           order by (f.value ->> 'sort_order')::integer
+         ) into funnel_expected
+  from jsonb_array_elements(id2_after.payload -> 'funnel') as f(value);
+
+  if funnel_recorded is distinct from funnel_expected then
+    raise exception 'real funnel stages were altered by the stale-stage cleanup delete';
+  end if;
 end;
 $proof$;
 
