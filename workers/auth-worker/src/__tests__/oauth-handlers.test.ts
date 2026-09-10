@@ -1635,6 +1635,14 @@ describe('redirect URI validation', () => {
     expect(isValidRedirectUri('https://localhost:9999/callback')).toBe(false);
   });
 
+  it('rejects hostnames that merely contain "localhost" as a label (exact-match only)', () => {
+    // Now that path is no longer a secondary filter, hostname equality is the
+    // sole gate — pin that it's exact match, not a substring/suffix check.
+    expect(isValidRedirectUri('http://localhost.evil.com:9999/callback')).toBe(false);
+    expect(isValidRedirectUri('http://notlocalhost:9999/callback')).toBe(false);
+    expect(isValidRedirectUri('http://evil.com:9999/callback?host=localhost')).toBe(false);
+  });
+
   it('accepts ChatGPT connector OAuth callback with any app ID', () => {
     expect(isValidRedirectUri('https://chatgpt.com/connector/oauth/pV6dW4LxKl3M')).toBe(true);
     expect(isValidRedirectUri('https://chatgpt.com/connector/oauth/fQYjWb9wMu_y')).toBe(true);
