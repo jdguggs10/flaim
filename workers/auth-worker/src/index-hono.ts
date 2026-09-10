@@ -92,11 +92,6 @@ import { runReconciliation } from './reconciliation';
 import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } from './sleeper-recurring-backfill';
 import { runEspnHistoryBackfill } from './espn-history-backfill';
 import {
-  parseYahooTargetedRecoveryRequest,
-  runYahooTargetedRecovery,
-  type YahooTargetedRecoveryEnv,
-} from './yahoo-targeted-recovery';
-import {
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
@@ -1056,27 +1051,6 @@ api.post('/internal/backfill/sleeper-recurring-ids', async (c) => {
   // A concurrent live run already holds the backfill's single-flight lease
   // (sync-state.ts, FLA-168 audit Fix 5) — 409 rather than racing writes.
   return c.json(summary, summary.outcome === 'blocked' ? 409 : 200);
-});
-
-// Temporary exact-cohort Yahoo repair (FLA-355). The request's complete
-// 59-account manifest must match the aggregate hash committed in public code;
-// one member is processed per service-authenticated request until expiry.
-api.post('/internal/backfill/yahoo-recovery', async (c) => {
-  const internalError = await requireInternalService(c.req.raw, c.env);
-  if (internalError) {
-    return c.json({ error: internalError.error }, internalError.status);
-  }
-
-  const validation = await parseYahooTargetedRecoveryRequest(c.req.raw);
-  if ('error' in validation) {
-    return c.json(validation.error.body, validation.error.status);
-  }
-
-  const summary = await runYahooTargetedRecovery(
-    c.env as YahooTargetedRecoveryEnv,
-    validation.request
-  );
-  return c.json(summary, summary.outcome === 'expired' ? 410 : summary.outcome === 'failed' ? 500 : 200);
 });
 
 // Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).

@@ -605,19 +605,26 @@ export class YahooStorage {
       }
 
       if (!isMissingRecurringLeagueIdColumnError(result.error)) {
-        console.error('[yahoo-storage] Failed to upsert Yahoo league:', result.error);
+        // Logs the error code only (a closed Postgres/PostgREST set), never the raw
+        // driver error object — its `message`/`details` can name the conflicting
+        // league_key on a unique-violation (FLA-363).
+        console.error(
+          `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${result.error.code ?? 'unknown'}`
+        );
         throw new Error('Failed to upsert Yahoo league');
       }
 
       console.warn(
-        `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(params.clerkUserId)} league ${params.leagueKey}; retrying without it (code=${result.error.code ?? 'unknown'})`
+        `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(params.clerkUserId)}; retrying without it (code=${result.error.code ?? 'unknown'})`
       );
       this.recurringLeagueIdColumnStatus = 'missing';
     }
 
     const legacy = await this.upsertYahooLeagueRow(basePayload);
     if (legacy.error) {
-      console.error('[yahoo-storage] Failed to upsert Yahoo league:', legacy.error);
+      console.error(
+        `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${legacy.error.code ?? 'unknown'}`
+      );
       throw new Error('Failed to upsert Yahoo league');
     }
     return legacy.id;

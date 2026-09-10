@@ -10,6 +10,14 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Fixed**: `retention_weekly`'s week series now starts at the week containing that same authoritative tracking-start day. It previously started at the week of the earliest ET-day row, so a first calendar week of tracking with zero calls on every day in it was dropped from the response entirely rather than returned as a zero-querier week flagged partial — the same root cause, losing a row instead of mis-flagging one.
 - **Added**: The analytics history proof gains a fixture where tracking starts mid-week and the whole first calendar week is empty, asserting that week is the earliest one emitted, that it is flagged partial, and that the first week actually holding rows is not. Both fixes are currently inert: the authoritative start day and the earliest row's day resolve to the same date in production, so no emitted row or flag changes. Payload shape, keys, windows, and sources are unchanged.
 
+### Temporary Yahoo Recovery Route Removal (FLA-355)
+
+- **Removed**: The temporary `POST /internal/backfill/yahoo-recovery` route and its `yahoo-targeted-recovery.ts` module. It repaired an exact 59-account cohort left with zero synced leagues by an earlier Yahoo discovery bug and self-expired on 2026-09-09T12:00 UTC (every call had been returning 410 since); this removes the now-dead code rather than leaving it live. No behavior change — the route was already inert.
+
+### Yahoo Shared Logging Redaction (FLA-363)
+
+- **Fixed**: Three log lines shared by every normal Yahoo refresh/discovery request, and by the FLA-360 support tool's `diagnose`/`refresh` actions, no longer carry free-form upstream text or a raw driver error object. Found during the FLA-360 cross-model audit. Token-refresh failures log the existing closed-set `diagnosticClass` instead of Yahoo's raw `error_description`; a discovery `access_denied` 403 logs only the boolean app-level-denial classification instead of up to 500 raw characters of Yahoo's response body; a league-upsert failure logs the Postgres/PostgREST error `code` only, never the raw driver error object (whose `message`/`details` can name the conflicting `league_key` on a unique-violation). No response or behavior change — log content only.
+
 ### ESPN Connection Timestamps (FLA-359)
 
 - **Added**: `public.espn_credentials` gains `created_at timestamptz not null default now()`, the creation timestamp `yahoo_credentials` and `sleeper_connections` already had. ESPN previously recorded only `updated_at`, which every credential re-sync moves, so nothing said when an ESPN connection was first established.
