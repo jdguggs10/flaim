@@ -1612,13 +1612,27 @@ describe('redirect URI validation', () => {
     expect(isValidRedirectUri('https://claude.ai/api/mcp/auth_callback')).toBe(true);
   });
 
-  it('accepts loopback with valid callback path', () => {
+  it('accepts loopback with any callback path (RFC 8252)', () => {
     expect(isValidRedirectUri('http://localhost:9999/callback')).toBe(true);
     expect(isValidRedirectUri('http://127.0.0.1:9999/oauth/callback')).toBe(true);
+    // Arbitrary vendor-chosen paths — the port is dynamic and so is the path;
+    // the loopback host is the actual boundary, not a fixed path allowlist.
+    expect(isValidRedirectUri('http://localhost:9999/anything/goes')).toBe(true);
+    expect(isValidRedirectUri('http://127.0.0.1:32809/mcp/oauth/callback')).toBe(true);
   });
 
-  it('rejects loopback with arbitrary path', () => {
-    expect(isValidRedirectUri('http://localhost:9999/evil')).toBe(false);
+  it('accepts IPv6 loopback', () => {
+    expect(isValidRedirectUri('http://[::1]:9999/callback')).toBe(true);
+  });
+
+  it('rejects loopback redirect with query string or fragment', () => {
+    expect(isValidRedirectUri('http://localhost:9999/callback?evil=true')).toBe(false);
+    expect(isValidRedirectUri('http://localhost:9999/callback#frag')).toBe(false);
+  });
+
+  it('rejects non-loopback host and non-http scheme for loopback-shaped paths', () => {
+    expect(isValidRedirectUri('http://evil.com/callback')).toBe(false);
+    expect(isValidRedirectUri('https://localhost:9999/callback')).toBe(false);
   });
 
   it('accepts ChatGPT connector OAuth callback with any app ID', () => {

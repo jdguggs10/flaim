@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Loopback OAuth Redirect Path Acceptance (FLA-369)
+
+- **Fixed**: MCP OAuth loopback redirect URIs (`http://127.0.0.1:<port>/...`, `http://localhost:<port>/...`) are now accepted with any callback path, not just a hardcoded allowlist (`/callback`, `/oauth/callback`, `/oauth2callback`, `/windsurf-auth-callback`, `/`). Msty Studio (and any future desktop MCP client) was rejected with `invalid_redirect_uri` at DCR because its path wasn't on that list, even though its loopback host and dynamic port were already accepted per RFC 8252. The path allowlist didn't add real security — DCR already lets any client self-register any `redirect_uri`; the actual boundary is loopback-only reachability plus PKCE — so this closes the whole bug class instead of adding one more path.
+- **Added**: IPv6 loopback (`http://[::1]:<port>/...`) is now also accepted alongside `127.0.0.1` and `localhost`.
+
 ### Retention Weekly Tracking Start (FLA-361)
 
 - **Fixed**: `retention_weekly.week_partial_start` in the analytics dashboard payload now compares against the authoritative day tracking began, not a minimum over the ET-day rows that happen to exist. A covered day with zero calls at the very start of tracking is invisible to a row-presence minimum, so a fully covered first week could be reported as partial. This is the same fix, for the same reason, that FLA-357 applied to `mau_30d_partial` — the one other place the payload discloses left-truncation.
