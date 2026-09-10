@@ -41,7 +41,13 @@ export function createGetTransactionsHandler(): HandlerFn {
       const now = Date.now();
       const cutoff = now - (14 * 24 * 60 * 60 * 1000);
       const parsed = normalizeYahooTransactions(raw);
-      const invalidTimestampCount = parsed.filter((txn) => !Number.isFinite(txn.timestamp) || txn.timestamp <= 0).length;
+      const hasInvalidTimestamp = (txn: (typeof parsed)[number]) => !Number.isFinite(txn.timestamp) || txn.timestamp <= 0;
+      // Yahoo only stamps a transaction once it resolves, so a still-pending
+      // trade or waiver claim legitimately has no timestamp yet. The cutoff
+      // filter below never applies to the pending path anyway, so there's no
+      // reason to drop those rows -- doing so was hiding pending trades from
+      // callers entirely instead of just leaving their timestamp/date unset.
+      const invalidTimestampCount = isPending ? 0 : parsed.filter(hasInvalidTimestamp).length;
       if (invalidTimestampCount > 0) {
         console.warn(
           `[yahoo-client] ${cid} get_transactions excluded ${invalidTimestampCount} rows with missing/invalid timestamp`,
@@ -49,10 +55,14 @@ export function createGetTransactionsHandler(): HandlerFn {
       }
 
       const filtered = parsed
-        .filter((txn) => Number.isFinite(txn.timestamp) && txn.timestamp > 0)
+        .filter((txn) => isPending || !hasInvalidTimestamp(txn))
         .filter((txn) => isPending || txn.timestamp >= cutoff)
         .filter((txn) => !type || txn.type === type);
-      const normalized = filtered.slice(0, maxCount);
+      const normalized = filtered.slice(0, maxCount).map((txn) => {
+        if (!hasInvalidTimestamp(txn)) return txn;
+        const { timestamp, date, ...rest } = txn;
+        return rest;
+      });
 
       // Yahoo's fetch is count-bound: buildYahooTransactionsPath/buildYahooPendingTransactionsPath
       // bake a clamped count into the request URL, so we can never fetch more
