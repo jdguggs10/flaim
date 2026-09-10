@@ -114,6 +114,48 @@ describe('yahoo football get_transactions handler', () => {
     expect(buildPathMock).not.toHaveBeenCalled();
   });
 
+  it.each(['pending_trade', 'waiver'] as const)(
+    'type=%s keeps a transaction Yahoo has not stamped with a timestamp yet',
+    async (pendingType) => {
+      // Regression guard: Yahoo only stamps a transaction once it resolves, so
+      // a genuinely pending trade/waiver has no timestamp. The cutoff filter
+      // never applies to the pending path, so such rows must surface (without
+      // a misleading timestamp/date) instead of being silently dropped.
+      getCredsMock.mockResolvedValue({ accessToken: 'token' });
+      resolveTeamKeyMock.mockResolvedValue('449.l.123.t.3');
+      buildPendingPathMock.mockReturnValue(`/league/449.l.123/transactions;types=${pendingType};team_key=449.l.123.t.3;count=25`);
+      fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
+      normalizeMock.mockReturnValue([
+        { transaction_id: 'pending-1', type: pendingType, status: 'pending', timestamp: 0, week: null },
+      ] as never);
+
+      const params: ToolParams = {
+        sport: 'football',
+        league_id: '449.l.123',
+        season_year: 2025,
+        type: pendingType,
+      };
+
+      const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-pending');
+
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      const data = result.data as {
+        count: number;
+        warning?: string;
+        dropped_invalid_timestamp_count?: number;
+        transactions: Array<Record<string, unknown>>;
+      };
+      expect(data.dropped_invalid_timestamp_count).toBe(0);
+      expect(data.warning).toBeUndefined();
+      expect(data.count).toBe(1);
+      expect(data.transactions[0]?.transaction_id).toBe('pending-1');
+      expect(data.transactions[0]?.status).toBe('pending');
+      expect('timestamp' in data.transactions[0]).toBe(false);
+      expect('date' in data.transactions[0]).toBe(false);
+    },
+  );
+
   it('type=waiver returns TEAM_KEY_MISSING when team key not found', async () => {
     getCredsMock.mockResolvedValue({ accessToken: 'token' });
     resolveTeamKeyMock.mockResolvedValue(null);
