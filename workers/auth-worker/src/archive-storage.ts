@@ -190,7 +190,13 @@ export class ArchiveStorage {
       );
       return true;
     } catch (error) {
-      console.error('[archive-storage] Failed to archive league:', error);
+      // Name only. postgrest-js never throws for network/HTTP/parse failures — it
+      // resolves them into the `error` object handled above — so nothing that
+      // reaches this catch-all carries row data; it is a defensive guard for a
+      // generic JS throw. Narrowed to the name anyway, matching FLA-368 (FLA-370).
+      console.error(
+        `[archive-storage] archiveLeague threw for user ${maskUserId(clerkUserId)}: ${error instanceof Error ? error.name : 'unknown'}`
+      );
       return false;
     }
   }
@@ -234,7 +240,10 @@ export class ArchiveStorage {
       );
       return true;
     } catch (error) {
-      console.error('[archive-storage] Failed to unarchive league:', error);
+      // Defensive-only, same reasoning as archiveLeague's catch-all (FLA-370).
+      console.error(
+        `[archive-storage] unarchiveLeague threw for user ${maskUserId(clerkUserId)}: ${error instanceof Error ? error.name : 'unknown'}`
+      );
       return false;
     }
   }
@@ -276,7 +285,12 @@ export class ArchiveStorage {
         mode: normalizeArchiveMode(row.mode),
       }));
     } catch (error) {
-      console.error('[archive-storage] Failed to list archived leagues:', error);
+      // The most reachable of the three catch-alls: the row `.map()` below runs
+      // inside the try, so a non-array `data` throws a TypeError here. Still a
+      // generic JS error, never a driver object — name only (FLA-370).
+      console.error(
+        `[archive-storage] listArchived threw for user ${maskUserId(clerkUserId)}: ${error instanceof Error ? error.name : 'unknown'}`
+      );
       return [];
     }
   }

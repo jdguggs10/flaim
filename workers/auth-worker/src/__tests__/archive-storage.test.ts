@@ -130,6 +130,29 @@ describe('ArchiveStorage', () => {
       expect(logged).not.toContain('league-name-sentinel');
       expect(logged).not.toContain('duplicate key');
     });
+
+    it('logs the thrown error name only when the client itself throws (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockFrom.mockImplementation(() => {
+        throw new TypeError('client blew up on recurring-sentinel-8c2d');
+      });
+
+      const ok = await storage.archiveLeague(
+        'user_leak_sentinel',
+        'espn',
+        'football',
+        'recurring-sentinel-8c2d',
+        'league-name-sentinel-Private Dynasty'
+      );
+
+      expect(ok).toBe(false);
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('TypeError');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('recurring-sentinel-8c2d');
+      expect(logged).not.toContain('league-name-sentinel');
+    });
   });
 
   describe('unarchiveLeague', () => {
@@ -189,6 +212,27 @@ describe('ArchiveStorage', () => {
       expect(logged).not.toContain('user_leak_sentinel');
       expect(logged).not.toContain('recurring-sentinel-8c2d');
       expect(logged).not.toContain('failed to parse filter');
+    });
+
+    it('logs the thrown error name only when the client itself throws (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockFrom.mockImplementation(() => {
+        throw new TypeError('client blew up on recurring-sentinel-8c2d');
+      });
+
+      const ok = await storage.unarchiveLeague(
+        'user_leak_sentinel',
+        'espn',
+        'football',
+        'recurring-sentinel-8c2d'
+      );
+
+      expect(ok).toBe(false);
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('TypeError');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('recurring-sentinel-8c2d');
     });
   });
 
@@ -441,6 +485,23 @@ describe('ArchiveStorage', () => {
       expect(logged).not.toContain('recurring-sentinel-8c2d');
       expect(logged).not.toContain('league-name-sentinel');
       expect(logged).not.toContain('failed to parse filter');
+    });
+
+    it('logs the thrown error name only when the row mapping throws (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      // The realistic reach for this catch-all: a truthy non-array `data` makes the
+      // `.map()` inside the try throw a TypeError.
+      const eqUser = vi.fn().mockResolvedValue({ data: { not: 'an array' }, error: null });
+      const select = vi.fn().mockReturnValue({ eq: eqUser });
+      mockFrom.mockReturnValue({ select });
+
+      const result = await storage.listArchived('user_leak_sentinel');
+
+      expect(result).toEqual([]);
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('TypeError');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
     });
   });
 });
