@@ -9,6 +9,21 @@ vi.mock('@supabase/supabase-js', () => ({
   }),
 }));
 
+/**
+ * Flatten everything handed to a console spy into one searchable string.
+ *
+ * JSON.stringify (not String()) so a hybrid regression that logs the safe
+ * substitute but also appends the raw error object as a second console.error
+ * argument still surfaces that object's fields here, instead of collapsing to
+ * the useless "[object Object]" (FLA-368 audit finding).
+ */
+function loggedFrom(spy: { mock: { calls: unknown[][] } }): string {
+  return spy.mock.calls
+    .flat()
+    .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+    .join(' ');
+}
+
 describe('ArchiveStorage', () => {
   let storage: ArchiveStorage;
 
@@ -81,6 +96,40 @@ describe('ArchiveStorage', () => {
 
       expect(ok).toBe(false);
     });
+
+    it('logs the error code only, never the raw driver error naming the league (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      // A 23505 on this table's unique constraint quotes the whole archive key,
+      // and a 23514 check violation's DETAIL is "Failing row contains (...)" —
+      // which includes league_name.
+      const mockUpsert = vi.fn().mockResolvedValue({
+        error: {
+          code: '23505',
+          message: 'duplicate key value violates unique constraint "archived_leagues_unique"',
+          details:
+            'Key (clerk_user_id, platform, sport, recurring_league_id)=(user_leak_sentinel, espn, football, recurring-sentinel-8c2d) already exists.',
+          hint: 'Failing row contains (..., league-name-sentinel-Private Dynasty, ...)',
+        },
+      });
+      mockFrom.mockReturnValue({ upsert: mockUpsert });
+
+      const ok = await storage.archiveLeague(
+        'user_leak_sentinel',
+        'espn',
+        'football',
+        'recurring-sentinel-8c2d',
+        'league-name-sentinel-Private Dynasty'
+      );
+
+      expect(ok).toBe(false);
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('code=23505');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('recurring-sentinel-8c2d');
+      expect(logged).not.toContain('league-name-sentinel');
+      expect(logged).not.toContain('duplicate key');
+    });
   });
 
   describe('unarchiveLeague', () => {
@@ -102,6 +151,44 @@ describe('ArchiveStorage', () => {
       expect(mockFrom).toHaveBeenCalledWith('archived_leagues');
       expect(mockDelete).toHaveBeenCalled();
       expect(calls).toBe(4);
+    });
+
+    it('logs the error code only, never the raw driver error echoing the filter (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      // postgrest-js appends `eq.${value}` verbatim, so a value carrying PostgREST
+      // grammar characters produces a PGRST100 whose message echoes the filter.
+      const eq = vi.fn();
+      let calls = 0;
+      eq.mockImplementation(() => {
+        calls += 1;
+        if (calls >= 4) {
+          return Promise.resolve({
+            error: {
+              code: 'PGRST100',
+              message: 'unexpected "(" expecting operator (eq, gt, ...)',
+              details: 'failed to parse filter (eq.recurring-sentinel-8c2d)',
+              hint: null,
+            },
+          });
+        }
+        return { eq };
+      });
+      mockFrom.mockReturnValue({ delete: vi.fn().mockReturnValue({ eq }) });
+
+      const ok = await storage.unarchiveLeague(
+        'user_leak_sentinel',
+        'espn',
+        'football',
+        'recurring-sentinel-8c2d'
+      );
+
+      expect(ok).toBe(false);
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('code=PGRST100');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('recurring-sentinel-8c2d');
+      expect(logged).not.toContain('failed to parse filter');
     });
   });
 
@@ -209,6 +296,70 @@ describe('ArchiveStorage', () => {
       expect(map.get(archivedKey('basketball', 'b'))).toBe('hidden');
       expect(map.size).toBe(2);
     });
+
+    it('logs the code only and throws a static message, never the raw Postgres message (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      // A malformed 200 body makes postgrest-js resolve a JSON.parse SyntaxError
+      // whose message quotes a prefix of that body — this table's own rows.
+      const eqPlatform = vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: '',
+          message:
+            'SyntaxError: Unexpected token < in JSON at position 0 — [{"league_name":"league-name-sentinel-Private Dynasty"',
+          details: 'at eq.user_leak_sentinel',
+          hint: null,
+        },
+      });
+      const eqUser = vi.fn().mockReturnValue({ eq: eqPlatform });
+      const select = vi.fn().mockReturnValue({ eq: eqUser });
+      mockFrom.mockReturnValue({ select });
+
+      // The thrown message is now static: no raw `.message` suffix at all.
+      await expect(storage.getArchivedMap('user_leak_sentinel', 'espn')).rejects.toThrow(
+        /^Failed to get archived map$/
+      );
+
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('code=unknown');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('league-name-sentinel');
+      expect(logged).not.toContain('SyntaxError');
+    });
+
+    it('redacts the legacy mode-less fallback failure the same way (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const eqPlatformWithMode = vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: '42703', message: 'column archived_leagues.mode does not exist' },
+      });
+      const eqPlatformLegacy = vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: 'PGRST100',
+          message: 'failed to parse filter (eq.user_leak_sentinel)',
+          details: 'row league-name-sentinel-Private Dynasty is invalid',
+          hint: null,
+        },
+      });
+      const select = vi.fn().mockImplementation((columns: string) => {
+        const eqPlatform = columns.includes('mode') ? eqPlatformWithMode : eqPlatformLegacy;
+        return { eq: vi.fn().mockReturnValue({ eq: eqPlatform }) };
+      });
+      mockFrom.mockReturnValue({ select });
+
+      await expect(storage.getArchivedMap('user_leak_sentinel', 'espn')).rejects.toThrow(
+        /^Failed to get archived map$/
+      );
+
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('code=PGRST100');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('league-name-sentinel');
+      expect(logged).not.toContain('failed to parse filter');
+    });
   });
 
   describe('listArchived', () => {
@@ -263,6 +414,33 @@ describe('ArchiveStorage', () => {
       const result = await storage.listArchived('user_123');
 
       expect(result[0].mode).toBe('historical');
+    });
+
+    it('logs the error code only, never the raw driver error (FLA-370)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const eqUser = vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: 'PGRST100',
+          message: 'failed to parse filter (eq.user_leak_sentinel)',
+          details:
+            'partial body: [{"recurring_league_id":"recurring-sentinel-8c2d","league_name":"league-name-sentinel-Private Dynasty"',
+          hint: null,
+        },
+      });
+      const select = vi.fn().mockReturnValue({ eq: eqUser });
+      mockFrom.mockReturnValue({ select });
+
+      const result = await storage.listArchived('user_leak_sentinel');
+
+      expect(result).toEqual([]);
+      const logged = loggedFrom(errorSpy);
+      expect(logged).toContain('code=PGRST100');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('recurring-sentinel-8c2d');
+      expect(logged).not.toContain('league-name-sentinel');
+      expect(logged).not.toContain('failed to parse filter');
     });
   });
 });
