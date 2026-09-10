@@ -3157,7 +3157,7 @@ export function parseYahooLeaguesResponse(data: unknown, stats?: YahooParseStats
 // =============================================================================
 
 export interface YahooDiagnosticCall {
-  label: 'full_games' | 'football_current_season';
+  label: 'full_games' | 'football_current_season' | 'league_teams';
   url: string;
   httpStatus: number | null;
   ok: boolean;
@@ -3171,17 +3171,51 @@ export interface YahooDiagnosticCall {
   durationMs: number;
 }
 
+/**
+ * The one stage `diagnoseYahooDiscovery` and `probeYahooLeague` must report
+ * identically: renewal was refused, so no Yahoo resource call was made. Named
+ * separately so both stop-here shapes come from one place (see
+ * `toCredentialRefreshFailure`) rather than from two copies of the same
+ * field-by-field mapping.
+ */
+export type YahooCredentialRefreshFailure = {
+  stage: 'credential_refresh_failed';
+  errorCode: string;
+  upstreamStatus?: number;
+  retryable?: boolean;
+  retryAfterSeconds?: number;
+  appFingerprintMismatch: boolean;
+};
+
 export type YahooSupportDiagnosis =
   | { stage: 'not_connected' }
-  | {
-      stage: 'credential_refresh_failed';
-      errorCode: string;
-      upstreamStatus?: number;
-      retryable?: boolean;
-      retryAfterSeconds?: number;
-      appFingerprintMismatch: boolean;
-    }
+  | YahooCredentialRefreshFailure
   | { stage: 'completed'; calls: YahooDiagnosticCall[]; requestCount: number };
+
+/**
+ * Project a failed token acquisition into the reportable stop-here shape.
+ *
+ * Extracted from `diagnoseYahooDiscovery` when `probeYahooLeague` was added:
+ * both stop at exactly the same point for exactly the same reasons, and the
+ * operator-facing interpretation of a renewal failure keys off these fields, so
+ * the two must never be able to drift.
+ */
+function toCredentialRefreshFailure(
+  tokenResult: Extract<GetTokenResult, { error: string }>
+): YahooCredentialRefreshFailure {
+  return {
+    stage: 'credential_refresh_failed',
+    errorCode: tokenResult.error,
+    ...(typeof tokenResult.upstreamStatus === 'number'
+      ? { upstreamStatus: tokenResult.upstreamStatus }
+      : {}),
+    ...(typeof tokenResult.retryable === 'boolean' ? { retryable: tokenResult.retryable } : {}),
+    ...(Number.isFinite(Number(tokenResult.retryAfter))
+      ? { retryAfterSeconds: Number(tokenResult.retryAfter) }
+      : {}),
+    appFingerprintMismatch: tokenResult.error === YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH,
+  };
+}
 
 const YAHOO_DIAGNOSTIC_TIMEOUT_MS = 10000;
 
@@ -3207,16 +3241,60 @@ function looksLikeYahooErrorJson(parsed: unknown): boolean {
   return 'error' in record || 'description' in record;
 }
 
+/** Hard cap on the one free-text provider string this module will ever project. */
+export const MAX_YAHOO_ERROR_DESCRIPTION_CHARS = 200;
+
+/**
+ * Yahoo's own explanation of a rejected request, if it gave one.
+ *
+ * Yahoo's error JSON is not one shape: some endpoints answer
+ * `{ error: { description } }`, others a bare `{ description }`, and a few a
+ * bare `{ error: "..." }`. All three are read here, in that order of
+ * preference, and the result is capped — this is the only free text anything in
+ * the support surface projects out of a provider body.
+ */
+function readYahooErrorDescription(parsed: unknown): string | null {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+  const record = parsed as Record<string, unknown>;
+
+  const error = record.error;
+  if (typeof error === 'object' && error !== null && !Array.isArray(error)) {
+    const description = (error as Record<string, unknown>).description;
+    if (typeof description === 'string' && description.trim().length > 0) {
+      return description.trim().slice(0, MAX_YAHOO_ERROR_DESCRIPTION_CHARS);
+    }
+  }
+
+  if (typeof record.description === 'string' && record.description.trim().length > 0) {
+    return record.description.trim().slice(0, MAX_YAHOO_ERROR_DESCRIPTION_CHARS);
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error.trim().slice(0, MAX_YAHOO_ERROR_DESCRIPTION_CHARS);
+  }
+
+  return null;
+}
+
 /**
  * One bounded Yahoo GET, recorded as a diagnostic observation.
  *
  * Never throws: a transport failure or timeout becomes a call record with a
  * null status, so the caller's request budget and report stay well-defined.
+ *
+ * `onErrorDescription` is an opt-in channel for exactly one caller
+ * (`probeYahooLeague`) and exactly one string: Yahoo's own capped
+ * `error.description`, and only when the body classified as
+ * `yahoo_error_json`. The projection runs *inside* this function, so the raw
+ * body still never leaves this scope — the module comment above stays true.
+ * The two discovery callers pass nothing and are unchanged; do not widen this
+ * into a way to hand a caller the body itself.
  */
 async function runYahooDiagnosticCall(
   label: YahooDiagnosticCall['label'],
   url: string,
-  accessToken: string
+  accessToken: string,
+  onErrorDescription?: (description: string) => void
 ): Promise<YahooDiagnosticCall> {
   const startedAt = Date.now();
   const call: YahooDiagnosticCall = {
@@ -3277,6 +3355,11 @@ async function runYahooDiagnosticCall(
       call.errorSnippetCategory = 'yahoo_error_json';
     } else {
       call.errorSnippetCategory = 'none';
+    }
+
+    if (onErrorDescription && call.errorSnippetCategory === 'yahoo_error_json') {
+      const description = readYahooErrorDescription(parsed);
+      if (description !== null) onErrorDescription(description);
     }
 
     if (call.httpStatus === 200 && call.bodyLooksLikeEnvelope) {
@@ -3347,18 +3430,7 @@ export async function diagnoseYahooDiscovery(
   if ('error' in tokenResult) {
     // Stop here, deliberately: calling a Yahoo resource with a token we could
     // not renew would add a second, misleading failure on top of the real one.
-    return {
-      stage: 'credential_refresh_failed',
-      errorCode: tokenResult.error,
-      ...(typeof tokenResult.upstreamStatus === 'number'
-        ? { upstreamStatus: tokenResult.upstreamStatus }
-        : {}),
-      ...(typeof tokenResult.retryable === 'boolean' ? { retryable: tokenResult.retryable } : {}),
-      ...(Number.isFinite(Number(tokenResult.retryAfter))
-        ? { retryAfterSeconds: Number(tokenResult.retryAfter) }
-        : {}),
-      appFingerprintMismatch: tokenResult.error === YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH,
-    };
+    return toCredentialRefreshFailure(tokenResult);
   }
 
   const calls: YahooDiagnosticCall[] = [];
@@ -3391,4 +3463,117 @@ export async function diagnoseYahooDiscovery(
   }
 
   return { stage: 'completed', calls, requestCount: calls.length };
+}
+
+// =============================================================================
+// SUPPORT LEAGUE PROBE
+//
+// Discovery answers "can we see this account's leagues at all". This answers a
+// different question the discovery diagnostic structurally cannot: does one
+// specific per-league fetch — the shape a get_league_info tool call makes —
+// still 400 for this account, right now.
+// =============================================================================
+
+/**
+ * The charset an operator-supplied league identifier must match before it is
+ * substituted into a Yahoo URL.
+ *
+ * Wide enough for both real forms — a bare numeric id (`153104`) and a full
+ * league key (`461.l.153104`) — and narrow enough that nothing it accepts can
+ * add a path segment, a query parameter, or a new host.
+ *
+ * The lookahead requires at least one alphanumeric character, which is what
+ * actually closes the gap a charset alone does not: `.` and `..` contain no
+ * `/`, so a slash-only path-segment check lets them through, and `fetch`'s
+ * own URL normalization collapses a dot-segment before the request leaves —
+ * `/league/../teams` becomes `/teams`, silently calling a different Yahoo
+ * endpoint than the one this module's contract says is the only one probed.
+ * Every real league identifier (a bare id or a full league key) already
+ * contains a digit, so this excludes nothing legitimate.
+ */
+export const YAHOO_SUPPORT_LEAGUE_ID_PATTERN = /^(?=.*[A-Za-z0-9])[A-Za-z0-9._-]{1,64}$/;
+
+export type YahooSupportLeagueProbe =
+  | { stage: 'not_connected' }
+  | YahooCredentialRefreshFailure
+  | {
+      stage: 'completed';
+      call: YahooDiagnosticCall;
+      /**
+       * Yahoo's own capped `error.description`, present only when Yahoo
+       * answered with an error JSON body. The one free-text provider string
+       * anywhere in the support surface — see `runYahooSupportProbeLeague`.
+       */
+      errorDescription?: string;
+    };
+
+/**
+ * Reproduce one live per-league Yahoo fetch for a single account.
+ *
+ * Mirrors `diagnoseYahooDiscovery` step for step — stored credentials, the
+ * guarded renewal, then bounded observation — with two deliberate differences:
+ * exactly one Yahoo call (so `MAX_YAHOO_DIAGNOSTIC_REQUESTS`, which bounds the
+ * discovery diagnostic's optional fallback, has nothing to bound here), and
+ * `leagueId` substituted into the URL **verbatim**.
+ *
+ * That verbatim substitution is the entire point. The failure this exists to
+ * reproduce is a bare numeric league id reaching `/league/{id}/teams` with no
+ * `game_key` prefix; a probe that helpfully normalised the id would take a
+ * different path from the code under investigation and prove nothing about it.
+ * Do not add prefixing, padding, or any other cleverness here.
+ *
+ * Writes nothing: no league rows, no sync state, no lease settlement. The
+ * ordinary credential-renewal write inside the guarded token path still
+ * happens, exactly as it does for `diagnoseYahooDiscovery`.
+ */
+export async function probeYahooLeague(
+  env: YahooConnectEnv,
+  userId: string,
+  leagueId: string,
+  correlationId?: string
+): Promise<YahooSupportLeagueProbe> {
+  // Defense in depth. The route parser has already applied this same pattern;
+  // this second check exists so no future caller can reach a Yahoo URL built
+  // from an unvalidated string. Unreachable over HTTP, and therefore a throw
+  // rather than a reportable stage: the caller collapses it to `probe_failed`.
+  // The rejected value is never quoted — an operator typo is not worth putting
+  // into a log line.
+  if (!YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test(leagueId)) {
+    throw new Error('probeYahooLeague received a league id that failed the charset check');
+  }
+
+  const storage = YahooStorage.fromEnvironment(env);
+  const credentials = await storage.getYahooCredentials(userId);
+  if (!credentials) return { stage: 'not_connected' };
+
+  const tokenResult = await getValidYahooAccessToken(
+    storage,
+    userId,
+    env,
+    credentials,
+    correlationId,
+    'support'
+  );
+
+  if ('error' in tokenResult) {
+    // Same stop-here rule as discovery: a resource call made with a token we
+    // could not renew reports the wrong failure.
+    return toCredentialRefreshFailure(tokenResult);
+  }
+
+  let errorDescription: string | undefined;
+  const call = await runYahooDiagnosticCall(
+    'league_teams',
+    `${YAHOO_FANTASY_API_URL}/league/${leagueId}/teams?format=json`,
+    tokenResult.accessToken,
+    (description) => {
+      errorDescription = description;
+    }
+  );
+
+  return {
+    stage: 'completed',
+    call,
+    ...(errorDescription !== undefined ? { errorDescription } : {}),
+  };
 }
