@@ -158,7 +158,14 @@ describe('YahooStorage', () => {
         })
       ).rejects.toThrow('Failed to create platform OAuth state');
 
-      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      // JSON.stringify (not String()) so a hybrid regression that logs the safe
+      // substitute but also appends the raw error object as a second console.error
+      // argument still surfaces that object's fields here, instead of collapsing to
+      // the useless "[object Object]" (FLA-368 audit finding).
+      const logged = errorSpy.mock.calls
+        .flat()
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
       expect(logged).toContain('code=23505');
       expect(logged).toContain('user_lea...');
       expect(logged).not.toContain('nonce-sentinel-9f3a');
@@ -356,7 +363,14 @@ describe('YahooStorage', () => {
         })
       ).rejects.toThrow('Failed to save Yahoo credentials');
 
-      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      // JSON.stringify (not String()) so a hybrid regression that logs the safe
+      // substitute but also appends the raw error object as a second console.error
+      // argument still surfaces that object's fields here, instead of collapsing to
+      // the useless "[object Object]" (FLA-368 audit finding).
+      const logged = errorSpy.mock.calls
+        .flat()
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
       expect(logged).toContain('code=23505');
       expect(logged).toContain('user_lea...');
       expect(logged).not.toContain('refresh-token-sentinel-4b1c');
@@ -638,7 +652,14 @@ describe('YahooStorage', () => {
         })
       ).rejects.toThrow('Failed to update Yahoo credentials');
 
-      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      // JSON.stringify (not String()) so a hybrid regression that logs the safe
+      // substitute but also appends the raw error object as a second console.error
+      // argument still surfaces that object's fields here, instead of collapsing to
+      // the useless "[object Object]" (FLA-368 audit finding).
+      const logged = errorSpy.mock.calls
+        .flat()
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
       expect(logged).toContain('code=22001');
       expect(logged).toContain('user_lea...');
       expect(logged).not.toContain('access-token-sentinel-7d2e');
@@ -734,7 +755,14 @@ describe('YahooStorage', () => {
         )
       ).rejects.toThrow('Failed to recover Yahoo credentials');
 
-      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      // JSON.stringify (not String()) so a hybrid regression that logs the safe
+      // substitute but also appends the raw error object as a second console.error
+      // argument still surfaces that object's fields here, instead of collapsing to
+      // the useless "[object Object]" (FLA-368 audit finding).
+      const logged = errorSpy.mock.calls
+        .flat()
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
       expect(logged).toContain('code=22P02');
       expect(logged).toContain('user_lea...');
       expect(logged).not.toContain('refresh-token-sentinel-4b1c');
@@ -851,7 +879,14 @@ describe('YahooStorage', () => {
         )
       ).rejects.toThrow('Failed to acquire Yahoo refresh lease');
 
-      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      // JSON.stringify (not String()) so a hybrid regression that logs the safe
+      // substitute but also appends the raw error object as a second console.error
+      // argument still surfaces that object's fields here, instead of collapsing to
+      // the useless "[object Object]" (FLA-368 audit finding).
+      const logged = errorSpy.mock.calls
+        .flat()
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
       expect(logged).toContain('code=22P02');
       expect(logged).toContain('user_lea...');
       expect(logged).not.toContain('refresh-token-sentinel-4b1c');
