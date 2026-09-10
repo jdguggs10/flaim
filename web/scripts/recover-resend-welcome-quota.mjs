@@ -577,8 +577,10 @@ export function parseLedger(text) {
 export async function acquireRecoveryLock(ledgerPath) {
   const lockPath = `${ledgerPath}.lock`;
   let handle;
+  let created = false;
   try {
     handle = await open(lockPath, "wx", 0o600);
+    created = true;
     await handle.writeFile(`${JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })}\n`);
   } catch (error) {
     await handle?.close().catch(() => {});
@@ -587,6 +589,9 @@ export async function acquireRecoveryLock(ledgerPath) {
         `Recovery lock already exists at ${lockPath}; stop and reconcile the running or interrupted process`,
       );
     }
+    // We created the lock file above but failed before it was safely written
+    // (e.g. disk full) — remove it so this isn't mistaken for a live lock.
+    if (created) await unlink(lockPath).catch(() => {});
     throw error;
   }
 
@@ -682,107 +687,106 @@ async function main() {
 
   const releaseLock = args.apply ? await acquireRecoveryLock(args.ledger) : null;
   try {
-
     const client = new Resend(resendApiKey);
     const manifestValue = JSON.parse(await readFile(args.failureManifest, "utf8"));
     const failureEvents = parseFailureManifest(manifestValue, {
-    afterMs: args.afterMs,
-    beforeMs: args.beforeMs,
-    expectedFailed: args.expectedFailed,
-    expectedFailureReason: args.expectedFailureReason,
-  });
-  let ledger = new Map();
-  const recoveryAttemptRecipientHashes = new Set();
-  if (args.apply) {
-    const ledgerText = await readFile(args.ledger, "utf8").catch((error) => {
-      if (error?.code === "ENOENT") return "";
-      throw error;
+      afterMs: args.afterMs,
+      beforeMs: args.beforeMs,
+      expectedFailed: args.expectedFailed,
+      expectedFailureReason: args.expectedFailureReason,
     });
-    ledger = parseLedger(ledgerText);
-    for (const [hash, entry] of ledger) {
-      if (entry.cohortHash !== args.expectedCohortHash) {
-        throw new Error("Recovery ledger contains an entry from a different cohort");
-      }
-      if (entry.status === "accepted" || entry.status === "attempting") {
-        recoveryAttemptRecipientHashes.add(hash);
+    let ledger = new Map();
+    const recoveryAttemptRecipientHashes = new Set();
+    if (args.apply) {
+      const ledgerText = await readFile(args.ledger, "utf8").catch((error) => {
+        if (error?.code === "ENOENT") return "";
+        throw error;
+      });
+      ledger = parseLedger(ledgerText);
+      for (const [hash, entry] of ledger) {
+        if (entry.cohortHash !== args.expectedCohortHash) {
+          throw new Error("Recovery ledger contains an entry from a different cohort");
+        }
+        if (entry.status === "accepted" || entry.status === "attempting") {
+          recoveryAttemptRecipientHashes.add(hash);
+        }
       }
     }
-  }
-  // Keep Resend pagination streams sequential so the account-wide request rate stays bounded.
-  const emails = await listEmailsThroughIncident({
-    afterMs: args.afterMs,
-    client,
-    delayMs: args.delayMs,
-    limit: args.pageLimit,
-  });
-  const contacts = await listAllContacts({ client, delayMs: args.delayMs, limit: args.pageLimit });
-  const suppressions = await listAllSuppressions({
-    client,
-    delayMs: args.delayMs,
-    limit: args.pageLimit,
-  });
-  const clerkUsers = await listAllClerkUsers({ clerkSecretKey, delayMs: args.delayMs });
-  const plan = deriveRecoveryPlan({
-    afterMs: args.afterMs,
-    beforeMs: args.beforeMs,
-    clerkUsers,
-    contacts,
-    emails,
-    failureEvents,
-    recoveryAttemptRecipientHashes,
-    suppressions,
-  });
-  const report = formatReport({ plan, scannedEmails: emails.length });
-  console.log(JSON.stringify(report, null, 2));
+    // Keep Resend pagination streams sequential so the account-wide request rate stays bounded.
+    const emails = await listEmailsThroughIncident({
+      afterMs: args.afterMs,
+      client,
+      delayMs: args.delayMs,
+      limit: args.pageLimit,
+    });
+    const contacts = await listAllContacts({ client, delayMs: args.delayMs, limit: args.pageLimit });
+    const suppressions = await listAllSuppressions({
+      client,
+      delayMs: args.delayMs,
+      limit: args.pageLimit,
+    });
+    const clerkUsers = await listAllClerkUsers({ clerkSecretKey, delayMs: args.delayMs });
+    const plan = deriveRecoveryPlan({
+      afterMs: args.afterMs,
+      beforeMs: args.beforeMs,
+      clerkUsers,
+      contacts,
+      emails,
+      failureEvents,
+      recoveryAttemptRecipientHashes,
+      suppressions,
+    });
+    const report = formatReport({ plan, scannedEmails: emails.length });
+    console.log(JSON.stringify(report, null, 2));
 
-  if (!args.apply) {
-    console.log("dry-run complete; no recovery events sent");
-    return;
-  }
-  if (plan.cohortHash !== args.expectedCohortHash) {
-    throw new Error(
-      `Cohort hash changed: expected ${args.expectedCohortHash}, found ${plan.cohortHash}; run a fresh dry run`,
+    if (!args.apply) {
+      console.log("dry-run complete; no recovery events sent");
+      return;
+    }
+    if (plan.cohortHash !== args.expectedCohortHash) {
+      throw new Error(
+        `Cohort hash changed: expected ${args.expectedCohortHash}, found ${plan.cohortHash}; run a fresh dry run`,
+      );
+    }
+    if (plan.eligible.length === 0) throw new Error("No eligible recovery recipients");
+
+    const unresolved = plan.eligible.filter(
+      (entry) => ledger.get(entry.recipientHash)?.status === "attempting",
     );
-  }
-  if (plan.eligible.length === 0) throw new Error("No eligible recovery recipients");
-
-  const unresolved = plan.eligible.filter(
-    (entry) => ledger.get(entry.recipientHash)?.status === "attempting",
-  );
-  if (unresolved.length > 0) {
-    throw new Error(
-      "Recovery ledger contains an ambiguous attempting entry; reconcile it before resuming",
+    if (unresolved.length > 0) {
+      throw new Error(
+        "Recovery ledger contains an ambiguous attempting entry; reconcile it before resuming",
+      );
+    }
+    const accepted = new Set(
+      plan.eligible
+        .filter((entry) => ledger.get(entry.recipientHash)?.status === "accepted")
+        .map((entry) => entry.recipientHash),
     );
-  }
-  const accepted = new Set(
-    plan.eligible
-      .filter((entry) => ledger.get(entry.recipientHash)?.status === "accepted")
-      .map((entry) => entry.recipientHash),
-  );
-  const canaryHash = plan.eligible[0]?.recipientHash;
-  if (accepted.size > 0 && !args.verifiedCanaryHash) {
-    throw new Error("Verify the accepted canary delivery before resuming this recovery");
-  }
-  if (
-    args.verifiedCanaryHash &&
-    (args.verifiedCanaryHash !== canaryHash || !accepted.has(args.verifiedCanaryHash))
-  ) {
-    throw new Error("The verified canary hash is not the accepted canary for this cohort");
-  }
-  const remaining = plan.eligible.filter((entry) => !accepted.has(entry.recipientHash));
-  if (remaining.length === 0) {
-    throw new Error("All eligible recovery recipients are already accepted in the ledger");
-  }
+    const canaryHash = plan.eligible[0]?.recipientHash;
+    if (accepted.size > 0 && !args.verifiedCanaryHash) {
+      throw new Error("Verify the accepted canary delivery before resuming this recovery");
+    }
+    if (
+      args.verifiedCanaryHash &&
+      (args.verifiedCanaryHash !== canaryHash || !accepted.has(args.verifiedCanaryHash))
+    ) {
+      throw new Error("The verified canary hash is not the accepted canary for this cohort");
+    }
+    const remaining = plan.eligible.filter((entry) => !accepted.has(entry.recipientHash));
+    if (remaining.length === 0) {
+      throw new Error("All eligible recovery recipients are already accepted in the ledger");
+    }
 
-  const results = await sendRecoveryEvents({
-    client,
-    cohort: remaining,
-    cohortHash: plan.cohortHash,
-    delayMs: args.sendDelayMs,
-    ledgerPath: args.ledger,
-    maxSend: args.maxSend,
-    source: "quota-recovery-2026-09-06",
-  });
+    const results = await sendRecoveryEvents({
+      client,
+      cohort: remaining,
+      cohortHash: plan.cohortHash,
+      delayMs: args.sendDelayMs,
+      ledgerPath: args.ledger,
+      maxSend: args.maxSend,
+      source: "quota-recovery-2026-09-06",
+    });
     console.log(JSON.stringify({ recoveryEvents: results }, null, 2));
   } finally {
     await releaseLock?.();
