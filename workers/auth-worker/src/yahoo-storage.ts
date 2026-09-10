@@ -225,7 +225,12 @@ export class YahooStorage {
     });
 
     if (error) {
-      console.error('[yahoo-storage] Failed to create platform OAuth state:', error);
+      // Code only, never the raw driver object — the failing INSERT payload carries
+      // the unmasked clerk_user_id, the state nonce and the redirect origin, and a
+      // Postgres error quotes the offending column value (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to create platform OAuth state for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+      );
       throw new Error('Failed to create platform OAuth state');
     }
 
@@ -294,7 +299,12 @@ export class YahooStorage {
     );
 
     if (error) {
-      console.error('[yahoo-storage] Failed to save Yahoo credentials:', error);
+      // Code only, never the raw driver object — the failing UPSERT payload carries
+      // access_token and refresh_token, and a Postgres error quotes the offending
+      // column value (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to save Yahoo credentials for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+      );
       throw new Error('Failed to save Yahoo credentials');
     }
 
@@ -402,7 +412,11 @@ export class YahooStorage {
     const { data, error } = await query.select('clerk_user_id');
 
     if (error) {
-      console.error('[yahoo-storage] Failed to update Yahoo credentials:', error);
+      // Code only — the UPDATE payload carries access_token and optionally
+      // refresh_token (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to update Yahoo credentials for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+      );
       throw new Error('Failed to update Yahoo credentials');
     }
 
@@ -439,7 +453,11 @@ export class YahooStorage {
     }
 
     if (error) {
-      console.error('[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss:', error);
+      // Code only — the RPC arguments include p_access_token, p_refresh_token and
+      // p_expected_refresh_token, and a data-type error names the argument (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+      );
       throw new Error('Failed to recover Yahoo credentials');
     }
 
@@ -514,7 +532,11 @@ export class YahooStorage {
     }
 
     if (error) {
-      console.error('[yahoo-storage] Failed to acquire Yahoo refresh lease:', error);
+      // Code only — p_expected_refresh_token is a raw refresh token passed as an
+      // RPC argument (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to acquire Yahoo refresh lease for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+      );
       throw new Error('Failed to acquire Yahoo refresh lease');
     }
 

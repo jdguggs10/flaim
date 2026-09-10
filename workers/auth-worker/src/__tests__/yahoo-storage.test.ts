@@ -137,6 +137,35 @@ describe('YahooStorage', () => {
         })
       ).rejects.toThrow('Failed to create platform OAuth state');
     });
+
+    it('logs the error code only, never the raw driver error (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockInsert.mockReturnValue({
+        error: {
+          code: '23505',
+          message:
+            'duplicate key value violates unique constraint "platform_oauth_states_pkey"',
+          details: 'Key (state, clerk_user_id)=(nonce-sentinel-9f3a, user_leak_sentinel) already exists.',
+        },
+      });
+
+      await expect(
+        storage.createPlatformOAuthState({
+          state: 'nonce-sentinel-9f3a',
+          clerkUserId: 'user_leak_sentinel',
+          platform: 'yahoo',
+          redirectAfter: 'https://redirect-sentinel.example/leagues',
+        })
+      ).rejects.toThrow('Failed to create platform OAuth state');
+
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('code=23505');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('nonce-sentinel-9f3a');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('redirect-sentinel.example');
+      expect(logged).not.toContain('duplicate key');
+    });
   });
 
   describe('consumePlatformOAuthState', () => {
@@ -305,6 +334,35 @@ describe('YahooStorage', () => {
           expiresAt: new Date(),
         })
       ).rejects.toThrow('Failed to save Yahoo credentials');
+    });
+
+    it('logs the error code only, never the raw driver error carrying the tokens (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockUpsert.mockReturnValue({
+        error: {
+          code: '23505',
+          message: 'duplicate key value violates unique constraint "yahoo_credentials_pkey"',
+          details:
+            'Key (refresh_token)=(refresh-token-sentinel-4b1c) already exists; access_token was access-token-sentinel-7d2e.',
+        },
+      });
+
+      await expect(
+        storage.saveYahooCredentials({
+          clerkUserId: 'user_leak_sentinel',
+          accessToken: 'access-token-sentinel-7d2e',
+          refreshToken: 'refresh-token-sentinel-4b1c',
+          expiresAt: new Date('2026-01-24T12:00:00Z'),
+        })
+      ).rejects.toThrow('Failed to save Yahoo credentials');
+
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('code=23505');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('refresh-token-sentinel-4b1c');
+      expect(logged).not.toContain('access-token-sentinel-7d2e');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('duplicate key');
     });
   });
 
@@ -560,6 +618,34 @@ describe('YahooStorage', () => {
 
       expect(result).toBe(false);
     });
+
+    it('logs the error code only, never the raw driver error carrying the tokens (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockSelect.mockResolvedValue({
+        data: null,
+        error: {
+          code: '22001',
+          message: 'value too long for type character varying(512)',
+          details: 'Failing column access_token = access-token-sentinel-7d2e.',
+        },
+      });
+
+      await expect(
+        storage.updateYahooCredentials('user_leak_sentinel', {
+          accessToken: 'access-token-sentinel-7d2e',
+          refreshToken: 'refresh-token-sentinel-4b1c',
+          expiresAt: new Date('2026-01-24T14:00:00Z'),
+        })
+      ).rejects.toThrow('Failed to update Yahoo credentials');
+
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('code=22001');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('access-token-sentinel-7d2e');
+      expect(logged).not.toContain('refresh-token-sentinel-4b1c');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('value too long');
+    });
   });
 
   describe('updateYahooCredentialsIfRefreshTokenMatches', () => {
@@ -622,6 +708,39 @@ describe('YahooStorage', () => {
       ).rejects.toThrow('Failed to recover Yahoo credentials');
 
       expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('logs the error code only, never the raw driver error naming the RPC token args (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: {
+          code: '22P02',
+          message: 'invalid input syntax for function recover_yahoo_credentials',
+          details:
+            'p_refresh_token = refresh-token-sentinel-4b1c, p_expected_refresh_token = old-token-sentinel-1a9b.',
+        },
+      });
+
+      await expect(
+        storage.updateYahooCredentialsIfRefreshTokenMatches(
+          'user_leak_sentinel',
+          {
+            accessToken: 'access-token-sentinel-7d2e',
+            refreshToken: 'refresh-token-sentinel-4b1c',
+            expiresAt: new Date('2026-01-24T14:00:00Z'),
+          },
+          'old-token-sentinel-1a9b'
+        )
+      ).rejects.toThrow('Failed to recover Yahoo credentials');
+
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('code=22P02');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('refresh-token-sentinel-4b1c');
+      expect(logged).not.toContain('old-token-sentinel-1a9b');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('invalid input syntax');
     });
   });
 
@@ -710,6 +829,34 @@ describe('YahooStorage', () => {
       ).rejects.toThrow('Failed to acquire Yahoo refresh lease');
 
       expect(mockFrom).not.toHaveBeenCalled();
+    });
+
+    it('logs the error code only, never the raw driver error naming the RPC token arg (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: {
+          code: '22P02',
+          message: 'invalid input syntax for function acquire_yahoo_refresh_lease',
+          details: 'p_expected_refresh_token = refresh-token-sentinel-4b1c.',
+        },
+      });
+
+      await expect(
+        storage.acquireRefreshLease(
+          'user_leak_sentinel',
+          'owner-1',
+          30_000,
+          'refresh-token-sentinel-4b1c'
+        )
+      ).rejects.toThrow('Failed to acquire Yahoo refresh lease');
+
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('code=22P02');
+      expect(logged).toContain('user_lea...');
+      expect(logged).not.toContain('refresh-token-sentinel-4b1c');
+      expect(logged).not.toContain('user_leak_sentinel');
+      expect(logged).not.toContain('invalid input syntax');
     });
   });
 
