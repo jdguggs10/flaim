@@ -256,6 +256,38 @@ describe('Yahoo recurring-id resolution', () => {
       expect(metaFetchCounts.get('423.l.10')).toBe(1);
       expect(metaFetchCounts.get('423.l.20')).toBe(1);
     });
+
+    it('logs a closed reason code and no league_key on the fallback warn (FLA-368)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        // 461.l.777 -(449_777)-> 449.l.777 -(461_777)-> back to 461.l.777 → cycle.
+        // ('no_meta' is defensive-only: parseYahooLeagueMeta never returns null,
+        // so 'cycle' is the reachable branch that exercises the same warn.)
+        mockFetch.mockImplementation(async (input) => {
+          const url = String(input);
+          if (url.includes('/users;use_login=1/games;game_types=full/leagues')) {
+            return jsonResponse(discoveryResponse('461.l.777', '2026', '449_777'));
+          }
+          if (url === `${YAHOO_API}/league/449.l.777?format=json`) {
+            return jsonResponse(leagueMeta('449.l.777', '461_777'));
+          }
+          return new Response(null, { status: 404 });
+        });
+
+        const res = await handleYahooDiscover(env, 'u', corsHeaders);
+        expect(res.status).toBe(200);
+
+        // Behavior is unchanged: still falls back to the season-scoped key.
+        expect(mockStorage.upsertYahooLeague.mock.calls[0][0].recurringLeagueId).toBe('461.l.777');
+
+        const logged = warnSpy.mock.calls.flat().map(String).join(' ');
+        expect(logged).toContain('reason=cycle');
+        expect(logged).not.toContain('461.l.777');
+        expect(logged).not.toContain('449.l.777');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
   });
 
   // ===========================================================================
