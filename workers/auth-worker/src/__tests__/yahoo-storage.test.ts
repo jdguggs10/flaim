@@ -173,6 +173,31 @@ describe('YahooStorage', () => {
       expect(logged).not.toContain('redirect-sentinel.example');
       expect(logged).not.toContain('duplicate key');
     });
+
+    // postgrest-js sets code: '' (empty string, not undefined) for client-side
+    // fetch/parse failures — the single most common failure class. `?? 'unknown'`
+    // let it through silently; a bug found and fixed across all these call sites
+    // during the FLA-370 audit. `''` is falsy, so `|| 'unknown'` catches it.
+    it('falls back to "unknown" when the driver error code is an empty string, not just when it is absent', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockInsert.mockReturnValue({
+        error: { code: '', message: 'fetch failed' },
+      });
+
+      await expect(
+        storage.createPlatformOAuthState({
+          state: 'test',
+          clerkUserId: 'user',
+          platform: 'yahoo',
+        })
+      ).rejects.toThrow('Failed to create platform OAuth state');
+
+      const logged = errorSpy.mock.calls
+        .flat()
+        .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+        .join(' ');
+      expect(logged).toContain('code=unknown');
+    });
   });
 
   describe('consumePlatformOAuthState', () => {

@@ -126,6 +126,12 @@ interface SupabaseErrorLike {
   hint?: string;
 }
 
+// Every `code=${error.code || 'unknown'}` below deliberately uses `||`, not `??`:
+// postgrest-js sets `code: ''` (empty string, not undefined) for client-side
+// fetch/parse failures, the single most common failure class, so `??` let it
+// through and logged a bare "code=" with no signal at all. Confirmed against
+// the installed @supabase/postgrest-js source during the FLA-370 audit.
+
 /**
  * Treat a missing `recurring_league_id` column (pre-migration) or a stale
  * PostgREST schema cache as tolerable: discovery/archive writes fall back to a
@@ -229,7 +235,7 @@ export class YahooStorage {
       // the unmasked clerk_user_id, the state nonce and the redirect origin, and a
       // Postgres error quotes the offending column value (FLA-368).
       console.error(
-        `[yahoo-storage] Failed to create platform OAuth state for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+        `[yahoo-storage] Failed to create platform OAuth state for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
       );
       throw new Error('Failed to create platform OAuth state');
     }
@@ -303,7 +309,7 @@ export class YahooStorage {
       // access_token and refresh_token, and a Postgres error quotes the offending
       // column value (FLA-368).
       console.error(
-        `[yahoo-storage] Failed to save Yahoo credentials for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+        `[yahoo-storage] Failed to save Yahoo credentials for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
       );
       throw new Error('Failed to save Yahoo credentials');
     }
@@ -415,7 +421,7 @@ export class YahooStorage {
       // Code only — the UPDATE payload carries access_token and optionally
       // refresh_token (FLA-368).
       console.error(
-        `[yahoo-storage] Failed to update Yahoo credentials for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+        `[yahoo-storage] Failed to update Yahoo credentials for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
       );
       throw new Error('Failed to update Yahoo credentials');
     }
@@ -456,7 +462,7 @@ export class YahooStorage {
       // Code only — the RPC arguments include p_access_token, p_refresh_token and
       // p_expected_refresh_token, and a data-type error names the argument (FLA-368).
       console.error(
-        `[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+        `[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
       );
       throw new Error('Failed to recover Yahoo credentials');
     }
@@ -535,7 +541,7 @@ export class YahooStorage {
       // Code only — p_expected_refresh_token is a raw refresh token passed as an
       // RPC argument (FLA-368).
       console.error(
-        `[yahoo-storage] Failed to acquire Yahoo refresh lease for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code ?? 'unknown'}`
+        `[yahoo-storage] Failed to acquire Yahoo refresh lease for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
       );
       throw new Error('Failed to acquire Yahoo refresh lease');
     }
@@ -631,13 +637,13 @@ export class YahooStorage {
         // driver error object — its `message`/`details` can name the conflicting
         // league_key on a unique-violation (FLA-363).
         console.error(
-          `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${result.error.code ?? 'unknown'}`
+          `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${result.error.code || 'unknown'}`
         );
         throw new Error('Failed to upsert Yahoo league');
       }
 
       console.warn(
-        `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(params.clerkUserId)}; retrying without it (code=${result.error.code ?? 'unknown'})`
+        `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(params.clerkUserId)}; retrying without it (code=${result.error.code || 'unknown'})`
       );
       this.recurringLeagueIdColumnStatus = 'missing';
     }
@@ -645,7 +651,7 @@ export class YahooStorage {
     const legacy = await this.upsertYahooLeagueRow(basePayload);
     if (legacy.error) {
       console.error(
-        `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${legacy.error.code ?? 'unknown'}`
+        `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${legacy.error.code || 'unknown'}`
       );
       throw new Error('Failed to upsert Yahoo league');
     }
@@ -697,7 +703,7 @@ export class YahooStorage {
     }
 
     console.warn(
-      `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(clerkUserId)}; skipping recurring-root persist (code=${(error as SupabaseErrorLike).code ?? 'unknown'})`
+      `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(clerkUserId)}; skipping recurring-root persist (code=${(error as SupabaseErrorLike).code || 'unknown'})`
     );
     this.recurringLeagueIdColumnStatus = 'missing';
   }
