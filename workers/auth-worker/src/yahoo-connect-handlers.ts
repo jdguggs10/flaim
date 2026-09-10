@@ -2045,7 +2045,11 @@ export async function handleYahooStatus(
       }
     );
   } catch (error) {
-    console.error('[yahoo-connect] Status error:', error);
+    // Name only. An upstream non-static throw can embed a raw Postgres message
+    // (archive-storage.ts, tracked in FLA-370); this narrowing holds regardless (FLA-368).
+    console.error(
+      `[yahoo-connect] Status error: ${error instanceof Error ? error.name : 'unknown'}`
+    );
     return new Response(
       JSON.stringify({
         error: 'server_error',
@@ -2239,9 +2243,17 @@ function parseYahooLeagueMeta(data: unknown, fallbackLeagueKey: string): YahooLe
   }
 }
 
+/**
+ * Closed reason set. The previous free-form strings interpolated the customer's
+ * season-scoped league_key, which reached Cloudflare Logs via the fallback warn
+ * below; an enum makes that impossible and lets tsc prove every return site was
+ * converted (FLA-368).
+ */
+type YahooRecurringFailureReason = 'no_meta' | 'unresolved_chain' | 'cycle' | 'depth_cap';
+
 interface YahooRecurringResolutionResult {
   recurringLeagueId?: string;
-  failureReason?: string;
+  failureReason?: YahooRecurringFailureReason;
 }
 
 /**
@@ -2273,17 +2285,17 @@ async function tryResolveYahooRecurringId(
       for (const pathKey of path) cache.set(pathKey, cached);
       return cached
         ? { recurringLeagueId: cached }
-        : { failureReason: `unresolved recurring chain at ${currentLeagueKey}` };
+        : { failureReason: 'unresolved_chain' };
     }
 
     if (visited.has(currentLeagueKey)) {
       for (const pathKey of path) cache.set(pathKey, null);
-      return { failureReason: `detected recurring league cycle at ${currentLeagueKey}` };
+      return { failureReason: 'cycle' };
     }
 
     if (path.length >= MAX_YAHOO_CHAIN_DEPTH) {
       for (const pathKey of path) cache.set(pathKey, null);
-      return { failureReason: `recurring chain exceeded depth cap at ${currentLeagueKey}` };
+      return { failureReason: 'depth_cap' };
     }
 
     visited.add(currentLeagueKey);
@@ -2299,7 +2311,7 @@ async function tryResolveYahooRecurringId(
         const meta = await getYahooLeagueMeta(currentLeagueKey, accessToken, metaCache);
         if (!meta) {
           for (const pathKey of path) cache.set(pathKey, null);
-          return { failureReason: `Yahoo returned no meta while resolving ${currentLeagueKey}` };
+          return { failureReason: 'no_meta' };
         }
         renew = meta.renew;
       }
@@ -2326,7 +2338,7 @@ async function tryResolveYahooRecurringId(
     }
   }
 
-  return { failureReason: `unresolved recurring chain at ${leagueKey}` };
+  return { failureReason: 'unresolved_chain' };
 }
 
 /**
@@ -2344,8 +2356,10 @@ async function resolveYahooRecurringId(
   const resolution = await tryResolveYahooRecurringId(leagueKey, accessToken, cache, metaCache, seedRenew);
   if (resolution.recurringLeagueId) return resolution.recurringLeagueId;
 
+  // Closed reason set only — the season-scoped league_key is a customer identifier
+  // and both it and the old free-form failureReason text carried it (FLA-368).
   console.warn(
-    `[yahoo-connect] Falling back to season-scoped league_key ${leagueKey} for recurring grouping: ${resolution.failureReason ?? 'unresolved recurring chain'}`
+    `[yahoo-connect] Falling back to season-scoped league_key for recurring grouping: reason=${resolution.failureReason ?? 'unresolved_chain'}`
   );
   return leagueKey;
 }
@@ -2581,9 +2595,10 @@ export async function handleYahooDiscover(
       } catch (error) {
         // resolveYahooRecurringId never throws, but guard discovery regardless:
         // persist without a recurring id rather than failing the whole sync.
+        // Neither the customer league_key nor the raw error object may reach the log
+        // (FLA-368); the error name is the whole operational signal here.
         console.warn(
-          `[yahoo-connect] Recurring-id resolution failed for ${league.leagueKey}; saving without it:`,
-          error
+          `[yahoo-connect] Recurring-id resolution failed for user ${maskUserId(userId)}; saving without it: ${error instanceof Error ? error.name : 'unknown'}`
         );
       }
 
@@ -2620,7 +2635,11 @@ export async function handleYahooDiscover(
       correlation_id: correlationId,
       auth_type: 'clerk',
     });
-    console.error('[yahoo-connect] Discovery error:', error);
+    // Name only. The realistic source here is a JSON.parse SyntaxError, whose
+    // message quotes a prefix of Yahoo's raw response body (FLA-368).
+    console.error(
+      `[yahoo-connect] Discovery error: ${error instanceof Error ? error.name : 'unknown'}`
+    );
     return new Response(
       JSON.stringify({
         error: 'server_error',
@@ -2706,7 +2725,11 @@ export async function fetchYahooLeaguesReadOnly(
     logYahooDiscoveryDropIfAny(userId, reconciliationStats, 'reconciliation');
     return { status: 'ok', leagues };
   } catch (error) {
-    console.error('[yahoo-connect] Read-only discovery error:', error instanceof Error ? error.message : error);
+    // `.message` was precisely the half that quotes Yahoo's raw response body on a
+    // JSON.parse SyntaxError; `.name` is the correct narrowing (FLA-368).
+    console.error(
+      `[yahoo-connect] Read-only discovery error: ${error instanceof Error ? error.name : 'unknown'}`
+    );
     const errorCode = error instanceof Error && error.name === 'TimeoutError' ? 'yahoo_timeout' : 'server_error';
     return { status: 'error', errorCode, retryable: true };
   }
@@ -3133,7 +3156,9 @@ export function parseYahooLeaguesResponse(data: unknown, stats?: YahooParseStats
       // Name only. A parse error's message can quote the payload that caused it.
       stats.thrownErrorName = parseError instanceof Error ? parseError.name : 'unknown';
     }
-    console.error('[yahoo-connect] Error parsing Yahoo response:', parseError);
+    console.error(
+      `[yahoo-connect] Error parsing Yahoo response: ${parseError instanceof Error ? parseError.name : 'unknown'}`
+    );
   }
 
   return leagues;

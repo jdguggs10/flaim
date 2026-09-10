@@ -2579,6 +2579,24 @@ describe('yahoo-connect-handlers', () => {
       expect(body.lastUpdated).toBeUndefined();
       expect(body.health).toBeUndefined();
     });
+
+    it('logs the error name only when the lookup throws, never the raw message (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentialHealth.mockResolvedValue(null);
+      // archive-storage.ts embeds the raw Postgres message in this throw (FLA-370).
+      mockStorage.getYahooLeagues.mockRejectedValue(
+        new Error('Failed to get archived map: row 461.l.777 "Private Dynasty" is invalid')
+      );
+
+      const response = await handleYahooStatus(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(500);
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('[yahoo-connect] Status error: Error');
+      expect(logged).not.toContain('461.l.777');
+      expect(logged).not.toContain('Private Dynasty');
+      expect(logged).not.toContain('Failed to get archived map');
+    });
   });
 
   // ===========================================================================
@@ -3369,9 +3387,61 @@ describe('yahoo-connect-handlers', () => {
         },
       ]);
     });
+
+    it('logs the error name only when the discovery body fails to parse (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      // A 200 whose body is not JSON: apiResponse.json() throws a SyntaxError
+      // whose message quotes a prefix of Yahoo's raw response body.
+      mockFetch.mockResolvedValue(
+        new Response('<html>league 461.l.777 "Private Dynasty"</html>', { status: 200 })
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(500);
+      const logged = errorSpy.mock.calls
+        .map((call) => call.map(String).join(' '))
+        .filter((line) => line.startsWith('[yahoo-connect] Discovery error:'))
+        .join(' ');
+      expect(logged).toBe('[yahoo-connect] Discovery error: SyntaxError');
+      expect(logged).not.toContain('461.l.777');
+      expect(logged).not.toContain('Private Dynasty');
+    });
   });
 
   describe('fetchYahooLeaguesReadOnly', () => {
+    it('logs the error name only when the read-only body fails to parse (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      mockFetch.mockResolvedValue(
+        new Response('<html>league 461.l.777 "Private Dynasty"</html>', { status: 200 })
+      );
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toMatchObject({ status: 'error' });
+      const logged = errorSpy.mock.calls
+        .map((call) => call.map(String).join(' '))
+        .filter((line) => line.startsWith('[yahoo-connect] Read-only discovery error:'))
+        .join(' ');
+      expect(logged).toBe('[yahoo-connect] Read-only discovery error: SyntaxError');
+      expect(logged).not.toContain('461.l.777');
+      expect(logged).not.toContain('Private Dynasty');
+    });
+
     it('uses the same full-game discovery filter and preserves an empty result', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',

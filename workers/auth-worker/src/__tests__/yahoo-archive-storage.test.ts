@@ -365,6 +365,29 @@ describe('YahooStorage archive surface', () => {
         storage.persistYahooRecurringRoot('u', ['449.l.10'], '300.l.10')
       ).resolves.toBeUndefined();
     });
+
+    it('throws a static message, never the raw Postgres error text (FLA-368)', async () => {
+      const inFn = vi.fn().mockResolvedValue({
+        error: {
+          code: '23514',
+          message: 'new row for relation "yahoo_leagues" violates check constraint; league_key was 461.l.777',
+          details: 'Failing row contains (461.l.777, Private Dynasty).',
+        },
+      });
+      const eq = vi.fn().mockReturnValue({ in: inFn });
+      const update = vi.fn().mockReturnValue({ eq });
+      mockFrom.mockReturnValue({ update });
+
+      const err = await storage
+        .persistYahooRecurringRoot('u', ['461.l.777'], '300.l.10')
+        .then(() => null, (e: unknown) => e as Error);
+
+      expect(err).toBeInstanceOf(Error);
+      expect(err?.message).toBe('Failed to persist Yahoo recurring root');
+      expect(err?.message).not.toContain('461.l.777');
+      expect(err?.message).not.toContain('Private Dynasty');
+      expect(err?.message).not.toContain('check constraint');
+    });
   });
 
   // ===========================================================================
