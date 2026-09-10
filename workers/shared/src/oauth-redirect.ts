@@ -22,12 +22,9 @@ const ALLOWED_REDIRECT_URIS = [
   'https://app.lilbird.co/mcp/oauth/callback',
   // User-hosted relay (exact callback only, not other Render services)
   'https://flaim-relay.onrender.com/oauth/callback',
-  // VS Code / GitHub Copilot
-  'http://127.0.0.1:33418',
+  // VS Code web (desktop VS Code's 127.0.0.1:33418 callback is covered by
+  // the general loopback rule below, same as any other loopback client)
   'https://vscode.dev/redirect',
-  // For local development/testing (MCP Inspector, etc.)
-  'http://localhost:3000/oauth/callback',
-  'http://localhost:6274/oauth/callback',
 ];
 
 // Check if a redirect URI is a valid loopback callback (RFC 8252 §7.3).

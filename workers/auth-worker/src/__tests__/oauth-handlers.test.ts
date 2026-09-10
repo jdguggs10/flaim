@@ -1605,7 +1605,7 @@ describe('oauth-handlers', () => {
 describe('redirect URI validation', () => {
   it('rejects allowlisted URI with appended query string (startsWith exploit)', () => {
     // startsWith() currently allows this — exact match shouldn't
-    expect(isValidRedirectUri('http://localhost:3000/oauth/callback?redirect=http://evil.com')).toBe(false);
+    expect(isValidRedirectUri('https://claude.ai/api/mcp/auth_callback?redirect=http://evil.com')).toBe(false);
   });
 
   it('accepts exact allowlist match', () => {
