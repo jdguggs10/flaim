@@ -756,7 +756,7 @@ export async function runYahooSupportDiagnose(
  *
  * The first two categories are shared verbatim with `diagnose` (see
  * `interpretNotConnected` / `interpretCredentialRefreshFailure`); the rest are
- * this probe's own. `RUNBOOK.md`'s probe-league section has one branch each.
+ * this probe's own, one branch each, written below.
  */
 export interface ProbeLeagueInterpretation {
   category:
@@ -771,10 +771,9 @@ export interface ProbeLeagueInterpretation {
    * Yahoo's own explanation, capped, and only on `yahoo_rejected`.
    *
    * The deliberate exception to "this module surfaces categories, never free
-   * text", and the same exception `refresh` already documents around
-   * `provider.error_description` (`RUNBOOK.md` §5): for a malformed league key
-   * the category alone says "Yahoo said no" while this string says *why*, which
-   * is the whole reason an operator runs this command. It is safe to project
+   * text": for a malformed league key the category alone says "Yahoo said no"
+   * while this string says *why*, which is the whole reason an operator runs
+   * this command. It is safe to project
    * here in a way it would not be elsewhere in this module: this action never
    * queries `yahoo_leagues`, so the identifier inside it is the one the
    * operator typed, not one read out of the customer's stored rows. It is still
