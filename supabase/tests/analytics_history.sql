@@ -72,6 +72,10 @@ declare
   v_today_et constant date := (now() at time zone 'America/New_York')::date;
   v_yesterday_et constant date := v_today_et - 1;
   v_start_et constant date := v_today_et - 6;
+  -- FLA-361 retention fixture: a Monday three-plus weeks back (date_trunc
+  -- 'week' is ISO, so Monday), tracking starting on the Wednesday inside it.
+  v_rw_week0 constant date := date_trunc('week', v_today_et - 21)::date;
+  v_rw_start constant date := v_rw_week0 + 2;
   v_marker date;
   v_rows_before bigint;
   v_rows_after bigint;
@@ -584,6 +588,72 @@ begin
      or not exists (select 1 from public.mcp_user_daily_et where user_id = 'history-proof-catchup-first')
      or not exists (select 1 from public.mcp_user_daily_et where user_id = 'history-proof-catchup-last') then
     raise exception 'missed nightly history close did not catch up through yesterday';
+  end if;
+
+  -- FLA-361: retention_weekly must describe the weeks tracking actually
+  -- covered, not the weeks that happen to contain rows. Tracking starts on a
+  -- Wednesday, the whole first calendar week has zero calls, and the first
+  -- user-day lands in the following week. Both retention expressions read the
+  -- authoritative initial_history_start_et_day; a MIN over rows present would
+  -- drop the first week entirely and mis-flag the second. Every raw event is
+  -- cleared first so the close's start-day and 90-day window checks see only
+  -- this fixture; nothing after this block depends on the earlier seeds.
+  delete from public.mcp_tool_events;
+  truncate public.mcp_user_daily_et;
+  update analytics.history_rollup_state
+  set initial_history_start_et_day = null,
+      last_closed_et_day = null,
+      updated_at = now()
+  where id;
+  if date_trunc('week', v_rw_start)::date <> v_rw_week0
+     or date_trunc('week', (v_rw_week0 + 9)::date)::date <> v_rw_week0 + 7 then
+    raise exception 'retention fixture weeks are not laid out as intended';
+  end if;
+  insert into public.mcp_tool_events (
+    ts, env, user_id, auth_type, client_name, tool_name, platform, sport,
+    status, error_code, latency_ms, league_hash
+  ) values
+    (((v_rw_week0 + 9)::timestamp + interval '12 hours') at time zone 'America/New_York',
+      'prod', 'history-proof-retention', 'oauth', 'Claude', 'get_roster', 'espn', 'football', 'ok', null, 100, 'history-proof-league'),
+    (((v_rw_week0 + 16)::timestamp + interval '12 hours') at time zone 'America/New_York',
+      'prod', 'history-proof-retention', 'oauth', 'Claude', 'get_roster', 'espn', 'football', 'ok', null, 100, 'history-proof-league');
+  perform public.close_mcp_user_daily_et(v_yesterday_et, v_rw_start);
+  if exists (
+    select 1 from public.mcp_user_daily_et where et_day < v_rw_week0 + 7
+  ) then
+    raise exception 'retention fixture left a user-day inside the first tracked week';
+  end if;
+  v_history := analytics.dashboard_payload_history(false);
+
+  -- The earliest emitted week is the week tracking began in, even though that
+  -- week contains no rows at all.
+  if (
+    select min(w ->> 'week_start')
+    from jsonb_array_elements(v_history -> 'retention_weekly') as w
+  ) is distinct from v_rw_week0::text then
+    raise exception 'retention_weekly does not start at the week tracking began (%)', v_rw_week0;
+  end if;
+  -- That week is real but empty, and began before tracking did, so it is
+  -- genuinely partial rather than comparable to a later full week.
+  if not exists (
+    select 1 from jsonb_array_elements(v_history -> 'retention_weekly') as w
+    where w ->> 'week_start' = v_rw_week0::text
+      and (w ->> 'queriers')::int = 0
+      and (w ->> 'week_partial_start')::boolean
+  ) then
+    raise exception 'retention_weekly did not report week % as an empty partial first week', v_rw_week0;
+  end if;
+  -- The first week that does hold rows is fully covered by tracking. Comparing
+  -- against a MIN over rows present would put its own first row's day after its
+  -- Monday and wrongly disclose it as partial.
+  if not exists (
+    select 1 from jsonb_array_elements(v_history -> 'retention_weekly') as w
+    where w ->> 'week_start' = (v_rw_week0 + 7)::text
+      and (w ->> 'queriers')::int = 1
+      and not (w ->> 'week_partial_start')::boolean
+  ) then
+    raise exception 'retention_weekly did not report week % as a fully covered week with one querier',
+      v_rw_week0 + 7;
   end if;
 end;
 $proof$;
