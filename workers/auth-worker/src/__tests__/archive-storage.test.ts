@@ -15,12 +15,20 @@ vi.mock('@supabase/supabase-js', () => ({
  * JSON.stringify (not String()) so a hybrid regression that logs the safe
  * substitute but also appends the raw error object as a second console.error
  * argument still surfaces that object's fields here, instead of collapsing to
- * the useless "[object Object]" (FLA-368 audit finding).
+ * the useless "[object Object]" (FLA-368 audit finding). Error instances get
+ * the same treatment via their own branch: Error.message/.stack are
+ * non-enumerable, so JSON.stringify(someError) is "{}" and would silently
+ * re-open the exact same vacuous-assertion gap for the Error case (FLA-370
+ * audit finding) — string-concatenate the message/stack instead.
  */
 function loggedFrom(spy: { mock: { calls: unknown[][] } }): string {
   return spy.mock.calls
     .flat()
-    .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+    .map((arg) => {
+      if (typeof arg === 'string') return arg;
+      if (arg instanceof Error) return `${arg.name}: ${arg.message} ${arg.stack ?? ''}`;
+      return JSON.stringify(arg);
+    })
     .join(' ');
 }
 
