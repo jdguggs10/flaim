@@ -2579,6 +2579,24 @@ describe('yahoo-connect-handlers', () => {
       expect(body.lastUpdated).toBeUndefined();
       expect(body.health).toBeUndefined();
     });
+
+    it('logs the error name only when the lookup throws, never the raw message (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentialHealth.mockResolvedValue(null);
+      // archive-storage.ts embeds the raw Postgres message in this throw (FLA-370).
+      mockStorage.getYahooLeagues.mockRejectedValue(
+        new Error('Failed to get archived map: row 461.l.777 "Private Dynasty" is invalid')
+      );
+
+      const response = await handleYahooStatus(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(500);
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('[yahoo-connect] Status error: Error');
+      expect(logged).not.toContain('461.l.777');
+      expect(logged).not.toContain('Private Dynasty');
+      expect(logged).not.toContain('Failed to get archived map');
+    });
   });
 
   // ===========================================================================

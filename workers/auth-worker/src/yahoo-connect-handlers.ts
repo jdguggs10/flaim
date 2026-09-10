@@ -2045,7 +2045,11 @@ export async function handleYahooStatus(
       }
     );
   } catch (error) {
-    console.error('[yahoo-connect] Status error:', error);
+    // Name only. An upstream non-static throw can embed a raw Postgres message
+    // (archive-storage.ts, tracked in FLA-370); this narrowing holds regardless (FLA-368).
+    console.error(
+      `[yahoo-connect] Status error: ${error instanceof Error ? error.name : 'unknown'}`
+    );
     return new Response(
       JSON.stringify({
         error: 'server_error',

@@ -668,7 +668,10 @@ export class YahooStorage {
     }
 
     if (!isMissingRecurringLeagueIdColumnError(error as SupabaseErrorLike)) {
-      throw new Error(`Failed to persist Yahoo recurring root: ${(error as SupabaseErrorLike).message}`);
+      // Static message, matching every other throw in this file. The raw Postgres
+      // message quotes the offending value from the failing statement, and this
+      // UPDATE filters on the customer's league_key list (FLA-368).
+      throw new Error('Failed to persist Yahoo recurring root');
     }
 
     console.warn(
