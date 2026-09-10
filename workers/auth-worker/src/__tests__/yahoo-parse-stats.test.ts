@@ -645,6 +645,20 @@ describe('the thrown-error path', () => {
     expect(JSON.stringify(stats)).not.toContain('Private Dynasty');
   });
 
+  it('logs the error name only, never its message (FLA-368)', () => {
+    // The bare beforeEach mutes console.error without keeping a handle, so take
+    // our own spy here; afterEach's restoreAllMocks still cleans it up.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    statsFor(throwingFixture());
+
+    const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+    expect(logged).toContain('SentinelParseError');
+    expect(logged).not.toContain(SECRET_MESSAGE);
+    expect(logged).not.toContain('461.l.777');
+    expect(logged).not.toContain('Private Dynasty');
+  });
+
   it('names a non-Error throw "unknown"', () => {
     const { stats } = statsFor(
       oneGame({ code: 'nfl', season: '2026' }, {

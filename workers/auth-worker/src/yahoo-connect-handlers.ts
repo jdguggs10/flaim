@@ -3133,7 +3133,9 @@ export function parseYahooLeaguesResponse(data: unknown, stats?: YahooParseStats
       // Name only. A parse error's message can quote the payload that caused it.
       stats.thrownErrorName = parseError instanceof Error ? parseError.name : 'unknown';
     }
-    console.error('[yahoo-connect] Error parsing Yahoo response:', parseError);
+    console.error(
+      `[yahoo-connect] Error parsing Yahoo response: ${parseError instanceof Error ? parseError.name : 'unknown'}`
+    );
   }
 
   return leagues;
