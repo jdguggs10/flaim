@@ -268,6 +268,12 @@ describe('probeYahooLeague', () => {
       ['an empty string', ''],
       ['longer than the cap', 'a'.repeat(65)],
       ['a percent escape', '%2e%2e'],
+      // No slash in either, so a slash-only check would miss them — but
+      // fetch's own URL normalization collapses a dot-segment before the
+      // request leaves, so '..' would silently route '/league/../teams' to
+      // '/teams'. The pattern's alphanumeric lookahead is what catches this.
+      ['a single dot', '.'],
+      ['a double dot (dot-segment)', '..'],
     ])('refuses %s before any Yahoo call', async (_label, leagueId) => {
       await expect(probeYahooLeague(env, USER_ID, leagueId, 'corr-1')).rejects.toThrow(
         /charset check/
@@ -282,6 +288,11 @@ describe('probeYahooLeague', () => {
       expect(YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test(BARE_LEAGUE_ID)).toBe(true);
       expect(YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test(FULL_LEAGUE_KEY)).toBe(true);
       expect(YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test('461/l/153104')).toBe(false);
+      // A dot-only value passes a bare charset check but is not a real
+      // league identifier, and 'fetch' normalizes it away as a dot-segment.
+      expect(YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test('.')).toBe(false);
+      expect(YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test('..')).toBe(false);
+      expect(YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test('---')).toBe(false);
     });
   });
 

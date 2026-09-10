@@ -3481,8 +3481,17 @@ export async function diagnoseYahooDiscovery(
  * Wide enough for both real forms — a bare numeric id (`153104`) and a full
  * league key (`461.l.153104`) — and narrow enough that nothing it accepts can
  * add a path segment, a query parameter, or a new host.
+ *
+ * The lookahead requires at least one alphanumeric character, which is what
+ * actually closes the gap a charset alone does not: `.` and `..` contain no
+ * `/`, so a slash-only path-segment check lets them through, and `fetch`'s
+ * own URL normalization collapses a dot-segment before the request leaves —
+ * `/league/../teams` becomes `/teams`, silently calling a different Yahoo
+ * endpoint than the one this module's contract says is the only one probed.
+ * Every real league identifier (a bare id or a full league key) already
+ * contains a digit, so this excludes nothing legitimate.
  */
-export const YAHOO_SUPPORT_LEAGUE_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+export const YAHOO_SUPPORT_LEAGUE_ID_PATTERN = /^(?=.*[A-Za-z0-9])[A-Za-z0-9._-]{1,64}$/;
 
 export type YahooSupportLeagueProbe =
   | { stage: 'not_connected' }

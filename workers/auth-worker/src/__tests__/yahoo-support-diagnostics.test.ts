@@ -156,6 +156,10 @@ describe('parseYahooSupportLeagueRequest', () => {
     ['a percent escape', '%2e%2e'],
     ['SQL-injection shaped', "153104'; DROP TABLE yahoo_leagues;--"],
     ['longer than 64 characters', 'a'.repeat(65)],
+    // No slash, so a slash-only check misses these — but fetch's own URL
+    // normalization collapses a dot-segment, silently retargeting the call.
+    ['a single dot', '.'],
+    ['a double dot (dot-segment)', '..'],
   ])('rejects %s leagueId', async (_label, leagueId) => {
     const result = await parseLeague({ userId: VALID_USER_ID, leagueId });
 
