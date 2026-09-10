@@ -288,6 +288,55 @@ describe('Yahoo recurring-id resolution', () => {
         warnSpy.mockRestore();
       }
     });
+
+    it('logs a masked user and the error name if recurring-id resolution throws (FLA-368)', async () => {
+      // The guard around resolveYahooRecurringId is defensive: the function is
+      // documented never to throw, because tryResolveYahooRecurringId catches
+      // internally. Rather than mocking past that internal catch, this forces a
+      // throw at resolveYahooRecurringId's only statement outside any catch — its
+      // own fallback console.warn — which is exactly the class of unexpected
+      // runtime failure the guard exists for.
+      class SentinelResolveError extends Error {
+        override name = 'SentinelResolveError';
+      }
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+        if (String(args[0]).includes('Falling back to season-scoped')) {
+          throw new SentinelResolveError('league 461.l.777 "Private Dynasty" exploded');
+        }
+      });
+      try {
+        // Same cycle fixture: guarantees the fallback warn is reached.
+        mockFetch.mockImplementation(async (input) => {
+          const url = String(input);
+          if (url.includes('/users;use_login=1/games;game_types=full/leagues')) {
+            return jsonResponse(discoveryResponse('461.l.777', '2026', '449_777'));
+          }
+          if (url === `${YAHOO_API}/league/449.l.777?format=json`) {
+            return jsonResponse(leagueMeta('449.l.777', '461_777'));
+          }
+          return new Response(null, { status: 404 });
+        });
+
+        const res = await handleYahooDiscover(env, 'u', corsHeaders);
+
+        // The guard holds: discovery still succeeds, just without a recurring id.
+        expect(res.status).toBe(200);
+        expect(mockStorage.upsertYahooLeague.mock.calls[0][0].recurringLeagueId).toBeUndefined();
+
+        const logged = warnSpy.mock.calls
+          .map((call) => call.map(String).join(' '))
+          .filter((line) => line.startsWith('[yahoo-connect] Recurring-id resolution failed'))
+          .join(' ');
+        expect(logged).toContain('SentinelResolveError');
+        // userId 'u' is <= 8 chars, so maskUserId collapses it entirely.
+        expect(logged).toContain('for user ***');
+        expect(logged).not.toContain('461.l.777');
+        expect(logged).not.toContain('Private Dynasty');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
   });
 
   // ===========================================================================

@@ -2595,9 +2595,10 @@ export async function handleYahooDiscover(
       } catch (error) {
         // resolveYahooRecurringId never throws, but guard discovery regardless:
         // persist without a recurring id rather than failing the whole sync.
+        // Neither the customer league_key nor the raw error object may reach the log
+        // (FLA-368); the error name is the whole operational signal here.
         console.warn(
-          `[yahoo-connect] Recurring-id resolution failed for ${league.leagueKey}; saving without it:`,
-          error
+          `[yahoo-connect] Recurring-id resolution failed for user ${maskUserId(userId)}; saving without it: ${error instanceof Error ? error.name : 'unknown'}`
         );
       }
 
@@ -2634,7 +2635,11 @@ export async function handleYahooDiscover(
       correlation_id: correlationId,
       auth_type: 'clerk',
     });
-    console.error('[yahoo-connect] Discovery error:', error);
+    // Name only. The realistic source here is a JSON.parse SyntaxError, whose
+    // message quotes a prefix of Yahoo's raw response body (FLA-368).
+    console.error(
+      `[yahoo-connect] Discovery error: ${error instanceof Error ? error.name : 'unknown'}`
+    );
     return new Response(
       JSON.stringify({
         error: 'server_error',
@@ -2720,7 +2725,11 @@ export async function fetchYahooLeaguesReadOnly(
     logYahooDiscoveryDropIfAny(userId, reconciliationStats, 'reconciliation');
     return { status: 'ok', leagues };
   } catch (error) {
-    console.error('[yahoo-connect] Read-only discovery error:', error instanceof Error ? error.message : error);
+    // `.message` was precisely the half that quotes Yahoo's raw response body on a
+    // JSON.parse SyntaxError; `.name` is the correct narrowing (FLA-368).
+    console.error(
+      `[yahoo-connect] Read-only discovery error: ${error instanceof Error ? error.name : 'unknown'}`
+    );
     const errorCode = error instanceof Error && error.name === 'TimeoutError' ? 'yahoo_timeout' : 'server_error';
     return { status: 'error', errorCode, retryable: true };
   }
