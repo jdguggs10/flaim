@@ -2,7 +2,7 @@
  * OAuth redirect URI validation — shared across auth-worker and web.
  * Browser-safe: URL, Set, string ops only — zero imports.
  * RFC 9700: exact-match + locked structural checks.
- * RFC 8252: dynamic loopback port acceptance.
+ * RFC 8252: dynamic loopback port and path acceptance.
  */
 
 const ALLOWED_REDIRECT_URIS = [
@@ -22,37 +22,30 @@ const ALLOWED_REDIRECT_URIS = [
   'https://app.lilbird.co/mcp/oauth/callback',
   // User-hosted relay (exact callback only, not other Render services)
   'https://flaim-relay.onrender.com/oauth/callback',
-  // VS Code / GitHub Copilot
-  'http://127.0.0.1:33418',
+  // VS Code web (desktop VS Code's 127.0.0.1:33418 callback is covered by
+  // the general loopback rule below, same as any other loopback client)
   'https://vscode.dev/redirect',
-  // For local development/testing (MCP Inspector, etc.)
-  'http://localhost:3000/oauth/callback',
-  'http://localhost:6274/oauth/callback',
 ];
 
-// Check if a redirect URI is a valid loopback callback (RFC 8252).
-// Accepts dynamic ports on localhost/127.0.0.1 with known callback paths.
-// Covers OAuth-capable desktop and local MCP clients that use loopback callbacks.
-const ALLOWED_LOOPBACK_PATHS = new Set([
-  '/callback',              // Claude Code
-  '/oauth/callback',        // Claude Code (alt), MCP Inspector
-  '/oauth2callback',        // Common desktop-client callback path
-  '/windsurf-auth-callback', // Windsurf
-  '/',                       // Kiro
-]);
-
+// Check if a redirect URI is a valid loopback callback (RFC 8252 §7.3).
+// Accepts any port and any path on localhost/127.0.0.1/::1 — the port is
+// inherently dynamic for native/desktop clients, and a fixed callback-path
+// allowlist doesn't add real security here: DCR already lets any client
+// self-register any redirect_uri it wants, so the actual boundary is "must
+// be reachable only via loopback" plus PKCE, not the specific path chosen.
 function isLoopbackRedirectUri(uri: string): boolean {
   try {
     const parsed = new URL(uri);
     // Check for http scheme (required for loopback)
     if (parsed.protocol !== 'http:') return false;
-    // Check for loopback hostname
-    const isLoopback = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-    // Check path against known callback paths
-    const isCallback = ALLOWED_LOOPBACK_PATHS.has(parsed.pathname);
+    // Check for loopback hostname (IPv6 loopback serializes as "[::1]")
+    const isLoopback =
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1' ||
+      parsed.hostname === '[::1]';
     // Reject URIs with query strings or fragments (prevent open redirect)
     const isClean = !parsed.search && !parsed.hash;
-    return isLoopback && isCallback && isClean;
+    return isLoopback && isClean;
   } catch {
     return false;
   }
