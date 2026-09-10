@@ -281,7 +281,10 @@ type SupabaseReadResult = { error: unknown; data: unknown; count?: number | null
  */
 function unwrapRead<T extends SupabaseReadResult>(result: T, label: string): T {
   if (result.error) {
-    const code = (result.error as { code?: string })?.code ?? 'unknown';
+    // `||` not `??`: postgrest-js sets `code: ''` for client-side fetch/parse
+    // failures, the single most common failure class, so `??` let the empty
+    // string through and produced a bare "(code=)" with no signal (FLA-370 audit).
+    const code = (result.error as { code?: string })?.code || 'unknown';
     throw new Error(`${label} read failed (code=${code})`);
   }
   return result;

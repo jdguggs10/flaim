@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Empty-String Error Code Fallback Fix (Yahoo logging)
+
+- **Fixed**: The `code=${error.code ?? 'unknown'}` pattern FLA-363/FLA-368 introduced across `yahoo-storage.ts` (and its `yahoo-support-diagnostics.ts` equivalent) silently lost signal on the single most common failure class. `@supabase/postgrest-js` sets `code: ''` (an empty string, not `undefined`) for client-side fetch/parse failures, so `??` let it through and produced a bare `code=` with nothing after it. Found during FLA-370's cross-model audit. Switched to `||`, which correctly falls back to `'unknown'` for both the missing and empty-string cases. No behavior change beyond the log line itself; a new test pins the empty-string case specifically (not just the missing-`code` case the existing tests already covered).
+
 ### Loopback OAuth Redirect Path Acceptance (FLA-369)
 
 - **Fixed**: MCP OAuth loopback redirect URIs (`http://127.0.0.1:<port>/...`, `http://localhost:<port>/...`) are now accepted with any callback path, not just a hardcoded allowlist (`/callback`, `/oauth/callback`, `/oauth2callback`, `/windsurf-auth-callback`, `/`). Msty Studio (and any future desktop MCP client) was rejected with `invalid_redirect_uri` at DCR because its path wasn't on that list, even though its loopback host and dynamic port were already accepted per RFC 8252. The path allowlist didn't add real security — DCR already lets any client self-register any `redirect_uri`; the actual boundary is loopback-only reachability plus PKCE — so this closes the whole bug class instead of adding one more path.
