@@ -10,13 +10,16 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     // request validation end-to-end while asserting it never runs before the
     // two auth gates have passed.
     parseYahooSupportRequest: vi.fn(actual.parseYahooSupportRequest),
+    parseYahooSupportLeagueRequest: vi.fn(actual.parseYahooSupportLeagueRequest),
     // Business logic is stubbed here: these tests own routing, auth and
     // status mapping. The snapshot itself is covered by
     // yahoo-support-inspect.test.ts, the diagnosis by
-    // yahoo-support-diagnose.test.ts, and the refresh by
-    // yahoo-support-refresh.test.ts.
+    // yahoo-support-diagnose.test.ts, the refresh by
+    // yahoo-support-refresh.test.ts, and the league probe by
+    // yahoo-support-probe-league.test.ts.
     runYahooSupportInspect: vi.fn(),
     runYahooSupportDiagnose: vi.fn(),
+    runYahooSupportProbeLeague: vi.fn(),
     runYahooSupportRefresh: vi.fn(),
   };
 });
@@ -32,21 +35,34 @@ vi.mock('../oauth-handlers', async () => {
 import app from '../index-hono';
 import { validateOAuthToken } from '../oauth-handlers';
 import {
+  parseYahooSupportLeagueRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
+  runYahooSupportProbeLeague,
   runYahooSupportRefresh,
   type YahooSupportDiagnoseReport,
   type YahooSupportInspectReport,
+  type YahooSupportProbeLeagueReport,
   type YahooSupportRefreshReport,
 } from '../yahoo-support-diagnostics';
 
 const INSPECT_PATH = '/auth/internal/support/yahoo/inspect';
 const DIAGNOSE_PATH = '/auth/internal/support/yahoo/diagnose';
+const PROBE_LEAGUE_PATH = '/auth/internal/support/yahoo/probe-league';
 const REFRESH_PATH = '/auth/internal/support/yahoo/refresh';
 
-// All three actions are implemented; no stub route remains.
-const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, REFRESH_PATH] as const;
+// All four actions are implemented; no stub route remains.
+const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, REFRESH_PATH] as const;
+
+/**
+ * probe-league is the one route with its own body shape and its own parser, so
+ * the shared gate suite below asks each path which of the two it should be
+ * asserting on rather than assuming one.
+ */
+function parserFor(path: string) {
+  return path === PROBE_LEAGUE_PATH ? parseYahooSupportLeagueRequest : parseYahooSupportRequest;
+}
 
 const INSPECT_OK_REPORT: YahooSupportInspectReport = {
   outcome: 'ok',
@@ -72,6 +88,28 @@ const DIAGNOSE_OK_REPORT: YahooSupportDiagnoseReport = {
   },
 };
 
+const PROBE_LEAGUE_OK_REPORT: YahooSupportProbeLeagueReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  call: {
+    label: 'league_teams',
+    httpStatus: 400,
+    ok: false,
+    bodyIsJson: true,
+    bodyLooksLikeEnvelope: false,
+    errorSnippetCategory: 'yahoo_error_json',
+    durationMs: 118,
+  },
+  interpretation: {
+    category: 'yahoo_rejected',
+    summary: 'Yahoo refused this exact league request (HTTP 400) with an error body of its own.',
+    nextAction: 'File a bug with the category and the error description below.',
+    errorDescription: 'Invalid game key provided - 153104',
+  },
+};
+
 const REFRESH_OK_REPORT: YahooSupportRefreshReport = {
   outcome: 'ok',
   userMasked: 'user_3Ie...',
@@ -90,6 +128,14 @@ const EVAL_USER_ID = 'user_eval_support';
 const DEMO_API_KEY = 'flaim_demo_support_routes_test';
 const DEMO_USER_ID = 'user_demo_support';
 const TARGET_USER_ID = 'user_3Ie4m68lUbzxyv22NsMU';
+const TARGET_LEAGUE_ID = '153104';
+
+/** The smallest valid body for each route. Only probe-league takes a second field. */
+function validBodyFor(path: string): string {
+  return path === PROBE_LEAGUE_PATH
+    ? JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_ID })
+    : JSON.stringify({ userId: TARGET_USER_ID });
+}
 
 const baseEnv = {
   SUPABASE_URL: 'https://example.supabase.co',
@@ -144,7 +190,7 @@ async function signedClerkToken(sub = 'user_support_route_caller'): Promise<stri
 function makeRequest(
   path: string,
   headers: Record<string, string> = {},
-  body: string = JSON.stringify({ userId: TARGET_USER_ID }),
+  body: string = validBodyFor(path),
   method = 'POST',
 ): Request {
   return new Request(`https://api.flaim.app${path}`, {
@@ -182,6 +228,7 @@ beforeEach(() => {
   vi.mocked(validateOAuthToken).mockResolvedValue(null);
   vi.mocked(runYahooSupportInspect).mockResolvedValue(INSPECT_OK_REPORT);
   vi.mocked(runYahooSupportDiagnose).mockResolvedValue(DIAGNOSE_OK_REPORT);
+  vi.mocked(runYahooSupportProbeLeague).mockResolvedValue(PROBE_LEAGUE_OK_REPORT);
   vi.mocked(runYahooSupportRefresh).mockResolvedValue(REFRESH_OK_REPORT);
   // Clerk JWKS lookup — the only network call these tests can trigger.
   vi.stubGlobal('fetch', vi.fn(async () => new Response(
@@ -199,7 +246,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     const res = await app.fetch(makeRequest(path), baseEnv);
 
     expect(res.status).toBe(403);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   // The whole point of the second secret: holding the widely-shared internal
@@ -214,7 +261,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     await expect(res.json()).resolves.toEqual({
       error: 'Missing or invalid X-Flaim-Support-Token',
     });
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('rejects a valid support token with no internal token', async () => {
@@ -227,7 +274,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     await expect(res.json()).resolves.toEqual({
       error: 'Missing or invalid X-Flaim-Internal-Token',
     });
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('rejects a valid support token with an incorrect internal token', async () => {
@@ -240,7 +287,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     );
 
     expect(res.status).toBe(403);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('rejects a valid internal token with an incorrect support token', async () => {
@@ -253,7 +300,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     );
 
     expect(res.status).toBe(403);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('fails closed when INTERNAL_SERVICE_TOKEN is unconfigured', async () => {
@@ -263,7 +310,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     );
 
     expect(res.status).toBe(500);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('fails closed when SUPPORT_TOOL_TOKEN is unconfigured', async () => {
@@ -276,7 +323,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     await expect(res.json()).resolves.toEqual({
       error: 'Support tool authentication is not configured',
     });
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('rejects a valid Clerk session JWT with no support token', async () => {
@@ -287,7 +334,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     );
 
     expect(res.status).toBe(403);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('rejects the static eval API key with no support token', async () => {
@@ -297,7 +344,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     );
 
     expect(res.status).toBe(403);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('rejects a valid MCP OAuth bearer token with no support token', async () => {
@@ -313,7 +360,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     );
 
     expect(res.status).toBe(403);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('reaches the handler with both secrets and a valid body', async () => {
@@ -323,7 +370,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     // per-route and asserted below.
     expect([403, 500]).not.toContain(res.status);
     await expect(res.json()).resolves.toHaveProperty('outcome');
-    expect(parseYahooSupportRequest).toHaveBeenCalledTimes(1);
+    expect(parserFor(path)).toHaveBeenCalledTimes(1);
   });
 
   it('returns a validation error with both secrets and a malformed userId', async () => {
@@ -334,7 +381,7 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
 
     expect(res.status).toBe(400);
     await expect(res.json()).resolves.toMatchObject({ error: 'invalid_user_id' });
-    expect(parseYahooSupportRequest).toHaveBeenCalledTimes(1);
+    expect(parserFor(path)).toHaveBeenCalledTimes(1);
   });
 
   // Ordering guard: with a bad token AND a bad body the caller must see the
@@ -350,14 +397,14 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     );
 
     expect(res.status).toBe(403);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 
   it('is not exposed over GET', async () => {
     const res = await app.fetch(makeRequest(path, bothTokens(), '', 'GET'), baseEnv);
 
     expect([404, 405]).toContain(res.status);
-    expect(parseYahooSupportRequest).not.toHaveBeenCalled();
+    expect(parserFor(path)).not.toHaveBeenCalled();
   });
 });
 
@@ -491,6 +538,105 @@ describe(`POST ${DIAGNOSE_PATH} (implemented)`, () => {
 
     const res = await app.fetch(
       makeRequest(DIAGNOSE_PATH, { 'X-Flaim-Internal-Token': 'wrong', 'X-Flaim-Support-Token': SUPPORT_TOOL_TOKEN }),
+      env,
+    );
+
+    expect(res.status).toBe(403);
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${PROBE_LEAGUE_PATH} (implemented)`, () => {
+  it('runs the league probe and returns the report verbatim', async () => {
+    const res = await app.fetch(makeRequest(PROBE_LEAGUE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(PROBE_LEAGUE_OK_REPORT);
+    expect(runYahooSupportProbeLeague).toHaveBeenCalledTimes(1);
+    expect(runYahooSupportProbeLeague).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_ID },
+    );
+    expect(runYahooSupportInspect).not.toHaveBeenCalled();
+    expect(runYahooSupportDiagnose).not.toHaveBeenCalled();
+    expect(runYahooSupportRefresh).not.toHaveBeenCalled();
+  });
+
+  it('maps a failed probe to 500 without inventing an error body', async () => {
+    const failed = { outcome: 'failed', userMasked: 'user_3Ie...', error: 'probe_failed' } as const;
+    vi.mocked(runYahooSupportProbeLeague).mockResolvedValue(failed);
+
+    const res = await app.fetch(makeRequest(PROBE_LEAGUE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual(failed);
+  });
+
+  // The field only this route accepts, and the one that reaches a Yahoo URL.
+  it.each([
+    ['missing', JSON.stringify({ userId: TARGET_USER_ID })],
+    ['a path traversal', JSON.stringify({ userId: TARGET_USER_ID, leagueId: '../../users' })],
+    ['a slash', JSON.stringify({ userId: TARGET_USER_ID, leagueId: '461/l/153104' })],
+    ['a query parameter', JSON.stringify({ userId: TARGET_USER_ID, leagueId: '153104?format=xml' })],
+    ['not a string', JSON.stringify({ userId: TARGET_USER_ID, leagueId: 153104 })],
+  ])('rejects a %s leagueId without running the probe', async (_label, body) => {
+    const res = await app.fetch(makeRequest(PROBE_LEAGUE_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_league_id' });
+    expect(runYahooSupportProbeLeague).not.toHaveBeenCalled();
+  });
+
+  it('accepts a full league key as readily as a bare numeric id', async () => {
+    const res = await app.fetch(
+      makeRequest(
+        PROBE_LEAGUE_PATH,
+        bothTokens(),
+        JSON.stringify({ userId: TARGET_USER_ID, leagueId: '461.l.153104' }),
+      ),
+      baseEnv,
+    );
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportProbeLeague).toHaveBeenCalledWith(
+      expect.anything(),
+      { userId: TARGET_USER_ID, leagueId: '461.l.153104' },
+    );
+  });
+
+  it('does not run the probe when authentication fails', async () => {
+    const res = await app.fetch(
+      makeRequest(PROBE_LEAGUE_PATH, { 'X-Flaim-Internal-Token': INTERNAL_SERVICE_TOKEN }),
+      baseEnv,
+    );
+
+    expect(res.status).toBe(403);
+    expect(runYahooSupportProbeLeague).not.toHaveBeenCalled();
+  });
+
+  // Its own limiter key: a burst of probes must not eat diagnose's budget, and
+  // rotating the target account must not evade the limit.
+  it('rate-limits independently of diagnose and refresh', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: { limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:probe-league' })) },
+    };
+
+    const res = await app.fetch(makeRequest(PROBE_LEAGUE_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(runYahooSupportProbeLeague).not.toHaveBeenCalled();
+
+    const diagnoseRes = await app.fetch(makeRequest(DIAGNOSE_PATH, bothTokens()), limitedEnv);
+    expect(diagnoseRes.status).toBe(200);
+  });
+
+  it('does not rate-limit under the probe key when the internal token is wrong', async () => {
+    const spy = vi.fn(async () => ({ success: true }));
+    const env = { ...baseEnv, CREDENTIALS_RATE_LIMITER: { limit: spy } };
+
+    const res = await app.fetch(
+      makeRequest(PROBE_LEAGUE_PATH, { 'X-Flaim-Internal-Token': 'wrong', 'X-Flaim-Support-Token': SUPPORT_TOOL_TOKEN }),
       env,
     );
 

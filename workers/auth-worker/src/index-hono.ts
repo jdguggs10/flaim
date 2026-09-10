@@ -92,9 +92,11 @@ import { runReconciliation } from './reconciliation';
 import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } from './sleeper-recurring-backfill';
 import { runEspnHistoryBackfill } from './espn-history-backfill';
 import {
+  parseYahooSupportLeagueRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
+  runYahooSupportProbeLeague,
   runYahooSupportRefresh,
   type YahooSupportEnv,
 } from './yahoo-support-diagnostics';
@@ -195,13 +197,16 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
 }
 
 /**
- * Bounds diagnose/refresh to 15 calls/60s per action, deliberately keyed on
- * the action alone rather than `${action}:${userId}` — a per-target key would
- * let repeated calls across rotating target ids evade the limit entirely,
- * which defeats the point for a route whose target id is caller-supplied.
- * `inspect` is pure DB reads and does not need this.
+ * Bounds diagnose/refresh/probe-league to 15 calls/60s per action, deliberately
+ * keyed on the action alone rather than `${action}:${userId}` — a per-target
+ * key would let repeated calls across rotating target ids evade the limit
+ * entirely, which defeats the point for a route whose target id is
+ * caller-supplied. `inspect` is pure DB reads and does not need this.
  */
-async function enforceSupportRateLimit(c: Context<{ Bindings: Env }>, action: 'diagnose' | 'refresh') {
+async function enforceSupportRateLimit(
+  c: Context<{ Bindings: Env }>,
+  action: 'diagnose' | 'refresh' | 'probe-league'
+) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
   if (success) return null;
 
@@ -1128,6 +1133,26 @@ api.post('/internal/support/yahoo/diagnose', async (c) => {
   }
 
   const report = await runYahooSupportDiagnose(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+// Sibling of diagnose for the case diagnose structurally cannot reach: one
+// live per-league fetch, with the operator-supplied league identifier
+// substituted verbatim. Same two gates, same rate-limit discipline, one extra
+// validated body field, and still no league or sync-state write.
+api.post('/internal/support/yahoo/probe-league', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'probe-league');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportLeagueRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportProbeLeague(c.env as YahooSupportEnv, validation.request);
   return c.json(report, report.outcome === 'failed' ? 500 : 200);
 });
 
@@ -2891,6 +2916,7 @@ api.notFound((c) => {
       '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
       '/internal/support/yahoo/inspect': 'POST - Operator support snapshot for one Yahoo account (two service secrets)',
       '/internal/support/yahoo/diagnose': 'POST - Operator support diagnosis of Yahoo league discovery (two service secrets)',
+      '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
       '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
       '/internal/user/preferences': 'GET - Get user preferences for internal workers',

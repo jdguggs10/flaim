@@ -14,13 +14,21 @@
  * the credential through the existing guarded token path and makes at most
  * MAX_YAHOO_DIAGNOSTIC_REQUESTS bounded GETs: no league rows, no sync state.
  *
+ * `runYahooSupportProbeLeague` also reaches Yahoo and also writes nothing, but
+ * asks a different question: it makes exactly one live per-league fetch, with
+ * an operator-supplied league identifier substituted verbatim, to reproduce a
+ * get_league_info-style failure on demand.
+ *
  * `runYahooSupportRefresh` is the only action that persists, and it owns none
  * of that persistence: it calls `refreshLeaguesForUser` with a scheduled sync's
  * own arguments and reports the saved state either side of it.
  *
  * Redaction is enforced at the query, not the response: every read names its
  * columns explicitly, so a customer league key, league name, team name, or a
- * token can never enter this module's memory in the first place.
+ * token can never enter this module's memory in the first place. The one
+ * documented exception is `probe-league`'s bounded `errorDescription` — see
+ * `ProbeLeagueInterpretation`, which explains why that specific string is safe
+ * to project and why it does not generalize.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -31,11 +39,16 @@ import {
 } from './league-refresh';
 import {
   diagnoseYahooDiscovery,
+  probeYahooLeague,
   readYahooCredentialHealthReport,
   MAX_YAHOO_DIAGNOSTIC_REQUESTS,
+  YAHOO_SUPPORT_LEAGUE_ID_PATTERN,
   type YahooConnectEnv,
   type YahooCredentialHealthReport,
+  type YahooCredentialRefreshFailure,
+  type YahooDiagnosticCall,
   type YahooSupportDiagnosis,
+  type YahooSupportLeagueProbe,
 } from './yahoo-connect-handlers';
 
 // Re-exported so existing callers/tests importing the budget constant from
@@ -44,6 +57,11 @@ import {
 export { MAX_YAHOO_DIAGNOSTIC_REQUESTS };
 
 export const CLERK_USER_ID_PATTERN = /^user_[A-Za-z0-9]{20,64}$/;
+
+// Re-exported for the same reason as the budget constant above: the league-id
+// charset is enforced in yahoo-connect-handlers.ts (where the URL is built),
+// and callers should be able to read it off the public support surface.
+export { YAHOO_SUPPORT_LEAGUE_ID_PATTERN };
 
 // Duplicated locally rather than imported from any of the ~13 other modules
 // that already carry their own private copy — that duplication is this
@@ -68,9 +86,21 @@ export interface YahooSupportRequest {
   userId: string;
 }
 
-export type YahooSupportValidation =
-  | { request: YahooSupportRequest }
-  | { error: { status: 400 | 413; body: { error: string; error_description: string } } };
+/** `probe-league` is the only action that takes a second field. */
+export interface YahooSupportLeagueRequest {
+  userId: string;
+  leagueId: string;
+}
+
+type ValidationError = {
+  error: { status: 400 | 413; body: { error: string; error_description: string } };
+};
+
+export type YahooSupportValidation = { request: YahooSupportRequest } | ValidationError;
+
+export type YahooSupportLeagueValidation =
+  | { request: YahooSupportLeagueRequest }
+  | ValidationError;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -80,11 +110,20 @@ function invalidRequest(
   error: string,
   errorDescription: string,
   status: 400 | 413 = 400
-): YahooSupportValidation {
+): ValidationError {
   return { error: { status, body: { error, error_description: errorDescription } } };
 }
 
-export async function parseYahooSupportRequest(request: Request): Promise<YahooSupportValidation> {
+/**
+ * Everything every support request must clear before any field is read: the
+ * byte cap (declared, then actual), valid JSON, a JSON object, and a fixed
+ * allowed-key set. Shared so a second route can never be added with a looser
+ * prelude than the first one has.
+ */
+async function readSupportRequestBody(
+  request: Request,
+  allowedKeys: ReadonlySet<string>
+): Promise<{ body: Record<string, unknown> } | ValidationError> {
   const contentLength = Number(request.headers.get('Content-Length'));
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
     return invalidRequest('request_too_large', `Request body exceeds ${MAX_REQUEST_BYTES} bytes`, 413);
@@ -103,15 +142,55 @@ export async function parseYahooSupportRequest(request: Request): Promise<YahooS
   }
   if (!isRecord(body)) return invalidRequest('invalid_request', 'Request body must be a JSON object');
 
-  const allowedKeys = new Set(['userId']);
   const unknownKey = Object.keys(body).find((key) => !allowedKeys.has(key));
   if (unknownKey) return invalidRequest('invalid_request', `Unknown request field: ${unknownKey}`);
 
+  return { body };
+}
+
+const INSPECT_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId']);
+const LEAGUE_PROBE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueId']);
+
+export async function parseYahooSupportRequest(request: Request): Promise<YahooSupportValidation> {
+  const parsed = await readSupportRequestBody(request, INSPECT_ALLOWED_KEYS);
+  if ('error' in parsed) return parsed;
+
+  const { body } = parsed;
   if (typeof body.userId !== 'string' || !CLERK_USER_ID_PATTERN.test(body.userId)) {
     return invalidRequest('invalid_user_id', 'userId must be a valid user ID');
   }
 
   return { request: { userId: body.userId } };
+}
+
+/**
+ * The `probe-league` request: the same strict discipline as above, plus one
+ * extra field.
+ *
+ * `leagueId` is whatever string the customer reported, and it is substituted
+ * into a Yahoo URL verbatim, so its charset is checked here rather than
+ * normalised — see `probeYahooLeague`, which checks the same pattern again
+ * before building the URL.
+ */
+export async function parseYahooSupportLeagueRequest(
+  request: Request
+): Promise<YahooSupportLeagueValidation> {
+  const parsed = await readSupportRequestBody(request, LEAGUE_PROBE_ALLOWED_KEYS);
+  if ('error' in parsed) return parsed;
+
+  const { body } = parsed;
+  if (typeof body.userId !== 'string' || !CLERK_USER_ID_PATTERN.test(body.userId)) {
+    return invalidRequest('invalid_user_id', 'userId must be a valid user ID');
+  }
+
+  if (typeof body.leagueId !== 'string' || !YAHOO_SUPPORT_LEAGUE_ID_PATTERN.test(body.leagueId)) {
+    return invalidRequest(
+      'invalid_league_id',
+      'leagueId must be 1-64 characters of letters, digits, dot, underscore, or hyphen'
+    );
+  }
+
+  return { request: { userId: body.userId, leagueId: body.leagueId } };
 }
 
 // =============================================================================
@@ -414,45 +493,71 @@ const YAHOO_THROTTLE_STATUSES = new Set([429, 999]);
  * is malformed for an uninteresting reason), and among the parser signals the
  * more specific explanation wins over the more general one.
  */
-function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpretation {
-  if (diagnosis.stage === 'not_connected') {
+/**
+ * The two pre-provider outcomes every support action that reaches Yahoo shares:
+ * there is no credential, or renewing it was refused. Both `diagnose` and
+ * `probe-league` stop at exactly these points for exactly these reasons, so the
+ * sentences an operator reads are written once here rather than twice.
+ */
+type SharedCredentialCategory = 'not_connected' | 'credential_renewal_rejected';
+
+interface SharedCredentialInterpretation {
+  category: SharedCredentialCategory;
+  summary: string;
+  nextAction: string;
+}
+
+/**
+ * `command` names the command to re-run in the retryable branch, so the advice
+ * points at whatever the operator actually ran rather than always at diagnose.
+ */
+function interpretNotConnected(): SharedCredentialInterpretation {
+  return {
+    category: 'not_connected',
+    summary: 'This account has no stored Yahoo credential row, so there is nothing for Flaim to sync from.',
+    nextAction: 'Ask the customer to connect Yahoo from the Flaim web app, then re-run inspect.',
+  };
+}
+
+function interpretCredentialRefreshFailure(
+  failure: YahooCredentialRefreshFailure,
+  command: 'diagnose' | 'probe-league'
+): SharedCredentialInterpretation {
+  if (failure.appFingerprintMismatch) {
     return {
-      category: 'not_connected',
-      summary: 'This account has no stored Yahoo credential row, so there is nothing for Flaim to sync from.',
-      nextAction: 'Ask the customer to connect Yahoo from the Flaim web app, then re-run inspect.',
+      category: 'credential_renewal_rejected',
+      summary:
+        'The stored Yahoo tokens were minted by a different Yahoo app than this worker is configured with, so no renewal of them can ever succeed.',
+      nextAction:
+        'Ask the customer to reconnect Yahoo, and check whether other accounts carry the same stale fingerprint before closing.',
     };
   }
 
-  if (diagnosis.stage === 'credential_refresh_failed') {
-    if (diagnosis.appFingerprintMismatch) {
-      return {
-        category: 'credential_renewal_rejected',
-        summary:
-          'The stored Yahoo tokens were minted by a different Yahoo app than this worker is configured with, so no renewal of them can ever succeed.',
-        nextAction:
-          'Ask the customer to reconnect Yahoo, and check whether other accounts carry the same stale fingerprint before closing.',
-      };
-    }
-
-    if (diagnosis.retryable) {
-      const wait =
-        typeof diagnosis.retryAfterSeconds === 'number'
-          ? `${diagnosis.retryAfterSeconds} seconds`
-          : 'a short while';
-      return {
-        category: 'credential_renewal_rejected',
-        summary: `Yahoo credential renewal was temporarily unavailable (${diagnosis.errorCode}); a refresh lease or cooldown is currently held for this account.`,
-        nextAction: `Wait ${wait}, then re-run diagnose once. Do not loop.`,
-      };
-    }
-
-    const upstream =
-      typeof diagnosis.upstreamStatus === 'number' ? `, upstream HTTP ${diagnosis.upstreamStatus}` : '';
+  if (failure.retryable) {
+    const wait =
+      typeof failure.retryAfterSeconds === 'number'
+        ? `${failure.retryAfterSeconds} seconds`
+        : 'a short while';
     return {
       category: 'credential_renewal_rejected',
-      summary: `Yahoo rejected the stored credential (${diagnosis.errorCode}${upstream}), so the grant is dead and cannot be recovered server-side.`,
-      nextAction: 'Ask the customer to disconnect and reconnect Yahoo; no refresh will help until they do.',
+      summary: `Yahoo credential renewal was temporarily unavailable (${failure.errorCode}); a refresh lease or cooldown is currently held for this account.`,
+      nextAction: `Wait ${wait}, then re-run ${command} once. Do not loop.`,
     };
+  }
+
+  const upstream =
+    typeof failure.upstreamStatus === 'number' ? `, upstream HTTP ${failure.upstreamStatus}` : '';
+  return {
+    category: 'credential_renewal_rejected',
+    summary: `Yahoo rejected the stored credential (${failure.errorCode}${upstream}), so the grant is dead and cannot be recovered server-side.`,
+    nextAction: 'Ask the customer to disconnect and reconnect Yahoo; no refresh will help until they do.',
+  };
+}
+
+function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpretation {
+  if (diagnosis.stage === 'not_connected') return interpretNotConnected();
+  if (diagnosis.stage === 'credential_refresh_failed') {
+    return interpretCredentialRefreshFailure(diagnosis, 'diagnose');
   }
 
   const primary = diagnosis.calls[0];
@@ -635,6 +740,212 @@ export async function runYahooSupportDiagnose(
       outcome: report.outcome,
       stage,
       yahoo_request_count: yahooRequestCount,
+      correlation_id: correlationId,
+    })
+  );
+
+  return report;
+}
+
+// =============================================================================
+// PROBE-LEAGUE — one live per-league fetch, reproduced on demand
+// =============================================================================
+
+/**
+ * What one live per-league fetch means, in the operator's language.
+ *
+ * The first two categories are shared verbatim with `diagnose` (see
+ * `interpretNotConnected` / `interpretCredentialRefreshFailure`); the rest are
+ * this probe's own. `RUNBOOK.md`'s probe-league section has one branch each.
+ */
+export interface ProbeLeagueInterpretation {
+  category:
+    | SharedCredentialCategory
+    | 'succeeded'
+    | 'yahoo_rejected'
+    | 'throttled'
+    | 'malformed_payload';
+  summary: string;
+  nextAction: string;
+  /**
+   * Yahoo's own explanation, capped, and only on `yahoo_rejected`.
+   *
+   * The deliberate exception to "this module surfaces categories, never free
+   * text", and the same exception `refresh` already documents around
+   * `provider.error_description` (`RUNBOOK.md` §5): for a malformed league key
+   * the category alone says "Yahoo said no" while this string says *why*, which
+   * is the whole reason an operator runs this command. It is safe to project
+   * here in a way it would not be elsewhere in this module: this action never
+   * queries `yahoo_leagues`, so the identifier inside it is the one the
+   * operator typed, not one read out of the customer's stored rows. It is still
+   * free provider text — read it before pasting it anywhere.
+   */
+  errorDescription?: string;
+}
+
+/**
+ * The observation, reduced to what an operator acts on.
+ *
+ * Deliberately not the whole `YahooDiagnosticCall`: `url` carries the
+ * substituted league id back out, and `stats`/`parsedLeagueCount` come from the
+ * *discovery* parser, which has no meaning against a `/league/{id}/teams`
+ * payload and would read as a finding rather than as noise.
+ */
+export interface ProbeLeagueCall {
+  label: YahooDiagnosticCall['label'];
+  httpStatus: number | null;
+  ok: boolean;
+  bodyIsJson: boolean;
+  bodyLooksLikeEnvelope: boolean;
+  errorSnippetCategory: YahooDiagnosticCall['errorSnippetCategory'];
+  durationMs: number;
+}
+
+export type YahooSupportProbeLeagueReport =
+  | {
+      outcome: 'ok';
+      userMasked: string;
+      checkedAt: string;
+      correlationId: string;
+      /** Null when the probe stopped before reaching Yahoo at all. */
+      call: ProbeLeagueCall | null;
+      interpretation: ProbeLeagueInterpretation;
+    }
+  | { outcome: 'failed'; userMasked: string; error: 'probe_failed' };
+
+export type YahooSupportProbeLeagueDependencies = {
+  now?: () => number;
+  probe?: typeof probeYahooLeague;
+};
+
+function toProbeLeagueCall(call: YahooDiagnosticCall): ProbeLeagueCall {
+  return {
+    label: call.label,
+    httpStatus: call.httpStatus,
+    ok: call.ok,
+    bodyIsJson: call.bodyIsJson,
+    bodyLooksLikeEnvelope: call.bodyLooksLikeEnvelope,
+    errorSnippetCategory: call.errorSnippetCategory,
+    durationMs: call.durationMs,
+  };
+}
+
+/**
+ * Turn one probe result into a category, in a fixed priority order.
+ *
+ * Same ordering principle as `interpretDiagnosis`: renewal failure outranks
+ * anything observed downstream, and throttling outranks payload shape, because
+ * a throttled response is malformed for an uninteresting reason.
+ */
+function interpretLeagueProbe(probe: YahooSupportLeagueProbe): ProbeLeagueInterpretation {
+  if (probe.stage === 'not_connected') return interpretNotConnected();
+  if (probe.stage === 'credential_refresh_failed') {
+    return interpretCredentialRefreshFailure(probe, 'probe-league');
+  }
+
+  const call = probe.call;
+
+  if (call.httpStatus !== null && YAHOO_THROTTLE_STATUSES.has(call.httpStatus)) {
+    return {
+      category: 'throttled',
+      summary: `Yahoo throttled the league request (HTTP ${call.httpStatus}), so nothing can be concluded about this league yet.`,
+      nextAction: 'Back off, then re-run probe-league once. Never loop.',
+    };
+  }
+
+  if (call.httpStatus === 200 && call.ok && call.bodyIsJson && call.bodyLooksLikeEnvelope) {
+    return {
+      category: 'succeeded',
+      summary:
+        'Yahoo answered this exact league request with a normal fantasy_content envelope, so the live per-league path works for this account right now.',
+      nextAction:
+        'Ask the customer to retry and confirm. If they still see the error, capture the exact time and league they used — what they hit is not reproducing here.',
+    };
+  }
+
+  if (call.bodyIsJson && call.errorSnippetCategory === 'yahoo_error_json') {
+    return {
+      category: 'yahoo_rejected',
+      summary: `Yahoo refused this exact league request (HTTP ${call.httpStatus === null ? 'no response' : call.httpStatus}) with an error body of its own, which is the shape a malformed league key produces.`,
+      nextAction:
+        'File a bug with the category and the error description below. Do not tell the customer to reconnect — the credential worked; the identifier sent to Yahoo did not.',
+      ...(probe.errorDescription !== undefined ? { errorDescription: probe.errorDescription } : {}),
+    };
+  }
+
+  const status = call.httpStatus === null ? 'no response' : `HTTP ${call.httpStatus}`;
+  return {
+    category: 'malformed_payload',
+    summary: `Yahoo's answer to this league request was neither a usable envelope nor a recognizable Yahoo error (${status}, body category ${call.errorSnippetCategory}).`,
+    nextAction:
+      'Re-run probe-league once. If it reproduces, file a bug with the status and body category only — never the body itself.',
+  };
+}
+
+/**
+ * Reproduce one live per-league Yahoo fetch for an account and interpret it.
+ *
+ * The sibling of `runYahooSupportDiagnose` for the case its decision tree does
+ * not cover: the customer's leagues *are* stored and visible, and a specific
+ * live fetch for one of them fails. Reaches Yahoo through `probeYahooLeague`
+ * (which owns the guarded renewal and the single-call bound) and persists no
+ * league or sync-state data. Any thrown error collapses to a bare
+ * `probe_failed`, matching diagnose: a provider or driver message never rides
+ * out on an error path.
+ */
+export async function runYahooSupportProbeLeague(
+  env: YahooSupportEnv,
+  request: YahooSupportLeagueRequest,
+  dependencies: YahooSupportProbeLeagueDependencies = {}
+): Promise<YahooSupportProbeLeagueReport> {
+  const now = dependencies.now ?? Date.now;
+  const probe = dependencies.probe ?? probeYahooLeague;
+  const userMasked = maskUserId(request.userId);
+  const correlationId = crypto.randomUUID();
+  const checkedAt = new Date(now()).toISOString();
+
+  let report: YahooSupportProbeLeagueReport;
+  let stage: YahooSupportLeagueProbe['stage'] | null = null;
+  let category: ProbeLeagueInterpretation['category'] | null = null;
+
+  try {
+    const result = await probe(
+      env as YahooConnectEnv,
+      request.userId,
+      request.leagueId,
+      correlationId
+    );
+    stage = result.stage;
+    const interpretation = interpretLeagueProbe(result);
+    category = interpretation.category;
+    report = {
+      outcome: 'ok',
+      userMasked,
+      checkedAt,
+      correlationId,
+      call: result.stage === 'completed' ? toProbeLeagueCall(result.call) : null,
+      interpretation,
+    };
+  } catch (error) {
+    // Name only — anything thrown here can come from the provider path, where a
+    // message may quote a body.
+    console.error(
+      '[yahoo-support] League probe failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+    report = { outcome: 'failed', userMasked, error: 'probe_failed' };
+  }
+
+  // The league id is deliberately absent from this line. It is operator input,
+  // not a stored customer value, and the audit log has no need of it.
+  console.log(
+    JSON.stringify({
+      event: 'yahoo_support_probe_league',
+      service: 'auth-worker',
+      user_id: userMasked,
+      outcome: report.outcome,
+      stage,
+      category,
       correlation_id: correlationId,
     })
   );
