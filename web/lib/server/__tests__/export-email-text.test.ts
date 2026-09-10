@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import KickoffBroadcastEmail from "../../../emails/broadcast-2026-08-kickoff";
 import YahooAccessBroadcastEmail from "../../../emails/broadcast-2026-08-yahoo-access";
+import SeptemberUpdateBroadcastEmail from "../../../emails/broadcast-2026-09-update";
+import YahooBackBroadcastEmail from "../../../emails/broadcast-2026-09-yahoo-back";
 import { htmlToText } from "../../../scripts/export-email-text.mjs";
 
 describe("email plain-text export", () => {
@@ -55,6 +57,39 @@ describe("email plain-text export", () => {
     expect(text).not.toContain("You will not need to reconnect or do anything else.");
     expect(text).toContain(
       "Manage ESPN & Sleeper leagues https://flaim.app/leagues?ref=email-yahoo-access-aug-2026",
+    );
+    expect(text).toContain("Unsubscribe {{{RESEND_UNSUBSCRIBE_URL}}}");
+  });
+
+  it("renders the September product update copy and attributed docs link", async () => {
+    const html = await render(React.createElement(SeptemberUpdateBroadcastEmail));
+    const text = htmlToText(html);
+
+    expect(text).toContain(
+      "Draft results are here! See your actual ESPN and Sleeper picks, draft positions, and auction costs where available.",
+    );
+    expect(text).toContain(
+      "More ESPN history and detail. Explore pre-2018 seasons where available, plus starters, bench players, and points for football matchups from 2018 onward.",
+    );
+    expect(text).toContain(
+      "More ways to use Flaim. In addition to official ChatGPT and Claude support, Perplexity, Grok, and Gemini are also available as custom connectors.",
+    );
+    expect(text).toContain("Yahoo is back!");
+    expect(html).toContain(
+      'href="https://flaim.app/docs/ai?ref=email-sep-2026-update"',
+    );
+  });
+
+  it("renders the Yahoo restoration broadcast with its GIF and footer disclosure", async () => {
+    const html = await render(React.createElement(YahooBackBroadcastEmail));
+    const text = htmlToText(html);
+
+    expect(text).toContain("YAHOO IS BACK");
+    expect(text).toContain(
+      "You are receiving this because Yahoo is connected to your Flaim account.",
+    );
+    expect(html).toContain(
+      'src="https://media1.tenor.com/m/GMQO9zwZ_QgAAAAd/slow-clap-gardner.gif"',
     );
     expect(text).toContain("Unsubscribe {{{RESEND_UNSUBSCRIBE_URL}}}");
   });

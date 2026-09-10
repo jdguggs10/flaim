@@ -179,7 +179,7 @@ const styles = {
     borderRadius: emailBrand.radius.card,
     borderStyle: "solid",
     borderWidth: "1px",
-    padding: "28px",
+    padding: "20px 28px 28px",
   },
   cardHeader: {
     margin: "0 0 10px",
@@ -259,7 +259,7 @@ const styles = {
     padding: "14px 16px",
   },
   calloutText: {
-    color: emailBrand.colors.mutedForeground,
+    color: emailBrand.colors.foreground,
     fontSize: "14px",
     lineHeight: "22px",
     margin: "0",
