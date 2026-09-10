@@ -28,6 +28,7 @@ The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / M
 - Resend product emails use the optimized transparent Flaim mark at 36px in the card's top-right corner, aligned with the eyebrow on the left or with the title when no eyebrow is used. The shared layout does not add a separate text wordmark above the card.
 - Clerk auth emails use the dashboard application logo at 72px with the `FLAIM FANTASY` label. Keep this provider-specific because Clerk/Revolvapp controls the final email HTML.
 - Use system fonts, 8px containers, 6px buttons, and plain-language copy.
+- Shared Resend cards use 20px top padding and 28px side/bottom padding. Callout body text uses the foreground color for readability against the muted box.
 - Do not add promotional hero art to auth or security emails.
 - Product and lifecycle emails must include a clear unsubscribe or notification-preferences link in the footer before they are connected to a live sender.
 
@@ -95,6 +96,8 @@ The first product templates are:
 - `web/emails/welcome.tsx`
 - `web/emails/broadcast-2026-08-kickoff.tsx`
 - `web/emails/broadcast-2026-08-yahoo-access.tsx`
+- `web/emails/broadcast-2026-09-update.tsx`
+- `web/emails/broadcast-2026-09-yahoo-back.tsx`
 - `web/emails/espn-setup-link.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.

@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Email Readability
+
+- **Changed**: Shared email cards use 20px top padding and darker callout text across welcome, ESPN setup-link, and broadcast templates.
+- **Added**: September football update and Yahoo restoration Broadcast templates with concise update bullets and a closing Yahoo status box.
+
 ### Empty-String Error Code Fallback Fix (Yahoo logging)
 
 - **Fixed**: The `code=${error.code ?? 'unknown'}` pattern FLA-363/FLA-368 introduced across `yahoo-storage.ts` (and its `yahoo-support-diagnostics.ts` equivalent) silently lost signal on the single most common failure class. `@supabase/postgrest-js` sets `code: ''` (an empty string, not `undefined`) for client-side fetch/parse failures, so `??` let it through and produced a bare `code=` with nothing after it. Found during FLA-370's cross-model audit. Switched to `||`, which correctly falls back to `'unknown'` for both the missing and empty-string cases. No behavior change beyond the log line itself; a new test pins the empty-string case specifically (not just the missing-`code` case the existing tests already covered).
