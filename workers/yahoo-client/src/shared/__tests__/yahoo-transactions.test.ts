@@ -671,6 +671,52 @@ describe('yahoo-transactions', () => {
     expect(normalized[0].trade_sides).toBeUndefined();
   });
 
+  it('builds trade_sides from player movements when trader/tradee keys are absent', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.12' },
+                  { type: 'trade' },
+                  { status: 'successful' },
+                  { timestamp: '1700800000' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [{ player_id: '2001' }],
+                          { transaction_data: { type: 'trade', source_team_key: '449.l.123.t.7', destination_team_key: '449.l.123.t.2' } },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [{ player_id: '2002' }],
+                          { transaction_data: { type: 'trade', source_team_key: '449.l.123.t.2', destination_team_key: '449.l.123.t.7' } },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized[0].trade_sides).toEqual([
+      { team_id: '449.l.123.t.7', acquired: [{ id: '2002' }], gave_up: [{ id: '2001' }] },
+      { team_id: '449.l.123.t.2', acquired: [{ id: '2001' }], gave_up: [{ id: '2002' }] },
+    ]);
+  });
+
   it('keeps trade_sides when a trade row also carries a non-trade drop', () => {
     const raw = {
       fantasy_content: {
@@ -725,6 +771,7 @@ describe('yahoo-transactions', () => {
 
     const normalized = normalizeYahooTransactions(raw);
     expect(normalized).toHaveLength(1);
+    expect(normalized[0].type).toBe('trade');
     expect(normalized[0].players_dropped).toEqual([{ id: '2003', name: 'Synthetic Bench Three' }]);
     expect(normalized[0].trade_sides).toEqual([
       { team_id: '449.l.123.t.2', acquired: [], gave_up: [{ id: '2001', name: 'Synthetic Guard One' }] },

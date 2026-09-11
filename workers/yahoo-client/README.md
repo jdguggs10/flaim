@@ -101,7 +101,7 @@ Yahoo auth and rate-limit failures return `success: false` with the matching HTT
 - Explicit `week` is ignored and replaced with a recent 14-day timestamp window.
 - `type=waiver` and `type=pending_trade` use Yahoo's pending endpoint for the authenticated user's own team.
 - Other supported types use Yahoo's recent league transaction feed.
-- `trade` and `pending_trade` rows leave `players_added`/`players_dropped` empty and instead populate `trade_sides` (each team's acquired/gave-up players), matching ESPN's directional trade convention; `trade_sides` is omitted when any player on the row is missing a source or destination team key.
+- On `trade` and `pending_trade` rows, traded players populate `trade_sides` (each team's acquired/gave-up players), matching ESPN's directional trade convention, rather than `players_added`/`players_dropped`. A plain drop carried on the same row still lands in `players_dropped`. `trade_sides` is omitted when any traded player is missing a source or destination team key.
 
 ### Draft Results (`get_draft`)
 
