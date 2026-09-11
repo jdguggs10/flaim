@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Support Inbox Provider
+
+- **Changed**: `docs/EMAILS.md` now lists Fastmail as the provider for real inboxes, aliases, and replies at `support@flaim.app`, replacing Zoho. Addresses, Clerk, and Resend sending are unchanged.
+
 ### Pending Yahoo Trades Dropped for Missing Timestamp
 
 - **Fixed**: `get_transactions` was excluding pending Yahoo trades/waivers entirely whenever Yahoo hadn't yet stamped them with a timestamp, reporting them only as `dropped_invalid_timestamp_count` with no way to see the pending item itself. Yahoo doesn't assign a transaction timestamp until it resolves, so a genuinely still-pending trade legitimately has none — and the 14-day cutoff filter that timestamp validity exists for was never applied to the pending path anyway. Pending rows are no longer dropped for this reason; their `timestamp`/`date` fields are simply omitted (both already optional in the tool's output schema) instead of showing a misleading `0`/`1970-01-01`. Found via a user support report of a pending trade Flaim couldn't see.

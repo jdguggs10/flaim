@@ -6,7 +6,7 @@ Flaim uses a small, restrained email system so product emails, auth emails, and 
 
 | Provider | Role | Sender |
 | --- | --- | --- |
-| Zoho | Real inboxes, aliases, and replies | `support@flaim.app` |
+| Fastmail | Real inboxes, aliases, and replies | `support@flaim.app` |
 | Clerk | Authentication and security emails | `Flaim <accounts@flaim.app>` |
 | Resend | Product and lifecycle emails | `Flaim <updates@flaim.app>` |
 | Resend | Broadcasts | `Flaim <updates@news.flaim.app>` |
