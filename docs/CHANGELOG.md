@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Trade Details
+
+- **Fixed**: Yahoo `get_transactions` reported pending trades as `status: "unknown"` with no players. Yahoo's `proposed` and `accepted` trade statuses weren't recognized, and trade players are marked `trade`/`pending_trade` with source and destination team keys rather than `add`/`drop`, so the normalizer skipped them. Pending trades now report `status: "pending"`, and pending and completed Yahoo trades fill `trade_sides` with each team's acquired and given-up players. No output schema change: `trade_sides` was already declared.
+
 ### Support Inbox Provider
 
 - **Changed**: `docs/EMAILS.md` now lists Fastmail as the provider for real inboxes, aliases, and replies at `support@flaim.app`, replacing Zoho. Addresses, Clerk, and Resend sending are unchanged.
