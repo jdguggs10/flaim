@@ -69,8 +69,11 @@ function maskUserId(userId: string): string {
  */
 function isMissingHideLeagueWidgetColumn(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
-  if (error.code === '42703') return true; // Postgres undefined_column
-  return /column\b.*\bhide_league_widget\b.*does not exist/i.test(error.message ?? '');
+  if (error.code !== '42703') return false; // Postgres undefined_column
+  // 42703 is the generic undefined_column code — any column can trigger it,
+  // so the message must actually name hide_league_widget before we treat
+  // this as the known pre-migration state rather than an unrelated schema error.
+  return /hide_league_widget/i.test(error.message ?? '');
 }
 
 // Logged once per running isolate (not once per request) — this only fires

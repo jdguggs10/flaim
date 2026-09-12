@@ -212,6 +212,22 @@ describe('EspnSupabaseStorage', () => {
       expect(callCount()).toBe(1);
     });
 
+    it('does not attempt a legacy retry for a 42703 on an unrelated column', async () => {
+      // 42703 (undefined_column) is Postgres's generic missing-column code —
+      // it fires for any column, not just hide_league_widget. Without a
+      // message check, this would be misread as the pre-FLA-277 migration
+      // state and retried against the legacy (incompatible) column list.
+      const { callCount } = mockUserPreferencesSingleSequence([
+        { data: null, error: { code: '42703', message: 'column "some_other_column" does not exist' } },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+      // Only the primary select ran — no legacy-column retry for an
+      // unrelated missing column.
+      expect(callCount()).toBe(1);
+    });
+
     it('defaults hideLeagueWidget to false when no row exists', async () => {
       mockUserPreferencesSingle({ data: null, error: { code: 'PGRST116' } });
       const prefs = await storage.getUserPreferences('user_123');
