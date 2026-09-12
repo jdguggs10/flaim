@@ -243,6 +243,7 @@ describe('basketball get_players handler', () => {
         jsonResponse([
           { user_id: 'owner_9', display_name: 'Gerry', avatar: null, metadata: { team_name: 'The Flaimers' } },
         ]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
     });
 
     const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
@@ -289,6 +290,7 @@ describe('basketball get_players handler', () => {
         jsonResponse([
           { user_id: 'owner_9', display_name: 'Gerry', avatar: null, metadata: { team_name: 'The Flaimers' } },
         ]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
     });
 
     const params: ToolParams = {
@@ -322,6 +324,7 @@ describe('basketball get_players handler', () => {
         }),
       '/rosters': () => new Response(null, { status: 503 }),
       '/users': () => jsonResponse([]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
     });
 
     const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
@@ -342,12 +345,39 @@ describe('basketball get_players handler', () => {
           { roster_id: 9, owner_id: 'owner_9', players: ['301'], starters: [], reserve: null, taxi: null, settings: {} },
         ]),
       '/users': () => new Response(null, { status: 503 }),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
     });
 
     const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
     const result = await basketballHandlers.get_players(env, params);
 
     expect(result.success).toBe(false);
+    expect('players' in ((result.data as Record<string, unknown>) ?? {})).toBe(false);
+  });
+
+  it('fails closed (no players payload leaked) when the league is actively drafting, since in-progress picks are not yet reflected on rosters', async () => {
+    routeByUrl({
+      '/players/nba': () =>
+        jsonResponse({
+          '301': { player_id: '301', full_name: 'Test Rostered Hooper', position: 'PG', team: 'BOS', active: true },
+        }),
+      '/rosters': () =>
+        jsonResponse([
+          { roster_id: 9, owner_id: 'owner_9', players: [], starters: [], reserve: null, taxi: null, settings: {} },
+        ]),
+      '/users': () =>
+        jsonResponse([
+          { user_id: 'owner_9', display_name: 'Gerry', avatar: null },
+        ]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'drafting' }),
+    });
+
+    const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
+    const result = await basketballHandlers.get_players(env, params);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.code).toBe('SLEEPER_DRAFT_IN_PROGRESS');
     expect('players' in ((result.data as Record<string, unknown>) ?? {})).toBe(false);
   });
 
