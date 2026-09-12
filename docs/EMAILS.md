@@ -20,9 +20,9 @@ Resend uses separate verified US East sending domains for the two lanes:
 
 The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses.
 
-Root DMARC stays at `p=quarantine`. Aggregate reports go to Cloudflare DMARC Management only: `postmaster@flaim.app` was dropped from the `rua` tag on 2026-09-12, once that alias began delivering to a real mailbox and the daily XML reports started landing in it. Read them in the Cloudflare dashboard under Email > DMARC Management, not by mail. No subdomain publishes its own `_dmarc` record, so the Broadcast, Clerk, and bounce subdomains all inherit the root policy.
+Root DMARC stays at `p=quarantine`. Aggregate reports go to Cloudflare DMARC Management only: `postmaster@flaim.app` was dropped from the `rua` tag on 2026-09-12, once the mailbox move gave that alias a real destination and the daily XML reports began arriving in the support inbox. Read them in the Cloudflare dashboard under Email > DMARC Management, not by mail. No subdomain publishes its own `_dmarc` record, so the Broadcast, Clerk, and bounce subdomains all inherit the root policy.
 
-Moving to `p=reject` stays a provider-level decision, not a template change, and the templates are not what blocks it. Both Resend lanes sign with a DKIM key aligned to their own From domain, and forwarded mail keeps passing on DKIM once SPF breaks in transit. The open item is Clerk: in the 2026-09-10/11 aggregate reports a small share of `accounts@flaim.app` messages failed DKIM and passed on SPF alone. Under `p=reject` that combination turns a spam-folder delivery into a hard bounce on sign-in codes. Re-check that share over a window that includes a Broadcast send before tightening the policy.
+Moving to `p=reject` stays a provider-level decision, not a template change, and the templates are not what blocks it. DMARC passes when either aligned SPF or aligned DKIM passes, so `p=reject` changes the outcome only for mail that fails both. Before tightening the policy, confirm from current aggregate reports that every sending lane passes on aligned DKIM rather than on aligned SPF alone. SPF alignment is the half that breaks when a message is forwarded, so a lane leaning on it has no second mechanism left at that point. Check a window that includes a Broadcast send.
 
 ## Visual rules
 
