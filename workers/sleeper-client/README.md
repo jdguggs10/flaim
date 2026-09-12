@@ -56,7 +56,7 @@ interface ExecuteRequest {
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
-- `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
+- `get_players` — Player lookup with league availability resolved against current rosters (`league_status`, `league_team_id`, `league_team_name`, `league_owner_name`); market-ownership fields stay `market_percent_owned: null` / `ownership_scope: "unavailable"` since Sleeper has no market-ownership metric
 - `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
 
 ### Basketball (NBA)
@@ -66,8 +66,12 @@ interface ExecuteRequest {
 - `get_roster` — Team roster with player details
 - `get_matchups` — Weekly matchups (paired by `matchup_id`)
 - `get_free_agents` — Available free agents (uses KV-backed player index cache)
-- `get_players` — Player lookup with ownership unavailable semantics (`market_percent_owned: null`, `ownership_scope: "unavailable"`)
+- `get_players` — Player lookup with league availability resolved against current rosters (`league_status`, `league_team_id`, `league_team_name`, `league_owner_name`); market-ownership fields stay `market_percent_owned: null` / `ownership_scope: "unavailable"` since Sleeper has no market-ownership metric
 - `get_transactions` — Recent transactions with player name/position enrichment and `teams`/`teamOwners` roster-name maps
+
+## Player Search League Availability
+
+`get_players` requires `league_id` and resolves each matched player against that league's current rosters (`GET /league/{league_id}/rosters` and `/users`, loaded fresh per call — never cached, so one league's ownership can never leak into another's answer). Every matched player gets four additive fields alongside its existing identity fields: `league_status` (`"ROSTERED"` | `"FREE_AGENT"`) and `league_team_id` / `league_team_name` / `league_owner_name`, populated when rostered and `null` when a free agent. A rostered player whose roster `owner_id` has no matching league user still resolves `ROSTERED` with `league_team_name`/`league_owner_name` as `null` — the roster slot is still occupied even if the owner's identity can't be resolved. These are wholly separate from Sleeper's market-ownership fields (`market_percent_owned`, `ownership_scope`), which stay `null`/`"unavailable"` as before — Sleeper has no market-ownership percentage, so league availability (this-league-only) and market ownership (cross-league popularity) are never conflated. The rosters/users fetch is not best-effort: if it fails, the whole `get_players` call fails rather than reporting any player as a `FREE_AGENT` on incomplete data.
 
 ## Roster/Matchup Player Enrichment and Team Names
 
