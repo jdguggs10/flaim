@@ -79,7 +79,14 @@ export async function loadSleeperLeagueOwnership(leagueId: string): Promise<Slee
   const rosters: SleeperRoster[] = await rostersRes.json();
   const users: SleeperLeagueUser[] = await usersRes.json();
 
-  if (league?.status === 'drafting') {
+  // An unrecognized status is deliberately allowed through (see above), but an
+  // unreadable league payload is not: without a status this code cannot tell a
+  // live draft from a normal league, and guessing "not drafting" would reopen
+  // the false-negative the check below exists to prevent.
+  if (typeof league !== 'object' || league === null || typeof league.status !== 'string') {
+    throw new Error('SLEEPER_API_ERROR: Sleeper league response was malformed or missing a status');
+  }
+  if (league.status === 'drafting') {
     throw new Error(
       'SLEEPER_DRAFT_IN_PROGRESS: This league\'s draft is in progress; player league availability cannot ' +
         'be resolved until the draft completes, because in-progress picks are not yet reflected on Sleeper ' +

@@ -212,6 +212,18 @@ describe('loadSleeperLeagueOwnership / resolveSleeperPlayerLeagueAvailability', 
     await expect(loadSleeperLeagueOwnership('league_1')).rejects.toThrow('SLEEPER_API_ERROR');
   });
 
+  it('fails closed when the league response body carries no readable status (cannot tell a live draft from a normal league)', async () => {
+    mockLeagueFetch('league_1', {
+      rosters: () => jsonResponse([
+        { roster_id: 5, owner_id: 'owner_5', players: ['101'], starters: [], reserve: null, taxi: null, settings: {} },
+      ]),
+      users: () => jsonResponse([]),
+      league: () => jsonResponse({ no_status_field: true }),
+    });
+
+    await expect(loadSleeperLeagueOwnership('league_1')).rejects.toThrow('SLEEPER_API_ERROR');
+  });
+
   it('fails closed when a roster entry has players as a string instead of an array (would otherwise iterate it character by character)', async () => {
     mockLeagueFetch('league_1', {
       rosters: () => jsonResponse([
