@@ -909,6 +909,29 @@ describe('get_players output schema', () => {
       ],
     }));
   });
+
+  it('accepts a Sleeper entry with null league_status for ambiguous cross-roster ownership', () => {
+    expectValid('get_players', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      query: 'allen',
+      count: 1,
+      players: [
+        {
+          id: '4034',
+          name: 'Josh Allen',
+          position: 'QB',
+          team: 'BUF',
+          market_percent_owned: null,
+          ownership_scope: 'unavailable',
+          league_status: null,
+          league_team_id: null,
+          league_team_name: null,
+          league_owner_name: null,
+        },
+      ],
+    }));
+  });
 });
 
 describe('get_transactions output schema', () => {
