@@ -2133,8 +2133,10 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('get_league_info');
     expect(tool!.description).toContain('get_roster');
     expect(tool!.description).toContain('Sleeper always resolves league ownership against every current roster');
+    expect(tool!.description).toContain('except during an active draft');
     expect(tool!.description).toContain('league_team_id');
     expect(tool!.description).toContain('Sleeper-only');
+    expect(tool!.description).toContain('Fall back to get_roster only when league_status itself is absent or null');
   });
 
   // Test A: multi-league, no defaultSport pref → defaultLeague should be null

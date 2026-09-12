@@ -197,5 +197,11 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain(
       '"Find the right Ben Rice and show market ownership context" → `get_user_session` → `get_league_info` → `get_players`'
     );
+
+    // Active-draft exception (FLA-382 cross-model audit fix 2) and league_status-keyed fallback (fix 1)
+    expect(skill).toContain('except during an active draft');
+    expect(skill).toContain(
+      'Fall back to `get_roster` only when `league_status` itself is absent or null'
+    );
   });
 });

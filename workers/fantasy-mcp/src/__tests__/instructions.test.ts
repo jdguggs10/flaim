@@ -116,6 +116,7 @@ describe('Flaim MCP initialization instructions', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Never infer league ownership from market_percent_owned, percentOwned, or ownership_scope on any platform'
     );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('except during an active draft');
   });
 
   it('allows one bounded retry only for temporary failures', () => {
