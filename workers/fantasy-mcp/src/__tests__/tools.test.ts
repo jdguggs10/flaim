@@ -2113,7 +2113,7 @@ describe('fantasy-mcp tools', () => {
     expect(result.structuredContent).toEqual(payload);
   });
 
-  it('get_players schema remains unchanged and includes ownership guardrails in description', () => {
+  it('get_players input schema is unchanged and description covers ownership guardrails plus the Sleeper-only league_team_id field', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();
 
@@ -2132,6 +2132,9 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('league_owner_name');
     expect(tool!.description).toContain('get_league_info');
     expect(tool!.description).toContain('get_roster');
+    expect(tool!.description).toContain('Sleeper always resolves league ownership against every current roster');
+    expect(tool!.description).toContain('league_team_id');
+    expect(tool!.description).toContain('Sleeper-only');
   });
 
   // Test A: multi-league, no defaultSport pref → defaultLeague should be null

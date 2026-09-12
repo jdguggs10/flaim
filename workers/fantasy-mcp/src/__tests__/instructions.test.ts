@@ -102,6 +102,22 @@ describe('Flaim MCP initialization instructions', () => {
     );
   });
 
+  it('scopes get_players league ownership resolution and keeps the market-ownership guardrail platform-wide', () => {
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      "In get_players, Sleeper always resolves league ownership against the selected league's current rosters"
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('Sleeper-only league_team_id (the roster id, or null)');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'alongside the cross-platform league_status/league_team_name/league_owner_name'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'ESPN and Yahoo populate league ownership only when credentials and league context allow'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Never infer league ownership from market_percent_owned, percentOwned, or ownership_scope on any platform'
+    );
+  });
+
   it('allows one bounded retry only for temporary failures', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Correct invalid-request parameters before trying again'

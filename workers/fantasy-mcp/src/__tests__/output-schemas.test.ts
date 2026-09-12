@@ -787,6 +787,52 @@ describe('get_players output schema', () => {
       ],
     }));
   });
+
+  it('accepts a Sleeper ROSTERED entry with resolved league ownership and no market ownership', () => {
+    expectValid('get_players', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      query: 'allen',
+      count: 1,
+      players: [
+        {
+          id: '4034',
+          name: 'Josh Allen',
+          position: 'QB',
+          team: 'BUF',
+          market_percent_owned: null,
+          ownership_scope: 'unavailable',
+          league_status: 'ROSTERED',
+          league_team_id: '3',
+          league_team_name: 'Diamond Dogs',
+          league_owner_name: 'Alice',
+        },
+      ],
+    }));
+  });
+
+  it('accepts a Sleeper FREE_AGENT entry with resolved league ownership and null league team fields', () => {
+    expectValid('get_players', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      query: 'allen',
+      count: 1,
+      players: [
+        {
+          id: '5849',
+          name: 'Cordarrelle Patterson',
+          position: 'RB',
+          team: 'PIT',
+          market_percent_owned: null,
+          ownership_scope: 'unavailable',
+          league_status: 'FREE_AGENT',
+          league_team_id: null,
+          league_team_name: null,
+          league_owner_name: null,
+        },
+      ],
+    }));
+  });
 });
 
 describe('get_transactions output schema', () => {
