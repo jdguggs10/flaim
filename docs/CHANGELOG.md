@@ -12,6 +12,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 - **Fixed**: Yahoo `get_transactions` reported pending trades as `status: "unknown"` with no players. Yahoo's `proposed` and `accepted` trade statuses weren't recognized, and trade players are marked `trade`/`pending_trade` with source and destination team keys rather than `add`/`drop`, so the normalizer skipped them. Pending trades now report `status: "pending"`, and pending and completed Yahoo trades fill `trade_sides` with each team's acquired and given-up players. No output schema change: `trade_sides` was already declared.
 
+### DMARC Aggregate Reporting
+
+- **Changed**: `postmaster@flaim.app` was removed from the `_dmarc.flaim.app` `rua` tag, leaving Cloudflare DMARC Management as the only report destination. The Fastmail move gave that alias a real mailbox for the first time, so roughly a dozen aggregate report emails a day began arriving in the support inbox. Policy, alignment, and coverage are unchanged at `p=quarantine; adkim=r; aspf=r; pct=100`.
+- **Changed**: `docs/EMAILS.md` now records where DMARC reports are read, that no subdomain publishes its own `_dmarc` record, and what still blocks `p=reject`.
+
 ### Support Inbox Provider
 
 - **Changed**: `docs/EMAILS.md` now lists Fastmail as the provider for real inboxes, aliases, and replies at `support@flaim.app`, replacing Zoho. Addresses, Clerk, and Resend sending are unchanged.

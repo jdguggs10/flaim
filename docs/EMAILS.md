@@ -18,7 +18,11 @@ Resend uses separate verified US East sending domains for the two lanes:
 - `flaim.app` carries product and lifecycle email. Open and click tracking are off; Flaim-owned links use first-party `ref=` attribution instead.
 - `news.flaim.app` carries Broadcasts. Open tracking is off and click tracking is on through `links.news.flaim.app`.
 
-The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses. Root DMARC remains at `p=quarantine` while aggregate reports are observed; moving to `p=reject` is a later provider-level decision, not a template change.
+The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses.
+
+Root DMARC stays at `p=quarantine`. Aggregate reports go to Cloudflare DMARC Management only: `postmaster@flaim.app` was dropped from the `rua` tag on 2026-09-12, once that alias began delivering to a real mailbox and the daily XML reports started landing in it. Read them in the Cloudflare dashboard under Email > DMARC Management, not by mail. No subdomain publishes its own `_dmarc` record, so the Broadcast, Clerk, and bounce subdomains all inherit the root policy.
+
+Moving to `p=reject` stays a provider-level decision, not a template change, and the templates are not what blocks it. Both Resend lanes sign with a DKIM key aligned to their own From domain, and forwarded mail keeps passing on DKIM once SPF breaks in transit. The open item is Clerk: in the 2026-09-10/11 aggregate reports a small share of `accounts@flaim.app` messages failed DKIM and passed on SPF alone. Under `p=reject` that combination turns a spam-folder delivery into a hard bounce on sign-in codes. Re-check that share over a window that includes a Broadcast send before tightening the policy.
 
 ## Visual rules
 
