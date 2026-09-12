@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Waiver Priority / FAAB Balance — Declared Schema and Tool Description (FLA-380)
+
+- **Changed** (gated, contract release): `get_standings` now declares `waiverPriority` and `faabBalance` in `standingsEntrySchema` and documents them in the tool description, including that the two are not mutually exclusive on Yahoo, that both are absent (not `null`) on ESPN and Sleeper, and that `waiverPriority` is the team's live priority — distinct from `get_transactions`' `waiver_priority`, which is the priority a past claim used. The data itself shipped separately (#287) as a passthrough-payload change with no contract impact; this entry is documentation only. Held for the FLA-282 directory-review freeze.
+
 ### Yahoo Waiver Priority / FAAB Balance in Standings (FLA-380)
 
 - **Added**: Yahoo `get_standings` team entries now carry `waiverPriority` (the team's current waiver-claim priority, 1 = first) and `faabBalance` (remaining free-agent budget). Yahoo's `/league/{id}/standings` response already included both on the team object — `unwrapTeam()` merges all team metadata generically — but the handler wasn't selecting them into the mapped result. Either can be `null` and they are not mutually exclusive: a FAAB league may still report `waiverPriority` as its tie-breaker. `waiverPriority` is a 1-based ordinal, so a `0` or placeholder from Yahoo reads as `null` rather than a priority ahead of first — it now shares `parsePositiveOrdinal` with `playoffSeed`; `faabBalance` is a quantity, so its `0` (spent out) is preserved. No output schema change: `standingsEntrySchema` is a passthrough object, so the fields validate as-is. The declared schema and tool-description documentation for these fields ship separately with the next contract release. Reported via support@flaim.app.
