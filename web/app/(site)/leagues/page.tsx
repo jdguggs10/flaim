@@ -534,6 +534,7 @@ function LeaguesPageContent() {
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
   const [isSavingHideLeagueWidget, setIsSavingHideLeagueWidget] = useState(false);
+  const [isLoadingPreferences, setIsLoadingPreferences] = useState(true);
   const currentUserIdRef = useRef<string | null>(null);
   const espnHistoryWasActiveRef = useRef(false);
   // Device class resolves after mount so SSR and hydration render identically.
@@ -1335,6 +1336,7 @@ function LeaguesPageContent() {
     setIsCheckingSleeper(true);
     setIsLoadingYahooLeagues(true);
     setIsLoadingSleeperLeagues(true);
+    setIsLoadingPreferences(true);
 
     // Fetch user preferences
     const loadPreferences = async () => {
@@ -1354,6 +1356,10 @@ function LeaguesPageContent() {
         }
       } catch (err) {
         console.error('Failed to load preferences:', err);
+      } finally {
+        if (shouldApply()) {
+          setIsLoadingPreferences(false);
+        }
       }
     };
     loadPreferences();
@@ -1521,6 +1527,7 @@ function LeaguesPageContent() {
   // shouldApply) so a rejected request that resolves after the user has
   // switched accounts can't clobber the newly loaded account's state.
   const handleToggleHideLeagueWidget = async () => {
+    if (isLoadingPreferences) return;
     const shouldApply = createAccountGuard();
     if (!shouldApply()) return;
 
@@ -1844,7 +1851,7 @@ function LeaguesPageContent() {
                   size="sm"
                   className="flex-shrink-0 gap-1.5"
                   onClick={handleToggleHideLeagueWidget}
-                  disabled={isSavingHideLeagueWidget}
+                  disabled={isSavingHideLeagueWidget || isLoadingPreferences}
                   aria-pressed={displayPreferences.hideLeagueWidget}
                   aria-label="Hide the league widget in ChatGPT and Claude"
                   title={displayPreferences.hideLeagueWidget ? 'Widget hidden (click to show)' : 'Widget shown (click to hide)'}
