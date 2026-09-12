@@ -949,6 +949,176 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(result.code).toBe('MISSING_PARAM');
       expect(fetchMock).not.toHaveBeenCalled();
     });
+
+    it.each(scenarios)('$label maps waiverPriority for a rolling-priority league, with faabBalance null', async ({ sport, handlers }) => {
+      const rollingPriorityResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A', waiver_priority: '3' }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(rollingPriorityResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].waiverPriority).toBe(3);
+      expect(standings[0].faabBalance).toBeNull();
+    });
+
+    it.each(scenarios)('$label maps faabBalance for a FAAB league, with waiverPriority null', async ({ sport, handlers }) => {
+      const faabResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A', faab_balance: '87' }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(faabResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].faabBalance).toBe(87);
+      expect(standings[0].waiverPriority).toBeNull();
+    });
+
+    it.each(scenarios)('$label returns both waiverPriority and faabBalance as null when Yahoo omits them', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildStandingsResponse()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].waiverPriority).toBeNull();
+      expect(standings[0].faabBalance).toBeNull();
+    });
+
+    it.each(scenarios)('$label maps both waiverPriority and faabBalance when a FAAB league also returns a rolling tie-break priority', async ({ sport, handlers }) => {
+      // A FAAB league can still populate waiver_priority as its tie-breaker for equal
+      // bids — the two fields are not mutually exclusive on Yahoo.
+      const bothPresentResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A', waiver_priority: 4, faab_balance: 0 }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(bothPresentResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      // Raw numbers (not numeric strings) are handled, and a genuine $0 FAAB balance
+      // stays 0 rather than collapsing to null — 0 is falsy but meaningful here.
+      expect(standings[0].waiverPriority).toBe(4);
+      expect(standings[0].faabBalance).toBe(0);
+    });
+
+    it.each(scenarios)('$label treats a non-applicable waiver_priority as null rather than priority zero', async ({ sport, handlers }) => {
+      // waiver_priority is a 1-based ordinal, so 0 / '' / a placeholder means "does
+      // not apply" — surfacing 0 would read as ranking ahead of first. faab_balance
+      // is a quantity, so its own 0 must survive; both cases are pinned together.
+      const zeroPriorityResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Zero', waiver_priority: 0, faab_balance: 0 }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    '1': {
+                      team: [
+                        [{ team_key: '449.l.123.t.2', team_id: '2', name: 'Placeholder', waiver_priority: 'N/A', faab_balance: '' }],
+                        { team_standings: { rank: 2, outcome_totals: { wins: 6, losses: 4, ties: 0, percentage: '.600' }, points_for: '1100', points_against: '1050' } },
+                      ],
+                    },
+                    '2': {
+                      team: [
+                        [{ team_key: '449.l.123.t.3', team_id: '3', name: 'Fractional', waiver_priority: 2.5 }],
+                        { team_standings: { rank: 3, outcome_totals: { wins: 4, losses: 6, ties: 0, percentage: '.400' }, points_for: '1000', points_against: '1100' } },
+                      ],
+                    },
+                    count: 3,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(zeroPriorityResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].waiverPriority).toBeNull();
+      expect(standings[0].faabBalance).toBe(0);
+      expect(standings[1].waiverPriority).toBeNull();
+      expect(standings[1].faabBalance).toBeNull();
+      expect(standings[2].waiverPriority).toBeNull();
+    });
   });
 
   describe('get_roster', () => {

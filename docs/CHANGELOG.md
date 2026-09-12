@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Waiver Priority / FAAB Balance in Standings (FLA-380)
+
+- **Added**: Yahoo `get_standings` team entries now carry `waiverPriority` (the team's current waiver-claim priority, 1 = first) and `faabBalance` (remaining free-agent budget). Yahoo's `/league/{id}/standings` response already included both on the team object — `unwrapTeam()` merges all team metadata generically — but the handler wasn't selecting them into the mapped result. Either can be `null` and they are not mutually exclusive: a FAAB league may still report `waiverPriority` as its tie-breaker. `waiverPriority` is a 1-based ordinal, so a `0` or placeholder from Yahoo reads as `null` rather than a priority ahead of first — it now shares `parsePositiveOrdinal` with `playoffSeed`; `faabBalance` is a quantity, so its `0` (spent out) is preserved. No output schema change: `standingsEntrySchema` is a passthrough object, so the fields validate as-is. The declared schema and tool-description documentation for these fields ship separately with the next contract release. Reported via support@flaim.app.
+
 ### Yahoo Trade Details
 
 - **Fixed**: Yahoo `get_transactions` reported pending trades as `status: "unknown"` with no players. Yahoo's `proposed` and `accepted` trade statuses weren't recognized, and trade players are marked `trade`/`pending_trade` with source and destination team keys rather than `add`/`drop`, so the normalizer skipped them. Pending trades now report `status: "pending"`, and pending and completed Yahoo trades fill `trade_sides` with each team's acquired and given-up players. No output schema change: `trade_sides` was already declared.
