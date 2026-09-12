@@ -15,7 +15,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### DMARC Aggregate Reporting
 
 - **Changed**: `postmaster@flaim.app` was removed from the `_dmarc.flaim.app` `rua` tag, leaving Cloudflare DMARC Management as the only report destination. The Fastmail move gave that alias a real mailbox for the first time, so roughly a dozen aggregate report emails a day began arriving in the support inbox. Policy, alignment, and coverage are unchanged at `p=quarantine; adkim=r; aspf=r; pct=100`.
-- **Changed**: `docs/EMAILS.md` now records where DMARC reports are read, that no subdomain publishes its own `_dmarc` record, and the validation criterion for any future move to `p=reject`.
+- **Changed**: `docs/EMAILS.md` now records where DMARC reports are read, which domains the root policy actually governs and why the bounce subdomains are not among them, and the validation criterion for any future move to `p=reject`.
 
 ### Support Inbox Provider
 
