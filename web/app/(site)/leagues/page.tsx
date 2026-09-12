@@ -1326,19 +1326,19 @@ function LeaguesPageContent() {
     };
   }, [clearAccountScopedState, isLoaded, isSignedIn, loadLeagues, userId]);
 
+  // Load user preferences (default sport, hide-widget) once per signed-in
+  // identity, independent of the Yahoo-callback effect below. Yahoo connect
+  // params never change these preferences, so keying this on searchParams
+  // would re-run the GET on every ?yahoo=/?error= navigation and could land
+  // a stale read after an in-flight optimistic toggle (FLA-277).
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !userId) return;
 
     let isActive = true;
     const shouldApply = () => isActive;
 
-    setIsCheckingYahoo(true);
-    setIsCheckingSleeper(true);
-    setIsLoadingYahooLeagues(true);
-    setIsLoadingSleeperLeagues(true);
     setIsLoadingPreferences(true);
 
-    // Fetch user preferences
     const loadPreferences = async () => {
       try {
         const res = await fetch('/api/user/preferences');
@@ -1363,6 +1363,22 @@ function LeaguesPageContent() {
       }
     };
     loadPreferences();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isLoaded, isSignedIn, userId]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId) return;
+
+    let isActive = true;
+    const shouldApply = () => isActive;
+
+    setIsCheckingYahoo(true);
+    setIsCheckingSleeper(true);
+    setIsLoadingYahooLeagues(true);
+    setIsLoadingSleeperLeagues(true);
 
     const yahooError = searchParams.get('error');
     if (yahooError) {
