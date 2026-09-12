@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Waiver Priority / FAAB Balance — Declared Schema and Tool Description (FLA-380)
+
+- **Changed**: `get_standings` now declares `waiverPriority` and `faabBalance` in `standingsEntrySchema` and documents them in the tool description, including that the two are not mutually exclusive on Yahoo, that both are absent (not `null`) on ESPN and Sleeper, and that `waiverPriority` is the team's live priority — distinct from `get_transactions`' `waiver_priority`, which is the priority a past claim used. The data itself shipped separately (#287) as a passthrough-payload change with no contract impact; this entry is documentation only.
+
 ### get_transactions Description Matches Real Row Fields (FLA-374)
 
 - **Fixed**: the `get_transactions` tool description claimed every normalized transaction includes a `date`. Since the pending-Yahoo fix, a Yahoo row that Yahoo has not stamped yet is returned without `date` and `timestamp` on `type=waiver` and `type=pending_trade` requests, and is left out and counted in `dropped_invalid_timestamp_count` on every other Yahoo request. The description now says so, states that ESPN and Sleeper rows always carry both fields, and notes that `week` is null on Yahoo rows and on Sleeper rows without one.

@@ -332,12 +332,31 @@ describe('get_standings output schema', () => {
           percentage: '.800',
           pointsFor: '612.5',
           pointsAgainst: '540.1',
+          waiverPriority: 3,
+          faabBalance: null,
           playoffSeed: null,
           madePlayoffs: null,
           finalRank: null,
           championshipWon: null,
           playoffOutcome: null,
           outcomeConfidence: null,
+        },
+      ],
+    }));
+  });
+
+  it('accepts a Yahoo FAAB league reporting a spent-out balance alongside a tie-break priority', () => {
+    expectValid('get_standings', routed({
+      leagueKey: '449.l.123',
+      seasonPhase: 'regular_season',
+      seasonComplete: false,
+      standings: [
+        {
+          rank: '1',
+          teamKey: '449.l.123.t.1',
+          name: 'Yahoo Team',
+          waiverPriority: 4,
+          faabBalance: 0,
         },
       ],
     }));
