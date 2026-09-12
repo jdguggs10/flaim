@@ -6,7 +6,6 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### League Widget Preference (FLA-277)
 - **Added**: A per-user `hide_league_widget` preference (default off) in `user_preferences`, managed from `/leagues` with a toggle in the AI Apps card ("Hide the league widget in ChatGPT and Claude"). When on, `get_user_session` adds `widget: { hidden: true }` to its `structuredContent`, and the league widget renders nothing and reports a zero size instead of its normal card — the user's leagues are still returned to the model, only the visual card is suppressed.
-- **Changed**: The MCP initialization instructions now tell the model to reuse an already-obtained `get_user_session` result within a conversation, calling it again only after a successful `refresh_leagues` or when no prior result exists.
 
 ### Yahoo Waiver Priority / FAAB Balance in Standings (FLA-380)
 

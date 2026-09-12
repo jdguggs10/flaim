@@ -138,7 +138,7 @@ function loadEmbeddedRender() {
 
   const exposedScript = script.replace(
     /\}\)\(\);\s*$/,
-    'globalThis.__render = render;\nglobalThis.__sendSizeChanged = sendSizeChanged;\nglobalThis.__queueSizeChanged = queueSizeChanged;\n})();',
+    'globalThis.__render = render;\nglobalThis.__queueSizeChanged = queueSizeChanged;\n})();',
   );
 
   const postedMessages: Array<Record<string, unknown>> = [];
@@ -192,7 +192,6 @@ function loadEmbeddedRender() {
   runInNewContext(exposedScript, context);
   return {
     render: context.__render as (data: unknown) => void,
-    sendSizeChanged: context.__sendSizeChanged as () => void,
     queueSizeChanged: context.__queueSizeChanged as () => void,
     postedMessages,
     widgetEl,
