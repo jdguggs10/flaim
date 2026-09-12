@@ -18,7 +18,11 @@ Resend uses separate verified US East sending domains for the two lanes:
 - `flaim.app` carries product and lifecycle email. Open and click tracking are off; Flaim-owned links use first-party `ref=` attribution instead.
 - `news.flaim.app` carries Broadcasts. Open tracking is off and click tracking is on through `links.news.flaim.app`.
 
-The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses. Root DMARC remains at `p=quarantine` while aggregate reports are observed; moving to `p=reject` is a later provider-level decision, not a template change.
+The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses.
+
+Root DMARC stays at `p=quarantine`. Aggregate reports go to Cloudflare DMARC Management only: `postmaster@flaim.app` was dropped from the `rua` tag on 2026-09-12, once the mailbox move gave that alias a real destination and the daily XML reports began arriving in the support inbox. Read them in the Cloudflare dashboard under Email > DMARC Management, not by mail. DMARC policy is discovered from the visible From domain. Product and Clerk mail send as `flaim.app`, so the root record governs them directly. Only the Broadcast lane uses a From subdomain, `news.flaim.app`, and it publishes no `_dmarc` record of its own, so it falls back to the root policy. The `send.` and `clkmail.` subdomains are MAIL FROM and SPF authentication domains that never appear in a visible From, so a `_dmarc` record on any of them would have no effect.
+
+Moving to `p=reject` stays a provider-level decision, not a template change, and the templates are not what blocks it. DMARC passes when either aligned SPF or aligned DKIM passes, so `p=reject` changes the outcome only for mail that fails both. Before tightening the policy, confirm from current aggregate reports that every sending lane passes on aligned DKIM rather than on aligned SPF alone. SPF alignment is the half that breaks when a message is forwarded, so a lane leaning on it has no second mechanism left at that point. Check a window that includes a Broadcast send.
 
 ## Visual rules
 
