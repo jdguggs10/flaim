@@ -478,7 +478,7 @@ const searchPlayerEntrySchema = looseObject({
   market_percent_owned: z.number().nullable().optional(),
   ownership_scope: z.string().optional(),
   league_status: z.string().nullable().optional().describe('ROSTERED, FREE_AGENT, or null when unresolved (unavailable, or ambiguous rostering on Sleeper)'),
-  league_team_id: z.string().nullable().optional().describe('Sleeper only: the roster id owning the player, or null when not rostered'),
+  league_team_id: z.string().nullable().optional().describe('Sleeper only: the roster id owning the player; null when no single owner was resolved, which includes both a free agent and ownership that could not be resolved uniquely. league_status is the confirmation: FREE_AGENT means unrostered, null means unresolved'),
   league_team_name: z.string().nullable().optional(),
   league_owner_name: z.string().nullable().optional(),
 });
