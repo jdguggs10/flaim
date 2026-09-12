@@ -57,6 +57,30 @@ function maskUserId(userId: string): string {
   return `${userId.substring(0, 8)}...`;
 }
 
+/**
+ * True when a DB error indicates the `hide_league_widget` column doesn't
+ * exist yet — this Worker deployed before the FLA-277 migration was applied
+ * to this database. Mirrors the isMissingModeColumn pattern in
+ * archive-storage.ts so the read path can fall back to the pre-FLA-277
+ * column list instead of failing every user's saved sport/league defaults
+ * closed on an error it can actually recover from. Migration application and
+ * Worker deployment are independent events; this keeps their order
+ * unconstrained.
+ */
+function isMissingHideLeagueWidgetColumn(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code !== '42703') return false; // Postgres undefined_column
+  // 42703 is the generic undefined_column code — any column can trigger it,
+  // so the message must actually name hide_league_widget before we treat
+  // this as the known pre-migration state rather than an unrelated schema error.
+  return /hide_league_widget/i.test(error.message ?? '');
+}
+
+// Logged once per running isolate (not once per request) — this only fires
+// continuously if the migration truly hasn't been applied yet, and repeating
+// it on every preferences read would be log spam for a known, temporary state.
+let hasLoggedMissingHideLeagueWidgetColumn = false;
+
 export interface SupabaseStorageOptions {
   supabaseUrl: string;
   supabaseKey: string;
@@ -83,6 +107,12 @@ export interface UserPreferences {
   defaultBaseball: LeagueDefault | null;
   defaultBasketball: LeagueDefault | null;
   defaultHockey: LeagueDefault | null;
+  /**
+   * When true, the fantasy-mcp gateway's get_user_session tool tells the
+   * ChatGPT/Claude league widget to render nothing (FLA-277). This never
+   * changes what league data is returned to the model.
+   */
+  hideLeagueWidget: boolean;
 }
 
 export type LeaseFencedLeagueWriteOutcome = 'added' | 'refreshed' | 'lease_lost' | 'invalid_identity' | 'error';
@@ -1005,6 +1035,7 @@ export class EspnSupabaseStorage {
         defaultBaseball: null,
         defaultBasketball: null,
         defaultHockey: null,
+        hideLeagueWidget: false,
       };
     }
 
@@ -1013,9 +1044,47 @@ export class EspnSupabaseStorage {
 
       const { data, error } = await this.supabase
         .from('user_preferences')
-        .select('clerk_user_id, default_sport, default_football, default_baseball, default_basketball, default_hockey')
+        .select('clerk_user_id, default_sport, default_football, default_baseball, default_basketball, default_hockey, hide_league_widget')
         .eq('clerk_user_id', clerkUserId)
         .single();
+
+      if (isMissingHideLeagueWidgetColumn(error)) {
+        if (!hasLoggedMissingHideLeagueWidgetColumn) {
+          hasLoggedMissingHideLeagueWidgetColumn = true;
+          console.warn(
+            '[supabase-storage] user_preferences.hide_league_widget column not found — falling back to the pre-FLA-277 column list. hideLeagueWidget defaults to false until the migration is applied to this database.'
+          );
+        }
+
+        const { data: legacyData, error: legacyError } = await this.supabase
+          .from('user_preferences')
+          .select('clerk_user_id, default_sport, default_football, default_baseball, default_basketball, default_hockey')
+          .eq('clerk_user_id', clerkUserId)
+          .single();
+
+        if (legacyError || !legacyData) {
+          console.log(`[supabase-storage] getUserPreferences: no preferences found (legacy fallback), returning defaults`);
+          return {
+            clerkUserId,
+            defaultSport: null,
+            defaultFootball: null,
+            defaultBaseball: null,
+            defaultBasketball: null,
+            defaultHockey: null,
+            hideLeagueWidget: false,
+          };
+        }
+
+        return {
+          clerkUserId: legacyData.clerk_user_id,
+          defaultSport: legacyData.default_sport,
+          defaultFootball: legacyData.default_football as LeagueDefault | null,
+          defaultBaseball: legacyData.default_baseball as LeagueDefault | null,
+          defaultBasketball: legacyData.default_basketball as LeagueDefault | null,
+          defaultHockey: legacyData.default_hockey as LeagueDefault | null,
+          hideLeagueWidget: false,
+        };
+      }
 
       if (error || !data) {
         console.log(`[supabase-storage] getUserPreferences: no preferences found, returning defaults`);
@@ -1026,6 +1095,7 @@ export class EspnSupabaseStorage {
           defaultBaseball: null,
           defaultBasketball: null,
           defaultHockey: null,
+          hideLeagueWidget: false,
         };
       }
 
@@ -1038,6 +1108,7 @@ export class EspnSupabaseStorage {
         defaultBaseball: data.default_baseball as LeagueDefault | null,
         defaultBasketball: data.default_basketball as LeagueDefault | null,
         defaultHockey: data.default_hockey as LeagueDefault | null,
+        hideLeagueWidget: data.hide_league_widget === true,
       };
     } catch (error) {
       console.error('[supabase-storage] getUserPreferences error:', error);
@@ -1048,6 +1119,7 @@ export class EspnSupabaseStorage {
         defaultBaseball: null,
         defaultBasketball: null,
         defaultHockey: null,
+        hideLeagueWidget: false,
       };
     }
   }
@@ -1086,6 +1158,44 @@ export class EspnSupabaseStorage {
       return { success: true };
     } catch (error) {
       console.error('[supabase-storage] setDefaultSport error:', error);
+      return { success: false, error: 'Internal error' };
+    }
+  }
+
+  /**
+   * Set whether the get_user_session league widget should render (FLA-277).
+   * Returns success/error object to match setDefaultSport's pattern.
+   */
+  async setHideLeagueWidget(
+    clerkUserId: string,
+    hideLeagueWidget: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!clerkUserId) {
+      console.log('[supabase-storage] setHideLeagueWidget: no clerkUserId provided');
+      return { success: false, error: 'Missing clerkUserId' };
+    }
+
+    try {
+      const { error } = await this.supabase
+        .from('user_preferences')
+        .upsert(
+          {
+            clerk_user_id: clerkUserId,
+            hide_league_widget: hideLeagueWidget,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'clerk_user_id' }
+        );
+
+      if (error) {
+        console.error('[supabase-storage] setHideLeagueWidget error:', error);
+        return { success: false, error: 'Failed to set hide_league_widget' };
+      }
+
+      console.log(`[supabase-storage] setHideLeagueWidget: set to ${hideLeagueWidget} for user ${maskUserId(clerkUserId)}`);
+      return { success: true };
+    } catch (error) {
+      console.error('[supabase-storage] setHideLeagueWidget error:', error);
       return { success: false, error: 'Internal error' };
     }
   }

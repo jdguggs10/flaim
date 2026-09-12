@@ -587,6 +587,23 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
   var initializedSent = false;
   var hasRendered = false;
+  // Hide-widget support (FLA-277): when get_user_session's structuredContent
+  // carries widget.hidden === true (the user's hide_league_widget
+  // preference), the widget renders nothing and reports a zero size instead
+  // of the 353px fallback. widgetHidden is re-derived on every render() call
+  // (not sticky), so a refresh that flips the preference back off re-shows
+  // the widget and resumes real size reporting.
+  var widgetHidden = false;
+  function sendZeroSize() {
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: {
+        width: 0,
+        height: 0,
+      },
+    });
+  }
   // Keep this browser implementation static. Serializing the module function
   // can leak Wrangler-generated module helpers into the iframe.
   function classifyRefreshResult(payload) {
@@ -741,6 +758,10 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   }
 
   function sendSizeChanged() {
+    if (widgetHidden) {
+      sendZeroSize();
+      return;
+    }
     var widget = document.querySelector('.widget');
     var rect = widget && widget.getBoundingClientRect ? widget.getBoundingClientRect() : null;
     postToParent({
@@ -839,6 +860,16 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   }
 
   function render(data) {
+    widgetHidden = !!(data && data.widget && data.widget.hidden === true);
+    if (widgetHidden) {
+      var widgetEl = document.querySelector('.widget');
+      if (widgetEl) widgetEl.style.display = 'none';
+      hasRendered = true;
+      sendZeroSize();
+      return;
+    }
+    var visibleWidgetEl = document.querySelector('.widget');
+    if (visibleWidgetEl) visibleWidgetEl.style.display = '';
     var container = document.getElementById('content');
     if (!container) return;
     if (!data || !data.allLeagues || data.allLeagues.length === 0) {

@@ -44,7 +44,7 @@ Most tools are read-only analysis calls. `refresh_leagues` requires `mcp:write` 
 
 | Tool | Description |
 |------|-------------|
-| `get_user_session` | User's leagues across all platforms (call first) |
+| `get_user_session` | User's leagues across all platforms (call first). Adds `widget: { hidden: true }` when the user's `hide_league_widget` preference is set — the leagues themselves are still returned, only the visual widget is suppressed |
 | `refresh_leagues` | Re-discover connected leagues and update Flaim's league records |
 | `get_ancient_history` | Past seasons and historical leagues outside the current season |
 | `get_league_info` | Baseline league context: settings, scoring, roster config, teams/owners |

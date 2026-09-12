@@ -4,6 +4,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### League Widget Preference (FLA-277)
+- **Added**: A per-user `hide_league_widget` preference (default off) in `user_preferences`, managed from `/leagues` with a toggle in the AI Apps card ("Hide the league widget in ChatGPT and Claude"). When on, `get_user_session` adds `widget: { hidden: true }` to its `structuredContent`, and the league widget renders nothing and reports a zero size instead of its normal card — the user's leagues are still returned to the model, only the visual card is suppressed.
+
 ### Yahoo Waiver Priority / FAAB Balance in Standings (FLA-380)
 
 - **Added**: Yahoo `get_standings` team entries now carry `waiverPriority` (the team's current waiver-claim priority, 1 = first) and `faabBalance` (remaining free-agent budget). Yahoo's `/league/{id}/standings` response already included both on the team object — `unwrapTeam()` merges all team metadata generically — but the handler wasn't selecting them into the mapped result. Either can be `null` and they are not mutually exclusive: a FAAB league may still report `waiverPriority` as its tie-breaker. `waiverPriority` is a 1-based ordinal, so a `0` or placeholder from Yahoo reads as `null` rather than a priority ahead of first — it now shares `parsePositiveOrdinal` with `playoffSeed`; `faabBalance` is a quantity, so its `0` (spent out) is preserved. No output schema change: `standingsEntrySchema` is a passthrough object, so the fields validate as-is. The declared schema and tool-description documentation for these fields ship separately with the next contract release. Reported via support@flaim.app.

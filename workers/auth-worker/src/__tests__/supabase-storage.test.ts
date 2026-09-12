@@ -119,6 +119,203 @@ describe('EspnSupabaseStorage', () => {
     });
   });
 
+  describe('getUserPreferences', () => {
+    function mockUserPreferencesSingle(result: { data: unknown; error: unknown }) {
+      const single = vi.fn().mockResolvedValue(result);
+      const eq = vi.fn().mockReturnValue({ single });
+      const select = vi.fn().mockReturnValue({ eq });
+      mockFrom.mockReturnValue({ select });
+      return { select, eq, single };
+    }
+
+    // Deploy-order safety (FLA-277): the Worker may ship before the
+    // hide_league_widget migration is applied to a hosted database. Each
+    // `.from()` call here returns the next queued result in sequence, so we
+    // can assert the primary select happens first and the legacy retry only
+    // fires when that primary select reports the column missing.
+    function mockUserPreferencesSingleSequence(results: Array<{ data: unknown; error: unknown }>) {
+      let call = 0;
+      const froms: Array<{ select: ReturnType<typeof vi.fn> }> = [];
+      mockFrom.mockImplementation(() => {
+        const result = results[Math.min(call, results.length - 1)];
+        call += 1;
+        const single = vi.fn().mockResolvedValue(result);
+        const eq = vi.fn().mockReturnValue({ single });
+        const select = vi.fn().mockReturnValue({ eq });
+        froms.push({ select });
+        return { select };
+      });
+      return { froms, callCount: () => call };
+    }
+
+    it('falls back to the legacy column list and preserves other preferences when hide_league_widget is missing', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { callCount } = mockUserPreferencesSingleSequence([
+        { data: null, error: { code: '42703', message: 'column "hide_league_widget" does not exist' } },
+        {
+          data: {
+            clerk_user_id: 'user_123',
+            default_sport: 'football',
+            default_football: { platform: 'espn', leagueId: '1', seasonYear: 2025 },
+            default_baseball: null,
+            default_basketball: null,
+            default_hockey: null,
+          },
+          error: null,
+        },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+
+      // Other saved preferences must survive the fallback — only
+      // hideLeagueWidget is forced to a safe default.
+      expect(prefs).toEqual({
+        clerkUserId: 'user_123',
+        defaultSport: 'football',
+        defaultFootball: { platform: 'espn', leagueId: '1', seasonYear: 2025 },
+        defaultBaseball: null,
+        defaultBasketball: null,
+        defaultHockey: null,
+        hideLeagueWidget: false,
+      });
+      expect(callCount()).toBe(2);
+      warnSpy.mockRestore();
+    });
+
+    it('returns full defaults when the legacy fallback also finds no row', async () => {
+      const { callCount } = mockUserPreferencesSingleSequence([
+        {
+          data: null,
+          error: {
+            code: '42703',
+            message: 'column user_preferences.hide_league_widget does not exist',
+          },
+        },
+        { data: null, error: { code: 'PGRST116' } },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs).toEqual({
+        clerkUserId: 'user_123',
+        defaultSport: null,
+        defaultFootball: null,
+        defaultBaseball: null,
+        defaultBasketball: null,
+        defaultHockey: null,
+        hideLeagueWidget: false,
+      });
+      expect(callCount()).toBe(2);
+    });
+
+    it('does not attempt a legacy retry for an unrelated error', async () => {
+      const { callCount } = mockUserPreferencesSingleSequence([
+        { data: null, error: { code: '42501', message: 'permission denied' } },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+      // Only the primary select ran — no legacy-column retry for an
+      // unrelated error.
+      expect(callCount()).toBe(1);
+    });
+
+    it('does not attempt a legacy retry for a 42703 on an unrelated column', async () => {
+      // 42703 (undefined_column) is Postgres's generic missing-column code —
+      // it fires for any column, not just hide_league_widget. Without a
+      // message check, this would be misread as the pre-FLA-277 migration
+      // state and retried against the legacy (incompatible) column list.
+      const { callCount } = mockUserPreferencesSingleSequence([
+        { data: null, error: { code: '42703', message: 'column "some_other_column" does not exist' } },
+      ]);
+
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+      // Only the primary select ran — no legacy-column retry for an
+      // unrelated missing column.
+      expect(callCount()).toBe(1);
+    });
+
+    it('defaults hideLeagueWidget to false when no row exists', async () => {
+      mockUserPreferencesSingle({ data: null, error: { code: 'PGRST116' } });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+    });
+
+    it('defaults hideLeagueWidget to false on a query error', async () => {
+      mockUserPreferencesSingle({ data: null, error: new Error('boom') });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+    });
+
+    it('reads hideLeagueWidget true from the stored row', async () => {
+      mockUserPreferencesSingle({
+        data: {
+          clerk_user_id: 'user_123',
+          default_sport: null,
+          default_football: null,
+          default_baseball: null,
+          default_basketball: null,
+          default_hockey: null,
+          hide_league_widget: true,
+        },
+        error: null,
+      });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(true);
+    });
+
+    it('reads hideLeagueWidget false from the stored row', async () => {
+      mockUserPreferencesSingle({
+        data: {
+          clerk_user_id: 'user_123',
+          default_sport: null,
+          default_football: null,
+          default_baseball: null,
+          default_basketball: null,
+          default_hockey: null,
+          hide_league_widget: false,
+        },
+        error: null,
+      });
+      const prefs = await storage.getUserPreferences('user_123');
+      expect(prefs.hideLeagueWidget).toBe(false);
+    });
+  });
+
+  describe('setHideLeagueWidget', () => {
+    it('upserts hide_league_widget true', async () => {
+      const upsert = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValue({ upsert });
+      const result = await storage.setHideLeagueWidget('user_123', true);
+      expect(result).toEqual({ success: true });
+      expect(upsert).toHaveBeenCalledOnce();
+      const arg = upsert.mock.calls[0][0];
+      expect(arg.hide_league_widget).toBe(true);
+      expect(arg.clerk_user_id).toBe('user_123');
+    });
+
+    it('upserts hide_league_widget false', async () => {
+      const upsert = vi.fn().mockResolvedValue({ error: null });
+      mockFrom.mockReturnValue({ upsert });
+      const result = await storage.setHideLeagueWidget('user_123', false);
+      expect(result).toEqual({ success: true });
+      const arg = upsert.mock.calls[0][0];
+      expect(arg.hide_league_widget).toBe(false);
+    });
+
+    it('returns an error when the upsert fails', async () => {
+      const upsert = vi.fn().mockResolvedValue({ error: new Error('db down') });
+      mockFrom.mockReturnValue({ upsert });
+      const result = await storage.setHideLeagueWidget('user_123', true);
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a missing clerkUserId', async () => {
+      const result = await storage.setHideLeagueWidget('', true);
+      expect(result).toEqual({ success: false, error: 'Missing clerkUserId' });
+    });
+  });
+
   describe('setCredentials', () => {
     it('preserves the credential snapshot timestamp when ESPN cookies are unchanged', async () => {
       const updatedAt = '2026-08-26T20:00:00.000Z';
