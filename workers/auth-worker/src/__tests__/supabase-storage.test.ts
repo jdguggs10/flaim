@@ -183,8 +183,14 @@ describe('EspnSupabaseStorage', () => {
     });
 
     it('returns full defaults when the legacy fallback also finds no row', async () => {
-      mockUserPreferencesSingleSequence([
-        { data: null, error: { code: '42703' } },
+      const { callCount } = mockUserPreferencesSingleSequence([
+        {
+          data: null,
+          error: {
+            code: '42703',
+            message: 'column user_preferences.hide_league_widget does not exist',
+          },
+        },
         { data: null, error: { code: 'PGRST116' } },
       ]);
 
@@ -198,6 +204,7 @@ describe('EspnSupabaseStorage', () => {
         defaultHockey: null,
         hideLeagueWidget: false,
       });
+      expect(callCount()).toBe(2);
     });
 
     it('does not attempt a legacy retry for an unrelated error', async () => {
