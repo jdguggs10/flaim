@@ -160,6 +160,18 @@ describe('OAuthStorage MCP token lifetimes', () => {
     expect(insertPayloads[0].code).toBe(code);
   });
 
+  it('labels Littlebird connections from the approved redirect URI', async () => {
+    const { insertPayloads } = buildTableMock();
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await storage.createAccessToken({
+      userId: 'user_123',
+      redirectUri: 'https://app.lilbird.co/mcp/oauth/callback',
+    });
+
+    expect(insertPayloads[0].client_name).toBe('Littlebird');
+  });
+
   it('marks confidential refresh tokens with the client binding', async () => {
     const { insertPayloads } = buildTableMock();
     const client = await createConfidentialClientRegistration(clientSigningKey);

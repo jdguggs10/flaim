@@ -541,6 +541,68 @@ describe('runReconciliation', () => {
     expect(probeLine).toContain('"partial_failure_sports":["basketball"]');
   });
 
+  it('logs retryable:false for a non-retryable Sleeper probe failure (FLA-188)', async () => {
+    supabaseStub.state.rowsByTable = {
+      sleeper_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: 'sl_f', recurring_league_id: null },
+      ],
+    };
+    vi.mocked(fetchSleeperLeaguesReadOnly).mockResolvedValue({
+      status: 'error',
+      errorCode: 'sleeper_unavailable',
+      httpStatus: 404,
+    });
+    const logSpy = vi.spyOn(console, 'log');
+
+    await runReconciliation({ ...baseEnv, RECONCILIATION_PROVIDERS: 'sleeper' }, 'cron');
+
+    const probeLine = logSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes('"status":"error"'));
+    expect(probeLine).toContain('"retryable":false');
+  });
+
+  it('logs retryable:true for a rate-limited Sleeper probe failure (FLA-188)', async () => {
+    supabaseStub.state.rowsByTable = {
+      sleeper_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: 'sl_f', recurring_league_id: null },
+      ],
+    };
+    vi.mocked(fetchSleeperLeaguesReadOnly).mockResolvedValue({
+      status: 'error',
+      errorCode: 'sleeper_unavailable',
+      httpStatus: 429,
+    });
+    const logSpy = vi.spyOn(console, 'log');
+
+    await runReconciliation({ ...baseEnv, RECONCILIATION_PROVIDERS: 'sleeper' }, 'cron');
+
+    const probeLine = logSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes('"status":"error"'));
+    expect(probeLine).toContain('"retryable":true');
+  });
+
+  it('logs retryable:true for a Sleeper probe failure without an HTTP status (FLA-188)', async () => {
+    supabaseStub.state.rowsByTable = {
+      sleeper_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: 'sl_f', recurring_league_id: null },
+      ],
+    };
+    vi.mocked(fetchSleeperLeaguesReadOnly).mockResolvedValue({
+      status: 'error',
+      errorCode: 'sleeper_timeout',
+    });
+    const logSpy = vi.spyOn(console, 'log');
+
+    await runReconciliation({ ...baseEnv, RECONCILIATION_PROVIDERS: 'sleeper' }, 'cron');
+
+    const probeLine = logSpy.mock.calls
+      .map((call) => String(call[0]))
+      .find((line) => line.includes('"status":"error"'));
+    expect(probeLine).toContain('"retryable":true');
+  });
+
   it('marks remaining candidates skipped_budget once the time budget is spent', async () => {
     vi.useFakeTimers();
     supabaseStub.state.rowsByTable = {

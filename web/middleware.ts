@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 
 const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 // Exact machine-to-machine endpoint paths exempted here must enforce their own request authentication.
-const CSRF_EXEMPT_PATHS = new Set(['/api/webhooks/clerk']);
+const CSRF_EXEMPT_PATHS = new Set(['/api/webhooks/clerk', '/api/webhooks/resend']);
 
 const ALLOWED_ORIGINS = [
   'https://flaim.app',

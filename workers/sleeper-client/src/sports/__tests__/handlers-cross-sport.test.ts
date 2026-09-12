@@ -6,6 +6,7 @@ import { clearSleeperPlayersInMemoryCacheForTesting } from '../../shared/sleeper
 import { SLEEPER_PLAYER_ENRICHMENT_WARNING } from '../../shared/sleeper-enrichment';
 import { TRADED_PICKS_UNAVAILABLE_WARNING, tradedPicksPartialWarning } from '../../shared/handlers/get-league-info';
 import { TEAMS_UNAVAILABLE_WARNING } from '../../shared/handlers/get-transactions';
+import { LEAGUE_STATUS_UNAVAILABLE_WARNING } from '../../shared/handlers/get-roster';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -279,7 +280,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
-      expect(data.draftRounds).toBe(4);
+      expect(data.futureDraftRounds).toBe(4);
       expect(typeof data.pickOwnershipNote).toBe('string');
       expect(data.warnings).toBeUndefined();
 
@@ -483,6 +484,179 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(tradedPicks[0].originalOwnerName).toBeUndefined();
       expect(tradedPicks[0].originalTeamName).toBeUndefined();
     });
+
+    it.each(scenarios)('$label surfaces leagueFormat for a guillotine-style keeper league and passes through raw keeper ids, preserving null/[] semantics', async ({ sport, handlers }) => {
+      // Modeled on the live-probed "Get Chopped" league (FLA-284 research brief).
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          league_id: '999',
+          name: 'Get Chopped',
+          sport: 'nfl',
+          season: '2026',
+          status: 'pre_draft',
+          total_rosters: 3,
+          roster_positions: ['QB', 'RB'],
+          scoring_settings: { pass_yd: 0.04 },
+          previous_league_id: null,
+          draft_id: 'draft_gc',
+          settings: {
+            type: 3,
+            max_keepers: 1,
+            disable_trades: 1,
+            pick_trading: 0,
+            trade_deadline: 11,
+            taxi_slots: 0,
+            draft_rounds: 3,
+          },
+        }))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], keepers: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], keepers: null, settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 3, owner_id: 'u3', players: [], starters: [], reserve: [], keepers: ['4046', '6794'], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+          { user_id: 'u3', display_name: 'Cara', avatar: null },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '999', season_year: 2026 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueFormat).toEqual({
+        typeRaw: 3,
+        typeNote: expect.stringContaining('guillotine'),
+        maxKeepers: 1,
+        tradeDeadlineWeek: 11,
+        tradesDisabled: true,
+        pickTrading: false,
+        taxi: { slots: 0 },
+      });
+      expect(data.futureDraftRounds).toBe(3);
+
+      const teams = data.teams as Array<{ rosterId: number; keepers?: string[] | null }>;
+      expect(teams[0].keepers).toEqual([]);
+      expect(teams[1].keepers).toBeNull();
+      expect(teams[2].keepers).toEqual(['4046', '6794']);
+    });
+
+    it.each(scenarios)('$label surfaces leagueFormat for a dynasty-style league with pick trading, taxi years, and reserve slots', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          league_id: '888',
+          name: 'Dynasty Vault',
+          sport: 'nfl',
+          season: '2026',
+          status: 'in_season',
+          total_rosters: 2,
+          roster_positions: ['QB', 'RB'],
+          scoring_settings: { pass_yd: 0.04 },
+          previous_league_id: null,
+          draft_id: 'draft_dv',
+          settings: {
+            type: 2,
+            pick_trading: 1,
+            taxi_slots: 3,
+            taxi_years: 1,
+            reserve_slots: 6,
+            trade_deadline: 13,
+          },
+        }))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '888', season_year: 2026 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      // disable_trades is absent from this fixture's settings — Sleeper's
+      // 0/1 encoding gives no way to distinguish "not disabled" from "not
+      // reported," so tradesDisabled is omitted rather than defaulted to
+      // false (FLA-284 audit).
+      expect(data.leagueFormat).toEqual({
+        typeRaw: 2,
+        typeNote: expect.stringContaining('guillotine'),
+        tradeDeadlineWeek: 13,
+        pickTrading: true,
+        taxi: { slots: 3, years: 1 },
+        reserveSlots: 6,
+      });
+      expect((data.leagueFormat as Record<string, unknown>)).not.toHaveProperty('tradesDisabled');
+
+      // Neither roster fixture included a keepers field — omitted, not
+      // coerced to null or [].
+      const teams = data.teams as Array<{ keepers?: string[] | null }>;
+      expect(teams[0].keepers).toBeUndefined();
+      expect(teams[1].keepers).toBeUndefined();
+    });
+
+    it.each(scenarios)('$label omits leagueFormat when the league has no settings', async ({ sport, handlers }) => {
+      mockBaseLeagueFetches();
+      mockFetch.mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueFormat).toBeUndefined();
+    });
+
+    it.each(scenarios)('$label omits tradesDisabled/pickTrading/taxi.allowVets rather than coercing to false when Sleeper sends a value other than exact numeric 0/1 (FLA-284)', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({
+          league_id: '777',
+          name: 'Odd Flags League',
+          sport: 'nfl',
+          season: '2026',
+          status: 'in_season',
+          total_rosters: 2,
+          roster_positions: ['QB', 'RB'],
+          scoring_settings: { pass_yd: 0.04 },
+          previous_league_id: null,
+          draft_id: 'draft_odd',
+          settings: {
+            type: 1,
+            // None of these are exact numeric 0/1 — Sleeper's encoding gives
+            // no defined meaning for them, so they must not collapse to false.
+            disable_trades: null,
+            pick_trading: 2,
+            taxi_allow_vets: null,
+            taxi_slots: 1,
+          },
+        }))
+        .mockResolvedValueOnce(jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+          { roster_id: 2, owner_id: 'u2', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+          { user_id: 'u2', display_name: 'Bob', avatar: null },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport, league_id: '777', season_year: 2026 };
+      const result = await handlers.get_league_info({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      const leagueFormat = data.leagueFormat as Record<string, unknown>;
+      expect(leagueFormat).not.toHaveProperty('tradesDisabled');
+      expect(leagueFormat).not.toHaveProperty('pickTrading');
+      expect(leagueFormat.taxi).toEqual({ slots: 1 });
+      expect((leagueFormat.taxi as Record<string, unknown>)).not.toHaveProperty('allowVets');
+    });
   });
 
   describe('get_standings', () => {
@@ -525,7 +699,11 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
   describe('get_roster', () => {
     it.each(scenarios)('$label enriches starters/bench/reserve/taxi with name/position/team and adds teamName', async ({ sport, handlers }) => {
+      // loadLeagueStatus is kicked off before the rosters/users Promise.all
+      // (finding 1: decoupled from required-fetch latency), so the league
+      // fetch is the FIRST mockFetch call, not the third.
       mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' }))
         .mockResolvedValueOnce(jsonResponse([
           {
             roster_id: 1, owner_id: 'u1',
@@ -555,10 +733,12 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.ownerName).toBe('Alice');
       expect(data.teamName).toBe('The Waiver Wire Wizards');
       expect(data.warnings).toBeUndefined();
+      expect(data.snapshot).toMatchObject({ leagueStatus: 'in_season' });
     });
 
     it.each(scenarios)('$label enriches a "0" empty slot, a DEF abbreviation id, and an unknown id; omits teamName when unset', async ({ sport, handlers }) => {
       mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' }))
         .mockResolvedValueOnce(jsonResponse([
           {
             roster_id: 2, owner_id: 'u2',
@@ -594,6 +774,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
     it.each(scenarios)('$label treats missing taxi as empty and keeps bench derivation', async ({ sport, handlers }) => {
       mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' }))
         .mockResolvedValueOnce(jsonResponse([
           {
             roster_id: 1, owner_id: 'u1',
@@ -617,6 +798,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
     it.each(scenarios)('$label returns all rosters summary when no team_id', async ({ sport, handlers }) => {
       mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'drafting' }))
         .mockResolvedValueOnce(jsonResponse([
           { roster_id: 1, owner_id: 'u1', players: ['p1', 'p2'], starters: ['p1'], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0, fpts_decimal: 0 } },
         ]))
@@ -628,9 +810,235 @@ describe('sleeper cross-sport handler characterization tests', () => {
       const result = await handlers.get_roster({} as never, params);
 
       expect(result.success).toBe(true);
-      const data = result.data as { rosters: Array<Record<string, unknown>> };
+      const data = result.data as { rosters: Array<Record<string, unknown>>; snapshot: Record<string, unknown> };
       expect(data.rosters).toHaveLength(1);
       expect(data.rosters[0]).toMatchObject({ rosterId: 1, playerCount: 2, starterCount: 1, teamName: 'The Waiver Wire Wizards' });
+      expect(data.snapshot).toMatchObject({ leagueStatus: 'drafting' });
+    });
+
+    it.each(scenarios)('$label resolves keepers via the player index, like starters/bench/reserve/taxi', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'pre_draft' }))
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1'], starters: [], reserve: [], taxi: [], keepers: ['p1', 'ghost999'],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+
+      const env = playersCacheEnv([
+        { player_id: 'p1', full_name: 'Player One', position: 'QB', team: 'BUF' },
+      ]);
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(env, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      // p1 resolves like any other roster array entry; ghost999 (unknown to
+      // the index) falls back to an id-only entry rather than throwing.
+      expect(data.keepers).toEqual([
+        { id: 'p1', name: 'Player One', position: 'QB', team: 'BUF' },
+        { id: 'ghost999' },
+      ]);
+    });
+
+    it.each(scenarios)('$label preserves keepers null vs [] rather than collapsing to one shape', async ({ sport, handlers }) => {
+      const rosterFixture = (keepers: string[] | null) => [
+        {
+          roster_id: 1, owner_id: 'u1',
+          players: [], starters: [], reserve: [], taxi: [], keepers,
+          settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+        },
+      ];
+      const usersFixture = [{ user_id: 'u1', display_name: 'Alice', avatar: null }];
+      const env = playersCacheEnv([]);
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' }))
+        .mockResolvedValueOnce(jsonResponse(rosterFixture(null)))
+        .mockResolvedValueOnce(jsonResponse(usersFixture));
+      const nullResult = await handlers.get_roster(env, params);
+      expect((nullResult.data as Record<string, unknown>).keepers).toBeNull();
+
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' }))
+        .mockResolvedValueOnce(jsonResponse(rosterFixture([])))
+        .mockResolvedValueOnce(jsonResponse(usersFixture));
+      const emptyResult = await handlers.get_roster(env, params);
+      expect((emptyResult.data as Record<string, unknown>).keepers).toEqual([]);
+    });
+
+    it.each(scenarios)('$label omits keepers when Sleeper does not include it on the roster', async ({ sport, handlers }) => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' }))
+        .mockResolvedValueOnce(jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: [], starters: [], reserve: [], taxi: [],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+          },
+        ]))
+        .mockResolvedValueOnce(jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]));
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(playersCacheEnv([]), params);
+
+      expect(result.success).toBe(true);
+      expect((result.data as Record<string, unknown>).keepers).toBeUndefined();
+    });
+
+    // URL-routed (not positional) so these tests can't pass "for the wrong
+    // reason": each asserts the actual GET /league/{league_id} URL was hit,
+    // and an unrouted call rejects loudly instead of silently consuming
+    // whatever response a positional queue happened to have next. Mirrors
+    // the mockFetchByUrl helper in the get_transactions describe block below.
+    function mockFetchByUrl(routes: Record<string, () => Response | Promise<Response>>) {
+      mockFetch.mockImplementation((input) => {
+        const url = String(input);
+        const route = Object.entries(routes).find(([pattern]) => url.includes(pattern));
+        if (!route) return Promise.reject(new Error(`unmocked fetch: ${url}`));
+        return Promise.resolve(route[1]());
+      });
+    }
+
+    const leagueUrl = 'https://api.sleeper.app/v1/league/12345';
+
+    it.each(scenarios)('$label surfaces leagueStatus: "drafting" on the current-roster snapshot so an empty mid-draft roster can explain itself', async ({ sport, handlers }) => {
+      mockFetchByUrl({
+        '/league/12345/rosters': () => jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: [], starters: [], reserve: [], taxi: [],
+            settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+          },
+        ]),
+        '/league/12345/users': () => jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]),
+        '/league/12345': () => jsonResponse({ status: 'drafting' }),
+      });
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.snapshot).toMatchObject({ leagueStatus: 'drafting' });
+      // The empty starters/bench/0-0-0 record themselves are unaffected —
+      // leagueStatus is additive context, not a behavior change.
+      expect(data.starters).toEqual([]);
+      expect(data.bench).toEqual([]);
+      expect(data.record).toEqual({ wins: 0, losses: 0, ties: 0 });
+      expect(data.warnings).toBeUndefined();
+      expect(mockFetch.mock.calls.some(([url]) => String(url) === leagueUrl)).toBe(true);
+    });
+
+    it.each(scenarios)('$label degrades gracefully when the league fetch fails: roster still returned, leagueStatus omitted, warning added', async ({ sport, handlers }) => {
+      mockFetchByUrl({
+        '/league/12345/rosters': () => jsonResponse([
+          {
+            roster_id: 1, owner_id: 'u1',
+            players: ['p1'], starters: ['p1'], reserve: [],
+            settings: { wins: 3, losses: 2, ties: 0, fpts: 400 },
+          },
+        ]),
+        '/league/12345/users': () => jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]),
+        '/league/12345': () => new Response(null, { status: 500 }),
+      });
+
+      const env = playersCacheEnv([
+        { player_id: 'p1', full_name: 'Player One', position: 'QB', team: 'BUF' },
+      ]);
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(env, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      // The roster itself still succeeds fully.
+      expect(data.starters).toEqual([{ id: 'p1', name: 'Player One', position: 'QB', team: 'BUF' }]);
+      expect(data.record).toEqual({ wins: 3, losses: 2, ties: 0 });
+      // leagueStatus is simply absent — not a malformed/empty-string value.
+      expect(data.snapshot).toEqual({ type: 'current' });
+      expect(data.warnings).toEqual([LEAGUE_STATUS_UNAVAILABLE_WARNING]);
+      expect(mockFetch.mock.calls.some(([url]) => String(url) === leagueUrl)).toBe(true);
+    });
+
+    it.each(scenarios)('$label degrades gracefully when the league fetch rejects (network error), on the roster-summary branch too', async ({ sport, handlers }) => {
+      mockFetchByUrl({
+        '/league/12345/rosters': () => jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: [], starters: [], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]),
+        '/league/12345/users': () => jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]),
+        '/league/12345': () => Promise.reject(new Error('network unreachable')),
+      });
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025 };
+      const result = await handlers.get_roster({} as never, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { rosters: unknown[]; snapshot: Record<string, unknown>; warnings?: string[] };
+      expect(data.rosters).toHaveLength(1);
+      expect(data.snapshot).toEqual({ type: 'current' });
+      expect(data.warnings).toEqual([LEAGUE_STATUS_UNAVAILABLE_WARNING]);
+      expect(mockFetch.mock.calls.some(([url]) => String(url) === leagueUrl)).toBe(true);
+    });
+
+    it.each(scenarios)('$label degrades gracefully when the league response is a 200 with no usable status field', async ({ sport, handlers }) => {
+      mockFetchByUrl({
+        '/league/12345/rosters': () => jsonResponse([
+          { roster_id: 1, owner_id: 'u1', players: ['p1'], starters: ['p1'], reserve: [], settings: { wins: 0, losses: 0, ties: 0, fpts: 0 } },
+        ]),
+        '/league/12345/users': () => jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]),
+        // A 200 body with no `status` field at all (e.g. an empty object) —
+        // distinct from a fetch/HTTP failure, but equally unusable.
+        '/league/12345': () => jsonResponse({}),
+      });
+
+      const env = playersCacheEnv([
+        { player_id: 'p1', full_name: 'Player One', position: 'QB', team: 'BUF' },
+      ]);
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(env, params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.snapshot).toEqual({ type: 'current' });
+      expect(data.warnings).toEqual([LEAGUE_STATUS_UNAVAILABLE_WARNING]);
+      expect(mockFetch.mock.calls.some(([url]) => String(url) === leagueUrl)).toBe(true);
+    });
+
+    it.each(scenarios)('$label returns a prompt roster error without waiting on a black-holed league fetch (pins the Promise.all decoupling)', async ({ sport, handlers }) => {
+      mockFetchByUrl({
+        // The required rosters fetch 404s immediately...
+        '/league/12345/rosters': () => new Response(null, { status: 404 }),
+        '/league/12345/users': () => jsonResponse([
+          { user_id: 'u1', display_name: 'Alice', avatar: null },
+        ]),
+        // ...while the optional league-status fetch never resolves at all.
+        // If loadLeagueStatus were still joined into the required Promise.all
+        // (or awaited on this error path), this test would hang until the
+        // suite's test timeout instead of resolving promptly.
+        '/league/12345': () => new Promise<Response>(() => {}),
+      });
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('SLEEPER_NOT_FOUND');
     });
   });
 
@@ -762,6 +1170,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
     it.each(scenarios)('$label current roster carries a current snapshot block', async ({ sport, handlers }) => {
       mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' }))
         .mockResolvedValueOnce(jsonResponse([
           {
             roster_id: 1, owner_id: 'u1',
@@ -778,7 +1187,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
-      expect(data.snapshot).toEqual({ type: 'current' });
+      expect(data.snapshot).toEqual({ type: 'current', leagueStatus: 'in_season' });
       expect(data).toHaveProperty('record');
     });
   });
@@ -1137,6 +1546,7 @@ describe('sleeper player-index failure degradation', () => {
   describe('get_roster (current roster, team_id provided)', () => {
     it.each(playersIndexFailures)('degrades gracefully on $label', async ({ queueFailure }) => {
       mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: 'in_season' })) // GET /league/{id}
         .mockResolvedValueOnce(jsonResponse([
           {
             roster_id: 1, owner_id: 'u1',

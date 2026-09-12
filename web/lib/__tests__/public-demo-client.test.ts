@@ -102,9 +102,9 @@ describe("parsePublicDemoCapabilities", () => {
     });
 
     expect(targets.map((target) => [target.platform, target.sport])).toEqual([
-      ["espn", "baseball"],
       ["espn", "football"],
       ["sleeper", "football"],
+      ["espn", "baseball"],
     ]);
   });
 
@@ -197,6 +197,7 @@ describe("capability resolution", () => {
       }),
     );
 
+    // Matrix order puts espn-football first for the 2026 NFL season.
     expect(state.platform).toBe("espn");
     expect(state.sport).toBe("football");
   });
@@ -959,9 +960,10 @@ describe("resolveSportForPlatform", () => {
   });
 
   it("falls back to the matrix default sport", () => {
+    // espn's default sport is football for the 2026 NFL season.
     expect(
       resolveSportForPlatform(TARGETS, "espn", "hockey" as never, undefined),
-    ).toBe("baseball");
+    ).toBe("football");
   });
 
   it("returns null for a platform with nothing advertised", () => {

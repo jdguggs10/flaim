@@ -84,10 +84,10 @@ describe('sleeper basketball get_transactions handler', () => {
     expect(fetchTransactionsMock).toHaveBeenCalledWith('league_nba_1', [18, 17], expect.any(Function));
 
     if (!result.success) return;
-    const data = result.data as { sport: string; count: number; window: { mode: string; weeks: number[] } };
+    const data = result.data as { sport: string; count: number; window: { mode: string; weeks: number[]; returned_rows: number } };
     expect(data.sport).toBe('basketball');
     expect(data.count).toBe(2);
-    expect(data.window).toEqual({ mode: 'recent_two_weeks', weeks: [18, 17] });
+    expect(data.window).toEqual({ mode: 'recent_two_weeks', weeks: [18, 17], returned_rows: 2 });
   });
 
   it('degrades gracefully when player lookup cache fails', async () => {
@@ -205,5 +205,93 @@ describe('sleeper basketball get_transactions handler', () => {
     const data = result.data as { count: number; transactions: unknown[] };
     expect(data.count).toBe(expected);
     expect(data.transactions).toHaveLength(expected);
+  });
+
+  it('flags possibly_truncated and reports returned_rows when matching rows exceed count', async () => {
+    getPlayersIndexMock.mockResolvedValue(new Map() as never);
+    fetchTransactionsMock.mockResolvedValue([
+      { transaction_id: 't1', type: 'add', status: 'complete', timestamp: 5000, week: 9 },
+      { transaction_id: 't2', type: 'add', status: 'complete', timestamp: 4000, week: 9 },
+      { transaction_id: 't3', type: 'add', status: 'complete', timestamp: 3000, week: 9 },
+      { transaction_id: 't4', type: 'add', status: 'complete', timestamp: 2000, week: 9 },
+      { transaction_id: 't5', type: 'add', status: 'complete', timestamp: 1000, week: 9 },
+    ] as never);
+
+    const params: ToolParams = {
+      sport: 'basketball',
+      league_id: 'league_nba_1',
+      season_year: 2025,
+      week: 9,
+      count: 3,
+    };
+
+    const result = await basketballHandlers.get_transactions({} as never, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      count: number;
+      window: { returned_rows: number };
+      limitations?: { possibly_truncated?: boolean };
+    };
+    expect(data.count).toBe(3);
+    expect(data.window.returned_rows).toBe(3);
+    expect(data.limitations).toEqual({ possibly_truncated: true });
+  });
+
+  it('omits limitations when matching rows fit within count', async () => {
+    getPlayersIndexMock.mockResolvedValue(new Map() as never);
+    fetchTransactionsMock.mockResolvedValue([
+      { transaction_id: 't1', type: 'add', status: 'complete', timestamp: 1000, week: 9 },
+    ] as never);
+
+    const params: ToolParams = {
+      sport: 'basketball',
+      league_id: 'league_nba_1',
+      season_year: 2025,
+      week: 9,
+      count: 25,
+    };
+
+    const result = await basketballHandlers.get_transactions({} as never, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as { limitations?: unknown };
+    expect(data.limitations).toBeUndefined();
+  });
+
+  it('omits limitations when matching rows exactly equal count (boundary, not >=)', async () => {
+    getPlayersIndexMock.mockResolvedValue(new Map() as never);
+    fetchTransactionsMock.mockResolvedValue(
+      Array.from({ length: 25 }, (_, i) => ({
+        transaction_id: `t${i}`,
+        type: 'add',
+        status: 'complete',
+        timestamp: 25000 - i * 1000,
+        week: 9,
+      })) as never,
+    );
+
+    const params: ToolParams = {
+      sport: 'basketball',
+      league_id: 'league_nba_1',
+      season_year: 2025,
+      week: 9,
+      count: 25,
+    };
+
+    const result = await basketballHandlers.get_transactions({} as never, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      count: number;
+      window: { returned_rows: number };
+      limitations?: unknown;
+    };
+    expect(data.count).toBe(25);
+    expect(data.window.returned_rows).toBe(25);
+    expect(data.limitations).toBeUndefined();
   });
 });

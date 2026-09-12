@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { EspnSupabaseStorage } from '../supabase-storage';
+import { EspnSupabaseStorage, nextCredentialUpdatedAt } from '../supabase-storage';
 
 const mockFrom = vi.fn();
 const mockDelete = vi.fn();
@@ -7,6 +7,7 @@ const mockSelect = vi.fn();
 const mockEq = vi.fn();
 const mockMaybeSingle = vi.fn();
 const mockUpsert = vi.fn();
+const mockRpc = vi.fn();
 
 function makeMaybeSingleChain(result: { data: unknown; error: unknown }) {
   const maybeSingle = vi.fn().mockResolvedValue(result);
@@ -16,9 +17,35 @@ function makeMaybeSingleChain(result: { data: unknown; error: unknown }) {
   return chain;
 }
 
+function makeLeagueRead(rows: Array<Record<string, unknown>>) {
+  const normalized = rows.map((row, index) => ({ id: index + 1, ...row }));
+  let afterId = 0;
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+  chain.eq = vi.fn().mockImplementation(() => chain);
+  chain.gt = vi.fn().mockImplementation((_column: string, value: number) => {
+    afterId = value;
+    return chain;
+  });
+  chain.order = vi.fn().mockImplementation(() => chain);
+  chain.limit = vi.fn().mockImplementation(async (limit: number) => ({
+    data: normalized.filter((row) => Number(row.id) > afterId).slice(0, limit),
+    error: null,
+  }));
+  return { select: vi.fn().mockReturnValue(chain) };
+}
+
+function makeCredentialUpdate(result: { data: unknown[]; error: unknown }) {
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+  chain.eq = vi.fn().mockImplementation(() => chain);
+  chain.is = vi.fn().mockImplementation(() => chain);
+  chain.select = vi.fn().mockResolvedValue(result);
+  return { update: vi.fn().mockReturnValue(chain), chain };
+}
+
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: mockFrom,
+    rpc: mockRpc,
   }),
 }));
 
@@ -34,6 +61,7 @@ describe('EspnSupabaseStorage', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -265,6 +293,281 @@ describe('EspnSupabaseStorage', () => {
     });
   });
 
+  describe('setCredentials', () => {
+    it('preserves the credential snapshot timestamp when ESPN cookies are unchanged', async () => {
+      const updatedAt = '2026-08-26T20:00:00.000Z';
+      const existing = makeMaybeSingleChain({
+        data: { swid: '{same}', s2: 'same-s2', updated_at: updatedAt },
+        error: null,
+      });
+      const update = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
+      mockFrom
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(existing) })
+        .mockReturnValueOnce({ update: update.update });
+
+      await expect(storage.setCredentials('user-1', '{same}', 'same-s2', 'new@example.com'))
+        .resolves.toBe(true);
+
+      expect(update.update).toHaveBeenCalledWith({
+        swid: '{same}',
+        s2: 'same-s2',
+        email: 'new@example.com',
+        updated_at: updatedAt,
+      });
+      expect(update.chain.eq).toHaveBeenCalledWith('updated_at', updatedAt);
+    });
+
+    it('advances the credential snapshot timestamp when either ESPN cookie changes', async () => {
+      vi.setSystemTime(new Date('2026-08-26T21:00:00.000Z'));
+      const existing = makeMaybeSingleChain({
+        data: { swid: '{old}', s2: 'old-s2', updated_at: '2026-08-26T20:00:00.000Z' },
+        error: null,
+      });
+      const update = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
+      mockFrom
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(existing) })
+        .mockReturnValueOnce({ update: update.update });
+
+      await expect(storage.setCredentials('user-1', '{old}', 'new-s2'))
+        .resolves.toBe(true);
+
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({
+        updated_at: '2026-08-26T21:00:00.000Z',
+      }));
+    });
+
+    it('advances past the existing fence when changed cookies land in the same millisecond', async () => {
+      const collision = '2026-08-26T21:00:00.000Z';
+      vi.setSystemTime(new Date(collision));
+      const existing = makeMaybeSingleChain({
+        data: { swid: '{old}', s2: 'old-s2', updated_at: collision },
+        error: null,
+      });
+      const update = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
+      mockFrom
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(existing) })
+        .mockReturnValueOnce({ update: update.update });
+
+      await expect(storage.setCredentials('user-1', '{new}', 'new-s2')).resolves.toBe(true);
+
+      expect(update.update).toHaveBeenCalledWith(expect.objectContaining({
+        updated_at: '2026-08-26T21:00:00.001Z',
+      }));
+      expect(nextCredentialUpdatedAt(collision, Date.parse(collision)))
+        .toBe('2026-08-26T21:00:00.001Z');
+    });
+
+    it('retries a lost compare-and-swap without restoring an old credential timestamp', async () => {
+      vi.setSystemTime(new Date('2026-08-26T21:00:00.000Z'));
+      const firstRead = makeMaybeSingleChain({
+        data: { swid: '{old}', s2: 'old-s2', updated_at: '2026-08-26T20:00:00.000Z' },
+        error: null,
+      });
+      const lostUpdate = makeCredentialUpdate({ data: [], error: null });
+      const secondRead = makeMaybeSingleChain({
+        data: { swid: '{new}', s2: 'new-s2', updated_at: '2026-08-26T20:30:00.000Z' },
+        error: null,
+      });
+      const winningUpdate = makeCredentialUpdate({ data: [{ clerk_user_id: 'user-1' }], error: null });
+      mockFrom
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(firstRead) })
+        .mockReturnValueOnce({ update: lostUpdate.update })
+        .mockReturnValueOnce({ select: vi.fn().mockReturnValue(secondRead) })
+        .mockReturnValueOnce({ update: winningUpdate.update });
+
+      await expect(storage.setCredentials('user-1', '{old}', 'old-s2')).resolves.toBe(true);
+
+      expect(lostUpdate.update).toHaveBeenCalledWith(expect.objectContaining({
+        updated_at: '2026-08-26T20:00:00.000Z',
+      }));
+      expect(winningUpdate.update).toHaveBeenCalledWith(expect.objectContaining({
+        updated_at: '2026-08-26T21:00:00.000Z',
+      }));
+    });
+  });
+
+  describe('persistLeagueWithLease', () => {
+    it('passes the exact owner and normalized league identity to the fenced RPC', async () => {
+      mockRpc.mockResolvedValue({ data: [{ outcome: 'added' }], error: null });
+
+      await expect(storage.persistLeagueWithLease('user-1', 'request-owner', {
+        leagueId: 'league-1',
+        sport: 'baseball',
+        seasonYear: 2025,
+        teamId: 'team-1',
+        teamName: 'Team',
+        leagueName: 'League',
+      })).resolves.toBe('added');
+
+      expect(mockRpc).toHaveBeenCalledWith('persist_espn_league_with_lease', {
+        p_clerk_user_id: 'user-1',
+        p_lease_owner: 'request-owner',
+        p_league_id: 'league-1',
+        p_sport: 'baseball',
+        p_season_year: 2025,
+        p_team_id: 'team-1',
+        p_team_name: 'Team',
+        p_league_name: 'League',
+      });
+    });
+
+    it('surfaces an exact-owner rejection without falling back to unfenced DML', async () => {
+      mockRpc.mockResolvedValue({ data: [{ outcome: 'lease_lost' }], error: null });
+
+      await expect(storage.persistLeagueWithLease('user-1', 'stale-owner', {
+        leagueId: 'league-1', sport: 'football', seasonYear: 2026, teamId: 'team-1',
+      })).resolves.toBe('lease_lost');
+      expect(mockFrom).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setLeagues created_at preservation', () => {
+    const ORIGINAL_CREATED_AT = '2025-08-01T12:00:00.000Z';
+
+    function mockLeagueReplace(existingRows: Array<Record<string, unknown>>) {
+      const insert = vi.fn().mockResolvedValue({ error: null });
+      const deleteEq = vi.fn().mockResolvedValue({ error: null });
+      const del = vi.fn().mockReturnValue({ eq: deleteEq });
+      const read = makeLeagueRead(existingRows);
+      mockFrom.mockImplementation((table: string) =>
+        table === 'espn_leagues'
+          ? { select: read.select, delete: del, insert }
+          : {}
+      );
+      return { insert, del };
+    }
+
+    it('carries the original created_at forward for a league that survives the replace', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      // Same league identity, edited team name — the connection did not change.
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1', teamName: 'Renamed' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].created_at).toBe(ORIGINAL_CREATED_AT);
+      expect(rows[0].team_name).toBe('Renamed');
+    });
+
+    it('stamps a fresh created_at only on leagues that are genuinely new', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1' },
+        { leagueId: '222', sport: 'baseball', seasonYear: 2025, teamId: 't2' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows[0].created_at).toBe(ORIGINAL_CREATED_AT);
+      expect(rows[1].created_at).not.toBe(ORIGINAL_CREATED_AT);
+      expect(typeof rows[1].created_at).toBe('string');
+    });
+
+    it('treats a different season of the same league as a new row', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2026, teamId: 't1' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows[0].created_at).not.toBe(ORIGINAL_CREATED_AT);
+    });
+
+    it('matches a seasonless league, which is stored as a null season_year', async () => {
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: null,
+          created_at: ORIGINAL_CREATED_AT,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', teamId: 't1' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows[0].season_year).toBeNull();
+      expect(rows[0].created_at).toBe(ORIGINAL_CREATED_AT);
+    });
+
+    it('keeps a NULL created_at on an existing row instead of stamping it as new', async () => {
+      // `espn_leagues.created_at` is nullable. A row carrying NULL is real,
+      // existing data; skipping it would make the league look brand new and
+      // restamp it with "now" — the same corruption this path exists to stop,
+      // reached from the other side.
+      const { insert } = mockLeagueReplace([
+        {
+          league_id: '111',
+          sport: 'football',
+          season_year: 2025,
+          created_at: null,
+        },
+      ]);
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1', teamName: 'Renamed' },
+      ])).resolves.toBe(true);
+
+      const rows = insert.mock.calls[0][0] as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(1);
+      expect(rows[0].created_at).toBeNull();
+      expect(rows[0].team_name).toBe('Renamed');
+    });
+
+    it('aborts without deleting when the timestamp pre-read fails', async () => {
+      const insert = vi.fn().mockResolvedValue({ error: null });
+      const deleteEq = vi.fn().mockResolvedValue({ error: null });
+      const del = vi.fn().mockReturnValue({ eq: deleteEq });
+      const failingChain: Record<string, ReturnType<typeof vi.fn>> = {};
+      failingChain.eq = vi.fn().mockImplementation(() => failingChain);
+      failingChain.gt = vi.fn().mockImplementation(() => failingChain);
+      failingChain.order = vi.fn().mockImplementation(() => failingChain);
+      failingChain.limit = vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'connection reset' },
+      });
+      mockFrom.mockImplementation((table: string) =>
+        table === 'espn_leagues'
+          ? { select: vi.fn().mockReturnValue(failingChain), delete: del, insert }
+          : {}
+      );
+
+      await expect(storage.setLeagues('user_123', [
+        { leagueId: '111', sport: 'football', seasonYear: 2025, teamId: 't1' },
+      ])).resolves.toBe(false);
+
+      // The rows we could not read must still be there.
+      expect(del).not.toHaveBeenCalled();
+      expect(insert).not.toHaveBeenCalled();
+    });
+  });
+
   it('removeLeague clears only the deleted sport default when league ids collide across sports', async () => {
     const mockPrefsUpsert = vi.fn().mockReturnValue({ error: null });
 
@@ -366,15 +669,10 @@ describe('EspnSupabaseStorage', () => {
   it('getLeagues excludes archived rows when includeArchived is false', async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
-        // .select(...).eq('clerk_user_id', ...) resolves with all rows
-        const eq = vi.fn().mockResolvedValue({
-          data: [
-            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
-            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Zombie', season_year: 2025 },
-          ],
-          error: null,
-        });
-        return { select: vi.fn().mockReturnValue({ eq }) };
+        return makeLeagueRead([
+          { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
+          { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Zombie', season_year: 2025 },
+        ]);
       }
       if (table === 'archived_leagues') {
         // .select('sport, recurring_league_id').eq(user).eq(platform) resolves with archived rows
@@ -394,14 +692,10 @@ describe('EspnSupabaseStorage', () => {
     // shares the id space and must remain visible.
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
-        const eq = vi.fn().mockResolvedValue({
-          data: [
-            { league_id: '123', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'FB Zombie', season_year: 2025 },
-            { league_id: '123', sport: 'basketball', team_id: 't2', team_name: 'B', league_name: 'BB Keep', season_year: 2025 },
-          ],
-          error: null,
-        });
-        return { select: vi.fn().mockReturnValue({ eq }) };
+        return makeLeagueRead([
+          { league_id: '123', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'FB Zombie', season_year: 2025 },
+          { league_id: '123', sport: 'basketball', team_id: 't2', team_name: 'B', league_name: 'BB Keep', season_year: 2025 },
+        ]);
       }
       if (table === 'archived_leagues') {
         const eqPlatform = vi.fn().mockResolvedValue({ data: [{ sport: 'football', recurring_league_id: '123' }], error: null });
@@ -421,13 +715,9 @@ describe('EspnSupabaseStorage', () => {
   it('getLeagues fails CLOSED: propagates a thrown archive-set error on the exclude path', async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
-        const eq = vi.fn().mockResolvedValue({
-          data: [
-            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
-          ],
-          error: null,
-        });
-        return { select: vi.fn().mockReturnValue({ eq }) };
+        return makeLeagueRead([
+          { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
+        ]);
       }
       if (table === 'archived_leagues') {
         // archive read errors → getArchivedSet throws → getLeagues(false) propagates
@@ -444,15 +734,11 @@ describe('EspnSupabaseStorage', () => {
   it('getLeagues exclude-hidden keeps historical archived rows, drops only hidden ones', async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
-        const eq = vi.fn().mockResolvedValue({
-          data: [
-            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Active', season_year: 2025 },
-            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Historical', season_year: 2025 },
-            { league_id: '333', sport: 'football', team_id: 't3', team_name: 'C', league_name: 'Hidden', season_year: 2025 },
-          ],
-          error: null,
-        });
-        return { select: vi.fn().mockReturnValue({ eq }) };
+        return makeLeagueRead([
+          { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Active', season_year: 2025 },
+          { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Historical', season_year: 2025 },
+          { league_id: '333', sport: 'football', team_id: 't3', team_name: 'C', league_name: 'Hidden', season_year: 2025 },
+        ]);
       }
       if (table === 'archived_leagues') {
         const eqPlatform = vi.fn().mockResolvedValue({
@@ -476,15 +762,11 @@ describe('EspnSupabaseStorage', () => {
   it('getLeagues exclude-archived drops BOTH historical and hidden archived rows', async () => {
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
-        const eq = vi.fn().mockResolvedValue({
-          data: [
-            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Active', season_year: 2025 },
-            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Historical', season_year: 2025 },
-            { league_id: '333', sport: 'football', team_id: 't3', team_name: 'C', league_name: 'Hidden', season_year: 2025 },
-          ],
-          error: null,
-        });
-        return { select: vi.fn().mockReturnValue({ eq }) };
+        return makeLeagueRead([
+          { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Active', season_year: 2025 },
+          { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Historical', season_year: 2025 },
+          { league_id: '333', sport: 'football', team_id: 't3', team_name: 'C', league_name: 'Hidden', season_year: 2025 },
+        ]);
       }
       if (table === 'archived_leagues') {
         const eqPlatform = vi.fn().mockResolvedValue({
@@ -535,14 +817,10 @@ describe('EspnSupabaseStorage', () => {
     const archivedSelect = vi.fn();
     mockFrom.mockImplementation((table: string) => {
       if (table === 'espn_leagues') {
-        const eq = vi.fn().mockResolvedValue({
-          data: [
-            { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
-            { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Zombie', season_year: 2025 },
-          ],
-          error: null,
-        });
-        return { select: vi.fn().mockReturnValue({ eq }) };
+        return makeLeagueRead([
+          { league_id: '111', sport: 'football', team_id: 't1', team_name: 'A', league_name: 'Keep', season_year: 2025 },
+          { league_id: '222', sport: 'football', team_id: 't2', team_name: 'B', league_name: 'Zombie', season_year: 2025 },
+        ]);
       }
       if (table === 'archived_leagues') {
         return { select: archivedSelect };
@@ -554,6 +832,29 @@ describe('EspnSupabaseStorage', () => {
     expect(all.map(l => l.leagueId)).toEqual(['111', '222']);
     // Archive set must NOT be consulted on the default (unfiltered) path.
     expect(archivedSelect).not.toHaveBeenCalled();
+  });
+
+  it('paginates beyond the PostgREST row limit without dropping or duplicating leagues', async () => {
+    const rows = Array.from({ length: 1001 }, (_, index) => ({
+      id: index + 1,
+      league_id: String(index + 1),
+      sport: 'football',
+      team_id: `team-${index + 1}`,
+      team_name: `Team ${index + 1}`,
+      league_name: `League ${index + 1}`,
+      season_year: 2025,
+    }));
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'espn_leagues') return makeLeagueRead(rows);
+      return {};
+    });
+
+    const all = await storage.getLeagues('heavy_user');
+
+    expect(all).toHaveLength(1001);
+    expect(new Set(all.map((league) => league.leagueId)).size).toBe(1001);
+    expect(all.at(-1)?.leagueId).toBe('1001');
+    expect(mockFrom).toHaveBeenCalledTimes(3);
   });
 
   // ===========================================================================

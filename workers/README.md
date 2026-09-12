@@ -69,9 +69,18 @@ SUPABASE_SERVICE_KEY=sb_secret_...
 ENVIRONMENT=prod|preview|dev
 NODE_ENV=production|development
 OAUTH_CLIENT_REGISTRATION_SIGNING_KEY=optional-stable-secret
+ESPN_DURABLE_HISTORY_ENABLED=false
+ESPN_DURABLE_HISTORY_USERS=user_...[,user_...]
+ESPN_HISTORY_BACKFILL_MODE=off|allowlist|all
+ESPN_HISTORY_BACKFILL_USERS=user_...[,user_...]
+ESPN_HISTORY_BACKFILL_LEGACY_CUTOFF=2026-08-27T12:00:00.000Z
 ```
 
 Use a dedicated stable `OAUTH_CLIENT_REGISTRATION_SIGNING_KEY` for preview and production before depending on confidential MCP clients. If it is omitted, auth-worker falls back to `SUPABASE_SERVICE_KEY`; rotating that key also invalidates existing confidential client registrations.
+
+Durable ESPN history is rollout-gated and default-off. Set `ESPN_DURABLE_HISTORY_ENABLED=true` only with `ESPN_DURABLE_HISTORY_USERS` populated by an exact, comma-separated Clerk user ID allowlist. Leaving either unset or false keeps web and extension ESPN refreshes on the synchronous path; MCP refresh remains synchronous regardless.
+
+The separate legacy-account migration is also default-off. `ESPN_HISTORY_BACKFILL_MODE=allowlist` limits claims to `ESPN_HISTORY_BACKFILL_USERS`; `all` covers the fixed legacy cohort. Either enabled mode also requires `ESPN_HISTORY_BACKFILL_LEGACY_CUTOFF`, which selects only accounts with saved ESPN league roots created on or before that timestamp. Do not reuse the interactive durable-history allowlist for this migration.
 
 ### MCP + Platform Workers (`fantasy-mcp`, `espn-client`, `yahoo-client`, `sleeper-client`)
 
@@ -111,8 +120,9 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive; rate-limited, see below)
 - `get_ancient_history` — Past seasons and historical leagues outside the current season
 - `get_league_info` — Baseline league context: settings, members, teams/owners
+- `get_draft`: Confirmed draft results and provider-grounded pick ownership, with optional round and team filters
 - `get_standings` — League standings
-- `get_matchups` — Current/specified week matchups
+- `get_matchups` — Current/specified week matchups; ESPN football can opt into bounded player detail
 - `get_roster` — Team roster with player details
 - `get_free_agents` — Available players with a normalized envelope (capabilities, ownership scope, ordering); ESPN/Yahoo include platform-wide ownership percentages, Sleeper returns identities without ownership percentages
 - `get_players` — Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable
@@ -123,17 +133,44 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 - Sleeper: explicit positive `week` values start at 1; `week: 0` returns `INVALID_TRANSACTION_WINDOW`; omission defaults to current+previous week.
 - Yahoo: explicit `week` ignored; uses a recent 14-day timestamp window.
 - Yahoo: `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team; other supported types use the recent league transaction feed.
-- `get_user_session` should be the first call in a normal chat, and `get_league_info` is usually the second call before most league-specific analysis so team names, owner/team mapping, and league rules are established.
+- `get_user_session` establishes league context for a chat. Ordinary analysis follow-ups reuse a usable successful result, including switches to leagues already returned. Reload after successful refresh, confirmed account/connection/league/default changes, or missing context; explicit connection/league/account-status requests still use the session tool. With session context available, call `get_league_info` before league-specific analysis so team names, owner/team mapping, and league rules are established. Session reuse does not replace fresh roster, score, or player reads when needed.
+
+`get_draft` separates the round slot (`selectionInRound`) from the stable board column (`draftColumn`), historical selecting team (`selectionTeamId`), and current pick owner (`currentOwnerTeamId`). Optional `round` and `team_id` filters reduce large results; the team filter uses `selectionTeamId` for completed selections and `currentOwnerTeamId` for ownership rows. Sleeper team and owner names appear once in the top-level `teams` and `teamOwners` maps. Completed Sleeper drafts omit the redundant full ownership board while changed-picks-only and future ledgers remain available; an omitted `ownership` block means no draft picks changed hands. Exact slots are returned only with confirmed provider picks or provider-grounded order projections.
+
+Sleeper league-scoped MCP reads are authorized by the gateway against the authenticated user's stored, discovered leagues for their current configured Sleeper identity before the public Sleeper API is called. This exact-record check does not run provider discovery or enrich legacy rows. A connected historical season remains available through the historical path; explicitly hidden leagues remain unavailable. Once a league is authorized, league-wide context stays available, including opponent rosters, matchups, standings, and transactions.
+
+### Bounded ESPN football matchup player detail
+
+`get_matchups` supports `detail: 'players'` only for ESPN football seasons 2018 and later. The mode requires a positive `week` and nonempty `team_id`, selects one matchup containing that team, and returns both present sides. Ordinary matchup summaries remain unchanged when `detail` is omitted, and `team_id` without player detail is rejected rather than ignored.
+
+Detail responses expose only compact player entries: `playerId`, `name`, `lineupSlot`, nullable `started`, and nullable weekly `points`. Raw provider roster payloads and expanded player metadata are never returned or cached. The selected matchup must fit the 24,000-byte serialized MCP tool-result limit (`content` plus `structuredContent`) in full, excluding the outer JSON-RPC envelope and SSE transport framing; Flaim fails closed with `MATCHUP_DETAIL_TOO_LARGE` rather than truncating players or omitting the opponent. Pre-2018 ESPN football, and every non-ESPN-football combination, are unsupported for player detail because their player-boxscore contract is not established.
 
 ### Refresh cooldown envelope
 
-League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider.
+League refresh and ESPN discovery run under a per-user, per-provider single-flight lease with post-refresh cooldowns (~75s after a normal refresh; 5 minutes or the provider's `Retry-After` after an upstream 429/timeout), backed by the `provider_sync_state` table, which also records last attempt/success/failure telemetry per provider. When durable ESPN history is enabled for an allowlisted user, web and extension refreshes transfer that lease to a Cloudflare Workflow after current leagues are stored; the workflow discovers historical league-seasons in restartable chunks and records progress in `espn_history_jobs`. Request-time league writes require the exact current lease owner. Changing or removing ESPN credentials, or deleting or replacing saved ESPN leagues, takes over that lease before changing rows. Other web and extension refreshes, and all MCP-triggered refreshes, remain synchronous.
+
+### Paced legacy ESPN history backfill
+
+The auth worker can proactively repair legacy ESPN accounts without waiting for
+a user to revisit Flaim. A five-minute cron invokes an atomic service-role
+claim that prepares at most one eligible `scheduled_backfill` job. The database
+enforces one globally active scheduled job, minimum spacing, retry limits,
+credential-version fencing, provider cooldowns, and a fixed legacy cutoff.
+Accounts without saved ESPN league roots are not claimed because Flaim cannot
+safely infer which leagues belong to them.
+
+The committed configuration stays `off`. Roll out with `allowlist` first, then
+switch to `all` only after inspecting job and provider-error aggregates. Turning
+the mode back to `off` stops new claims and cancels scheduled jobs at the next
+workflow checkpoint without changing interactive refresh behavior. A manual
+service-token trigger is available at `POST /auth/internal/backfill/espn-history`;
+it uses the same gates and can start no more than one job.
 
 - When **every** requested provider is cooling down, refresh endpoints return `429 refresh_cooldown` with a `retry_after` field and a `Retry-After` header.
 - Partially blocked refreshes return `200` with per-provider results; a blocked provider carries `error: "refresh_cooldown"`, `httpStatus: 429`, and `retryAfter` (seconds, as a string).
 - Providers skipped for missing credentials do not incur a cooldown.
 - Each provider refresh emits one structured `provider_sync` log line (provider, masked user, source, status, duration, league count, error code, retry seconds, correlation id), queryable in Workers Logs by the `event` field.
-- The envelope fails open: storage errors never block a refresh.
+- The normal request envelope fails open on telemetry storage errors. Durable ESPN history job creation, lease transfer, and fenced progress writes fail closed so a background scan cannot continue without an owned job and lease.
 
 ### Scheduled rollover reconciliation (dry-run)
 
@@ -171,6 +208,21 @@ candidates, not a mid-probe cutoff.
   `X-Flaim-Internal-Token`; returns the run summary (409 when disabled or
   refused).
 
+### Sleeper recurring-id backfill (one-shot, dry-run default)
+
+Fills missing `recurring_league_id` values on Sleeper league rows saved before
+chain resolution existed. Operator-triggered only — there is no cron.
+
+- Trigger: `POST /auth/internal/backfill/sleeper-recurring-ids` guarded by
+  `X-Flaim-Internal-Token`. `dryRun` defaults to `true`; pass
+  `{"dryRun": false}` explicitly for a live run.
+- Writes are a conditional `UPDATE` of only `recurring_league_id` where it is
+  still `NULL` — convergent and safe under any overlap; a synthetic
+  `__backfill__` lease bounds duplicate work and is removed on completion.
+- Returns a JSON summary with `outcome` (`completed` | `failed` | `blocked` |
+  `lease_lost`) and per-run counts; only `blocked` maps to a non-200 status
+  (409), so drive it off the JSON `outcome`, not the HTTP code.
+
 ## ESPN API Reference
 
 Host: `https://lm-api-reads.fantasy.espn.com`
@@ -185,6 +237,13 @@ X-Fantasy-Platform: kona-web-2.0.0
 
 Note: The Chrome extension's league discovery uses ESPN's Fan API; MCP workers
 still call `lm-api-reads.fantasy.espn.com` for league data.
+
+Historical league reads use ESPN's `leagueHistory` route before ESPN-native
+season 2018. For later historical seasons, a 401 from the modern league route
+is retried once through `leagueHistory` before the response is classified as
+an authentication failure. Current-season requests do not use this fallback.
+The historical route's one-item JSON array is normalized to the same league
+object shape used by the modern route.
 
 Credentials are fetched from auth-worker per request; MCP workers don't store them locally.
 
@@ -213,6 +272,9 @@ Workers use custom routes via `api.flaim.app`:
 - `/auth/*` → auth-worker
 - `/fantasy/*` → fantasy-mcp (unified gateway)
 - `/mcp*` → fantasy-mcp (primary MCP endpoint, POST required; non-POST returns `405`)
+- `/widgets/*`, `/health` → fantasy-mcp (unprefixed paths served directly on the custom domain)
+
+Every unprefixed path fantasy-mcp serves on `api.flaim.app` needs its own route entry in `wrangler.jsonc`; a path with no matching route falls through to a nonexistent origin and returns Cloudflare 522, not a 404 from the Worker.
 
 Note: `espn-client` is called internally via service binding for MCP traffic, but the web app uses its `/onboarding/*` endpoints via the public workers.dev URL.
 

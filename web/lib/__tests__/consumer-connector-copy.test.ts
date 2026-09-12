@@ -26,7 +26,6 @@ const consumerSurfaces = [
   "web/app/(site)/support/page.tsx",
   "web/emails/espn-setup-link.tsx",
   "web/emails/flaim-email-links.json",
-  "web/emails/league-connected.tsx",
   "web/emails/welcome.tsx",
   "web/lib/product-links.ts",
   "web/public/.well-known/ai-plugin.json",
@@ -110,13 +109,8 @@ describe("consumer connector copy boundaries", () => {
     expect(links.chatGptAppUrl).toBeTruthy();
     expect(links.claudeConnectorUrl).toBeTruthy();
 
-    for (const relativePath of [
-      "web/emails/welcome.tsx",
-      "web/scripts/setup-resend-welcome-automation.mjs",
-    ]) {
-      const contents = read(relativePath);
-      expect(contents, relativePath).toMatch(/Add to ChatGPT/);
-      expect(contents, relativePath).toMatch(/Add to Claude/);
-    }
+    const contents = read("web/emails/welcome.tsx");
+    expect(contents).toMatch(/Add to ChatGPT/);
+    expect(contents).toMatch(/Add to Claude/);
   });
 });

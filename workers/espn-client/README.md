@@ -68,9 +68,10 @@ Handlers should use `params.seasonContext.espnYear` for ESPN URLs, cache keys, a
 
 ## Supported Tools
 
-All four sports (football, baseball, basketball, hockey) support the same 7 tools:
+All four sports (football, baseball, basketball, hockey) support the same 8 tools:
 
 - `get_league_info` - League settings and members
+- `get_draft` - Confirmed draft results from ESPN's draft-detail view
 - `get_standings` - League standings
 - `get_matchups` - Weekly matchups
 - `get_roster` - Team roster with player stats
@@ -78,11 +79,23 @@ All four sports (football, baseball, basketball, hockey) support the same 7 tool
 - `get_players` - Player lookup with market/global ownership context
 - `get_transactions` - Recent league transactions (adds, drops, waivers, trades, failed bids, trade lifecycle) from the structured primary source with an activity-feed fallback
 
+### Draft Results (`get_draft`)
+
+`get_draft` requests ESPN's `mDraftDetail` and `mSettings` views. Populated selections return their provider-confirmed round, selection within the round, overall pick, selecting fantasy team ID, player ID, keeper flag, and auction cost when the draft type is auction. Empty pre-draft board placeholders are omitted and disclosed with a warning. The selecting team is historical selection evidence, not current player or future-pick ownership. ESPN does not expose a current draft-pick ownership ledger through this handler, and the worker does not project unmade slots.
+
 ### ESPN Period Fields
 
 ESPN exposes both `scoringPeriodId` and `currentMatchupPeriod`. Treat `currentMatchupPeriod` as the current fantasy matchup/week when normalizing standings or defaulting `get_matchups`; `scoringPeriodId` can be daily for sports such as baseball and may be much larger than the weekly matchup period.
 
 When callers pass an explicit `week`, use it. Otherwise prefer `currentMatchupPeriod` from the league response or `status.currentMatchupPeriod`, then fall back to `scoringPeriodId`.
+
+### Football matchup player detail (`get_matchups`)
+
+The opt-in `detail: 'players'` path is limited to ESPN football seasons 2018 and later. It requires a positive public `week` and a nonempty `team_id`, then fetches the requested scoring period with ESPN's `mBoxscore` view and a schedule `X-Fantasy-Filter` for that matchup period. The handler selects exactly one matchup containing the requested team and returns both present sides. A bye may have one null side.
+
+Each side's player rows come only from `rosterForCurrentScoringPeriod.entries`. The normalized whitelist is `playerId`, `name`, `lineupSlot`, nullable `started`, and nullable weekly `points` from ESPN's applied weekly total. The handler keeps a legitimate numeric zero, but returns `points: null` when a valid row has no trustworthy weekly score. It must not pass through raw ESPN roster objects, player stats, projections, acquisition fields, ownership, injury state, or current professional-team data. `rosterForMatchupPeriod` is not the source for lineup-slot classification.
+
+This path has no player-detail cache and does not truncate the selected matchup. The gateway owns the final 24,000-byte serialized MCP tool-result ceiling (`content` plus `structuredContent`), excluding the outer JSON-RPC envelope and SSE transport framing; if the complete normalized detail result is too large, it fails closed rather than slicing players or omitting the opponent. Pre-2018 ESPN football uses a historical route whose player-boxscore payload is not yet trustworthy for this contract, so it is rejected before this handler runs.
 
 ### Roster Snapshots (`get_roster`)
 
@@ -95,6 +108,18 @@ Dates resolve through `shared/scoring-period.ts`: the public `proTeamSchedules_w
 For current ESPN seasons, derive `seasonPhase` from matchup context before trusting final-rank-like fields. Fields such as `rankFinal` and `rankCalculatedFinal` prove season completion for historical seasons, but active leagues can expose them before live play is complete. Keep outcome fields such as `finalRank`, `championshipWon`, and `playoffOutcome` null unless `seasonComplete` is true.
 
 When a completed season's championship game is marked `TIE` (or `UNDECIDED`), the champion is resolved from the league's `playoffMatchupTieRule` setting: `NONE` (ESPN's platform default) advances the higher playoff seed, and `HOME_TEAM_WINS` advances the home team. Any other rule, or missing/equal seeds, leaves the outcome null. These results keep `outcomeConfidence: 'derived'` because league managers can manually override brackets via ESPN's Edit Playoffs page, so a rule-based resolution is not guaranteed to match what actually happened.
+
+### Keeper / League-Format Context (`get_league_info`, `get_roster`)
+
+Both tools additively surface keeper/draft-format fields when ESPN's `mSettings`/`mTeam` payloads carry them; every field is optional and simply absent for non-keeper leagues or when ESPN omits it — no field is renamed and no existing field changes shape.
+
+`get_league_info` adds, from the same `mSettings`/`mTeam` fetch it already makes: `keeperSettings` (`keeperCount`, `keeperCountFuture`, `keeperOrderType`, `keeperDeadlineDate` as an ISO string or `null`) whenever ESPN reports a numeric `keeperCount` (including `0` for an explicitly non-keeper league); `isKeeperLeague` alongside it (`keeperCount > 0`); `draftSettings` (`type`, `auctionBudget`, `pickTradingEnabled` — note ESPN's underlying `isTradingEnabled` flag toggles **draft-pick** trading, not in-season player trades); and `tradeSettings` (`deadlineDate` as ISO or `null`, `revisionHours`, `vetoVotesRequired`, `allowOutOfUniverse`, `max`) for season trade rules. Per team, `keeperPlayerIds`/`futureKeeperPlayerIds` pass through ESPN's raw numeric player IDs (from `team.draftStrategy`) with no name resolution — `get_league_info` doesn't request `mRoster`, so no player-id-to-name map is available at that call site.
+
+`get_roster` adds `&view=mSettings` to its existing `mRoster&mTeam` fetch so keeper-cost units can be determined, then passes through `keeperValue`/`keeperValueFuture` per roster entry (from `playerPoolEntry`, a sibling of `player`, not nested inside it) plus one per-response `keeperValueUnit: 'auction_dollars' | 'draft_round'` derived from `draftSettings.type` (`AUCTION` → `auction_dollars`; `SNAKE` and `AUTOPICK` → `draft_round`; any other/unknown type, e.g. `OFFLINE`, or the type field being absent → `keeperValueUnit` omitted rather than guessed) and `isKeeperLeague` when available. If `mSettings` data is missing from the payload, `keeperValueUnit` and `isKeeperLeague` are omitted rather than guessed; `keeperValue`/`keeperValueFuture` themselves are unaffected since they live on the roster entry regardless.
+
+On a historical snapshot (`week` or `date`), `keeperValueFuture` is withheld entirely — it's next season's keeper cost, not yet fixed as of a past date — while `keeperValue` (this season's cost, season-stable) is still returned; the response's `limitations` block adds `keeperValueFutureAvailable: false`, mirroring the FLA-278 `playerProTeamAvailable` pattern.
+
+**Verified field semantics** (live probe against real ESPN keeper leagues, 2026-08-23): `keeperValue` is the keeper cost for the *current* season, carried over from how the player was acquired the *previous* season. `keeperValueFuture` is the keeper cost for *next* season — this season's auction price or draft round — and **follows the player through trades**; it resets to `0` when the player passes through free agency/waivers (observed consistently in this league's config; not confirmed as a universal ESPN default). `0` means no cost defined or not keeper-eligible. `keeperPlayerIds` is this season's keepers (verified to equal the set of `keeper:true` draft picks); `futureKeeperPlayerIds` was observed populated only on the authenticated user's own team. Neither `get_league_info` nor `get_roster` computes or asserts a keeper cost after a trade beyond passing through what ESPN already reports — that remains a league house-rules question.
 
 ### `get_transactions` Response Shape
 

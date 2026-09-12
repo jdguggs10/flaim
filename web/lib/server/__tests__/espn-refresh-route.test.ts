@@ -204,6 +204,34 @@ describe('POST /api/espn/refresh', () => {
     );
   });
 
+  it('preserves additive durable history status from extension discovery', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      currentSeason: { found: 1, added: 1, alreadySaved: 0, refreshed: 0 },
+      pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+      history: {
+        jobId: 'history-job-123',
+        state: 'queued',
+        counts: { planned: 8, completed: 0, skipped: 0, failed: 0 },
+        retryable: false,
+      },
+    })));
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      currentSeason: { found: 1, added: 1, alreadySaved: 0, refreshed: 0 },
+      pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+      history: {
+        jobId: 'history-job-123',
+        state: 'queued',
+        counts: { planned: 8, completed: 0, skipped: 0, failed: 0 },
+        retryable: false,
+      },
+    });
+  });
+
   it('passes through expected auth-worker credential errors', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
       error: 'credentials_not_found',

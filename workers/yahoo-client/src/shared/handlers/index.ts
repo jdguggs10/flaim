@@ -6,6 +6,7 @@ import { createGetRosterHandler } from './get-roster';
 import { createGetMatchupsHandler } from './get-matchups';
 import { createGetFreeAgentsHandler } from './get-free-agents';
 import { createGetTransactionsHandler } from './get-transactions';
+import { createGetDraftHandler } from './get-draft';
 
 export type { HandlerFn, YahooSportConfig } from './types';
 
@@ -22,5 +23,6 @@ export function createYahooHandlers(config: YahooSportConfig): Record<string, Ha
     get_free_agents: createGetFreeAgentsHandler(context),
     get_transactions: createGetTransactionsHandler(),
     get_players: createSearchPlayersHandler(context),
+    get_draft: createGetDraftHandler(context),
   };
 }

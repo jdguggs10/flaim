@@ -11,7 +11,7 @@ import {
   toSnapshotMetadata,
   type SeasonSport,
 } from '@flaim/worker-shared';
-import { extractManagerName, extractPlayerMeta, toExecuteErrorResponse } from './utils';
+import { extractManagerName, extractPlayerMeta, normalizeIsKeeper, toExecuteErrorResponse } from './utils';
 
 export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
@@ -78,6 +78,15 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
         const selectedPosition = positionData?.selected_position as Record<string, unknown>[] | undefined;
         const position = selectedPosition?.[1]?.position;
 
+        // Keeper designation (Yahoo's undocumented is_keeper field) is a
+        // season-long constant set pre-draft, not a point-in-time club/status
+        // fact — unlike `team`/`status` above, which are gated on
+        // isHistoricalSnapshot because they describe the player's CURRENT
+        // club/status and would misrepresent a past week (FLA-278 temporal
+        // purity). A player's keeper eligibility for the season doesn't
+        // change week to week, so isKeeper is intentionally NOT gated here.
+        const isKeeper = normalizeIsKeeper(playerMeta.is_keeper);
+
         return {
           playerKey: playerMeta.player_key,
           playerId: playerMeta.player_id,
@@ -86,6 +95,7 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
           position: playerMeta.display_position,
           selectedPosition: position,
           ...(isHistoricalSnapshot ? {} : { status: playerMeta.status }),
+          ...(isKeeper ? { isKeeper } : {}),
         };
       });
 

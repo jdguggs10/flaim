@@ -65,6 +65,18 @@ export {
 } from './season.js';
 export type { SeasonSport } from './season.js';
 
+// ESPN league-season route compatibility
+export {
+  ESPN_MODERN_LEAGUE_FIRST_YEAR,
+  buildEspnLeaguePath,
+  fetchEspnLeagueSeason,
+  unwrapEspnLeaguePayload,
+} from './espn-league.js';
+export type {
+  EspnLeagueRequest,
+  EspnLeagueRoute,
+} from './espn-league.js';
+
 // Roster snapshot contract (get_roster week / as_of_date selectors)
 export {
   getRosterSelectorCapability,

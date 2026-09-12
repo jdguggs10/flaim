@@ -283,11 +283,15 @@ async function probeSleeper(
   const result = await fetchSleeperLeaguesReadOnly(env as SleeperConnectEnv, userId, requests);
   if (result.status === 'not_connected') return { status: 'not_connected' };
   if (result.status === 'error') {
+    // Mirrors isYahooTransientHttpStatus: no status (network/timeout failure),
+    // rate-limited, or a 5xx are worth retrying; other 4xx are not.
+    const retryable =
+      result.httpStatus === undefined || result.httpStatus === 429 || result.httpStatus >= 500;
     return {
       status: 'error',
       errorCode: result.errorCode,
       ...(result.httpStatus !== undefined ? { httpStatus: result.httpStatus } : {}),
-      retryable: true,
+      retryable,
     };
   }
 

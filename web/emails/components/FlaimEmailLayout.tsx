@@ -2,6 +2,7 @@ import * as React from "react";
 import {
   Body,
   Button,
+  Column,
   Container,
   Head,
   Heading,
@@ -10,6 +11,7 @@ import {
   Img,
   Link,
   Preview,
+  Row,
   Section,
   Text,
 } from "react-email";
@@ -21,6 +23,7 @@ interface FlaimEmailLayoutProps {
   footerDisclosure?: React.ReactNode;
   footerDescription?: React.ReactNode;
   footerSupport?: React.ReactNode;
+  headerUrl?: string;
   lang?: string;
   preview: string;
   title: string;
@@ -37,6 +40,7 @@ export function FlaimEmailLayout({
   footerDisclosure,
   footerDescription,
   footerSupport,
+  headerUrl = emailBrand.url,
   lang = "en",
   preview,
   title,
@@ -57,26 +61,42 @@ export function FlaimEmailLayout({
       <Preview>{preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Section style={styles.header}>
-            <Link href={emailBrand.url} style={styles.logoLink}>
-              <Img
-                alt=""
-                height="32"
-                src={emailBrand.logoUrl}
-                style={styles.logo}
-                width="32"
-              />
-            </Link>
-            <Link href={emailBrand.url} style={styles.wordmark}>
-              {emailBrand.name}
-            </Link>
-          </Section>
-
           <Section style={styles.card}>
-            {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-            <Heading as="h1" style={styles.heading}>
-              {title}
-            </Heading>
+            <Section
+              style={eyebrow ? styles.cardHeader : styles.cardTitleHeader}
+            >
+              <Row>
+                <Column style={styles.cardHeaderText}>
+                  {eyebrow ? (
+                    <Text style={styles.cardEyebrow}>{eyebrow}</Text>
+                  ) : (
+                    <Heading as="h1" style={styles.cardHeaderHeading}>
+                      {title}
+                    </Heading>
+                  )}
+                </Column>
+                <Column
+                  align="right"
+                  data-skip-in-text="true"
+                  style={styles.cardLogoColumn}
+                >
+                  <Link href={headerUrl} style={styles.logoLink}>
+                    <Img
+                      alt="Flaim"
+                      height="36"
+                      src={emailBrand.logoUrl}
+                      style={styles.cardLogo}
+                      width="36"
+                    />
+                  </Link>
+                </Column>
+              </Row>
+            </Section>
+            {eyebrow ? (
+              <Heading as="h1" style={styles.heading}>
+                {title}
+              </Heading>
+            ) : null}
             {children}
           </Section>
 
@@ -150,26 +170,8 @@ const styles = {
     maxWidth: "560px",
     padding: "32px 16px",
   },
-  header: {
-    padding: "0 0 16px",
-  },
   logoLink: {
     textDecoration: "none",
-  },
-  logo: {
-    display: "inline-block",
-    margin: "0 8px 0 0",
-    verticalAlign: "middle",
-  },
-  wordmark: {
-    color: emailBrand.colors.foreground,
-    display: "inline-block",
-    fontSize: "18px",
-    fontWeight: "700",
-    lineHeight: "24px",
-    margin: "0",
-    textDecoration: "none",
-    verticalAlign: "middle",
   },
   card: {
     backgroundColor: emailBrand.colors.card,
@@ -177,14 +179,40 @@ const styles = {
     borderRadius: emailBrand.radius.card,
     borderStyle: "solid",
     borderWidth: "1px",
-    padding: "28px",
+    padding: "20px 28px 28px",
   },
-  eyebrow: {
+  cardHeader: {
+    margin: "0 0 10px",
+    width: "100%",
+  },
+  cardTitleHeader: {
+    margin: "0 0 18px",
+    width: "100%",
+  },
+  cardHeaderText: {
+    verticalAlign: "middle",
+  },
+  cardHeaderHeading: {
+    color: emailBrand.colors.foreground,
+    fontSize: "24px",
+    fontWeight: "700",
+    lineHeight: "32px",
+    margin: "0",
+  },
+  cardEyebrow: {
     color: emailBrand.colors.mutedForeground,
     fontSize: "12px",
     fontWeight: "700",
     lineHeight: "18px",
-    margin: "0 0 10px",
+    margin: "0",
+  },
+  cardLogoColumn: {
+    verticalAlign: "middle",
+    width: "36px",
+  },
+  cardLogo: {
+    display: "block",
+    margin: "0 0 0 auto",
   },
   heading: {
     color: emailBrand.colors.foreground,
@@ -231,7 +259,7 @@ const styles = {
     padding: "14px 16px",
   },
   calloutText: {
-    color: emailBrand.colors.mutedForeground,
+    color: emailBrand.colors.foreground,
     fontSize: "14px",
     lineHeight: "22px",
     margin: "0",

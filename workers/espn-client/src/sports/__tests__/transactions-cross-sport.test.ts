@@ -47,6 +47,7 @@ describe('ESPN daily-sport get_transactions handlers', () => {
         end_date: '2026-04-26',
         date_bounds_kind: 'exact_contiguous',
         timezone: 'America/New_York',
+        returned_rows: 0,
       },
       source: 'activity_feed',
       limitations: { structured_details_incomplete: true },

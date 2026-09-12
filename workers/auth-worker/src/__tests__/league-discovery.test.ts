@@ -9,6 +9,7 @@ vi.mock('../v3/get-league-teams', () => ({
 
 import {
   discoverLeaguesV3,
+  discoverAndSaveCurrentLeagues,
   discoverAndSaveLeagues,
 } from '../v3/league-discovery';
 import { EspnCredentialsRequired, AutomaticLeagueDiscoveryFailed } from '../espn-types';
@@ -111,6 +112,113 @@ describe('discoverAndSaveLeagues', () => {
     errorSpy.mockRestore();
   });
 
+  it('uses the exact request owner for current-row writes and stops after lease takeover', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [{
+          id: 'pref-1',
+          type: { code: 'fantasy' },
+          metaData: {
+            entry: {
+              entryId: 8,
+              gameId: 1,
+              seasonId: 2026,
+              entryMetadata: { teamName: 'Team' },
+              groups: [{ groupId: 12345, groupName: 'League' }],
+            },
+          },
+        }],
+      }),
+    } as Response);
+    const storage = {
+      persistLeagueWithLease: vi.fn().mockResolvedValue('lease_lost'),
+      leagueExists: vi.fn(),
+      addLeague: vi.fn(),
+      updateLeague: vi.fn(),
+    } as any;
+
+    await expect(discoverAndSaveCurrentLeagues(
+      'user_123', '{swid}', 's2token', storage, 'request-owner'
+    )).rejects.toThrow('lease lost');
+
+    expect(storage.persistLeagueWithLease).toHaveBeenCalledWith(
+      'user_123',
+      'request-owner',
+      expect.objectContaining({ leagueId: '12345', seasonYear: 2026, teamId: '8' })
+    );
+    expect(storage.leagueExists).not.toHaveBeenCalled();
+    expect(storage.addLeague).not.toHaveBeenCalled();
+    expect(storage.updateLeague).not.toHaveBeenCalled();
+  });
+
+  it('discovers and persists baseball history through 2011', async () => {
+    const previousSeasons = Array.from({ length: 15 }, (_, index) => 2025 - index);
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-baseball',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 7,
+                gameId: 2,
+                seasonId: 2026,
+                entryMetadata: { teamName: 'Current Team' },
+                groups: [{ groupId: 30201, groupName: 'Long-Running League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    mockGetLeagueInfo.mockImplementation(async (_swid, _s2, _leagueId, season) => (
+      season === 2026
+        ? { status: { previousSeasons } } as any
+        : { leagueName: `Long-Running League ${season}` } as any
+    ));
+    mockGetLeagueTeams.mockImplementation(async (_swid, _s2, _leagueId, season) => ([
+      { teamId: '7', teamName: `Historical Team ${season}` },
+    ]));
+
+    const storage = {
+      leagueExists: vi.fn().mockResolvedValue(false),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
+      updateLeague: vi.fn().mockResolvedValue(true),
+    } as any;
+
+    const result = await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(result.pastSeasons).toEqual({
+      found: 15,
+      added: 15,
+      alreadySaved: 0,
+      refreshed: 0,
+    });
+    expect(mockGetLeagueTeams).toHaveBeenCalledTimes(15);
+    expect(mockGetLeagueTeams).toHaveBeenLastCalledWith(
+      '{swid}',
+      's2token',
+      '30201',
+      2011,
+      'flb',
+    );
+    expect(storage.addLeague).toHaveBeenCalledWith('user_123', expect.objectContaining({
+      leagueId: '30201',
+      sport: 'baseball',
+      seasonYear: 2011,
+      teamId: '7',
+      teamName: 'Historical Team 2011',
+    }));
+  });
+
   it('stores historical seasons with the season-specific team name', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -171,7 +279,7 @@ describe('discoverAndSaveLeagues', () => {
     }));
   });
 
-  it('saves every current season before any historical backfill so old seasons cannot exhaust the league cap first', async () => {
+  it('saves every current season before any historical backfill', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -232,7 +340,7 @@ describe('discoverAndSaveLeagues', () => {
     expect(seasonYearsInCallOrder).toEqual([2025, 2025, 2024, 2024]);
   });
 
-  it('stops probing a league\'s historical seasons once the league cap is hit', async () => {
+  it('continues historical discovery beyond 100 league-season rows', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -247,8 +355,8 @@ describe('discoverAndSaveLeagues', () => {
                 entryId: 8,
                 gameId: 1,
                 seasonId: 2025,
-                entryMetadata: { teamName: 'Capped Team' },
-                groups: [{ groupId: 12345, groupName: 'Capped League' }],
+                entryMetadata: { teamName: 'Deep History Team' },
+                groups: [{ groupId: 12345, groupName: 'Deep History League' }],
               },
             },
           },
@@ -256,26 +364,30 @@ describe('discoverAndSaveLeagues', () => {
       }),
     } as Response);
 
+    const previousSeasons = Array.from({ length: 105 }, (_, index) => 2024 - index);
     mockGetLeagueInfo
-      .mockResolvedValueOnce({ status: { previousSeasons: [2024, 2023] } } as any)
-      .mockResolvedValue({ leagueName: 'Capped League Past' } as any);
+      .mockResolvedValueOnce({ status: { previousSeasons } } as any)
+      .mockResolvedValue({ leagueName: 'Deep History League Past' } as any);
 
-    mockGetLeagueTeams.mockResolvedValue([{ teamId: '8', teamName: 'Capped Team Past' }]);
+    mockGetLeagueTeams.mockResolvedValue([{ teamId: '8', teamName: 'Deep History Team Past' }]);
 
     const storage = {
       // Current season already saved; historical rows are new.
       leagueExists: vi.fn()
         .mockResolvedValueOnce(true)
         .mockResolvedValue(false),
-      addLeague: vi.fn().mockResolvedValue({ success: false, code: 'LIMIT_EXCEEDED', error: 'cap' }),
+      addLeague: vi.fn().mockResolvedValue({ success: true }),
       updateLeague: vi.fn().mockResolvedValue(true),
     } as any;
 
     await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
 
-    // First historical season (2024) hits the cap; 2023 must not be attempted.
-    expect(storage.addLeague).toHaveBeenCalledTimes(1);
-    expect(mockGetLeagueTeams).toHaveBeenCalledTimes(1);
+    expect(storage.addLeague).toHaveBeenCalledTimes(105);
+    expect(mockGetLeagueTeams).toHaveBeenCalledTimes(105);
+    expect(storage.addLeague).toHaveBeenLastCalledWith(
+      'user_123',
+      expect.objectContaining({ seasonYear: 1920 })
+    );
   });
 
   it('refreshes existing current-season rows with latest ESPN metadata', async () => {

@@ -18,14 +18,35 @@ import { isCurrentSeason, type SeasonSport } from './season-utils';
 import { clearDefaultsForLeague as _clearDefaultsForLeague, clearDefaultsForPlatform as _clearDefaultsForPlatform } from './preference-defaults';
 import { ArchiveStorage, archivedKey, isSuppressed, type ArchivedFilter } from './archive-storage';
 
+const LEAGUE_PAGE_SIZE = 500;
+
 /**
- * Per-user cap on stored league rows. Each league-season is one row, so a
- * user with a few leagues and several seasons of history accumulates rows
- * quickly — this is a runaway-sync guard, not a product limit. Raised from
- * 10 (July 2026) after season rollover silently failed for multi-season
- * users whose historical rows had consumed the cap.
+ * Identity key for an `espn_leagues` row, mirroring the shape of
+ * `idx_espn_leagues_user_league_sport_season_unique`, which is unique on
+ * `(clerk_user_id, league_id, sport, coalesce(season_year, -1))`. The user is
+ * already fixed by the caller, so it is not part of the key.
+ *
+ * Callers must pass `season_year` exactly as it is written to the row (the
+ * insert payload normalizes a nullish season to `null` with the same `??`
+ * semantics used here), or a preserved row will not be recognized as the same
+ * league. The caller-supplied season is type-checked at the API boundary, so a
+ * numeric string never reaches this key, where it would silently fail to match
+ * the number the `integer` column reads back.
  */
-export const MAX_LEAGUES_PER_USER = 100;
+function espnLeagueIdentityKey(
+  sport: string,
+  leagueId: string,
+  seasonYear: number | null | undefined
+): string {
+  // JSON encoding keeps the parts unambiguous: no separator character can be
+  // smuggled in through a league id.
+  return JSON.stringify([sport, leagueId, seasonYear ?? -1]);
+}
+
+export function nextCredentialUpdatedAt(existingUpdatedAt: string, nowMs = Date.now()): string {
+  const existingMs = Date.parse(existingUpdatedAt);
+  return new Date(Number.isFinite(existingMs) ? Math.max(nowMs, existingMs + 1) : nowMs).toISOString();
+}
 
 /**
  * Mask user ID for logging to avoid PII exposure
@@ -91,6 +112,8 @@ export interface UserPreferences {
   hideLeagueWidget: boolean;
 }
 
+export type LeaseFencedLeagueWriteOutcome = 'added' | 'refreshed' | 'lease_lost' | 'invalid_identity' | 'error';
+
 export class EspnSupabaseStorage {
   private supabase: SupabaseClient;
   private archive: ArchiveStorage;
@@ -131,25 +154,55 @@ export class EspnSupabaseStorage {
         throw new Error('Missing required parameters: clerkUserId, swid, s2');
       }
 
-      const { error } = await this.supabase
-        .from('espn_credentials')
-        .upsert(
-          {
-            clerk_user_id: clerkUserId,
-            swid,
-            s2,
-            email,
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'clerk_user_id' }
-        );
+      // History writes fence against updated_at. Preserve it for an identical
+      // cookie re-sync, but use an optimistic compare-and-swap so an older
+      // request can never restore an earlier timestamp after a concurrent
+      // credential change (the credential ABA race).
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data: existing, error: readError } = await this.supabase
+          .from('espn_credentials')
+          .select('swid, s2, updated_at')
+          .eq('clerk_user_id', clerkUserId)
+          .maybeSingle();
+        if (readError) {
+          console.error('Supabase error reading existing credentials:', readError);
+          return false;
+        }
 
-      if (error) {
-        console.error('Supabase error storing credentials:', error);
-        return false;
+        const now = new Date().toISOString();
+        if (!existing) {
+          const { error: insertError } = await this.supabase
+            .from('espn_credentials')
+            .insert({ clerk_user_id: clerkUserId, swid, s2, email, updated_at: now });
+          if (!insertError) return true;
+          if (insertError.code === '23505') continue;
+          console.error('Supabase error storing credentials:', insertError);
+          return false;
+        }
+
+        const credentialsUnchanged = existing.swid === swid && existing.s2 === s2;
+        const nextUpdatedAt = credentialsUnchanged && existing.updated_at
+          ? existing.updated_at
+          : existing.updated_at
+            ? nextCredentialUpdatedAt(existing.updated_at)
+            : now;
+        let update = this.supabase
+          .from('espn_credentials')
+          .update({ swid, s2, email, updated_at: nextUpdatedAt })
+          .eq('clerk_user_id', clerkUserId);
+        update = existing.updated_at
+          ? update.eq('updated_at', existing.updated_at)
+          : update.is('updated_at', null);
+        const { data, error: updateError } = await update.select('clerk_user_id');
+        if (updateError) {
+          console.error('Supabase error storing credentials:', updateError);
+          return false;
+        }
+        if ((data?.length ?? 0) === 1) return true;
       }
 
-      return true;
+      console.error('Supabase credential update lost its compare-and-swap race repeatedly');
+      return false;
     } catch (error) {
       console.error('Failed to store ESPN credentials:', error);
       return false;
@@ -308,6 +361,31 @@ export class EspnSupabaseStorage {
   // LEAGUE MANAGEMENT OPERATIONS
   // =============================================================================
 
+  async persistLeagueWithLease(
+    clerkUserId: string,
+    leaseOwner: string,
+    league: EspnLeague
+  ): Promise<LeaseFencedLeagueWriteOutcome> {
+    const { data, error } = await this.supabase.rpc('persist_espn_league_with_lease', {
+      p_clerk_user_id: clerkUserId,
+      p_lease_owner: leaseOwner,
+      p_league_id: league.leagueId,
+      p_sport: league.sport,
+      p_season_year: league.seasonYear ?? null,
+      p_team_id: league.teamId ?? null,
+      p_team_name: league.teamName ?? null,
+      p_league_name: league.leagueName ?? null,
+    });
+    if (error) {
+      console.error('Supabase error storing lease-fenced ESPN league:', error);
+      return 'error';
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return ['added', 'refreshed', 'lease_lost', 'invalid_identity'].includes(row?.outcome)
+      ? row.outcome as LeaseFencedLeagueWriteOutcome
+      : 'error';
+  }
+
   /**
    * Store league IDs and sports for a user (backward compatibility)
    */
@@ -333,15 +411,92 @@ export class EspnSupabaseStorage {
   }
 
   /**
-   * Store ESPN leagues for a user
+   * Read the `created_at` this user's ESPN league rows currently carry, keyed
+   * by league identity, so a replace can carry it forward.
+   *
+   * Returns `null` on any read error. Callers must treat that as a hard
+   * failure: this read happens immediately before a destructive delete, and
+   * deleting rows whose timestamps we could not capture is exactly the data
+   * loss we are trying to stop.
+   *
+   * `created_at` is a nullable column, so the map's values are `string | null`
+   * and presence of the key — not truthiness of the value — is what says "this
+   * league already existed". A row whose `created_at` is NULL is real data, and
+   * dropping it here would restamp it as new, reopening the bug from the other
+   * side.
+   */
+  private async getLeagueCreatedAtMap(clerkUserId: string): Promise<Map<string, string | null> | null> {
+    const createdAtByLeague = new Map<string, string | null>();
+    let afterId = 0;
+    while (true) {
+      const { data, error } = await this.supabase
+        .from('espn_leagues')
+        .select('id, league_id, sport, season_year, created_at')
+        .eq('clerk_user_id', clerkUserId)
+        .gt('id', afterId)
+        .order('id', { ascending: true })
+        .limit(LEAGUE_PAGE_SIZE);
+      if (error || !data) {
+        console.error('Supabase error reading existing ESPN league timestamps:', error);
+        return null;
+      }
+
+      for (const row of data as Array<{
+        id: number;
+        league_id: string;
+        sport: string;
+        season_year: number | null;
+        created_at: string | null;
+      }>) {
+        const key = espnLeagueIdentityKey(row.sport, row.league_id, row.season_year);
+        if (!createdAtByLeague.has(key)) {
+          createdAtByLeague.set(key, row.created_at);
+          continue;
+        }
+        // The unique index makes duplicates impossible in practice; if one ever
+        // slips through, the earliest timestamp is the honest answer, and a NULL
+        // beats every timestamp: the row records no creation time, and picking
+        // one of its siblings' would invent the number this fix exists to avoid.
+        const existing = createdAtByLeague.get(key) ?? null;
+        if (existing === null) continue;
+        if (row.created_at === null || Date.parse(row.created_at) < Date.parse(existing)) {
+          createdAtByLeague.set(key, row.created_at);
+        }
+      }
+
+      if (data.length < LEAGUE_PAGE_SIZE) break;
+      afterId = data[data.length - 1].id;
+    }
+    return createdAtByLeague;
+  }
+
+  /**
+   * Replace a user's ESPN leagues with the supplied set.
+   *
+   * This is a delete-then-insert, so a row that survives the replace unchanged
+   * would otherwise come back with a brand-new `created_at`. That made every
+   * manual league edit look like a fresh connection and corrupted any
+   * timestamp-based reading of `espn_leagues` (tenure, cohorts, first-seen).
+   * We therefore capture the existing `created_at` per league identity first
+   * and write it back explicitly for any league that is still present; only
+   * genuinely new leagues are stamped with the current time.
+   *
+   * An upsert would be the tidier fix, but the uniqueness key is the
+   * expression index `idx_espn_leagues_user_league_sport_season_unique`
+   * (`coalesce(season_year, -1)`), which PostgREST's `onConflict` cannot name —
+   * the same constraint `persist_espn_league_with_lease` documents.
+   *
+   * Yahoo and Sleeper are unaffected: their league writers already upsert on
+   * real column constraints and never delete a surviving row.
    */
   async setLeagues(clerkUserId: string, leagues: EspnLeague[]): Promise<boolean> {
     try {
       if (!clerkUserId) return false;
 
-      if (leagues.length > MAX_LEAGUES_PER_USER) {
-        throw new Error(`Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`);
-      }
+      // Read before the delete. A failure here aborts while the rows are still
+      // intact, rather than destroying timestamps we cannot restore.
+      const createdAtByLeague = await this.getLeagueCreatedAtMap(clerkUserId);
+      if (!createdAtByLeague) return false;
 
       // First, delete existing leagues for this user
       await this.supabase
@@ -354,16 +509,32 @@ export class EspnSupabaseStorage {
         return true;
       }
 
-      // Then insert new leagues
-      const leagueData = leagues.map(league => ({
-        clerk_user_id: clerkUserId,
-        league_id: league.leagueId,
-        sport: league.sport,
-        team_id: league.teamId || null,
-        team_name: league.teamName || null,
-        league_name: league.leagueName || null,
-        season_year: league.seasonYear || null
-      }));
+      // Then insert new leagues. `created_at` is set on every row rather than
+      // left to the column default: a bulk insert whose objects do not all
+      // carry the same keys resolves the missing ones to NULL by default, so
+      // an unset key would blank a timestamp we meant to preserve. A NULL is
+      // written only when the row we are replacing already carried one.
+      const now = new Date().toISOString();
+      const leagueData = leagues.map(league => {
+        const seasonYear = league.seasonYear ?? null;
+        const key = espnLeagueIdentityKey(league.sport, league.leagueId, seasonYear);
+        // Presence in the map, not a truthy value: a league whose row carried a
+        // NULL `created_at` still existed, so it keeps its NULL instead of being
+        // stamped as new. Only a league with no entry at all is genuinely new.
+        const createdAt = createdAtByLeague.has(key)
+          ? createdAtByLeague.get(key) ?? null
+          : now;
+        return {
+          clerk_user_id: clerkUserId,
+          league_id: league.leagueId,
+          sport: league.sport,
+          team_id: league.teamId || null,
+          team_name: league.teamName || null,
+          league_name: league.leagueName || null,
+          season_year: seasonYear,
+          created_at: createdAt,
+        };
+      });
 
       const { error } = await this.supabase
         .from('espn_leagues')
@@ -390,17 +561,24 @@ export class EspnSupabaseStorage {
    *   'exclude-hidden'   — drop only 'hidden' (get_ancient_history view)
    */
   async getLeagues(clerkUserId: string, archived: ArchivedFilter = 'include-all'): Promise<EspnLeague[]> {
-    let rawRows: { league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[] = [];
+    let rawRows: { id: number; league_id: string; sport: string; team_id: string | null; team_name: string | null; league_name: string | null; season_year: number | null }[] = [];
     try {
       if (!clerkUserId) return [];
 
-      const { data, error } = await this.supabase
-        .from('espn_leagues')
-        .select('league_id, sport, team_id, team_name, league_name, season_year')
-        .eq('clerk_user_id', clerkUserId);
-
-      if (error || !data) return [];
-      rawRows = data;
+      let afterId = 0;
+      while (true) {
+        const { data, error } = await this.supabase
+          .from('espn_leagues')
+          .select('id, league_id, sport, team_id, team_name, league_name, season_year')
+          .eq('clerk_user_id', clerkUserId)
+          .gt('id', afterId)
+          .order('id', { ascending: true })
+          .limit(LEAGUE_PAGE_SIZE);
+        if (error || !data) return [];
+        rawRows.push(...data);
+        if (data.length < LEAGUE_PAGE_SIZE) break;
+        afterId = data[data.length - 1].id;
+      }
     } catch (error) {
       console.error('Failed to retrieve ESPN leagues:', error);
       return [];
@@ -488,34 +666,8 @@ export class EspnSupabaseStorage {
    * Add a single league to user's collection
    * Returns result object with success flag and optional error code
    */
-  async addLeague(clerkUserId: string, league: EspnLeague): Promise<{ success: boolean; code?: 'DUPLICATE' | 'LIMIT_EXCEEDED' | 'DB_ERROR'; error?: string }> {
+  async addLeague(clerkUserId: string, league: EspnLeague): Promise<{ success: boolean; code?: 'DUPLICATE' | 'DB_ERROR'; error?: string }> {
     try {
-      const existingLeagues = await this.getLeagues(clerkUserId);
-
-      // Check for duplicates (including seasonYear for multi-season support)
-      const isDuplicate = existingLeagues.some(
-        existing => existing.leagueId === league.leagueId
-          && existing.sport === league.sport
-          && existing.seasonYear === league.seasonYear
-      );
-
-      if (isDuplicate) {
-        return {
-          success: false,
-          code: 'DUPLICATE',
-          error: `League ${league.leagueId} for ${league.sport} season ${league.seasonYear} already exists`
-        };
-      }
-
-      // Check league limit
-      if (existingLeagues.length >= MAX_LEAGUES_PER_USER) {
-        return {
-          success: false,
-          code: 'LIMIT_EXCEEDED',
-          error: `Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`
-        };
-      }
-
       const { error } = await this.supabase
         .from('espn_leagues')
         .insert({
@@ -529,6 +681,15 @@ export class EspnSupabaseStorage {
         });
 
       if (error) {
+        // PostgreSQL unique_violation. Supabase/PostgREST returns this stable
+        // code without requiring an unbounded pre-read of the user's history.
+        if (error.code === '23505') {
+          return {
+            success: false,
+            code: 'DUPLICATE',
+            error: `League ${league.leagueId} for ${league.sport} season ${league.seasonYear} already exists`,
+          };
+        }
         console.error('Supabase error adding league:', error);
         return { success: false, code: 'DB_ERROR', error: 'Database error' };
       }

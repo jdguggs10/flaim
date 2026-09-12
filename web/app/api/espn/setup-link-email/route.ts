@@ -3,6 +3,7 @@ import { currentUser } from '@clerk/nextjs/server';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { emailBrand } from '@/emails/brand';
 import { withEmailRef } from '@/emails/link-ref';
+import { logEmailOps } from '@/lib/server/email-ops';
 import { sendEspnSetupLinkEmail } from '@/lib/server/product-email';
 
 // Best-effort per-user cooldown. In-memory, so it only holds within a warm
@@ -17,11 +18,15 @@ const lastSendByUser = new Map<string, number>();
  * email address. The recipient is never caller-controlled.
  */
 export async function POST() {
+  let userId: string | undefined;
+
   try {
     const user = await currentUser();
     if (!user) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
+
+    userId = user.id;
 
     const lastSend = lastSendByUser.get(user.id);
     if (lastSend !== undefined && Date.now() - lastSend < SETUP_LINK_COOLDOWN_MS) {
@@ -45,6 +50,7 @@ export async function POST() {
       extensionUrl: CHROME_EXTENSION_URL,
       leaguesUrl: withEmailRef(`${emailBrand.url}/leagues`, 'email-espn-setup-link'),
       to: email,
+      userId: user.id,
     });
 
     if (result.skipped) {
@@ -64,7 +70,12 @@ export async function POST() {
     lastSendByUser.set(user.id, Date.now());
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error('ESPN setup-link email route error:', error);
+    logEmailOps('email.send_failed', {
+      error,
+      reason: 'setup_link_route_failed',
+      source: 'espn.setup_link_email',
+      userId,
+    });
     return NextResponse.json(
       { error: 'send_failed', error_description: 'Could not send the email' },
       { status: 500 }

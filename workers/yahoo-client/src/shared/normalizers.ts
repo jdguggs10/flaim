@@ -102,3 +102,57 @@ export function parseYahooPercentOwned(value: unknown): number | null {
   }
   return null;
 }
+
+/**
+ * Normalize a Yahoo boolean-flag field. Yahoo's XML->JSON conversion
+ * represents these inconsistently across resources: native JSON booleans on
+ * some player fields, "0"/"1" strings on league settings (verified against a
+ * real captured `/league/{key}/settings` fixture — e.g. `can_trade_draft_picks:
+ * "1"`), and bare 0/1 numbers elsewhere in this codebase (e.g.
+ * `league.is_finished === 1` in get-league-info.ts/get-standings.ts). Also
+ * recognizes the strings "true"/"false" (case-insensitive, trimmed) — an
+ * undocumented alternate encoding some Yahoo fields use (FLA-284 audit).
+ * Returns undefined for anything unrecognized rather than guessing at a
+ * default, e.g. `is_keeper.status`/`kept` must never be coerced to `true`
+ * for an unrecognized encoding.
+ */
+export function toYahooBoolean(value: unknown): boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    if (value === '1') return true;
+    if (value === '0') return false;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Parse a Yahoo numeric field that may arrive as a string (real
+ * `/league/{key}/settings` capture: `trade_reject_time: "1"`). Returns
+ * undefined for missing/non-finite values rather than coercing to 0.
+ *
+ * An empty or whitespace-only string is rejected before reaching `Number()`
+ * (FLA-284 audit): `Number('')` and `Number('   ')` both evaluate to `0`,
+ * which would otherwise misreport "field not sent/blank" as the finite
+ * value `0`.
+ */
+export function toYahooFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed === '') return undefined;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}

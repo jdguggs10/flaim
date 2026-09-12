@@ -126,6 +126,12 @@ interface SupabaseErrorLike {
   hint?: string;
 }
 
+// Every `code=${error.code || 'unknown'}` below deliberately uses `||`, not `??`:
+// postgrest-js sets `code: ''` (empty string, not undefined) for client-side
+// fetch/parse failures, the single most common failure class, so `??` let it
+// through and logged a bare "code=" with no signal at all. Confirmed against
+// the installed @supabase/postgrest-js source during the FLA-370 audit.
+
 /**
  * Treat a missing `recurring_league_id` column (pre-migration) or a stale
  * PostgREST schema cache as tolerable: discovery/archive writes fall back to a
@@ -142,6 +148,23 @@ function isMissingRecurringLeagueIdColumnError(error: SupabaseErrorLike | null |
 // Match the original Yahoo OAuth behavior: refresh before the access token
 // expires so user-facing tool calls do not land exactly on the expiry boundary.
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
+
+// Yahoo's expires_in is measured from when Yahoo issued the token, not when we
+// finish storing it. Shave a buffer off at write time so the stored expiry
+// accounts for the token-exchange round-trip, independent of REFRESH_BUFFER_MS
+// above (which guards the duration of the subsequent tool call instead).
+export const EXPIRY_WRITE_BUFFER_MS = 60 * 1000;
+
+export function computeYahooExpiresAt(expiresInSeconds: number, nowMs: number = Date.now()): Date {
+  // The 60s floor only holds when Yahoo's actual lifetime allows it — a safety
+  // buffer must never extend the stored expiry beyond what Yahoo granted, so
+  // the floored value is capped back down to expiresInSeconds itself.
+  const bufferedSeconds = Math.min(
+    expiresInSeconds,
+    Math.max(expiresInSeconds - EXPIRY_WRITE_BUFFER_MS / 1000, 60),
+  );
+  return new Date(nowMs + bufferedSeconds * 1000);
+}
 
 /**
  * Mask user ID for logging
@@ -208,7 +231,12 @@ export class YahooStorage {
     });
 
     if (error) {
-      console.error('[yahoo-storage] Failed to create platform OAuth state:', error);
+      // Code only, never the raw driver object — the failing INSERT payload carries
+      // the unmasked clerk_user_id, the state nonce and the redirect origin, and a
+      // Postgres error quotes the offending column value (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to create platform OAuth state for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+      );
       throw new Error('Failed to create platform OAuth state');
     }
 
@@ -277,7 +305,12 @@ export class YahooStorage {
     );
 
     if (error) {
-      console.error('[yahoo-storage] Failed to save Yahoo credentials:', error);
+      // Code only, never the raw driver object — the failing UPSERT payload carries
+      // access_token and refresh_token, and a Postgres error quotes the offending
+      // column value (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to save Yahoo credentials for user ${maskUserId(params.clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+      );
       throw new Error('Failed to save Yahoo credentials');
     }
 
@@ -385,7 +418,11 @@ export class YahooStorage {
     const { data, error } = await query.select('clerk_user_id');
 
     if (error) {
-      console.error('[yahoo-storage] Failed to update Yahoo credentials:', error);
+      // Code only — the UPDATE payload carries access_token and optionally
+      // refresh_token (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to update Yahoo credentials for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+      );
       throw new Error('Failed to update Yahoo credentials');
     }
 
@@ -422,7 +459,11 @@ export class YahooStorage {
     }
 
     if (error) {
-      console.error('[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss:', error);
+      // Code only — the RPC arguments include p_access_token, p_refresh_token and
+      // p_expected_refresh_token, and a data-type error names the argument (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to recover Yahoo credentials after owner guard miss for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+      );
       throw new Error('Failed to recover Yahoo credentials');
     }
 
@@ -497,7 +538,11 @@ export class YahooStorage {
     }
 
     if (error) {
-      console.error('[yahoo-storage] Failed to acquire Yahoo refresh lease:', error);
+      // Code only — p_expected_refresh_token is a raw refresh token passed as an
+      // RPC argument (FLA-368).
+      console.error(
+        `[yahoo-storage] Failed to acquire Yahoo refresh lease for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+      );
       throw new Error('Failed to acquire Yahoo refresh lease');
     }
 
@@ -588,19 +633,26 @@ export class YahooStorage {
       }
 
       if (!isMissingRecurringLeagueIdColumnError(result.error)) {
-        console.error('[yahoo-storage] Failed to upsert Yahoo league:', result.error);
+        // Logs the error code only (a closed Postgres/PostgREST set), never the raw
+        // driver error object — its `message`/`details` can name the conflicting
+        // league_key on a unique-violation (FLA-363).
+        console.error(
+          `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${result.error.code || 'unknown'}`
+        );
         throw new Error('Failed to upsert Yahoo league');
       }
 
       console.warn(
-        `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(params.clerkUserId)} league ${params.leagueKey}; retrying without it (code=${result.error.code ?? 'unknown'})`
+        `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(params.clerkUserId)}; retrying without it (code=${result.error.code || 'unknown'})`
       );
       this.recurringLeagueIdColumnStatus = 'missing';
     }
 
     const legacy = await this.upsertYahooLeagueRow(basePayload);
     if (legacy.error) {
-      console.error('[yahoo-storage] Failed to upsert Yahoo league:', legacy.error);
+      console.error(
+        `[yahoo-storage] Failed to upsert Yahoo league for user ${maskUserId(params.clerkUserId)}: code=${legacy.error.code || 'unknown'}`
+      );
       throw new Error('Failed to upsert Yahoo league');
     }
     return legacy.id;
@@ -644,11 +696,14 @@ export class YahooStorage {
     }
 
     if (!isMissingRecurringLeagueIdColumnError(error as SupabaseErrorLike)) {
-      throw new Error(`Failed to persist Yahoo recurring root: ${(error as SupabaseErrorLike).message}`);
+      // Static message, matching every other throw in this file. The raw Postgres
+      // message quotes the offending value from the failing statement, and this
+      // UPDATE filters on the customer's league_key list (FLA-368).
+      throw new Error('Failed to persist Yahoo recurring root');
     }
 
     console.warn(
-      `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(clerkUserId)}; skipping recurring-root persist (code=${(error as SupabaseErrorLike).code ?? 'unknown'})`
+      `[yahoo-storage] recurring_league_id column unavailable for user ${maskUserId(clerkUserId)}; skipping recurring-root persist (code=${(error as SupabaseErrorLike).code || 'unknown'})`
     );
     this.recurringLeagueIdColumnStatus = 'missing';
   }

@@ -90,6 +90,33 @@ function buildLeagueInfoResponse(): unknown {
   };
 }
 
+// FLA-284: shape verified against a real captured /league/{key}/settings
+// fixture (hkyplyr/yahoo_fantasy_ex) — settings is a nested array (not a
+// flat object), with a second element carrying unrelated per-week metadata.
+function buildLeagueSettingsResponse(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', name: 'Test League' },
+        {
+          settings: [
+            {
+              draft_type: 'live',
+              is_auction_draft: '0',
+              can_trade_draft_picks: '1',
+              trade_end_date: '2025-11-20',
+              trade_ratify_type: 'commish',
+              trade_reject_time: '2',
+              uses_faab: '1',
+            },
+            { min_games_played: '' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 function buildStandingsResponse(): unknown {
   return {
     fantasy_content: {
@@ -141,6 +168,58 @@ function buildRosterResponse(): unknown {
                   ],
                 },
                 count: 1,
+              },
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
+// FLA-284: two roster players — one carrying Yahoo's undocumented is_keeper
+// field (present-on-every-player-once-keeper-league shape verified against
+// a real captured NHL roster fixture, folkg/auto-coach), one without it.
+function buildRosterResponseWithKeeper(statusKept: unknown): unknown {
+  return {
+    fantasy_content: {
+      team: [
+        [
+          { team_key: '449.l.123.t.1' },
+          { name: 'Team A' },
+        ],
+        {
+          roster: {
+            '0': {
+              players: {
+                '0': {
+                  player: [
+                    [{
+                      player_key: 'p101',
+                      player_id: '101',
+                      name: { full: 'Kept Player' },
+                      editorial_team_abbr: 'PIT',
+                      display_position: 'C',
+                      status: 'healthy',
+                      is_keeper: { status: statusKept, cost: false, kept: statusKept },
+                    }],
+                    { selected_position: [{}, { position: 'C' }] },
+                  ],
+                },
+                '1': {
+                  player: [
+                    [{
+                      player_key: 'p102',
+                      player_id: '102',
+                      name: { full: 'No Keeper Field' },
+                      editorial_team_abbr: 'PIT',
+                      display_position: 'LW',
+                      status: 'healthy',
+                    }],
+                    { selected_position: [{}, { position: 'LW' }] },
+                  ],
+                },
+                count: 2,
               },
             },
           },
@@ -211,6 +290,35 @@ function buildFreeAgentsResponse(): unknown {
   };
 }
 
+// FLA-284: same is_keeper shape as the roster fixture, on a free-agent entry.
+function buildFreeAgentsResponseWithKeeper(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', name: 'Test League' },
+        {
+          players: {
+            '0': {
+              player: [
+                [{
+                  player_key: 'fa101',
+                  player_id: '201',
+                  name: { full: 'Free Agent Keeper' },
+                  editorial_team_abbr: 'BOS',
+                  display_position: 'OF',
+                  is_keeper: { status: true, cost: false, kept: true },
+                }],
+                { ownership: { percent_owned: '12.5' } },
+              ],
+            },
+            count: 1,
+          },
+        },
+      ],
+    },
+  };
+}
+
 function buildFreeAgentsPageResponse(players: Array<{
   player_key: string;
   player_id: string;
@@ -248,6 +356,46 @@ function buildFreeAgentsPageResponse(players: Array<{
   };
 }
 
+function buildDraftResultsResponse(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.123', draft_status: 'postdraft', draft_type: 'live' },
+        {
+          draft_results: {
+            '0': {
+              draft_result: {
+                pick: '1',
+                round: '1',
+                team_key: '449.l.123.t.2',
+                player_key: '449.p.101',
+              },
+            },
+            count: 1,
+          },
+        },
+      ],
+    },
+  };
+}
+
+function buildDraftPlayersResponse(): unknown {
+  return {
+    fantasy_content: {
+      players: {
+        '0': {
+          player: [[
+            { player_key: '449.p.101' },
+            { player_id: '101' },
+            { name: { full: 'Drafted Player' } },
+          ]],
+        },
+        count: 1,
+      },
+    },
+  };
+}
+
 describe('yahoo cross-sport handler characterization tests', () => {
   const getCredsMock = getYahooCredentials as MockedFunction<typeof getYahooCredentials>;
   const fetchMock = yahooFetch as MockedFunction<typeof yahooFetch>;
@@ -257,9 +405,106 @@ describe('yahoo cross-sport handler characterization tests', () => {
     getCredsMock.mockResolvedValue({ accessToken: 'token' });
   });
 
+  describe('get_draft', () => {
+    it.each(scenarios)('$label routes the requested sport and season through Yahoo draftresults', async ({ sport, handlers }) => {
+      fetchMock.mockImplementation(async (path) => jsonResponse(
+        path.includes('/draftresults') ? buildDraftResultsResponse() : buildDraftPlayersResponse(),
+      ));
+
+      const result = await handlers.get_draft(
+        {} as never,
+        { sport, league_id: '449.l.123', season_year: 2023 },
+        'Bearer x',
+        `cid-${sport}`,
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith('/league/449.l.123/draftresults', { credentials: { accessToken: 'token' } });
+      expect(result).toMatchObject({
+        success: true,
+        data: {
+          platform: 'yahoo',
+          sport,
+          leagueId: '449.l.123',
+          seasonYear: 2023,
+          draft: { type: 'unknown', status: 'complete' },
+          picks: [{
+            round: 1,
+            selectionTeamId: '449.l.123.t.2',
+            playerId: '449.p.101',
+            playerName: 'Drafted Player',
+            placement: { status: 'confirmed', source: 'provider_pick' },
+          }],
+        },
+      });
+    });
+
+    it.each(scenarios)('$label treats an empty draft-results collection as a successful pre-draft result', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse({
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', draft_status: 'predraft', draft_type: 'live' },
+            { draft_results: { count: 0 } },
+          ],
+        },
+      }));
+
+      const result = await handlers.get_draft({} as never, { sport, league_id: '449.l.123', season_year: 2026 }, 'Bearer x');
+
+      expect(result).toMatchObject({
+        success: true,
+        data: { draft: { status: 'pre_draft' }, picks: [] },
+      });
+    });
+
+    it.each(scenarios)('$label fails closed when Yahoo marks a draft complete but supplies no usable selections', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse({
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', draft_status: 'postdraft', draft_type: 'live' },
+            { draft_results: {
+              '0': { draft_result: { round: '1', team_key: '', player_key: '' } },
+              count: 1,
+            } },
+          ],
+        },
+      }));
+
+      const result = await handlers.get_draft({} as never, { sport, league_id: '449.l.123', season_year: 2026 }, 'Bearer x');
+
+      expect(result).toMatchObject({
+        success: false,
+        code: 'YAHOO_DRAFT_RESULTS_UNAVAILABLE',
+      });
+    });
+
+    it('propagates Yahoo access denial instead of returning an empty draft', async () => {
+      fetchMock.mockResolvedValue(new Response('Forbidden', { status: 403 }));
+
+      const result = await footballHandlers.get_draft(
+        {} as never,
+        { sport: 'football', league_id: '449.l.123', season_year: 2026 },
+        'Bearer x',
+      );
+
+      expect(result).toMatchObject({
+        success: false,
+        code: 'YAHOO_ACCESS_DENIED',
+        status: 403,
+      });
+    });
+  });
+
   describe('get_league_info', () => {
     it.each(scenarios)('$label returns consistent league metadata shape', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildLeagueInfoResponse()));
+      // get_league_info now fetches /teams then /settings sequentially
+      // (FLA-284) — mockImplementation returns a fresh Response per call so
+      // the second read doesn't hit a consumed body ("Body has already been
+      // used") from mockResolvedValue's single shared Response. This request
+      // doesn't exercise settings fields, so serving /teams-shaped JSON to
+      // both calls is fine: extractLeagueSettings finds no settings key and
+      // the handler degrades to its warning path, which these assertions
+      // don't check.
+      fetchMock.mockImplementation(async () => jsonResponse(buildLeagueInfoResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_league_info({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -282,7 +527,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
     });
 
     it('baseball includes startDate and endDate', async () => {
-      fetchMock.mockResolvedValue(jsonResponse(buildLeagueInfoResponse()));
+      // get_league_info now fetches /teams then /settings sequentially
+      // (FLA-284) — mockImplementation returns a fresh Response per call so
+      // the second read doesn't hit a consumed body ("Body has already been
+      // used") from mockResolvedValue's single shared Response. This request
+      // doesn't exercise settings fields, so serving /teams-shaped JSON to
+      // both calls is fine: extractLeagueSettings finds no settings key and
+      // the handler degrades to its warning path, which these assertions
+      // don't check.
+      fetchMock.mockImplementation(async () => jsonResponse(buildLeagueInfoResponse()));
 
       const params: ToolParams = { sport: 'baseball', league_id: '449.l.123', season_year: 2025 };
       const result = await baseballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
@@ -294,7 +547,15 @@ describe('yahoo cross-sport handler characterization tests', () => {
     });
 
     it.each(scenarios.filter(s => s.label !== 'baseball'))('$label does not include startDate/endDate', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildLeagueInfoResponse()));
+      // get_league_info now fetches /teams then /settings sequentially
+      // (FLA-284) — mockImplementation returns a fresh Response per call so
+      // the second read doesn't hit a consumed body ("Body has already been
+      // used") from mockResolvedValue's single shared Response. This request
+      // doesn't exercise settings fields, so serving /teams-shaped JSON to
+      // both calls is fine: extractLeagueSettings finds no settings key and
+      // the handler degrades to its warning path, which these assertions
+      // don't check.
+      fetchMock.mockImplementation(async () => jsonResponse(buildLeagueInfoResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_league_info({} as never, params, 'Bearer x', 'cid');
@@ -312,6 +573,122 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(result.success).toBe(false);
       expect(result.code).toBe('MISSING_PARAM');
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    // FLA-284: the new /settings fetch, keyed off the request path so the
+    // /teams and /settings calls resolve to genuinely distinct Response
+    // objects (unlike the single-mockResolvedValue scenarios above) — this
+    // is what a real deployment does, and it exercises the merge logic
+    // end-to-end rather than only the degrade path.
+    it('includes draft/trade settings fields when the /settings fetch succeeds', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        return jsonResponse(p.includes('/settings') ? buildLeagueSettingsResponse() : buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      // Pre-existing /teams-derived fields are unaffected.
+      expect(data.leagueKey).toBe('449.l.123');
+      expect((data.teams as unknown[]).length).toBe(2);
+      // New settings-derived fields, normalized from Yahoo's string flags.
+      expect(data.draftType).toBe('live');
+      expect(data.isAuctionDraft).toBe(false);
+      expect(data.canTradeDraftPicks).toBe(true);
+      expect(data.tradeEndDate).toBe('2025-11-20');
+      expect(data.tradeRatifyType).toBe('commish');
+      expect(data.tradeRejectTime).toBe(2);
+      expect(data.usesFaab).toBe(true);
+      expect(data.warning).toBeUndefined();
+    });
+
+    it('degrades gracefully (teams-only + warning, no throw) when /settings returns a non-2xx response', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          return new Response('Not Found', { status: 404 });
+        }
+        return jsonResponse(buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueKey).toBe('449.l.123');
+      expect((data.teams as unknown[]).length).toBe(2);
+      expect(data.draftType).toBeUndefined();
+      expect(data.isAuctionDraft).toBeUndefined();
+      expect(data.warning).toBe(
+        'LEAGUE_SETTINGS_UNAVAILABLE: could not fetch league settings; draft/trade config fields omitted.'
+      );
+    });
+
+    it('degrades gracefully (teams-only + warning, no throw) when the /settings fetch itself rejects', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          throw new Error('network boom');
+        }
+        return jsonResponse(buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueKey).toBe('449.l.123');
+      expect((data.teams as unknown[]).length).toBe(2);
+      expect(data.warning).toContain('LEAGUE_SETTINGS_UNAVAILABLE');
+    });
+
+    it('degrades gracefully (teams-only + warning, no throw) when /settings returns an unexpected shape', async () => {
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          return jsonResponse({ fantasy_content: { league: [{ league_key: '449.l.123' }, { settings: 'not-an-array-or-object' }] } });
+        }
+        return jsonResponse(buildLeagueInfoResponse());
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.leagueKey).toBe('449.l.123');
+      expect(data.draftType).toBeUndefined();
+      expect(data.warning).toContain('LEAGUE_SETTINGS_UNAVAILABLE');
+    });
+
+    it('surfaces isProLeague from the /teams response metadata without an extra fetch', async () => {
+      const responseWithProLeague = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League', is_pro_league: '1' },
+            { teams: { count: 0 } },
+          ],
+        },
+      };
+      fetchMock.mockImplementation(async (path: unknown) => {
+        const p = path as string;
+        if (p.includes('/settings')) {
+          return new Response('Not Found', { status: 404 });
+        }
+        return jsonResponse(responseWithProLeague);
+      });
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_league_info({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect(data.isProLeague).toBe(true);
     });
   });
 
@@ -376,7 +753,49 @@ describe('yahoo cross-sport handler characterization tests', () => {
                         { team_standings: { rank: 2, outcome_totals: { wins: 9, losses: 4, ties: 0, percentage: '.692' }, points_for: '1400', points_against: '1300' } },
                       ],
                     },
-                    count: 2,
+                    '2': {
+                      team: [
+                        [{ team_key: '449.l.123.t.3', team_id: '3', name: 'Team C' }],
+                        { team_standings: { rank: 3, playoff_seed: 'N/A', outcome_totals: { wins: 5, losses: 8, ties: 0, percentage: '.385' }, points_for: '1100', points_against: '1350' } },
+                      ],
+                    },
+                    '3': {
+                      team: [
+                        [{ team_key: '449.l.123.t.4', team_id: '4', name: 'Team D' }],
+                        { team_standings: { rank: 4, playoff_seed: '', outcome_totals: { wins: 4, losses: 9, ties: 0, percentage: '.308' }, points_for: '1050', points_against: '1400' } },
+                      ],
+                    },
+                    '4': {
+                      team: [
+                        [{ team_key: '449.l.123.t.5', team_id: '5', name: 'Team E' }],
+                        { team_standings: { rank: 5, playoff_seed: '   ', outcome_totals: { wins: 3, losses: 10, ties: 0, percentage: '.231' }, points_for: '1000', points_against: '1450' } },
+                      ],
+                    },
+                    '5': {
+                      team: [
+                        [{ team_key: '449.l.123.t.6', team_id: '6', name: 'Team F' }],
+                        { team_standings: { rank: 6, playoff_seed: false, outcome_totals: { wins: 2, losses: 11, ties: 0, percentage: '.154' }, points_for: '950', points_against: '1500' } },
+                      ],
+                    },
+                    '6': {
+                      team: [
+                        [{ team_key: '449.l.123.t.7', team_id: '7', name: 'Team G' }],
+                        { team_standings: { rank: 7, playoff_seed: true, outcome_totals: { wins: 1, losses: 12, ties: 0, percentage: '.077' }, points_for: '900', points_against: '1550' } },
+                      ],
+                    },
+                    '7': {
+                      team: [
+                        [{ team_key: '449.l.123.t.8', team_id: '8', name: 'Team H' }],
+                        { team_standings: { rank: 8, playoff_seed: 0, outcome_totals: { wins: 0, losses: 13, ties: 0, percentage: '.000' }, points_for: '850', points_against: '1600' } },
+                      ],
+                    },
+                    '8': {
+                      team: [
+                        [{ team_key: '449.l.123.t.9', team_id: '9', name: 'Team I' }],
+                        { team_standings: { rank: 9, playoff_seed: '3', outcome_totals: { wins: 6, losses: 7, ties: 0, percentage: '.462' }, points_for: '1150', points_against: '1300' } },
+                      ],
+                    },
+                    count: 9,
                   },
                 },
               ],
@@ -398,10 +817,35 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const standings = data.standings as Array<Record<string, unknown>>;
       const teamA = standings.find((s) => s.name === 'Team A');
       const teamB = standings.find((s) => s.name === 'Team B');
+      const teamC = standings.find((s) => s.name === 'Team C');
+      const teamD = standings.find((s) => s.name === 'Team D');
+      const teamE = standings.find((s) => s.name === 'Team E');
+      const teamF = standings.find((s) => s.name === 'Team F');
+      const teamG = standings.find((s) => s.name === 'Team G');
+      const teamH = standings.find((s) => s.name === 'Team H');
+      const teamI = standings.find((s) => s.name === 'Team I');
       expect(teamA?.madePlayoffs).toBe(true);
       expect(teamA?.playoffSeed).toBe(1);
       expect(teamB?.madePlayoffs).toBeNull();
       expect(teamB?.playoffSeed).toBeNull();
+      // Non-numeric playoff_seed ('N/A') must fall back to null, never NaN
+      expect(teamC?.madePlayoffs).toBeNull();
+      expect(teamC?.playoffSeed).toBeNull();
+      // Empty string, whitespace-only string, booleans, and zero must all reject
+      // rather than coerce via Number() (Number('') === 0, Number(true) === 1, etc.)
+      expect(teamD?.madePlayoffs).toBeNull();
+      expect(teamD?.playoffSeed).toBeNull();
+      expect(teamE?.madePlayoffs).toBeNull();
+      expect(teamE?.playoffSeed).toBeNull();
+      expect(teamF?.madePlayoffs).toBeNull();
+      expect(teamF?.playoffSeed).toBeNull();
+      expect(teamG?.madePlayoffs).toBeNull();
+      expect(teamG?.playoffSeed).toBeNull();
+      expect(teamH?.madePlayoffs).toBeNull();
+      expect(teamH?.playoffSeed).toBeNull();
+      // A valid numeric string must still parse correctly
+      expect(teamI?.madePlayoffs).toBe(true);
+      expect(teamI?.playoffSeed).toBe(3);
 
       // Yahoo cannot verify championship outcome — always null
       expect(teamA?.finalRank).toBeNull();
@@ -505,6 +949,176 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(result.code).toBe('MISSING_PARAM');
       expect(fetchMock).not.toHaveBeenCalled();
     });
+
+    it.each(scenarios)('$label maps waiverPriority for a rolling-priority league, with faabBalance null', async ({ sport, handlers }) => {
+      const rollingPriorityResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A', waiver_priority: '3' }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(rollingPriorityResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].waiverPriority).toBe(3);
+      expect(standings[0].faabBalance).toBeNull();
+    });
+
+    it.each(scenarios)('$label maps faabBalance for a FAAB league, with waiverPriority null', async ({ sport, handlers }) => {
+      const faabResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A', faab_balance: '87' }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(faabResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].faabBalance).toBe(87);
+      expect(standings[0].waiverPriority).toBeNull();
+    });
+
+    it.each(scenarios)('$label returns both waiverPriority and faabBalance as null when Yahoo omits them', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildStandingsResponse()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].waiverPriority).toBeNull();
+      expect(standings[0].faabBalance).toBeNull();
+    });
+
+    it.each(scenarios)('$label maps both waiverPriority and faabBalance when a FAAB league also returns a rolling tie-break priority', async ({ sport, handlers }) => {
+      // A FAAB league can still populate waiver_priority as its tie-breaker for equal
+      // bids — the two fields are not mutually exclusive on Yahoo.
+      const bothPresentResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Team A', waiver_priority: 4, faab_balance: 0 }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    count: 1,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(bothPresentResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      // Raw numbers (not numeric strings) are handled, and a genuine $0 FAAB balance
+      // stays 0 rather than collapsing to null — 0 is falsy but meaningful here.
+      expect(standings[0].waiverPriority).toBe(4);
+      expect(standings[0].faabBalance).toBe(0);
+    });
+
+    it.each(scenarios)('$label treats a non-applicable waiver_priority as null rather than priority zero', async ({ sport, handlers }) => {
+      // waiver_priority is a 1-based ordinal, so 0 / '' / a placeholder means "does
+      // not apply" — surfacing 0 would read as ranking ahead of first. faab_balance
+      // is a quantity, so its own 0 must survive; both cases are pinned together.
+      const zeroPriorityResponse = {
+        fantasy_content: {
+          league: [
+            { league_key: '449.l.123', name: 'Test League' },
+            {
+              standings: [
+                {
+                  teams: {
+                    '0': {
+                      team: [
+                        [{ team_key: '449.l.123.t.1', team_id: '1', name: 'Zero', waiver_priority: 0, faab_balance: 0 }],
+                        { team_standings: { rank: 1, outcome_totals: { wins: 8, losses: 2, ties: 0, percentage: '.800' }, points_for: '1200', points_against: '1000' } },
+                      ],
+                    },
+                    '1': {
+                      team: [
+                        [{ team_key: '449.l.123.t.2', team_id: '2', name: 'Placeholder', waiver_priority: 'N/A', faab_balance: '' }],
+                        { team_standings: { rank: 2, outcome_totals: { wins: 6, losses: 4, ties: 0, percentage: '.600' }, points_for: '1100', points_against: '1050' } },
+                      ],
+                    },
+                    '2': {
+                      team: [
+                        [{ team_key: '449.l.123.t.3', team_id: '3', name: 'Fractional', waiver_priority: 2.5 }],
+                        { team_standings: { rank: 3, outcome_totals: { wins: 4, losses: 6, ties: 0, percentage: '.400' }, points_for: '1000', points_against: '1100' } },
+                      ],
+                    },
+                    count: 3,
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+      fetchMock.mockResolvedValue(jsonResponse(zeroPriorityResponse));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_standings({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const standings = (result.data as Record<string, unknown>).standings as Array<Record<string, unknown>>;
+      expect(standings[0].waiverPriority).toBeNull();
+      expect(standings[0].faabBalance).toBe(0);
+      expect(standings[1].waiverPriority).toBeNull();
+      expect(standings[1].faabBalance).toBeNull();
+      expect(standings[2].waiverPriority).toBeNull();
+    });
   });
 
   describe('get_roster', () => {
@@ -532,6 +1146,33 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(false);
       expect(result.code).toBe('MISSING_PARAM');
+    });
+
+    // FLA-284: Yahoo's undocumented is_keeper field, reverse-engineered from
+    // real captures. Emitted as normalized booleans only for players that
+    // carry the field at all — absent entirely for a non-keeper league.
+    it.each(scenarios)('$label includes normalized isKeeper only for the player that has is_keeper', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponseWithKeeper(true)));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await handlers.get_roster({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>> };
+      expect(data.players).toHaveLength(2);
+      expect(data.players[0]).toMatchObject({ isKeeper: { status: true, cost: false, kept: true } });
+      expect(data.players[1]).not.toHaveProperty('isKeeper');
+    });
+
+    it('football normalizes "0"/"1" string is_keeper flags to booleans', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponseWithKeeper('0')));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>> };
+      expect(data.players[0].isKeeper).toEqual({ status: false, cost: false, kept: false });
     });
   });
 
@@ -840,6 +1481,29 @@ describe('yahoo cross-sport handler characterization tests', () => {
         expect.objectContaining({ playerId: '202', name: 'Ben Bat', percentOwned: 99 }),
         expect.objectContaining({ playerId: '203', name: 'Carl Curve', percentOwned: 88.5 }),
       ]);
+    });
+
+    // FLA-284: same is_keeper passthrough as get_roster.
+    it.each(scenarios)('$label includes normalized isKeeper when a free agent has is_keeper', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponseWithKeeper()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<Record<string, unknown>> };
+      expect(data.freeAgents[0]).toMatchObject({ isKeeper: { status: true, cost: false, kept: true } });
+    });
+
+    it.each(scenarios)('$label omits isKeeper when a free agent has no is_keeper field', async ({ sport, handlers }) => {
+      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<Record<string, unknown>> };
+      expect(data.freeAgents[0]).not.toHaveProperty('isKeeper');
     });
   });
 });

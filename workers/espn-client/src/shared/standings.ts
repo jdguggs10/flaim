@@ -1,6 +1,6 @@
 import type { EspnCredentials } from '@flaim/worker-shared';
-import type { EspnLeagueResponse, EspnMatchup, EspnTeam } from '../types';
-import { espnFetch } from './espn-api';
+import { isEspnLeagueResponse, type EspnMatchup, type EspnTeam } from '../types';
+import { espnFetch, readEspnLeagueJson } from './espn-api';
 
 export type EspnSeasonPhase = 'regular_season' | 'playoffs_in_progress' | 'season_complete';
 
@@ -147,16 +147,25 @@ export async function fetchBracketFinal(
   seasonYear: number,
   credentials?: EspnCredentials | null,
   playoffSeeds?: Map<number, number>,
+  historical = true,
 ): Promise<EspnBracketFinal | null> {
   try {
     // mSettings rides along on the same request (multi-view is the standard
     // ESPN API pattern) so the playoff tie rule is available for a tied final.
     const path = `/seasons/${seasonYear}/segments/0/leagues/${leagueId}?view=mMatchupScore&view=mSettings`;
-    const response = await espnFetch(path, gameId, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, gameId, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId,
+        espnSeasonYear: seasonYear,
+        historical,
+      },
+    });
     if (!response.ok) {
       return null;
     }
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     return deriveBracketFinal(data?.schedule, {
       playoffMatchupTieRule: data?.settings?.scoringSettings?.playoffMatchupTieRule,
       playoffSeeds,

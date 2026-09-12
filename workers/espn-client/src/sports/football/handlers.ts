@@ -1,11 +1,12 @@
 // workers/espn-client/src/sports/football/handlers.ts
-import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
+import { isEspnLeagueResponse, type Env, type RoutedToolParams, type ExecuteResponse, type EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
-import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
+import { espnFetch, handleEspnError, readEspnLeagueJson, requireCredentials } from '../../shared/espn-api';
 import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
-import { buildRosterLimitations, currentClubAndInjuryFields } from '../../shared/roster-entry';
+import { buildRosterLimitations, currentClubAndInjuryFields, resolveKeeperValueUnit } from '../../shared/roster-entry';
+import { epochMsToIso } from '../../shared/dates';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import {
   getPositionName,
@@ -18,6 +19,11 @@ import {
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import {
+  normalizeEspnFootballMatchupPlayerDetail,
+  resolveEspnFootballMatchupPeriod,
+} from './matchup-player-detail';
+import { executeEspnGetDraft } from '../../shared/espn-draft';
 
 const GAME_ID = 'ffl'; // ESPN's game ID for fantasy football
 
@@ -29,6 +35,7 @@ type HandlerFn = (
 ) => Promise<ExecuteResponse>;
 
 export const footballHandlers: Record<string, HandlerFn> = {
+  get_draft: (env, params, authHeader, correlationId) => executeEspnGetDraft(env, params, GAME_ID, authHeader, correlationId),
   get_league_info: handleGetLeagueInfo,
   get_standings: handleGetStandings,
   get_matchups: handleGetMatchups,
@@ -54,13 +61,21 @@ async function handleGetLeagueInfo(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
 
     if (!data || !data.settings) {
       return {
@@ -82,6 +97,12 @@ async function handleGetLeagueInfo(
         abbrev: team.abbrev,
         ownerName: hasOwners ? ownerNames[0] : undefined,
         owners: hasOwners ? ownerNames : undefined,
+        ...(team.draftStrategy?.keeperPlayerIds !== undefined
+          ? { keeperPlayerIds: team.draftStrategy.keeperPlayerIds }
+          : {}),
+        ...(team.draftStrategy?.futureKeeperPlayerIds !== undefined
+          ? { futureKeeperPlayerIds: team.draftStrategy.futureKeeperPlayerIds }
+          : {}),
       };
     });
 
@@ -116,6 +137,29 @@ async function handleGetLeagueInfo(
         schedule: {
           playoffSeedingRule: data.settings.scheduleSettings?.playoffSeedingRule,
           playoffMatchupPeriodLength: data.settings.scheduleSettings?.playoffMatchupPeriodLength
+        },
+        ...(data.settings.draftSettings?.keeperCount != null
+          ? {
+              keeperSettings: {
+                keeperCount: data.settings.draftSettings.keeperCount,
+                keeperCountFuture: data.settings.draftSettings.keeperCountFuture,
+                keeperOrderType: data.settings.draftSettings.keeperOrderType,
+                keeperDeadlineDate: epochMsToIso(data.settings.draftSettings.keeperDeadlineDate),
+              },
+              isKeeperLeague: data.settings.draftSettings.keeperCount > 0,
+            }
+          : {}),
+        draftSettings: {
+          type: data.settings.draftSettings?.type,
+          auctionBudget: data.settings.draftSettings?.auctionBudget,
+          pickTradingEnabled: data.settings.draftSettings?.isTradingEnabled,
+        },
+        tradeSettings: {
+          deadlineDate: epochMsToIso(data.settings.tradeSettings?.deadlineDate),
+          revisionHours: data.settings.tradeSettings?.revisionHours,
+          vetoVotesRequired: data.settings.tradeSettings?.vetoVotesRequired,
+          allowOutOfUniverse: data.settings.tradeSettings?.allowOutOfUniverse,
+          max: data.settings.tradeSettings?.max
         }
       }
     };
@@ -143,13 +187,21 @@ async function handleGetStandings(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mStandings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: season_year,
+        historical: season_year < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const teams = data?.teams || [];
 
@@ -166,7 +218,14 @@ async function handleGetStandings(
     // ESPN leaves final ranks at 0 for some historical seasons; fall back to the
     // playoff bracket to identify the champion and runner-up.
     const bracketFinal = seasonComplete && !hasExplicitFinalRanks(teams)
-      ? await fetchBracketFinal(GAME_ID, league_id, season_year, credentials, buildPlayoffSeedMap(teams))
+      ? await fetchBracketFinal(
+        GAME_ID,
+        league_id,
+        season_year,
+        credentials,
+        buildPlayoffSeedMap(teams),
+        season_year < getCurrentSeasonYear('football'),
+      )
       : null;
 
     // Transform and sort teams by standings
@@ -245,6 +304,10 @@ async function handleGetMatchups(
 ): Promise<ExecuteResponse> {
   const { league_id, season_year, week } = params;
 
+  if (params.detail === 'players') {
+    return handleGetMatchupPlayerDetail(env, params, authHeader, correlationId);
+  }
+
   try {
     const credentials = await getCredentials(env, authHeader, correlationId);
 
@@ -253,13 +316,21 @@ async function handleGetMatchups(
       path += `&scoringPeriodId=${week}&matchupPeriodId=${week}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: season_year,
+        historical: season_year < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const schedule = data?.schedule || [];
     const teamsById = Object.fromEntries(
@@ -315,6 +386,106 @@ async function handleGetMatchups(
 }
 
 /**
+ * Get one ESPN football matchup with the selected matchup's weekly player
+ * detail. This stays separate from the summary branch above so ordinary
+ * get_matchups requests preserve their URL, response shape, and semantics.
+ */
+async function handleGetMatchupPlayerDetail(
+  env: Env,
+  params: RoutedToolParams,
+  authHeader?: string,
+  correlationId?: string,
+): Promise<ExecuteResponse> {
+  const { league_id, season_year, week, team_id } = params;
+
+  if (typeof week !== 'number' || !Number.isInteger(week) || week <= 0 || !team_id?.trim()) {
+    return {
+      success: false,
+      error: 'MATCHUP_DETAIL_SELECTOR_REQUIRED: Player detail requires a positive week and team_id',
+      code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED',
+    };
+  }
+  if (season_year < 2018) {
+    return {
+      success: false,
+      error: 'MATCHUP_DETAIL_UNSUPPORTED: ESPN player detail is currently supported for seasons 2018 and later',
+      code: 'MATCHUP_DETAIL_UNSUPPORTED',
+    };
+  }
+
+  try {
+    const credentials = await getCredentials(env, authHeader, correlationId);
+    const league = {
+      leagueId: league_id,
+      espnSeasonYear: season_year,
+      historical: season_year < getCurrentSeasonYear('football'),
+    };
+    const settingsPath = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mSettings`;
+    const settingsResponse = await espnFetch(settingsPath, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league,
+    });
+
+    if (!settingsResponse.ok) {
+      handleEspnError(settingsResponse);
+    }
+
+    const settingsData = await readEspnLeagueJson(settingsResponse, isEspnLeagueResponse);
+    if (!settingsData) {
+      throw new Error(
+        'MATCHUP_PLAYER_DETAIL_UNAVAILABLE: ESPN did not return usable matchup-period settings',
+      );
+    }
+    const matchupPeriod = resolveEspnFootballMatchupPeriod(settingsData, week);
+
+    const path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mBoxscore&scoringPeriodId=${week}`;
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      headers: {
+        'X-Fantasy-Filter': JSON.stringify({
+          schedule: {
+            filterMatchupPeriodIds: { value: [matchupPeriod] },
+          },
+        }),
+      },
+      league,
+    });
+
+    if (!response.ok) {
+      handleEspnError(response);
+    }
+
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
+    if (!data) {
+      return {
+        success: false,
+        error: 'MATCHUP_PLAYER_DETAIL_UNAVAILABLE: ESPN did not return a usable league payload for player detail',
+        code: 'MATCHUP_PLAYER_DETAIL_UNAVAILABLE',
+      };
+    }
+
+    const matchup = normalizeEspnFootballMatchupPlayerDetail(data, matchupPeriod, team_id.trim());
+    return {
+      success: true,
+      data: {
+        leagueId: league_id,
+        seasonYear: season_year,
+        matchupPeriod: matchup.matchupPeriodId,
+        matchups: [matchup],
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      code: extractErrorCode(error),
+    };
+  }
+}
+
+/**
  * Get roster for a specific team
  */
 async function handleGetRoster(
@@ -336,20 +507,28 @@ async function handleGetRoster(
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'roster data');
 
-    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam`;
+    let path = `/seasons/${season_year}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam&view=mSettings`;
     let providerScoringPeriodId: number | undefined;
     if (snapshot.type === 'week') {
       providerScoringPeriodId = snapshot.week;
       path += `&scoringPeriodId=${snapshot.week}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: season_year,
+        historical: season_year < getCurrentSeasonYear('football'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse) ?? {};
     const teams = data.teams || [];
 
     // Find the requested team
@@ -392,7 +571,15 @@ async function handleGetRoster(
         percentStarted: player?.ownership?.percentStarted,
         stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined,
         acquisitionType: entry.acquisitionType,
-        acquisitionDate: entry.acquisitionDate
+        acquisitionDate: entry.acquisitionDate,
+        keeperValue: entry.playerPoolEntry?.keeperValue,
+        // keeperValueFuture is next season's cost — not yet fixed as of a
+        // past week/date, so historical snapshots withhold it entirely
+        // (FLA-284 temporal purity, mirroring FLA-278's proTeam/injuryStatus
+        // omission below via buildRosterLimitations).
+        ...(snapshot.type === 'current'
+          ? { keeperValueFuture: entry.playerPoolEntry?.keeperValueFuture }
+          : {}),
       };
     });
 
@@ -402,6 +589,12 @@ async function handleGetRoster(
       && roster.length > 0
       && roster.some((entry) => entry.acquisitionType == null || entry.acquisitionDate == null);
     const limitations = buildRosterLimitations(snapshot, acquisitionMetadataMissing);
+
+    // Keeper cost unit depends on the league's draft type; requires mSettings
+    // in this fetch (added above). Omit rather than guess when unavailable.
+    const draftType = data.settings?.draftSettings?.type;
+    const keeperValueUnit = resolveKeeperValueUnit(draftType);
+    const keeperCount = data.settings?.draftSettings?.keeperCount;
 
     return {
       success: true,
@@ -414,6 +607,8 @@ async function handleGetRoster(
         ownerName,
         snapshot: toSnapshotMetadata(snapshot, { providerScoringPeriodId }),
         ...(limitations ? { limitations } : {}),
+        ...(keeperValueUnit ? { keeperValueUnit } : {}),
+        ...(keeperCount != null ? { isKeeperLeague: keeperCount > 0 } : {}),
         roster
       }
     };

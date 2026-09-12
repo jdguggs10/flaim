@@ -11,12 +11,21 @@
       "head_sampling_rate": 1
     }
   },
+  "workflows": [
+    { "name": "espn-history-refresh", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+  ],
   // Required secrets (set via `wrangler secret put` or Cloudflare dashboard):
   // - SUPABASE_URL
   // - SUPABASE_SERVICE_KEY
   // - YAHOO_CLIENT_ID      (Yahoo Developer App)
   // - YAHOO_CLIENT_SECRET  (Yahoo Developer App)
+  // - CLERK_ACCOUNT_DELETION_WEBHOOK_SIGNING_SECRET (Clerk user.deleted
+  //   webhook; each Clerk instance issues its own value -- --env preview
+  //   takes the dev-instance value, --env prod takes the prod-instance
+  //   value; they are never the same secret)
   // Optional vars:
+  // - SUPPORT_TOOL_TOKEN (second secret required by /internal/support/*, on top
+  //   of INTERNAL_SERVICE_TOKEN; when unset those routes fail closed with 500)
   // - OAUTH_REFRESH_TOKEN_TTL_SECONDS (defaults to 31536000 in code; set only to override)
   // - OAUTH_CLIENT_REGISTRATION_SIGNING_KEY (defaults to SUPABASE_SERVICE_KEY;
   //   set a dedicated stable secret in preview/prod so Supabase key rotation
@@ -27,6 +36,9 @@
     // Production environment
     "prod": {
       "name": "auth-worker",
+      "workflows": [
+        { "name": "espn-history-refresh", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+      ],
       "workers_dev": true, // Enable .workers.dev URL for worker-to-worker calls
       "observability": {
         "enabled": true,
@@ -43,6 +55,11 @@
           "name": "CREDENTIALS_RATE_LIMITER",
           "namespace_id": "1002",
           "simple": { "limit": 15, "period": 60 }
+        },
+        {
+          "name": "WEBHOOK_RATE_LIMITER",
+          "namespace_id": "1003",
+          "simple": { "limit": 30, "period": 60 }
         },
       ],
       // Custom domain routes for production (external clients)
@@ -73,11 +90,11 @@
           "zone_name": "flaim.app"
         }
       ],
-      // Scheduled league rollover reconciliation (FLA-161). The cron is inert
-      // until RECONCILIATION_ENABLED is set to "true": the handler logs a
-      // single `disabled` line and exits.
+      // Each scheduled task has its own default-off gate. The five-minute ESPN
+      // tick can claim at most one legacy backfill job and does no work while
+      // ESPN_HISTORY_BACKFILL_MODE remains "off".
       "triggers": {
-        "crons": ["17 10 * * *"]
+        "crons": ["17 10 * * *", "*/5 * * * *"]
       },
       // Environment variables for production
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
@@ -85,6 +102,8 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "prod",
         "FRONTEND_URL": "https://flaim.app",
+        "ESPN_DURABLE_HISTORY_ENABLED": "false",
+        "ESPN_HISTORY_BACKFILL_MODE": "off",
         // Dry-run evidence collection enabled 2026-07-17 (FLA-161). Caps stay
         // at code defaults: 5 users/run, espn+sleeper, football, 45s budget.
         "RECONCILIATION_ENABLED": "true",
@@ -94,6 +113,9 @@
     // Preview environment (remote dev/staging)
     "preview": {
       "name": "auth-worker-preview",
+      "workflows": [
+        { "name": "espn-history-refresh-preview", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+      ],
       "workers_dev": true, // Also keep workers.dev URL available
       "observability": {
         "enabled": true,
@@ -109,6 +131,11 @@
           "name": "CREDENTIALS_RATE_LIMITER",
           "namespace_id": "1012",
           "simple": { "limit": 15, "period": 60 }
+        },
+        {
+          "name": "WEBHOOK_RATE_LIMITER",
+          "namespace_id": "1013",
+          "simple": { "limit": 30, "period": 60 }
         }
       ],
       // Custom domain routes for preview (needed for worker-to-worker calls)
@@ -120,9 +147,10 @@
           "zone_name": "flaim.app"
         }
       ],
-      // FLA-161 reconciliation cron — inert until RECONCILIATION_ENABLED="true".
+      // Default-off scheduled tasks mirror production routing for safe preview
+      // verification without selecting any ESPN accounts.
       "triggers": {
-        "crons": ["17 10 * * *"]
+        "crons": ["17 10 * * *", "*/5 * * * *"]
       },
       // Environment variables for preview
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY set via Cloudflare secrets
@@ -130,6 +158,8 @@
         "NODE_ENV": "production",
         "ENVIRONMENT": "preview",
         "FRONTEND_URL": "https://preview.flaim.app",
+        "ESPN_DURABLE_HISTORY_ENABLED": "false",
+        "ESPN_HISTORY_BACKFILL_MODE": "off",
         "RECONCILIATION_ENABLED": "false",
         "RECONCILIATION_DRY_RUN": "true"
       }
@@ -137,6 +167,9 @@
     // Development environment (local)
     "dev": {
       "name": "auth-worker-dev",
+      "workflows": [
+        { "name": "espn-history-refresh-dev", "binding": "ESPN_HISTORY_REFRESH", "class_name": "EspnHistoryRefreshWorkflow" }
+      ],
       "workers_dev": true, // Use workers.dev URL for development
       "ratelimits": [
         {
@@ -148,14 +181,21 @@
           "name": "CREDENTIALS_RATE_LIMITER",
           "namespace_id": "1022",
           "simple": { "limit": 15, "period": 60 }
+        },
+        {
+          "name": "WEBHOOK_RATE_LIMITER",
+          "namespace_id": "1023",
+          "simple": { "limit": 30, "period": 60 }
         }
       ],
-      // Environment variables for dev  
+      // Environment variables for dev
       // Note: SUPABASE_URL and SUPABASE_SERVICE_KEY loaded from .env.local for local development
       "vars": {
         "NODE_ENV": "development",
         "ENVIRONMENT": "dev",
-        "FRONTEND_URL": "http://localhost:3000"
+        "FRONTEND_URL": "http://localhost:3000",
+        "ESPN_DURABLE_HISTORY_ENABLED": "false",
+        "ESPN_HISTORY_BACKFILL_MODE": "off"
       }
     }
   }

@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-muted-foreground mb-8">
-          Last updated: July 27, 2026
+          Last updated: August 29, 2026
         </p>
 
         <div className="max-w-none space-y-8">
@@ -216,9 +216,29 @@ export default function PrivacyPage() {
                 Sleeper from your account.
               </li>
               <li>
-                <strong>Account data:</strong> Retained until you request
-                deletion. Upon deletion, all stored credentials and league data
-                are permanently removed within 30 days.
+                <strong>Account data:</strong> Deleting your account through
+                your account menu (Manage account, then Security, then Delete
+                account) starts permanent deletion. Your connected ESPN,
+                Yahoo, and Sleeper credentials and your saved league data are
+                purged once the verified deletion event is processed,
+                normally within seconds.
+              </li>
+              <li>
+                <strong>Usage records after deletion:</strong> Some usage
+                records are pseudonymous rather than anonymous: they remain
+                linked to your Clerk account identifier rather than your name
+                or email. Raw usage-event records are kept for up to 90 days;
+                daily usage summaries derived from them are kept indefinitely
+                for product analytics. We also keep a permanent record that
+                your account existed and when it was deleted, so we can
+                continue to block any future attempt to write data under that
+                identifier.
+              </li>
+              <li>
+                <strong>Marketing email:</strong> Deleting your account does
+                not remove or unsubscribe any existing marketing-contact
+                record with our email provider. Use the unsubscribe link in
+                any marketing email to opt out of that separately.
               </li>
               <li>
                 <strong>Signup attribution:</strong> A first-party cookie keeps
@@ -234,14 +254,8 @@ export default function PrivacyPage() {
                 to manage or remove your platform credentials.
               </li>
               <li>
-                <strong>Delete account:</strong> Contact us at{" "}
-                <a
-                  href="mailto:privacy@flaim.app"
-                  className="text-primary hover:underline"
-                >
-                  privacy@flaim.app
-                </a>{" "}
-                to request complete account deletion.
+                <strong>Delete account:</strong> Open your account menu,
+                choose Manage account, then Security, then Delete account.
               </li>
             </ul>
           </section>
@@ -252,8 +266,9 @@ export default function PrivacyPage() {
               We do not sell, rent, or share your personal information or
               platform credentials with any third parties. Your data is used
               exclusively to provide Flaim&apos;s services to you. Our service
-              providers (Clerk for authentication, Supabase for data storage)
-              process data only as necessary to operate the service.
+              providers (Clerk for authentication, Supabase for data storage,
+              and Resend for product, account, and marketing email) process data only as
+              necessary to operate the service.
             </p>
           </section>
 
@@ -269,7 +284,7 @@ export default function PrivacyPage() {
                 </a>
               </li>
               <li>Request a copy of your stored data</li>
-              <li>Request deletion of your account and all associated data</li>
+              <li>Request deletion of your account. See Data Retention above for what is removed and what is retained afterward.</li>
             </ul>
           </section>
 

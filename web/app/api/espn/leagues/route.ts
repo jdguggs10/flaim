@@ -2,7 +2,7 @@
  * ESPN Leagues Management API Route
  * ---------------------------------------------------------------------------
  * Handles saving and managing ESPN league arrays for the leagues page.
- * Supports up to 100 leagues per user with duplicate validation.
+ * Supports per-season league rows with duplicate validation.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -91,13 +91,6 @@ export async function POST(request: NextRequest) {
     if (!body.leagues || !Array.isArray(body.leagues)) {
       return NextResponse.json({ 
         error: 'Invalid request: leagues array is required' 
-      }, { status: 400 });
-    }
-
-    // Validate league limit (keep in sync with MAX_LEAGUES_PER_USER in auth-worker)
-    if (body.leagues.length > 100) {
-      return NextResponse.json({
-        error: 'Maximum of 100 leagues allowed per user' 
       }, { status: 400 });
     }
 

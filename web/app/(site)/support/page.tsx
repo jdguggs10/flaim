@@ -21,30 +21,6 @@ export default function SupportPage() {
         </p>
 
         <div className="max-w-none space-y-8">
-          <section
-            aria-labelledby="yahoo-outage-heading"
-            className="rounded-lg border border-warning/40 bg-warning/10 p-4"
-          >
-            <h2
-              id="yahoo-outage-heading"
-              className="text-base font-semibold text-foreground"
-            >
-              Ongoing Yahoo outage
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              <strong className="text-foreground">
-                Yahoo league data is temporarily unavailable in Flaim.
-              </strong>{" "}
-              Yahoo is currently reviewing third-party access to its Fantasy
-              Sports API and is blocking unapproved apps across the board, so
-              Yahoo sign-in may complete but league data will not load. This is
-              not a problem with your account, connection, or league, and no
-              reconnect will fix it. Flaim has applied for approval and will
-              restore Yahoo automatically once access returns. ESPN and Sleeper
-              leagues are unaffected.
-            </p>
-          </section>
-
           <section>
             <h2 className="text-xl font-semibold mb-3">Get in Touch</h2>
             <p className="text-muted-foreground">

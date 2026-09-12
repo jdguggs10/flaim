@@ -61,10 +61,33 @@ function normalizeArchiveMode(mode: string | null | undefined): ArchiveMode {
   return mode === 'historical' ? 'historical' : 'hidden';
 }
 
+/**
+ * Shape of a Supabase/PostgREST driver error, narrowed to the fields this module
+ * reads. Only `code` is ever logged: `message`, `details` and `hint` can quote the
+ * offending value from the failing statement — for `archived_leagues` that means
+ * `league_name` and `recurring_league_id` (FLA-370). Mirrors yahoo-storage.ts.
+ */
+interface SupabaseErrorLike {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
+/**
+ * The only field of a driver error this module is allowed to log. `||` rather than
+ * `??` on purpose: postgrest-js sets `code: ''` (not undefined) when it turns a
+ * client-side fetch or response-parse failure into a resolved error object, and a
+ * bare `code=` is a useless signal for exactly the most common failure class.
+ */
+function errorCode(error: SupabaseErrorLike | null | undefined): string {
+  return error?.code || 'unknown';
+}
+
 /** True when a DB error indicates the `mode` column doesn't exist yet (code runs
  * before migration 025). Lets the read path fall back to legacy behavior instead
  * of failing closed on a transient-looking error it can actually recover from. */
-function isMissingModeColumn(error: { code?: string; message?: string } | null): boolean {
+function isMissingModeColumn(error: SupabaseErrorLike | null): boolean {
   if (!error) return false;
   if (error.code === '42703') return true; // Postgres undefined_column
   return /column\b.*\bmode\b.*does not exist/i.test(error.message ?? '');
@@ -149,7 +172,16 @@ export class ArchiveStorage {
         );
 
       if (error) {
-        console.error('[archive-storage] archiveLeague error:', error);
+        // Code only, never the raw driver object. This UPSERT's payload carries
+        // league_name, recurring_league_id and the unmasked clerk_user_id, and a
+        // Postgres error quotes them back: a 23505 unique violation names the
+        // (clerk_user_id, platform, sport, recurring_league_id) key tuple, a 23514
+        // check violation's DETAIL is "Failing row contains (...)" including
+        // league_name, and the account-deletion BEFORE INSERT/UPDATE trigger raises
+        // "account <clerk_user_id> was deleted" (FLA-370).
+        console.error(
+          `[archive-storage] archiveLeague failed for user ${maskUserId(clerkUserId)}: code=${errorCode(error)}`
+        );
         return false;
       }
 
@@ -158,7 +190,13 @@ export class ArchiveStorage {
       );
       return true;
     } catch (error) {
-      console.error('[archive-storage] Failed to archive league:', error);
+      // Name only. postgrest-js never throws for network/HTTP/parse failures — it
+      // resolves them into the `error` object handled above — so nothing that
+      // reaches this catch-all carries row data; it is a defensive guard for a
+      // generic JS throw. Narrowed to the name anyway, matching FLA-368 (FLA-370).
+      console.error(
+        `[archive-storage] archiveLeague threw for user ${maskUserId(clerkUserId)}: ${error instanceof Error ? error.name : 'unknown'}`
+      );
       return false;
     }
   }
@@ -184,7 +222,16 @@ export class ArchiveStorage {
         .eq('recurring_league_id', recurringLeagueId);
 
       if (error) {
-        console.error('[archive-storage] unarchiveLeague error:', error);
+        // Narrower than the archive write — a DELETE has no payload, no table
+        // references archived_leagues (so no FK-violation DETAIL), and the
+        // account-deletion trigger is BEFORE INSERT OR UPDATE only. But the filter
+        // values still reach PostgREST's grammar unescaped (postgrest-js appends
+        // `eq.${value}` verbatim), so a value containing a comma or paren yields a
+        // PGRST100 parse error echoing the offending filter — recurring_league_id
+        // and the unmasked clerk_user_id. Code only (FLA-370).
+        console.error(
+          `[archive-storage] unarchiveLeague failed for user ${maskUserId(clerkUserId)}: code=${errorCode(error)}`
+        );
         return false;
       }
 
@@ -193,7 +240,10 @@ export class ArchiveStorage {
       );
       return true;
     } catch (error) {
-      console.error('[archive-storage] Failed to unarchive league:', error);
+      // Defensive-only, same reasoning as archiveLeague's catch-all (FLA-370).
+      console.error(
+        `[archive-storage] unarchiveLeague threw for user ${maskUserId(clerkUserId)}: ${error instanceof Error ? error.name : 'unknown'}`
+      );
       return false;
     }
   }
@@ -213,7 +263,16 @@ export class ArchiveStorage {
         .eq('clerk_user_id', clerkUserId);
 
       if (error || !data) {
-        if (error) console.error('[archive-storage] listArchived error:', error);
+        // A SELECT writes no payload, but two channels still put row data in the
+        // raw error: PGRST100 echoes the unescaped `clerk_user_id` filter, and a
+        // malformed 200 body makes postgrest-js resolve a JSON.parse SyntaxError
+        // whose message quotes a prefix of that body — which for `select('*')` on
+        // this table is the caller's own league_name rows. Code only (FLA-370).
+        if (error) {
+          console.error(
+            `[archive-storage] listArchived failed for user ${maskUserId(clerkUserId)}: code=${errorCode(error)}`
+          );
+        }
         return [];
       }
 
@@ -226,7 +285,12 @@ export class ArchiveStorage {
         mode: normalizeArchiveMode(row.mode),
       }));
     } catch (error) {
-      console.error('[archive-storage] Failed to list archived leagues:', error);
+      // The most reachable of the three catch-alls: the row `.map()` below runs
+      // inside the try, so a non-array `data` throws a TypeError here. Still a
+      // generic JS error, never a driver object — name only (FLA-370).
+      console.error(
+        `[archive-storage] listArchived threw for user ${maskUserId(clerkUserId)}: ${error instanceof Error ? error.name : 'unknown'}`
+      );
       return [];
     }
   }
@@ -280,12 +344,23 @@ export class ArchiveStorage {
           ])
         );
       }
-      console.error('[archive-storage] getArchivedMap legacy fallback error:', legacyError);
-      throw new Error(`Failed to get archived map: ${legacyError?.message ?? 'no data returned'}`);
+      // Both getArchivedMap failure paths: log the code only, and throw a STATIC
+      // message. Interpolating the raw Postgres `.message` here was the root cause
+      // of the transitive leak FLA-368 patched defensively downstream — this throw
+      // propagates to callers that log the caught error. Leak channels are the same
+      // two as listArchived (PGRST100 filter echo, JSON.parse-of-body). Callers
+      // match on the "Failed to get archived map" prefix only, so dropping the
+      // suffix is not a behavior change (FLA-370).
+      console.error(
+        `[archive-storage] getArchivedMap legacy fallback failed for user ${maskUserId(clerkUserId)}: code=${errorCode(legacyError)}`
+      );
+      throw new Error('Failed to get archived map');
     }
 
-    console.error('[archive-storage] getArchivedMap error:', error);
-    throw new Error(`Failed to get archived map: ${error?.message ?? 'no data returned'}`);
+    console.error(
+      `[archive-storage] getArchivedMap failed for user ${maskUserId(clerkUserId)}: code=${errorCode(error)}`
+    );
+    throw new Error('Failed to get archived map');
   }
 
   /**

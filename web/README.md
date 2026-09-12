@@ -64,6 +64,8 @@ Note: `/chat` redirects to `/#live-demo` (legacy URL support).
 
 Most API routes proxy to auth-worker. See `docs/ARCHITECTURE.md` for the full flow.
 
+`/api/leagues/refresh` saves current ESPN league metadata before returning. Historical season discovery is available only to the exact Clerk user IDs in the auth-worker's `ESPN_DURABLE_HISTORY_USERS` rollout allowlist when `ESPN_DURABLE_HISTORY_ENABLED=true`; the path is default-off. `/api/espn/history` exposes an enabled signed-in user's latest background status so Your Leagues can poll without keeping the original refresh request open.
+
 ## Season Years
 
 Leagues are stored per season year. The `/leagues` UI defaults the season year based on America/New_York time:

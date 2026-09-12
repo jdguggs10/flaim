@@ -78,9 +78,9 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
       }
 
       const rows = await fetchSleeperTransactionsByWeeks(league_id, weeks, resolvePlayer);
-      const filtered = rows
-        .filter((txn) => !type || txn.type === type)
-        .slice(0, maxCount);
+      const preSlice = rows.filter((txn) => !type || txn.type === type);
+      const filtered = preSlice.slice(0, maxCount);
+      const possiblyTruncated = preSlice.length > maxCount;
 
       let teams: Record<string, string> | undefined;
       let teamOwners: Record<string, string> | undefined;
@@ -104,12 +104,14 @@ export function createGetTransactionsHandler(config: SleeperSportConfig): Handle
           window: {
             mode: explicitWeek !== undefined ? 'explicit_week' : 'recent_two_weeks',
             weeks,
+            returned_rows: transactions.length,
           },
           count: transactions.length,
           transactions,
           ...(teams ? { teams } : {}),
           ...(teamOwners ? { teamOwners } : {}),
           ...(warnings.length > 0 ? { warnings } : {}),
+          ...(possiblyTruncated ? { limitations: { possibly_truncated: true } } : {}),
         },
       };
     } catch (error) {

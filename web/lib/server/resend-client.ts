@@ -11,6 +11,7 @@ let resendContacts: Resend | null = null;
 let resendContactsApiKey: string | null = null;
 let resendEvents: Resend | null = null;
 let resendEventsApiKey: string | null = null;
+let resendWebhookVerifier: Resend | null = null;
 
 export function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -46,6 +47,17 @@ export function getResendEventsClient() {
   }
 
   return resendEvents;
+}
+
+// Webhook verification is local Svix signature validation. Resend's SDK still
+// requires a non-empty constructor key even though this client never issues an
+// API request, so use a fixed non-secret placeholder rather than a send key.
+export function getResendWebhookVerifier() {
+  if (!resendWebhookVerifier) {
+    resendWebhookVerifier = new Resend("webhook-verifier");
+  }
+
+  return resendWebhookVerifier;
 }
 
 export function getResendErrorMessage(error: ResendApiError | unknown) {

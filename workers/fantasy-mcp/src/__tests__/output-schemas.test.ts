@@ -384,6 +384,57 @@ describe('get_matchups output schema', () => {
     }));
   });
 
+  it('accepts the bounded ESPN football player-detail shape', () => {
+    expectValid('get_matchups', routed({
+      leagueId: '336777',
+      seasonYear: 2024,
+      matchupPeriod: 5,
+      matchups: [{
+        matchupPeriodId: 5,
+        home: {
+          teamId: 1,
+          totalPoints: 101.2,
+          players: [{
+            playerId: '101',
+            name: 'Player One',
+            lineupSlot: 'QB',
+            started: true,
+            points: 0,
+          }],
+        },
+        away: {
+          teamId: 2,
+          totalPoints: 98.7,
+          players: [{
+            playerId: '202',
+            name: null,
+            lineupSlot: 'SLOT_88',
+            started: null,
+            points: null,
+          }],
+        },
+      }],
+    }));
+  });
+
+  it('rejects malformed player detail without tightening summary compatibility', () => {
+    const result = outputSchemaFor('get_matchups').safeParse(routed({
+      matchups: [{
+        home: {
+          teamId: 1,
+          players: [{
+            playerId: '101',
+            name: 'Player One',
+            lineupSlot: 'QB',
+            started: true,
+            points: '10',
+          }],
+        },
+      }],
+    }));
+    expect(result.success).toBe(false);
+  });
+
   it('accepts the Yahoo envelope with string week fields', () => {
     expectValid('get_matchups', routed({
       leagueKey: '449.l.123',
@@ -407,6 +458,80 @@ describe('get_matchups output schema', () => {
         },
       ],
     }));
+  });
+});
+
+describe('get_draft output schema', () => {
+  it('accepts the required common draft contract with provider placement metadata', () => {
+    expectValid('get_draft', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      leagueId: 'league-1',
+      seasonYear: 2025,
+      draft: {
+        id: 'draft-1',
+          type: 'snake',
+          status: 'complete',
+          rounds: 15,
+          teams: 12,
+          playerPool: { source: 'provider' },
+      },
+      picks: [{
+        round: 1,
+        selectionInRound: 1,
+          overallPick: 1,
+          selectionTeamId: 'roster-1',
+          originalTeamId: 'roster-1',
+          playerId: '4034',
+          playerName: 'Patrick Mahomes',
+          playerPosition: 'QB',
+          playerProTeam: 'KC',
+          isKeeper: false,
+          cost: { amount: 17, unit: 'auction_dollars' },
+        placement: { status: 'confirmed', source: 'provider_pick' },
+      }],
+      teams: {
+        'roster-1': 'First Team',
+        'roster-2': 'Second Team',
+      },
+      teamOwners: {
+        'roster-1': 'First Owner',
+        'roster-2': 'Second Owner',
+      },
+      ownership: {
+        scope: 'complete',
+        picks: [{
+          seasonYear: 2026,
+          round: 1,
+          draftColumn: 1,
+          selectionInRound: 1,
+          overallPick: 1,
+          originalTeamId: 'roster-1',
+          currentOwnerTeamId: 'roster-2',
+          placement: { status: 'projected', source: 'provider_order_derived' },
+        }],
+      },
+    }));
+  });
+
+  it('requires the common draft fields while tolerating future provider keys', () => {
+    const schema = outputSchemaFor('get_draft');
+    expect(schema.safeParse(routed({
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 123,
+      seasonYear: 2024,
+      draft: { type: 'auction', status: 'unavailable', futureDraftField: true },
+      picks: [],
+      futureProviderField: { nested: true },
+    })).success).toBe(true);
+    expect(schema.safeParse(routed({
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 123,
+      seasonYear: 2024,
+      draft: { type: 'auction', status: 'complete' },
+    })).success).toBe(false);
   });
 });
 
@@ -456,6 +581,21 @@ describe('get_roster output schema', () => {
       reserve: [],
       taxi: ['6002'],
       record: { wins: 9, losses: 5, ties: 0 },
+    }));
+  });
+
+  it('accepts the Sleeper current roster mid-draft, with snapshot.leagueStatus disclosing why it is empty (FLA-293)', () => {
+    expectValid('get_roster', routed({
+      leagueId: 'sleeper-2025',
+      rosterId: 7,
+      ownerId: 'user-1',
+      ownerName: 'Gerry',
+      snapshot: { type: 'current', leagueStatus: 'drafting' },
+      starters: [],
+      bench: [],
+      reserve: [],
+      taxi: [],
+      record: { wins: 0, losses: 0, ties: 0 },
     }));
   });
 
@@ -667,6 +807,7 @@ describe('get_transactions output schema', () => {
         end_date: '2026-04-24',
         date_bounds_kind: 'exact_contiguous',
         timezone: 'America/New_York',
+        returned_rows: 2,
       },
       source: 'activity_feed',
       limitations: {
@@ -674,6 +815,7 @@ describe('get_transactions output schema', () => {
         omitted_unscoped_rows: 2,
         omitted_conflicting_rows: 1,
         window_coverage_incomplete: true,
+        possibly_truncated: true,
       },
       count: 2,
       truncated: true,
@@ -710,10 +852,12 @@ describe('get_transactions output schema', () => {
         weeks: [],
         start_timestamp_ms: 1760000000000,
         end_timestamp_ms: 1761209600000,
+        returned_rows: 1,
       },
       warning: 'Some transactions were missing timestamps and were dropped.',
       dropped_invalid_timestamp_count: 1,
       count: 1,
+      limitations: { possibly_truncated: true },
       transactions: [
         {
           transaction_id: '449.l.123.tr.10',
@@ -762,8 +906,9 @@ describe('get_transactions output schema', () => {
       sport: 'football',
       league_id: 'sleeper-2025',
       season_year: 2025,
-      window: { mode: 'explicit_week', weeks: [15] },
+      window: { mode: 'explicit_week', weeks: [15], returned_rows: 1 },
       count: 1,
+      limitations: { possibly_truncated: true },
       transactions: [
         { transaction_id: '9990', date: '2026-07-18', type: 'add', status: 'complete', week: 15, team_ids: [7] },
       ],

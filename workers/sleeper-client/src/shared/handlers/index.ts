@@ -6,6 +6,7 @@ import { createGetStandingsHandler } from './get-standings';
 import { createGetRosterHandler } from './get-roster';
 import { createGetMatchupsHandler } from './get-matchups';
 import { createGetTransactionsHandler } from './get-transactions';
+import { createGetDraftHandler } from './get-draft';
 
 export type { HandlerFn, SleeperSportConfig } from './types';
 
@@ -18,5 +19,6 @@ export function createSleeperHandlers(config: SleeperSportConfig): Record<string
     get_free_agents: createSleeperGetFreeAgentsHandler(config.sport),
     get_transactions: createGetTransactionsHandler(config),
     get_players: createSearchPlayersHandler(config),
+    get_draft: createGetDraftHandler(config),
   };
 }

@@ -205,6 +205,87 @@ describe('SleeperStorage', () => {
     });
   });
 
+  describe('isSleeperLeagueAuthorized', () => {
+    it('reads an exact user-scoped stored row and permits a historical archive', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { sleeper_user_id: 'sleeper_current' },
+        error: null,
+      }).mockResolvedValueOnce({
+        data: {
+          league_id: 'league-2024',
+          sport: 'football',
+          season_year: 2024,
+          recurring_league_id: 'league-root',
+        },
+        error: null,
+      });
+      const archive = (storage as unknown as { archive: { getArchivedMap: ReturnType<typeof vi.fn> } }).archive;
+      vi.spyOn(archive, 'getArchivedMap').mockResolvedValue(new Map([
+        ['football:league-root', 'historical'],
+      ]));
+
+      await expect(storage.isSleeperLeagueAuthorized('user_123', 'league-2024', 'football', 2024)).resolves.toBe(true);
+      expect(mockFrom).toHaveBeenCalledWith('sleeper_connections');
+      expect(mockFrom).toHaveBeenCalledWith('sleeper_leagues');
+      expect(mockSelect).toHaveBeenCalledWith('sleeper_user_id');
+      expect(mockSelect).toHaveBeenCalledWith('league_id, sport, season_year, recurring_league_id');
+      expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
+      expect(mockEq).toHaveBeenCalledWith('sleeper_user_id', 'sleeper_current');
+      expect(mockEq).toHaveBeenCalledWith('league_id', 'league-2024');
+      expect(mockEq).toHaveBeenCalledWith('sport', 'football');
+      expect(mockEq).toHaveBeenCalledWith('season_year', 2024);
+    });
+
+    it('denies a hidden exact stored row', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { sleeper_user_id: 'sleeper_current' },
+        error: null,
+      }).mockResolvedValueOnce({
+        data: {
+          league_id: 'league-2024',
+          sport: 'football',
+          season_year: 2024,
+          recurring_league_id: null,
+        },
+        error: null,
+      });
+      const archive = (storage as unknown as { archive: { getArchivedMap: ReturnType<typeof vi.fn> } }).archive;
+      vi.spyOn(archive, 'getArchivedMap').mockResolvedValue(new Map([
+        ['football:league-2024', 'hidden'],
+      ]));
+
+      await expect(storage.isSleeperLeagueAuthorized('user_123', 'league-2024', 'football', 2024)).resolves.toBe(false);
+    });
+
+    it('denies old-identity league rows after the user reconnects with a new Sleeper identity', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: { sleeper_user_id: 'sleeper_new' },
+        error: null,
+      }).mockResolvedValueOnce({ data: null, error: null });
+
+      await expect(storage.isSleeperLeagueAuthorized('user_123', 'old-identity-league', 'football', 2025)).resolves.toBe(false);
+      expect(mockEq).toHaveBeenCalledWith('sleeper_user_id', 'sleeper_new');
+    });
+
+    it('denies authorization when the user has no current Sleeper connection', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+
+      await expect(storage.isSleeperLeagueAuthorized('user_123', 'league-2025', 'football', 2025)).resolves.toBe(false);
+      expect(mockFrom).toHaveBeenCalledWith('sleeper_connections');
+      expect(mockFrom).not.toHaveBeenCalledWith('sleeper_leagues');
+    });
+
+    it('throws when the current Sleeper connection cannot be read', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'connection lookup unavailable' },
+      });
+
+      await expect(storage.isSleeperLeagueAuthorized('user_123', 'league-2025', 'football', 2025))
+        .rejects.toThrow('Failed to read Sleeper connection for authorization: connection lookup unavailable');
+    });
+  });
+
   // ===========================================================================
   // deleteSleeperLeague Tests
   // ===========================================================================
@@ -714,6 +795,74 @@ describe('SleeperStorage', () => {
 
       // Tolerates the missing column instead of throwing (mirrors saveSleeperLeague).
       await expect(storage.persistRecurringRoot('u', ['L2025'], 'ROOT2024')).resolves.toBeUndefined();
+    });
+  });
+
+  // ===========================================================================
+  // backfillRecurringLeagueId: narrow conditional write used ONLY by the
+  // FLA-168 backfill orchestrator (round-3 audit finding — replaces an
+  // unconditional full-row upsert that could resurrect a deleted row or
+  // clobber a concurrently-written value).
+  // ===========================================================================
+
+  describe('backfillRecurringLeagueId', () => {
+    function mockConditionalUpdateChain(result: { data: unknown; error: unknown }) {
+      const mockSelectAfterUpdate = vi.fn().mockResolvedValue(result);
+      const mockIs = vi.fn().mockReturnValue({ select: mockSelectAfterUpdate });
+      const mockEqSeason = vi.fn().mockReturnValue({ is: mockIs });
+      const mockEqLeague = vi.fn().mockReturnValue({ eq: mockEqSeason });
+      const mockEqUser = vi.fn().mockReturnValue({ eq: mockEqLeague });
+      const mockUpdateFn = vi.fn().mockReturnValue({ eq: mockEqUser });
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'sleeper_leagues') return { update: mockUpdateFn };
+        return {};
+      });
+      return { mockUpdateFn, mockEqUser, mockEqLeague, mockEqSeason, mockIs };
+    }
+
+    it('sets recurring_league_id scoped to the exact row, guarded on IS NULL', async () => {
+      const { mockUpdateFn, mockEqUser, mockEqLeague, mockEqSeason, mockIs } =
+        mockConditionalUpdateChain({ data: [{ id: 'row-1' }], error: null });
+
+      const result = await storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024');
+
+      expect(result).toBe(true);
+      expect(mockUpdateFn).toHaveBeenCalledOnce();
+      expect(mockUpdateFn.mock.calls[0][0]).toMatchObject({ recurring_league_id: 'root-2024' });
+      expect(mockEqUser).toHaveBeenCalledWith('clerk_user_id', 'user_1');
+      expect(mockEqLeague).toHaveBeenCalledWith('league_id', 'league-2025');
+      expect(mockEqSeason).toHaveBeenCalledWith('season_year', 2025);
+      expect(mockIs).toHaveBeenCalledWith('recurring_league_id', null);
+    });
+
+    it('returns false as a clean skip when zero rows match (deleted, or already filled concurrently)', async () => {
+      mockConditionalUpdateChain({ data: [], error: null });
+
+      const result = await storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024');
+
+      expect(result).toBe(false);
+    });
+
+    it('tolerates the missing recurring_league_id column (pre-migration) by returning false', async () => {
+      mockConditionalUpdateChain({
+        data: null,
+        error: { code: '42703', message: 'column sleeper_leagues.recurring_league_id does not exist' },
+      });
+
+      await expect(
+        storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024')
+      ).resolves.toBe(false);
+    });
+
+    it('does not treat an unrelated error as a missing column', async () => {
+      mockConditionalUpdateChain({
+        data: null,
+        error: { code: '42501', message: 'permission denied' },
+      });
+
+      await expect(
+        storage.backfillRecurringLeagueId('user_1', 'league-2025', 2025, 'root-2024')
+      ).rejects.toThrow('Failed to backfill Sleeper recurring_league_id: permission denied');
     });
   });
 

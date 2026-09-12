@@ -22,6 +22,80 @@ const env: OAuthEnv = {
 
 const corsHeaders = {};
 const cursorRedirectUri = 'cursor://anysphere.cursor-mcp/oauth/abc123/callback';
+const taskletRelayRedirectUri = 'https://flaim-relay.onrender.com/oauth/callback';
+const geminiSparkRedirectHosts = [
+  'oauth-redirect-sandbox.googleusercontent.com',
+  'oauth-redirect-test.googleusercontent.com',
+  'oauth-redirect.googleusercontent.com',
+] as const;
+const geminiSparkRedirectPrefixes = ['r', 'a'] as const;
+const geminiSparkRedirectUris = geminiSparkRedirectPrefixes.flatMap((prefix) =>
+  geminiSparkRedirectHosts.map(
+    (host) => `https://${host}/${prefix}/user_bound_custom-mcp-123456789012345678901-api_flaim_app`
+  )
+);
+const geminiSparkRedirectUri = geminiSparkRedirectUris[2];
+const grokRedirectUri = 'https://grok.com/connectors-oauth-exchange-code/';
+const grokInvalidRedirectUris = [
+  'https://grok.com/connectors-oauth-exchange-code',
+  'https://www.grok.com/connectors-oauth-exchange-code/',
+  'https://sub.grok.com/connectors-oauth-exchange-code/',
+  'https://grok.com.evil.example/connectors-oauth-exchange-code/',
+  'https://grok.com/connectors-oauth-exchange-code/extra',
+  'https://grok.com/connectors-oauth-exchange-code/?next=https://evil.example',
+  'https://grok.com/connectors-oauth-exchange-code/#fragment',
+  'http://grok.com/connectors-oauth-exchange-code/',
+  'https://user@grok.com/connectors-oauth-exchange-code/',
+  'https://grok.com:443/connectors-oauth-exchange-code/',
+  'https://grok.com/ignored/../connectors-oauth-exchange-code/',
+  'https://grok.com/connectors-oauth-exchange-code/%2e%2e/',
+  'https://grok.com/connectors-oauth-exchange-code/\n',
+  'https://grok.com/connectors-oauth-exchange-code/\r\n',
+];
+const cursorAgentsRedirectUri = 'https://www.cursor.com/agents/mcp/oauth/callback';
+const cursorAgentsInvalidRedirectUris = [
+  'https://cursor.com/agents/mcp/oauth/callback',
+  'https://www.cursor.com/agents/mcp/oauth/callback/',
+  'https://sub.cursor.com/agents/mcp/oauth/callback',
+  'https://www.cursor.com.evil.example/agents/mcp/oauth/callback',
+  'https://www.cursor.com/agents/mcp/oauth/callback/extra',
+  'https://www.cursor.com/agents/mcp/oauth/callback?next=https://evil.example',
+  'https://www.cursor.com/agents/mcp/oauth/callback#fragment',
+  'http://www.cursor.com/agents/mcp/oauth/callback',
+  'https://user@www.cursor.com/agents/mcp/oauth/callback',
+  'https://www.cursor.com:443/agents/mcp/oauth/callback',
+  'https://www.cursor.com/ignored/../agents/mcp/oauth/callback',
+  'https://www.cursor.com/agents/mcp/oauth/callback/%2e%2e/',
+  'https://www.cursor.com/agents/mcp/oauth/callback\n',
+  'https://www.cursor.com/agents/mcp/oauth/callback\r\n',
+];
+const geminiSparkInvalidRedirectUris = [
+  ...geminiSparkRedirectHosts.flatMap((host) => geminiSparkRedirectPrefixes.flatMap((prefix) => {
+    const path = `/${prefix}/user_bound_custom-mcp-123456789012345678901-api_flaim_app`;
+    return [
+      `https://${host}/${prefix}/user_bound_custom-mcp--api_flaim_app`,
+      `https://${host}/${prefix}/user_bound_custom-mcp-account123-api_flaim_app`,
+      `https://${host}/${prefix}/user_bound_custom-mcp-123456789012345678901-api_other_app`,
+      `https://${host}/other/user_bound_custom-mcp-123456789012345678901-api_flaim_app`,
+      `https://sub.${host}${path}`,
+      `https://${host}.evil.example${path}`,
+      `https://${host}${path}/`,
+      `https://${host}${path}/extra`,
+      `https://${host}${path}?next=https://evil.example`,
+      `https://${host}${path}#fragment`,
+      `http://${host}${path}`,
+      `https://user@${host}${path}`,
+      `https://${host}:443${path}`,
+      `https://${host}/${prefix}/ignored/../user_bound_custom-mcp-123456789012345678901-api_flaim_app`,
+      `https://${host}/${prefix}%2Fuser_bound_custom-mcp-123456789012345678901-api_flaim_app`,
+      `https://${host}${path}\n`,
+      `https://${host}${path}\r\n`,
+    ];
+  })),
+  ...geminiSparkRedirectPrefixes.map((prefix) =>
+    `https://oauth-redirect-preview.googleusercontent.com/${prefix}/user_bound_custom-mcp-123456789012345678901-api_flaim_app`
+  ),
+];
 
 function buildRegisterRequest(body: Record<string, unknown> = {}): Request {
   return new Request('https://api.flaim.app/auth/register', {
@@ -110,6 +184,126 @@ describe('oauth-handlers', () => {
     expect(body.token_endpoint_auth_method).toBe('none');
     expect(body.client_secret).toBeUndefined();
   });
+
+  it('registers the exact Tasklet relay callback as a public client without a client_secret', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [taskletRelayRedirectUri],
+      token_endpoint_auth_method: 'none',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      redirect_uris?: string[];
+      token_endpoint_auth_method?: string;
+    };
+
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.redirect_uris).toEqual([taskletRelayRedirectUri]);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
+  it('registers all six Gemini Spark callbacks together as a public client', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: geminiSparkRedirectUris,
+      token_endpoint_auth_method: 'none',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      redirect_uris?: string[];
+      token_endpoint_auth_method?: string;
+    };
+
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.redirect_uris).toEqual(geminiSparkRedirectUris);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
+  it.each(geminiSparkInvalidRedirectUris)(
+    'rejects an invalid Gemini Spark callback during DCR: %s',
+    async (redirectUri) => {
+      const res = await handleClientRegistration(buildRegisterRequest({
+        redirect_uris: [redirectUri],
+      }), env, corsHeaders);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string };
+      expect(body.error).toBe('invalid_redirect_uri');
+    }
+  );
+
+  it('registers the exact Grok callback as a public client', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [grokRedirectUri],
+      token_endpoint_auth_method: 'none',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      redirect_uris?: string[];
+      token_endpoint_auth_method?: string;
+    };
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.redirect_uris).toEqual([grokRedirectUri]);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
+  it.each(grokInvalidRedirectUris)(
+    'rejects a structurally different Grok callback during DCR: %s',
+    async (redirectUri) => {
+      const res = await handleClientRegistration(buildRegisterRequest({
+        redirect_uris: [redirectUri],
+      }), env, corsHeaders);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string };
+      expect(body.error).toBe('invalid_redirect_uri');
+    }
+  );
+
+  it('registers the exact Cursor web/agents callback as a public client', async () => {
+    const res = await handleClientRegistration(buildRegisterRequest({
+      redirect_uris: [cursorAgentsRedirectUri],
+      token_endpoint_auth_method: 'none',
+    }), env, corsHeaders);
+
+    expect(res.status).toBe(201);
+    const body = await res.json() as {
+      client_id?: string;
+      client_secret?: string;
+      redirect_uris?: string[];
+      token_endpoint_auth_method?: string;
+    };
+    expect(body.client_id).toMatch(/^mcp_/);
+    expect(body.redirect_uris).toEqual([cursorAgentsRedirectUri]);
+    expect(body.token_endpoint_auth_method).toBe('none');
+    expect(body.client_secret).toBeUndefined();
+  });
+
+  it.each(cursorAgentsInvalidRedirectUris)(
+    'rejects a structurally different Cursor web/agents callback during DCR: %s',
+    async (redirectUri) => {
+      const res = await handleClientRegistration(buildRegisterRequest({
+        redirect_uris: [redirectUri],
+      }), env, corsHeaders);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string };
+      expect(body.error).toBe('invalid_redirect_uri');
+    }
+  );
 
   it('keeps omitted non-Perplexity DCR clients public', async () => {
     const res = await handleClientRegistration(buildRegisterRequest(), env, corsHeaders);
@@ -227,6 +421,18 @@ describe('oauth-handlers', () => {
     expect(redirect.searchParams.get('error_description')).toBe('code_challenge is required (PKCE)');
   });
 
+  it('requires PKCE before authorizing through the exact Tasklet relay callback', async () => {
+    const req = new Request(
+      `https://api.flaim.app/authorize?response_type=code&client_id=test&redirect_uri=${encodeURIComponent(taskletRelayRedirectUri)}`
+    );
+    const res = await handleAuthorize(req, env);
+    const redirect = expectRedirectLocation(res);
+
+    expect(`${redirect.origin}${redirect.pathname}`).toBe(taskletRelayRedirectUri);
+    expect(redirect.searchParams.get('error')).toBe('invalid_request');
+    expect(redirect.searchParams.get('error_description')).toBe('code_challenge is required (PKCE)');
+  });
+
   it('rejects missing redirect_uri for /authorize', async () => {
     const req = new Request('https://api.flaim.app/authorize?response_type=code');
     const res = await handleAuthorize(req, env);
@@ -236,6 +442,60 @@ describe('oauth-handlers', () => {
     expect(body.error).toBe('invalid_request');
     expect(body.error_description).toBe('redirect_uri is required');
   });
+
+  it.each(geminiSparkInvalidRedirectUris)(
+    'rejects an invalid Gemini Spark callback during authorization: %s',
+    async (redirectUri) => {
+      const req = new Request(
+        'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        '&code_challenge=abc123&code_challenge_method=S256'
+      );
+      const res = await handleAuthorize(req, env);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string; error_description?: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toBe('redirect_uri is not in the allowed list');
+    }
+  );
+
+  it.each(grokInvalidRedirectUris)(
+    'rejects a structurally different Grok callback during authorization: %s',
+    async (redirectUri) => {
+      const req = new Request(
+        'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        '&code_challenge=abc123&code_challenge_method=S256'
+      );
+      const res = await handleAuthorize(req, env);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string; error_description?: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toBe('redirect_uri is not in the allowed list');
+    }
+  );
+
+  it.each(cursorAgentsInvalidRedirectUris)(
+    'rejects a structurally different Cursor web/agents callback during authorization: %s',
+    async (redirectUri) => {
+      const req = new Request(
+        'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        '&code_challenge=abc123&code_challenge_method=S256'
+      );
+      const res = await handleAuthorize(req, env);
+
+      expect(res.status).toBe(400);
+      expect(res.headers.get('Location')).toBeNull();
+      const body = await res.json() as { error?: string; error_description?: string };
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toBe('redirect_uri is not in the allowed list');
+    }
+  );
 
   it('does not emit setup signal for no-param /authorize probes', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -315,6 +575,109 @@ describe('oauth-handlers', () => {
     expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
       state: 'pkce:abc123',
       scope: 'mcp:read',
+    }));
+  });
+
+  it('starts a PKCE read-only authorization for the exact Tasklet relay callback', async () => {
+    const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      `&redirect_uri=${encodeURIComponent(taskletRelayRedirectUri)}` +
+      '&scope=mcp%3Aread&code_challenge=relay-challenge&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.pathname).toBe('/oauth/consent');
+    expect(location.searchParams.get('scope')).toBe('mcp:read');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      redirectUri: taskletRelayRedirectUri,
+      scope: 'mcp:read',
+      codeChallenge: 'relay-challenge',
+    }));
+  });
+
+  it.each(geminiSparkRedirectUris)(
+    'starts a PKCE read-only authorization for Gemini Spark callback %s',
+    async (redirectUri) => {
+      const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+      const req = new Request(
+        'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        '&scope=mcp%3Aread&code_challenge=gemini-challenge&code_challenge_method=S256'
+      );
+
+      const res = await handleAuthorize(req, env);
+      const location = expectRedirectLocation(res);
+
+      expect(location.pathname).toBe('/oauth/consent');
+      expect(location.searchParams.get('scope')).toBe('mcp:read');
+      expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+        redirectUri,
+        scope: 'mcp:read',
+        codeChallenge: 'gemini-challenge',
+      }));
+    }
+  );
+
+  it.each(geminiSparkInvalidRedirectUris)(
+    'rejects a structurally different Gemini Spark callback during authorization: %s',
+    async (redirectUri) => {
+      const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+      const req = new Request(
+        'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        '&scope=mcp%3Aread&code_challenge=gemini-challenge&code_challenge_method=S256'
+      );
+
+      const res = await handleAuthorize(req, env);
+      const body = await res.json() as { error?: string; error_description?: string };
+
+      expect(res.status).toBe(400);
+      expect(body.error).toBe('invalid_request');
+      expect(body.error_description).toBe('redirect_uri is not in the allowed list');
+      expect(createOAuthState).not.toHaveBeenCalled();
+    }
+  );
+
+  it('starts a PKCE read-only authorization for the exact Grok callback', async () => {
+    const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      `&redirect_uri=${encodeURIComponent(grokRedirectUri)}` +
+      '&scope=mcp%3Aread&code_challenge=grok-challenge&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.pathname).toBe('/oauth/consent');
+    expect(location.searchParams.get('scope')).toBe('mcp:read');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      redirectUri: grokRedirectUri,
+      scope: 'mcp:read',
+      codeChallenge: 'grok-challenge',
+    }));
+  });
+
+  it('starts a PKCE read-only authorization for the exact Cursor web/agents callback', async () => {
+    const createOAuthState = vi.spyOn(OAuthStorage.prototype, 'createOAuthState').mockResolvedValue(undefined);
+    const req = new Request(
+      'https://api.flaim.app/authorize?response_type=code&client_id=test' +
+      `&redirect_uri=${encodeURIComponent(cursorAgentsRedirectUri)}` +
+      '&scope=mcp%3Aread&code_challenge=cursor-agents-challenge&code_challenge_method=S256'
+    );
+
+    const res = await handleAuthorize(req, env);
+    const location = expectRedirectLocation(res);
+
+    expect(location.pathname).toBe('/oauth/consent');
+    expect(location.searchParams.get('scope')).toBe('mcp:read');
+    expect(createOAuthState).toHaveBeenCalledWith(expect.objectContaining({
+      redirectUri: cursorAgentsRedirectUri,
+      scope: 'mcp:read',
+      codeChallenge: 'cursor-agents-challenge',
     }));
   });
 
@@ -1242,20 +1605,42 @@ describe('oauth-handlers', () => {
 describe('redirect URI validation', () => {
   it('rejects allowlisted URI with appended query string (startsWith exploit)', () => {
     // startsWith() currently allows this — exact match shouldn't
-    expect(isValidRedirectUri('http://localhost:3000/oauth/callback?redirect=http://evil.com')).toBe(false);
+    expect(isValidRedirectUri('https://claude.ai/api/mcp/auth_callback?redirect=http://evil.com')).toBe(false);
   });
 
   it('accepts exact allowlist match', () => {
     expect(isValidRedirectUri('https://claude.ai/api/mcp/auth_callback')).toBe(true);
   });
 
-  it('accepts loopback with valid callback path', () => {
+  it('accepts loopback with any callback path (RFC 8252)', () => {
     expect(isValidRedirectUri('http://localhost:9999/callback')).toBe(true);
     expect(isValidRedirectUri('http://127.0.0.1:9999/oauth/callback')).toBe(true);
+    // Arbitrary vendor-chosen paths — the port is dynamic and so is the path;
+    // the loopback host is the actual boundary, not a fixed path allowlist.
+    expect(isValidRedirectUri('http://localhost:9999/anything/goes')).toBe(true);
+    expect(isValidRedirectUri('http://127.0.0.1:32809/mcp/oauth/callback')).toBe(true);
   });
 
-  it('rejects loopback with arbitrary path', () => {
-    expect(isValidRedirectUri('http://localhost:9999/evil')).toBe(false);
+  it('accepts IPv6 loopback', () => {
+    expect(isValidRedirectUri('http://[::1]:9999/callback')).toBe(true);
+  });
+
+  it('rejects loopback redirect with query string or fragment', () => {
+    expect(isValidRedirectUri('http://localhost:9999/callback?evil=true')).toBe(false);
+    expect(isValidRedirectUri('http://localhost:9999/callback#frag')).toBe(false);
+  });
+
+  it('rejects non-loopback host and non-http scheme for loopback-shaped paths', () => {
+    expect(isValidRedirectUri('http://evil.com/callback')).toBe(false);
+    expect(isValidRedirectUri('https://localhost:9999/callback')).toBe(false);
+  });
+
+  it('rejects hostnames that merely contain "localhost" as a label (exact-match only)', () => {
+    // Now that path is no longer a secondary filter, hostname equality is the
+    // sole gate — pin that it's exact match, not a substring/suffix check.
+    expect(isValidRedirectUri('http://localhost.evil.com:9999/callback')).toBe(false);
+    expect(isValidRedirectUri('http://notlocalhost:9999/callback')).toBe(false);
+    expect(isValidRedirectUri('http://evil.com:9999/callback?host=localhost')).toBe(false);
   });
 
   it('accepts ChatGPT connector OAuth callback with any app ID', () => {
@@ -1279,9 +1664,71 @@ describe('redirect URI validation', () => {
     expect(isValidRedirectUri('https://perplexity.ai/rest/connections/oauth_callback')).toBe(true);
   });
 
+  it('accepts Gemini Spark callbacks with synthetic user-bound numeric identifiers', () => {
+    expect(isValidRedirectUri(
+      'https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-987654321-api_flaim_app'
+    )).toBe(true);
+    expect(isValidRedirectUri(
+      'https://oauth-redirect.googleusercontent.com/a/user_bound_custom-mcp-987654321-api_flaim_app'
+    )).toBe(true);
+  });
+
+  it.each(geminiSparkInvalidRedirectUris)(
+    'rejects structurally different Gemini Spark callback: %s',
+    (uri) => {
+      expect(isValidRedirectUri(uri)).toBe(false);
+    }
+  );
+
+  it('accepts only the exact observed Grok callback', () => {
+    expect(isValidRedirectUri(grokRedirectUri)).toBe(true);
+  });
+
+  it.each(grokInvalidRedirectUris)(
+    'rejects structurally different Grok callback: %s',
+    (uri) => {
+      expect(isValidRedirectUri(uri)).toBe(false);
+    }
+  );
+
+  it('accepts only the exact Cursor web/agents callback', () => {
+    expect(isValidRedirectUri(cursorAgentsRedirectUri)).toBe(true);
+  });
+
+  it.each(cursorAgentsInvalidRedirectUris)(
+    'rejects structurally different Cursor web/agents callback: %s',
+    (uri) => {
+      expect(isValidRedirectUri(uri)).toBe(false);
+    }
+  );
+
   it('rejects non-perplexity host using perplexity callback path', () => {
     expect(isValidRedirectUri('https://evil-perplexity.ai/rest/connections/oauth_callback')).toBe(false);
     expect(isValidRedirectUri('https://evil.com/rest/connections/oauth_callback')).toBe(false);
+  });
+
+  it('accepts only the exact Littlebird production callback', () => {
+    expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback')).toBe(true);
+    expect(isValidRedirectUri('https://littlebird.ai/mcp/oauth/callback')).toBe(false);
+    expect(isValidRedirectUri('https://evil.lilbird.co/mcp/oauth/callback')).toBe(false);
+    expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback?next=https://evil.com')).toBe(false);
+    expect(isValidRedirectUri('https://app.lilbird.co/mcp/oauth/callback/')).toBe(false);
+  });
+
+  it.each([
+    [taskletRelayRedirectUri, true],
+    ['https://other-relay.onrender.com/oauth/callback', false],
+    ['https://sub.flaim-relay.onrender.com/oauth/callback', false],
+    ['https://flaim-relay.onrender.com.evil.example/oauth/callback', false],
+    ['https://flaim-relay.onrender.com/oauth/callback/extra', false],
+    ['https://flaim-relay.onrender.com/oauth/callback/', false],
+    ['https://flaim-relay.onrender.com/oauth/callback?next=https://evil.example', false],
+    ['https://flaim-relay.onrender.com/oauth/callback#fragment', false],
+    ['http://flaim-relay.onrender.com/oauth/callback', false],
+    ['https://user@flaim-relay.onrender.com/oauth/callback', false],
+    ['https://flaim-relay.onrender.com:8443/oauth/callback', false],
+  ])('validates the Tasklet relay callback exactly: %s', (uri, expected) => {
+    expect(isValidRedirectUri(uri)).toBe(expected);
   });
 
   it('accepts a loopback redirect with the /oauth2callback path', () => {

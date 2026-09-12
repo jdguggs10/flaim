@@ -1,11 +1,12 @@
 // workers/espn-client/src/sports/basketball/handlers.ts
-import type { Env, RoutedToolParams, ExecuteResponse, EspnLeagueResponse, EspnPlayerPoolResponse } from '../../types';
+import { isEspnLeagueResponse, type Env, type RoutedToolParams, type ExecuteResponse, type EspnPlayerPoolResponse } from '../../types';
 import { getCredentials } from '../../shared/auth';
-import { espnFetch, handleEspnError, requireCredentials } from '../../shared/espn-api';
+import { espnFetch, handleEspnError, readEspnLeagueJson, requireCredentials } from '../../shared/espn-api';
 import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
-import { buildRosterLimitations, currentClubAndInjuryFields } from '../../shared/roster-entry';
+import { buildRosterLimitations, currentClubAndInjuryFields, resolveKeeperValueUnit } from '../../shared/roster-entry';
+import { epochMsToIso } from '../../shared/dates';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import { resolveScoringPeriodForDate } from '../../shared/scoring-period';
 import {
@@ -19,6 +20,7 @@ import {
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
 import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import { executeEspnGetDraft } from '../../shared/espn-draft';
 
 const GAME_ID = 'fba'; // ESPN's game ID for fantasy basketball
 
@@ -30,6 +32,7 @@ type HandlerFn = (
 ) => Promise<ExecuteResponse>;
 
 export const basketballHandlers: Record<string, HandlerFn> = {
+  get_draft: (env, params, authHeader, correlationId) => executeEspnGetDraft(env, params, GAME_ID, authHeader, correlationId),
   get_league_info: handleGetLeagueInfo,
   get_standings: handleGetStandings,
   get_matchups: handleGetMatchups,
@@ -117,13 +120,21 @@ async function handleGetLeagueInfo(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mSettings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
 
     if (!data || !data.settings) {
       return {
@@ -145,6 +156,12 @@ async function handleGetLeagueInfo(
         abbrev: team.abbrev,
         ownerName: hasOwners ? ownerNames[0] : undefined,
         owners: hasOwners ? ownerNames : undefined,
+        ...(team.draftStrategy?.keeperPlayerIds !== undefined
+          ? { keeperPlayerIds: team.draftStrategy.keeperPlayerIds }
+          : {}),
+        ...(team.draftStrategy?.futureKeeperPlayerIds !== undefined
+          ? { futureKeeperPlayerIds: team.draftStrategy.futureKeeperPlayerIds }
+          : {}),
       };
     });
 
@@ -179,6 +196,29 @@ async function handleGetLeagueInfo(
         schedule: {
           playoffSeedingRule: data.settings.scheduleSettings?.playoffSeedingRule,
           playoffMatchupPeriodLength: data.settings.scheduleSettings?.playoffMatchupPeriodLength
+        },
+        ...(data.settings.draftSettings?.keeperCount != null
+          ? {
+              keeperSettings: {
+                keeperCount: data.settings.draftSettings.keeperCount,
+                keeperCountFuture: data.settings.draftSettings.keeperCountFuture,
+                keeperOrderType: data.settings.draftSettings.keeperOrderType,
+                keeperDeadlineDate: epochMsToIso(data.settings.draftSettings.keeperDeadlineDate),
+              },
+              isKeeperLeague: data.settings.draftSettings.keeperCount > 0,
+            }
+          : {}),
+        draftSettings: {
+          type: data.settings.draftSettings?.type,
+          auctionBudget: data.settings.draftSettings?.auctionBudget,
+          pickTradingEnabled: data.settings.draftSettings?.isTradingEnabled,
+        },
+        tradeSettings: {
+          deadlineDate: epochMsToIso(data.settings.tradeSettings?.deadlineDate),
+          revisionHours: data.settings.tradeSettings?.revisionHours,
+          vetoVotesRequired: data.settings.tradeSettings?.vetoVotesRequired,
+          allowOutOfUniverse: data.settings.tradeSettings?.allowOutOfUniverse,
+          max: data.settings.tradeSettings?.max
         }
       }
     };
@@ -207,13 +247,21 @@ async function handleGetStandings(
     const credentials = await getCredentials(env, authHeader, correlationId);
 
     const path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mStandings&view=mTeam`;
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const teams = data?.teams || [];
 
@@ -230,7 +278,14 @@ async function handleGetStandings(
     // ESPN leaves final ranks at 0 for some historical seasons; fall back to the
     // playoff bracket to identify the champion and runner-up.
     const bracketFinal = seasonComplete && !hasExplicitFinalRanks(teams)
-      ? await fetchBracketFinal(GAME_ID, league_id, espnYear, credentials, buildPlayoffSeedMap(teams))
+      ? await fetchBracketFinal(
+        GAME_ID,
+        league_id,
+        espnYear,
+        credentials,
+        buildPlayoffSeedMap(teams),
+        canonicalYear < getCurrentSeasonYear('basketball'),
+      )
       : null;
 
     // Transform and sort teams by standings
@@ -321,13 +376,21 @@ async function handleGetMatchups(
       path += `&matchupPeriodId=${week}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse | null;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse);
     const currentMatchupPeriod = data?.currentMatchupPeriod ?? data?.status?.currentMatchupPeriod;
     const schedule = data?.schedule || [];
     const teamsById = Object.fromEntries(
@@ -392,7 +455,7 @@ async function handleGetRoster(
   correlationId?: string
 ): Promise<ExecuteResponse> {
   const { league_id, team_id } = params;
-  const { espnYear } = getSeasonContext(params);
+  const { canonicalYear, espnYear } = getSeasonContext(params);
   const snapshot = params.rosterSnapshot ?? resolveRosterSnapshotFromParams(params);
   if (!snapshot) {
     return malformedRosterSnapshotError();
@@ -405,7 +468,7 @@ async function handleGetRoster(
     const credentials = await getCredentials(env, authHeader, correlationId);
     requireCredentials(credentials, 'roster data');
 
-    let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam`;
+    let path = `/seasons/${espnYear}/segments/0/leagues/${league_id}?view=mRoster&view=mTeam&view=mSettings`;
     let providerScoringPeriodId: number | undefined;
     if (snapshot.type === 'date') {
       const resolved = await resolveScoringPeriodForDate(GAME_ID, espnYear, snapshot.date);
@@ -413,13 +476,21 @@ async function handleGetRoster(
       path += `&scoringPeriodId=${resolved.scoringPeriodId}`;
     }
 
-    const response = await espnFetch(path, GAME_ID, { credentials, timeout: 7000 });
+    const response = await espnFetch(path, GAME_ID, {
+      credentials,
+      timeout: 7000,
+      league: {
+        leagueId: league_id,
+        espnSeasonYear: espnYear,
+        historical: canonicalYear < getCurrentSeasonYear('basketball'),
+      },
+    });
 
     if (!response.ok) {
       handleEspnError(response);
     }
 
-    const data = await response.json() as EspnLeagueResponse;
+    const data = await readEspnLeagueJson(response, isEspnLeagueResponse) ?? {};
     const teams = data.teams || [];
 
     // Find the requested team
@@ -462,7 +533,15 @@ async function handleGetRoster(
         percentStarted: player?.ownership?.percentStarted,
         stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined,
         acquisitionType: entry.acquisitionType,
-        acquisitionDate: entry.acquisitionDate
+        acquisitionDate: entry.acquisitionDate,
+        keeperValue: entry.playerPoolEntry?.keeperValue,
+        // keeperValueFuture is next season's cost — not yet fixed as of a
+        // past week/date, so historical snapshots withhold it entirely
+        // (FLA-284 temporal purity, mirroring FLA-278's proTeam/injuryStatus
+        // omission below via buildRosterLimitations).
+        ...(snapshot.type === 'current'
+          ? { keeperValueFuture: entry.playerPoolEntry?.keeperValueFuture }
+          : {}),
       };
     });
 
@@ -472,6 +551,12 @@ async function handleGetRoster(
       && roster.length > 0
       && roster.some((entry) => entry.acquisitionType == null || entry.acquisitionDate == null);
     const limitations = buildRosterLimitations(snapshot, acquisitionMetadataMissing);
+
+    // Keeper cost unit depends on the league's draft type; requires mSettings
+    // in this fetch (added above). Omit rather than guess when unavailable.
+    const draftType = data.settings?.draftSettings?.type;
+    const keeperValueUnit = resolveKeeperValueUnit(draftType);
+    const keeperCount = data.settings?.draftSettings?.keeperCount;
 
     return {
       success: true,
@@ -484,6 +569,8 @@ async function handleGetRoster(
         ownerName,
         snapshot: toSnapshotMetadata(snapshot, { providerScoringPeriodId }),
         ...(limitations ? { limitations } : {}),
+        ...(keeperValueUnit ? { keeperValueUnit } : {}),
+        ...(keeperCount != null ? { isKeeperLeague: keeperCount > 0 } : {}),
         roster
       }
     };

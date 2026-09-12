@@ -1,7 +1,11 @@
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CHATGPT_APP_URL, CLAUDE_CONNECTOR_DIRECTORY_URL } from "@/lib/product-links";
+import {
+  CHATGPT_APP_URL,
+  CLAUDE_CONNECTOR_DIRECTORY_URL,
+} from "@/lib/product-links";
 import { ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 interface StepConnectAIProps {
   showStepNumber?: boolean;
@@ -29,29 +33,35 @@ export function StepConnectAI({
 
           <p className="mb-4 text-sm text-muted-foreground">
             Flaim Fantasy is available in ChatGPT and Claude. Connect your
-            leagues first, then use your AI app for read-only fantasy
-            analysis.
+            leagues first, then use either for read-only fantasy analysis.
           </p>
         </>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <Button asChild size="sm" className="w-full">
-          <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
-            Open in ChatGPT
-            <ExternalLink className="ml-2 h-4 w-4" />
-          </a>
-        </Button>
-        <Button asChild size="sm" variant="outline" className="w-full">
-          <a
-            href={CLAUDE_CONNECTOR_DIRECTORY_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Open in Claude
-            <ExternalLink className="ml-2 h-4 w-4" />
-          </a>
-        </Button>
+      <Button asChild size="sm" className="w-full">
+        <a href={CHATGPT_APP_URL} target="_blank" rel="noopener noreferrer">
+          Open Flaim in ChatGPT
+          <ExternalLink className="ml-2 h-4 w-4" />
+        </a>
+      </Button>
+      <Button asChild size="sm" className="mt-2 w-full">
+        <a
+          href={CLAUDE_CONNECTOR_DIRECTORY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open Flaim in Claude
+          <ExternalLink className="ml-2 h-4 w-4" />
+        </a>
+      </Button>
+      <div className="mt-4 text-center text-sm text-muted-foreground">
+        <p>Using Perplexity, Gemini, or Grok?</p>
+        <Link
+          href="/docs/ai#custom-connectors"
+          className="font-medium text-primary underline underline-offset-4 transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          Custom connector setup →
+        </Link>
       </div>
     </div>
   );

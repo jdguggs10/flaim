@@ -23,7 +23,7 @@ Assess the user's current head-to-head matchup with a fact-based forecast of wha
 
 ### 1. Resolve the target league
 
-- Call `get_user_session` if it has not already been called in this chat.
+- Reuse a usable successful `get_user_session` result from this chat. Call it if that context is missing, after a successful league refresh, or when the user confirms account, connection, league-list, or default changes. Do not repeat it just for a follow-up or a switch to another league already in the session result. Follow the tool's error guidance if a lookup fails.
 - If the user explicitly names a league, platform, or sport, honor that.
 - Otherwise treat this as a vague singular request: use `defaultLeague` when present, otherwise the relevant sport entry in `defaultLeagues`.
 - If there is no applicable default and multiple leagues still match, ask which league.

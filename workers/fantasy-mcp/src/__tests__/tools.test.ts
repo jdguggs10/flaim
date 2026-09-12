@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import type { z } from 'zod';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError, mcpInsufficientScopeError } from '../mcp/tools';
@@ -43,8 +42,9 @@ describe('fantasy-mcp tools', () => {
     const names = tools.map((tool) => tool.name).sort();
 
     expect(names).toEqual([
-      'get_ancient_history',
-      'get_free_agents',
+        'get_ancient_history',
+        'get_draft',
+        'get_free_agents',
       'get_league_info',
       'get_matchups',
       'get_players',
@@ -56,7 +56,7 @@ describe('fantasy-mcp tools', () => {
     ]);
   });
 
-  it('describes the three get_user_session routing paths without a global bootstrap', () => {
+  it('describes session reuse for analysis while preserving status and refresh paths', () => {
     const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_user_session');
     expect(tool).toBeTruthy();
 
@@ -67,17 +67,45 @@ describe('fantasy-mcp tools', () => {
       'Use this alone for user-specific connection, league, or account-status questions'
     );
     expect(tool!.description).toContain(
-      'For a normal selected-league request, call this once before any other data tool'
+      'call this only when no usable successful session result is available in this chat'
     );
     expect(tool!.description).toContain(
       'For an explicit refresh request, call refresh_leagues first and then call this tool after success'
     );
-    expect(tool!.description).not.toContain('at the start of each chat');
+    expect(tool!.description).toContain('do not repeat this call merely because a new user message arrived');
+    expect(tool!.description).toContain('switching to another league already in allLeagues');
+    expect(tool!.description).toContain('when the user confirms account, connection, league-list, or default changes');
+    expect(tool!.description).toContain('when the needed session context is missing');
+    expect(tool!.description).toContain('A new chat needs its own session lookup');
+    expect(tool!.description).toContain('Follow the error guidance if a call fails');
+    expect(tool!.description).toContain('Session reuse does not replace fresh roster, score, or player reads');
     expect(tool!.description).toContain('generic coding, scraping, weather');
     expect(tool!.description).toContain(
-      'For a selected active league, call get_league_info next before the requested league-specific data tool'
+      'With session context established, call get_league_info for the selected active league before the requested league-specific data tool'
     );
     expect(tool!.description).toContain('call it again even if it ran earlier in the chat');
+  });
+
+  it('keeps downstream tool descriptions compatible with reusable session context', () => {
+    const tools = new Map(getUnifiedTools().map((tool) => [tool.name, tool]));
+
+    for (const name of [
+      'get_draft',
+      'get_standings',
+      'get_matchups',
+      'get_roster',
+      'get_players',
+      'get_transactions',
+    ]) {
+      expect(tools.get(name)?.description).toContain(
+        'established session context (call get_user_session only if needed)'
+      );
+    }
+
+    const history = tools.get('get_ancient_history')?.description;
+    expect(history).toContain('established session context (call get_user_session only if needed)');
+    expect(history).toContain('This is the historical branch');
+    expect(history).not.toContain('get_league_info');
   });
 
   it('describes refresh_leagues as explicit, registry-only, and provider-write incapable', () => {
@@ -179,9 +207,9 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
-    // Published URIs are immutable ChatGPT cache keys: v1 and v2 are pinned
-    // to their scanned bytes forever, so the attributed body ships under a
-    // new v3 key and the descriptor points there.
+    // Published URIs are stable cache keys with frozen resource metadata. The
+    // descriptor points at v3, the only URI whose published widget CSP allows
+    // the Yahoo Fantasy attribution link.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
     expect(V2_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
     expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
@@ -190,45 +218,148 @@ describe('fantasy-mcp tools', () => {
     expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
   });
 
-  it('pins the frozen v1/v2 widget body to its immutable golden hash', () => {
-    // The self-referential trap: every other byte-identity assertion compares
-    // the runtime output against the same LEGACY_USER_SESSION_WIDGET_HTML
-    // constant, so an accidental edit to the literal would move expected and
-    // actual in lockstep. This golden hash (computed from the body as
-    // published in the OpenAI-scanned v2.1 submission) is the anchor that
-    // cannot move with it. If this test fails, the frozen bytes changed —
-    // revert the literal; do not update the hash.
-    expect(Buffer.byteLength(LEGACY_USER_SESSION_WIDGET_HTML, 'utf8')).toBe(24998);
-    expect(
-      createHash('sha256').update(LEGACY_USER_SESSION_WIDGET_HTML, 'utf8').digest('hex')
-    ).toBe('ca6160c5ccabd329e60885e6bfbe72b35ab48985fb1b6866fa64c0d657e2647b');
+  it('keeps every downstream data tool and refresh free of widget attachments', () => {
+    expect(getUnifiedTools().filter((tool) => tool.widgetUri).map((tool) => tool.name))
+      .toEqual(['get_user_session']);
   });
 
-  it('v3 widget carries the provider attribution footer; the legacy body stays frozen', () => {
-    // Exact attribution markup is pinned deliberately — the credit line and
-    // its Yahoo Fantasy link are a required product surface on v3.
-    expect(USER_SESSION_WIDGET_HTML).toContain(
-      '<div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>'
+  it('serves exactly one body per link permission, differing only by the Yahoo link', () => {
+    // The v1/v2 widget CSP allows only https://flaim.app as a redirect
+    // domain, so those URIs cannot carry the Yahoo Fantasy link. Everything
+    // else about the two bodies must be identical, or the two URIs would
+    // drift into separate widgets to maintain.
+    const yahooLink =
+      '<a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>';
+    expect(USER_SESSION_WIDGET_HTML).toContain(yahooLink);
+    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(yahooLink);
+    expect(LEGACY_USER_SESSION_WIDGET_HTML).toContain(
+      'Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
     );
-    expect(USER_SESSION_WIDGET_HTML).toContain('.attribution {');
-    // The frozen v1/v2 body must never pick the footer up.
-    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('Fantasy data provided by');
-    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain('class="attribution"');
-    // v3 differs from the frozen body only by the injected CSS, footer, and
-    // hidden-widget render + size-report guards (FLA-277).
-    expect(
-      USER_SESSION_WIDGET_HTML
-        .replace('  .attribution {\n    padding: 8px 16px 10px;\n    border-top: 1px solid rgba(13, 13, 13, 0.05);\n    font-size: 11px;\n    line-height: 14px;\n    text-align: center;\n    color: #9ca3af;\n  }\n  .attribution a {\n    color: inherit;\n    text-decoration: underline;\n  }\n', '')
-        .replace('\n  <div class="attribution">Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.</div>', '')
-        .replace(
-          "  function sendSizeChanged() {\n    if (widgetHidden) {\n      sendZeroSize();\n      return;\n    }",
-          '  function sendSizeChanged() {',
-        )
-        .replace(
-          "  var widgetHidden = false;\n\n  function sendZeroSize() {\n    postToParent({\n      jsonrpc: '2.0',\n      method: 'ui/notifications/size-changed',\n      params: {\n        width: 0,\n        height: 0,\n      },\n    });\n  }\n\n  function render(data) {\n    widgetHidden = !!(data && data.widget && data.widget.hidden === true);\n    if (widgetHidden) {\n      var widgetEl = document.querySelector('.widget');\n      if (widgetEl) widgetEl.style.display = 'none';\n      hasRendered = true;\n      sendZeroSize();\n      return;\n    }\n    var visibleWidgetEl = document.querySelector('.widget');\n    if (visibleWidgetEl) visibleWidgetEl.style.display = '';",
-          '  function render(data) {',
-        )
-    ).toBe(LEGACY_USER_SESSION_WIDGET_HTML);
+    // ESPN and Sleeper stay plain text on every body: no published widget CSP
+    // allows their domains.
+    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
+      expect(body).not.toContain('espn.com');
+      expect(body).not.toContain('sleeper.com');
+    }
+  });
+
+  it('keeps every URL in each body inside that URI\'s published redirect domains', () => {
+    // Every href/src attribute value plus every absolute or protocol-relative
+    // URL anywhere in the document, so a javascript:, data:, or //host
+    // reference cannot slip past an https-only scan.
+    const referencesIn = (body: string) => {
+      const refs = new Set<string>();
+      for (const match of body.matchAll(/(?:href|src)\s*=\s*"([^"]*)"/gi)) refs.add(match[1].trim());
+      for (const match of body.matchAll(/(?:[a-z][a-z0-9+.-]*:)?\/\/[^"'\s<>)]+/gi)) refs.add(match[0].trim());
+      return Array.from(refs).sort();
+    };
+    // The single dynamic href is the leagues link; its constant is pinned here
+    // so the concatenation cannot quietly point somewhere else.
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      "var LEAGUES_URL = 'https://flaim.app/leagues?from=widget';"
+    );
+    expect(referencesIn(LEGACY_USER_SESSION_WIDGET_HTML)).toEqual([
+      "' + LEAGUES_URL + '",
+      'https://flaim.app/leagues?from=widget',
+    ]);
+    expect(referencesIn(USER_SESSION_WIDGET_HTML)).toEqual([
+      "' + LEAGUES_URL + '",
+      'https://flaim.app/leagues?from=widget',
+      'https://sports.yahoo.com/fantasy/',
+    ]);
+  });
+
+  it('keeps both bodies self-contained: no external scripts, fonts, images, or styles', () => {
+    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
+      expect(body).not.toMatch(/<script[^>]+src=/i);
+      expect(body).not.toMatch(/<link\b/i);
+      expect(body).not.toMatch(/<img\b/i);
+      expect(body).not.toMatch(/@import/i);
+      expect(body).not.toMatch(/@font-face/i);
+      // No CSS url() references: background images, fonts, or cursors would
+      // all need a resource domain the published widget CSP does not allow.
+      const style = body.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+      expect(style).toBeDefined();
+      expect(style).not.toMatch(/url\(/i);
+      expect(body.match(/<script/g)).toHaveLength(1);
+    }
+  });
+
+  it('renders the footer sentences in the required order with only Refresh underlined', () => {
+    const footer = USER_SESSION_WIDGET_HTML.match(/<footer class="footer">([\s\S]*?)<\/footer>/)?.[1];
+    expect(footer).toBeDefined();
+    const footerText = (footer || '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    expect(footerText).toBe(
+      'Refresh your leagues, seasons, and team names. Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
+    );
+    // The whole first sentence is the button; only the word "Refresh" is
+    // underlined inside it.
+    expect(footer).toContain(
+      '<button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button>'
+    );
+    expect(USER_SESSION_WIDGET_HTML).toContain('text-decoration-thickness: 1px;');
+    expect(USER_SESSION_WIDGET_HTML).toContain('text-underline-offset: 2px;');
+    // Refresh progress and outcome live in an accessible status region that is
+    // present from first paint, so assistive technology is already observing
+    // it when the first message lands.
+    expect(footer).toContain('<div class="status" id="refresh-status" role="status" aria-live="polite"></div>');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('.status:empty { display: none; }');
+  });
+
+  it('ships the compact header, sport bands, and fixed-height league rows', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('<span class="app-name">Your Leagues</span>');
+    expect(USER_SESSION_WIDGET_HTML).toContain('href="https://flaim.app/leagues?from=widget"');
+    expect(USER_SESSION_WIDGET_HTML).toContain('aria-label="Edit leagues"');
+    // Coarse pointers get the larger hit area.
+    expect(USER_SESSION_WIDGET_HTML).toContain('@media (pointer: coarse) {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('.edit-link { width: 44px; height: 44px; }');
+    expect(USER_SESSION_WIDGET_HTML).toContain('grid-template-columns: 60px minmax(0, 1fr);');
+    expect(USER_SESSION_WIDGET_HTML).toContain('.sport-group + .sport-group { margin-top: 12px; }');
+  });
+
+  it('carries monochrome Tabler sport icons with a trophy fallback and its license', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('var SPORT_ICON_PATHS = {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('stroke="currentColor" stroke-width="1.5"');
+    expect(USER_SESSION_WIDGET_HTML).toContain('renderSportIcon(sport)');
+    expect(USER_SESSION_WIDGET_HTML).toContain('aria-hidden="true" focusable="false"');
+    expect(USER_SESSION_WIDGET_HTML).toContain('Permission is hereby granted, free of charge');
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      'Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, key)'
+    );
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('var SPORT_EMOJI =');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('🏈');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('⚾');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('🏀');
+    expect(USER_SESSION_WIDGET_HTML).not.toContain('🏒');
+  });
+
+  it('drives dark mode from the host theme global with a media-query fallback', () => {
+    expect(USER_SESSION_WIDGET_HTML).toContain('@media (prefers-color-scheme: dark) {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('html:not(.theme-light) {');
+    expect(USER_SESSION_WIDGET_HTML).toContain('html.theme-dark {');
+    expect(USER_SESSION_WIDGET_HTML).toContain("root.classList.add('theme-' + theme)");
+    expect(USER_SESSION_WIDGET_HTML).toContain('window.openai.theme');
+    // Theme updates must survive the first render, unlike tool output.
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      "applyTheme(globals && globals.theme !== undefined ? globals.theme : readHostTheme());\n    if (hasRendered) return;"
+    );
+    // Hide-widget support (FLA-277) applies uniformly to every URI's body,
+    // since the frozen-body rule was retired (PR #243) and both
+    // USER_SESSION_WIDGET_HTML and LEGACY_USER_SESSION_WIDGET_HTML are now
+    // produced by the same buildUserSessionWidgetHtml template.
+    for (const html of [USER_SESSION_WIDGET_HTML, LEGACY_USER_SESSION_WIDGET_HTML]) {
+      expect(html).toContain('var widgetHidden = false;');
+      expect(html).toContain('function sendZeroSize() {');
+      expect(html).toContain(
+        "  function sendSizeChanged() {\n    if (widgetHidden) {\n      sendZeroSize();\n      return;\n    }",
+      );
+      expect(html).toContain(
+        "widgetHidden = !!(data && data.widget && data.widget.hidden === true);",
+      );
+    }
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {
@@ -582,7 +713,8 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain('Flaim is connected, but no fantasy leagues are set up yet.');
     expect(USER_SESSION_WIDGET_HTML).toContain('id="connect-league-link"');
     expect(USER_SESSION_WIDGET_HTML).toContain("connectLeagueLink.addEventListener('click', openLeagues)");
-    expect(USER_SESSION_WIDGET_HTML).toContain('window.openai.openExternal({ href: LEAGUES_URL })');
+    expect(USER_SESSION_WIDGET_HTML).toContain('window.openai.openExternal({ href: url })');
+    expect(USER_SESSION_WIDGET_HTML).toContain('return openExternalUrl(LEAGUES_URL);');
   });
 
   it('refresh_leagues forwards the user auth and internal token to auth-worker', async () => {
@@ -627,6 +759,45 @@ describe('fantasy-mcp tools', () => {
     expect(capturedRequest!.headers.get(INTERNAL_SERVICE_TOKEN_HEADER)).toBe('internal-secret');
     expect(capturedRequest!.headers.get('X-Correlation-ID')).toBe('corr-refresh');
     expect(await capturedRequest!.json()).toEqual({ platforms: ['espn'] });
+  });
+
+  it('refresh_leagues allows 60 seconds before timing out auth-worker', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'refresh_leagues');
+    expect(tool).toBeTruthy();
+
+    let aborted = false;
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => new Promise<Response>((_resolve, reject) => {
+          req.signal.addEventListener('abort', () => {
+            aborted = true;
+            reject(new DOMException('The operation was aborted.', 'AbortError'));
+          });
+        }),
+      },
+    } as unknown as Env;
+
+    const resultPromise = tool!.handler(
+      { platforms: ['espn'] },
+      env,
+      'Bearer user-token',
+      'corr-refresh-timeout'
+    );
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(aborted).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await resultPromise;
+
+    expect(aborted).toBe(true);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toEqual({
+      success: false,
+      code: 'AUTH_WORKER_TIMEOUT',
+      error: 'League refresh timed out after 60 seconds',
+    });
   });
 
   it('refresh_leagues rejects invalid platforms instead of widening to all platforms', async () => {
@@ -692,6 +863,11 @@ describe('fantasy-mcp tools', () => {
       INTERNAL_SERVICE_TOKEN: 'internal-secret',
       AUTH_WORKER: {
         fetch: async () => {
+          // Mirrors what auth-worker actually sends today (index-hono.ts:861,
+          // deliberately out of scope here): the gateway discards this
+          // upstream error_description entirely — it branches only on
+          // payload.error === 'insufficient_scope' — and builds its own
+          // re-grant copy via mcpInsufficientScopeError, asserted below.
           return new Response(JSON.stringify({
             error: 'insufficient_scope',
             error_description: 'mcp:write scope is required to refresh leagues',
@@ -715,16 +891,16 @@ describe('fantasy-mcp tools', () => {
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[] | undefined)?.[0];
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues');
+    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.');
     expect(result.structuredContent).toEqual({
       success: false,
       code: 'INSUFFICIENT_SCOPE',
-      error: 'mcp:write scope is required to refresh leagues',
+      error: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
     });
     expect(challenge).toContain('scope="mcp:write"');
     // ChatGPT requires BOTH error and error_description present to trigger consent UI.
     expect(challenge).toContain('error="insufficient_scope"');
-    expect(challenge).toContain('error_description="mcp:write scope is required to refresh leagues"');
+    expect(challenge).toContain('error_description="mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission."');
     expect(challenge).toContain('resource_metadata="https://fantasy-mcp-preview.gerrygugger.workers.dev/.well-known/oauth-protected-resource"');
     expect(challenge).not.toContain('invalid_token');
   });
@@ -950,6 +1126,52 @@ describe('fantasy-mcp tools', () => {
     expect(bbOld?.seasonYear).toBe(2025);
   });
 
+  it('get_ancient_history preserves every stored ESPN baseball season through 2011', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
+    expect(tool).toBeTruthy();
+
+    const espnLeagues = Array.from({ length: 16 }, (_, index) => ({
+      platform: 'espn',
+      sport: 'baseball',
+      leagueId: 'bb-history',
+      leagueName: 'Long-Running League',
+      teamId: '7',
+      seasonYear: 2026 - index,
+    }));
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: espnLeagues }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({ platform: 'espn' }, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      oldSeasonsFromActiveLeagues: Record<string, Array<{ seasonYear: number }>>;
+      totalOldSeasons: number;
+    };
+    const seasons = Object.values(payload.oldSeasonsFromActiveLeagues)
+      .flat()
+      .map((season) => season.seasonYear);
+
+    expect(payload.totalOldSeasons).toBe(15);
+    expect(seasons).toContain(2011);
+    expect(seasons).toEqual(expect.arrayContaining(Array.from({ length: 15 }, (_, index) => 2025 - index)));
+  });
+
   it('get_ancient_history keeps recurring Yahoo seasons under active leagues', async () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_ancient_history');
     expect(tool).toBeTruthy();
@@ -1069,6 +1291,316 @@ describe('fantasy-mcp tools', () => {
     const payload = JSON.parse(text as string) as { success?: boolean; data?: unknown };
     expect(payload.success).toBe(true);
     expect(payload.data).toEqual({ league: { id: 123, name: 'Test League' } });
+  });
+
+  it('get_draft defaults the season, forwards an optional draft ID, and formats a success payload', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_draft');
+    expect(tool).toBeTruthy();
+
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: {
+        platform: 'sleeper',
+        sport: 'football',
+        leagueId: '123',
+        seasonYear: 2025,
+        draft: { id: 'draft-1', type: 'snake', status: 'complete' },
+        picks: [],
+      },
+    });
+
+    const env = {} as Env;
+    const correlationId = 'corr-draft';
+    const defaultSeasonResult = await tool!.handler({
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: '123',
+    }, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenLastCalledWith(
+      env,
+      'get_draft',
+      { platform: 'sleeper', sport: 'football', league_id: '123', season_year: 2025, draft_id: undefined, round: undefined, team_id: undefined },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
+    expect(JSON.parse(defaultSeasonResult.content[0]!.text)).toMatchObject({ success: true });
+
+    await tool!.handler({
+      platform: 'espn',
+      sport: 'baseball',
+      league_id: '456',
+      season_year: 2024,
+      draft_id: 'provider-draft-456',
+    }, env, 'Bearer token', correlationId);
+    expect(routeToClient).toHaveBeenLastCalledWith(
+      env,
+      'get_draft',
+      { platform: 'espn', sport: 'baseball', league_id: '456', season_year: 2024, draft_id: 'provider-draft-456', round: undefined, team_id: undefined },
+      'Bearer token',
+      correlationId,
+      undefined,
+      undefined
+    );
+  });
+
+  it('get_draft filters historical selections and current ownership using their distinct team fields', async () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_draft')!;
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: {
+        platform: 'sleeper',
+        sport: 'football',
+        leagueId: '123',
+        seasonYear: 2025,
+        draft: { id: 'draft-1', type: 'snake', status: 'in_progress' },
+        picks: [
+          { round: 2, selectionTeamId: '449.l.123.t.7', playerId: 'keep', placement: { status: 'confirmed', source: 'provider_pick' } },
+          { round: 2, selectionTeamId: '449.l.123.t.8', playerId: 'wrong-team', placement: { status: 'confirmed', source: 'provider_pick' } },
+          { round: 3, selectionTeamId: '449.l.123.t.7', playerId: 'wrong-round', placement: { status: 'confirmed', source: 'provider_pick' } },
+        ],
+        ownership: {
+          scope: 'changed_picks_only',
+          picks: [
+            { seasonYear: 2025, round: 2, originalTeamId: 3, currentOwnerTeamId: 7, placement: { status: 'unavailable', source: 'no_provider_order' } },
+            { seasonYear: 2025, round: 2, originalTeamId: 7, currentOwnerTeamId: 8, placement: { status: 'unavailable', source: 'no_provider_order' } },
+          ],
+        },
+      },
+    });
+
+    const result = await tool.handler({
+      platform: 'sleeper',
+      sport: 'football',
+      league_id: '123',
+      season_year: 2025,
+      round: 2,
+      team_id: '7',
+    }, {} as Env, 'Bearer token', 'corr-filter');
+
+    expect(routeToClient).toHaveBeenLastCalledWith(
+      expect.anything(),
+      'get_draft',
+      expect.objectContaining({ round: 2, team_id: '7' }),
+      'Bearer token',
+      'corr-filter',
+      undefined,
+      undefined,
+    );
+    const payload = JSON.parse(result.content[0]!.text) as Record<string, any>;
+    expect(payload.data.picks).toEqual([expect.objectContaining({ playerId: 'keep' })]);
+    expect(payload.data.ownership.picks).toEqual([
+      expect.objectContaining({ originalTeamId: 3, currentOwnerTeamId: 7 }),
+    ]);
+  });
+
+  it('get_draft keeps a 14-team by 25-round completed result within its regression size budget', async () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_draft')!;
+    const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+    const teams = Object.fromEntries(Array.from({ length: 14 }, (_, index) => [String(index + 1), `Team ${index + 1}`]));
+    const teamOwners = Object.fromEntries(Array.from({ length: 14 }, (_, index) => [String(index + 1), `Owner ${index + 1}`]));
+    const picks = Array.from({ length: 350 }, (_, index) => ({
+      round: Math.floor(index / 14) + 1,
+      selectionInRound: (index % 14) + 1,
+      overallPick: index + 1,
+      draftColumn: (index % 14) + 1,
+      selectionTeamId: (index % 14) + 1,
+      originalTeamId: (index % 14) + 1,
+      playerId: `player-${index + 1}`,
+      playerName: `Player ${index + 1}`,
+      playerPosition: 'WR',
+      placement: { status: 'confirmed', source: 'provider_pick' },
+    }));
+    routeToClientMock.mockResolvedValue({
+      success: true,
+      data: {
+        platform: 'sleeper', sport: 'football', leagueId: 'large', seasonYear: 2025,
+        draft: { id: 'large-draft', type: 'snake', status: 'complete', rounds: 25, teams: 14 },
+        picks,
+        teams,
+        teamOwners,
+      },
+    });
+
+    const result = await tool.handler({
+      platform: 'sleeper', sport: 'football', league_id: 'large', season_year: 2025,
+    }, {} as Env, 'Bearer token', 'corr-large');
+
+    const serializedBytes = new TextEncoder().encode(JSON.stringify(result)).byteLength;
+    expect(serializedBytes).toBeLessThan(300_000);
+  });
+
+  it('get_draft exposes bounded optional filter schemas', () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_draft')!;
+    const roundSchema = asZod(tool.inputSchema.round);
+    const teamSchema = asZod(tool.inputSchema.team_id);
+
+    expect(roundSchema.safeParse(undefined).success).toBe(true);
+    expect(roundSchema.safeParse(1).success).toBe(true);
+    expect(roundSchema.safeParse(0).success).toBe(false);
+    expect(roundSchema.safeParse(-1).success).toBe(false);
+    expect(roundSchema.safeParse(1.5).success).toBe(false);
+    expect(teamSchema.safeParse(undefined).success).toBe(true);
+    expect(teamSchema.safeParse('7').success).toBe(true);
+    expect(teamSchema.safeParse('').success).toBe(false);
+  });
+
+  describe('get_matchups player detail', () => {
+    const matchupTool = () => getUnifiedTools().find((tool) => tool.name === 'get_matchups')!;
+    const detailArgs = {
+      platform: 'espn',
+      sport: 'football',
+      league_id: '123',
+      season_year: 2024,
+      week: 5,
+      team_id: '9',
+      detail: 'players',
+    } as const;
+
+    function detailData(padding = ''): Record<string, unknown> {
+      return {
+        leagueId: '123',
+        seasonYear: 2024,
+        matchupPeriod: 5,
+        padding,
+        matchups: [{
+          matchupPeriodId: 5,
+          home: {
+            teamId: 9,
+            totalPoints: 10,
+            players: [{
+              playerId: '101',
+              name: 'Player One',
+              lineupSlot: 'QB',
+              started: true,
+              points: 10,
+            }],
+          },
+          away: null,
+        }],
+      };
+    }
+
+    // This is the stable MCP tool-result object returned by the handler, not
+    // the outer JSON-RPC envelope or stream/SSE transport framing.
+    function serializedToolResultBytes(response: unknown): number {
+      return new TextEncoder().encode(JSON.stringify(response)).byteLength;
+    }
+
+    async function callDetailWithPadding(padding: string) {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: true, data: detailData(padding) });
+      return matchupTool().handler(detailArgs, {} as Env, 'Bearer token', 'corr-matchup-detail');
+    }
+
+    it('keeps summary-mode routing unchanged and rejects team_id without detail', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: true, data: { matchups: [] } });
+
+      await matchupTool().handler({
+        platform: 'espn', sport: 'football', league_id: '123', season_year: 2024, week: 5,
+      }, {} as Env, 'Bearer token', 'corr-summary');
+      expect(routeToClientMock).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'get_matchups',
+        { platform: 'espn', sport: 'football', league_id: '123', season_year: 2024, week: 5 },
+        'Bearer token',
+        'corr-summary',
+        undefined,
+        undefined
+      );
+
+      routeToClientMock.mockClear();
+      const result = await matchupTool().handler({
+        platform: 'espn', sport: 'football', league_id: '123', season_year: 2024, team_id: '9',
+      }, {} as Env, 'Bearer token', 'corr-ambiguous');
+      expect(result.structuredContent).toMatchObject({ code: 'MATCHUP_DETAIL_MODE_REQUIRED' });
+      expect(routeToClientMock).not.toHaveBeenCalled();
+    });
+
+    it('validates the ESPN-football capability and selectors before routing', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const rejectionMatrix = [
+        { args: { ...detailArgs, platform: 'yahoo' }, code: 'MATCHUP_DETAIL_UNSUPPORTED' },
+        { args: { ...detailArgs, sport: 'baseball' }, code: 'MATCHUP_DETAIL_UNSUPPORTED' },
+        { args: { ...detailArgs, season_year: 2017 }, code: 'MATCHUP_DETAIL_UNSUPPORTED' },
+        { args: { ...detailArgs, week: undefined }, code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED' },
+        { args: { ...detailArgs, week: 0 }, code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED' },
+        { args: { ...detailArgs, team_id: '   ' }, code: 'MATCHUP_DETAIL_SELECTOR_REQUIRED' },
+      ];
+
+      for (const { args, code } of rejectionMatrix) {
+        routeToClientMock.mockClear();
+        const result = await matchupTool().handler(args, {} as Env, 'Bearer token', 'corr-invalid-detail');
+        expect(result.structuredContent).toMatchObject({ success: false, code });
+        expect(routeToClientMock).not.toHaveBeenCalled();
+      }
+    });
+
+    it('forwards only valid, normalized player-detail selectors', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: true, data: detailData() });
+
+      const result = await matchupTool().handler(
+        { ...detailArgs, team_id: ' 9 ' },
+        {} as Env,
+        'Bearer token',
+        'corr-valid-detail'
+      );
+
+      expect(result.isError).toBeUndefined();
+      expect(routeToClientMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'get_matchups',
+        {
+          platform: 'espn', sport: 'football', league_id: '123', season_year: 2024,
+          week: 5, team_id: '9', detail: 'players',
+        },
+        'Bearer token',
+        'corr-valid-detail',
+        undefined,
+        undefined
+      );
+    });
+
+    it('allows serialized MCP tool results at and below 24,000 bytes, but returns a corrective error above it', async () => {
+      // Content contains pretty JSON while structuredContent repeats the same
+      // data. ASCII padding grows the actual response by two bytes per
+      // character: once in the pretty text and once in structuredContent.
+      // Request IDs and transport framing are deliberately outside this cap.
+      let exact: { padding: string; response: Awaited<ReturnType<typeof callDetailWithPadding>> } | undefined;
+      for (const prefix of ['', '\n', '\u0000']) {
+        const baseline = await callDetailWithPadding(prefix);
+        const baselineBytes = serializedToolResultBytes(baseline);
+        const approximateCount = Math.max(0, Math.floor((24_000 - baselineBytes) / 2));
+        for (let delta = -4; delta <= 4; delta += 1) {
+          const padding = prefix + 'x'.repeat(Math.max(0, approximateCount + delta));
+          const response = await callDetailWithPadding(padding);
+          if (!response.isError && serializedToolResultBytes(response) === 24_000) {
+            exact = { padding, response };
+            break;
+          }
+        }
+        if (exact) break;
+      }
+
+      expect(exact).toBeDefined();
+      expect(exact!.response.isError).toBeUndefined();
+      expect(serializedToolResultBytes(exact!.response)).toBe(24_000);
+
+      const below = await callDetailWithPadding(exact!.padding.slice(0, -1));
+      expect(below.isError).toBeUndefined();
+      expect(serializedToolResultBytes(below)).toBeLessThan(24_000);
+
+      const above = await callDetailWithPadding(`${exact!.padding}x`);
+      expect(above).toMatchObject({
+        isError: true,
+        structuredContent: { success: false, code: 'MATCHUP_DETAIL_TOO_LARGE' },
+      });
+    });
   });
 
   describe('get_roster snapshot selector validation', () => {
@@ -2471,16 +3003,44 @@ describe('mcpInsufficientScopeError', () => {
     const result = mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues');
+    expect(result.content[0]?.text).toBe('INSUFFICIENT_SCOPE: mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.');
     expect(result.structuredContent).toEqual({
       success: false,
       code: 'INSUFFICIENT_SCOPE',
-      error: 'mcp:write scope is required to refresh leagues',
+      error: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
     });
 
     const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
     expect(challenge).toBe(
-      'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource", scope="mcp:write", error="insufficient_scope", error_description="mcp:write scope is required to refresh leagues"'
+      'Bearer resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource", scope="mcp:write", error="insufficient_scope", error_description="mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission."'
+    );
+  });
+
+  /**
+   * The re-grant instruction text never reaches the rendered widget: the
+   * widget's refreshLeagues() handler (user-session-widget.ts:751-791) throws
+   * on isError, but its catch block (lines 785-786) swallows the specific
+   * error text and always shows a generic "Refresh failed. Open leagues."
+   * line — by design, not something this PR changes. This copy only
+   * surfaces when the LLM client itself calls refresh_leagues directly and
+   * relays the tool-error text to the user (e.g. Claude, ChatGPT's
+   * chat-level tool calls, or a custom MCP connector) — never through the
+   * widget's Refresh button.
+   */
+  it('pins the mcp:write re-grant instruction copy', () => {
+    const result = mcpInsufficientScopeError('https://api.flaim.app/mcp', 'mcp:write');
+
+    // The test above already pins result.content[0].text and the full
+    // structuredContent/challenge strings; this one covers what that test
+    // doesn't isolate on its own: the copy inside structuredContent.error,
+    // and inside the WWW-Authenticate error_description.
+    expect(result.structuredContent).toMatchObject({
+      error: 'mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission.',
+    });
+
+    const challenge = (result._meta?.['mcp/www_authenticate'] as string[])[0];
+    expect(challenge).toContain(
+      'error_description="mcp:write scope is required to refresh leagues. Disconnect and reconnect the Flaim connector in your AI app to grant this permission."'
     );
   });
 

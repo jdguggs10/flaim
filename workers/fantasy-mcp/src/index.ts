@@ -312,6 +312,13 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   });
 
   const authHeader = c.req.header('Authorization');
+  const requestUrl = new URL(c.req.raw.url);
+  // Opt-in interoperability path for clients that discover tools anonymously
+  // but do not recover when a later tools/call receives a 401. Requiring the
+  // exact query preserves the published behavior of the normal endpoint.
+  const requireHandshakeAuth =
+    requestUrl.pathname === '/mcp'
+    && requestUrl.search === '?auth=required';
   // Static widget resources are public based on method + exact URI, even when
   // a client happens to attach a stale bearer token. User-data paths still
   // require normal token introspection.
@@ -319,6 +326,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   const allowPublicHandshake =
     !authHeader &&
     !allowPublicStaticResource &&
+    !requireHandshakeAuth &&
     await isPublicMcpHandshakeRequest(c.req.raw);
   if (!authHeader && !allowPublicHandshake && !allowPublicStaticResource) {
     if (await isAuthenticatedMcpToolAttemptRequest(c.req.raw)) {
@@ -340,7 +348,7 @@ async function handleMcpRequest(c: Context<{ Bindings: Env }>): Promise<Response
   // Preview's request-derived value is also used for post-introspection
   // in-band auth/scope challenges so a consent upgrade cannot redirect
   // discovery back to production.
-  const { origin, pathname } = new URL(c.req.raw.url);
+  const { origin, pathname } = requestUrl;
   const expectedResource = pathname.startsWith('/fantasy/')
     ? `${origin}/fantasy/mcp`
     : `${origin}/mcp`;
@@ -593,10 +601,10 @@ app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
 });
 
 // Widget HTML endpoint (fallback for HTTP-fetching clients). Deliberately
-// version-less: serves the CURRENT widget body, so live fetches carry the
-// provider attribution the Yahoo agreement requires on rendering surfaces.
-// The frozen v1/v2 contracts are only reachable via their immutable
-// ui://widget/... resource URIs, which cached ChatGPT clients pin.
+// version-less: serves the v3 body, so live fetches carry the linked provider
+// attribution the Yahoo agreement requires on rendering surfaces. The v1/v2
+// body, whose published widget CSP cannot allow the Yahoo link, is only
+// reachable through its own ui://widget/... resource URIs.
 app.get('/widgets/user-session', (c) => {
   return c.html(USER_SESSION_WIDGET_HTML);
 });

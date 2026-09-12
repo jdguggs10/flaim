@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { asArray, getPath, unwrapLeague, unwrapTeam } from '../shared/normalizers';
+import { asArray, getPath, toYahooBoolean, toYahooFiniteNumber, unwrapLeague, unwrapTeam } from '../shared/normalizers';
 
 describe('normalizers', () => {
   describe('asArray', () => {
@@ -165,6 +165,74 @@ describe('normalizers', () => {
       expect(result.team_key).toBe('449.l.123.t.1');
       expect(result.roster).toEqual({ players: [] });
       expect(result.matchups).toEqual([{ week: 1 }]);
+    });
+  });
+
+  describe('toYahooBoolean (FLA-284)', () => {
+    it('passes through native booleans', () => {
+      expect(toYahooBoolean(true)).toBe(true);
+      expect(toYahooBoolean(false)).toBe(false);
+    });
+
+    it('normalizes "0"/"1" strings (real /settings fixture shape)', () => {
+      expect(toYahooBoolean('1')).toBe(true);
+      expect(toYahooBoolean('0')).toBe(false);
+    });
+
+    it('normalizes 0/1 numbers (e.g. is_finished elsewhere in this codebase)', () => {
+      expect(toYahooBoolean(1)).toBe(true);
+      expect(toYahooBoolean(0)).toBe(false);
+    });
+
+    it('returns undefined for unrecognized values rather than guessing', () => {
+      expect(toYahooBoolean(undefined)).toBeUndefined();
+      expect(toYahooBoolean(null)).toBeUndefined();
+      expect(toYahooBoolean('yes')).toBeUndefined();
+      expect(toYahooBoolean(2)).toBeUndefined();
+    });
+
+    it('normalizes "true"/"false" strings, case-insensitive and trimmed (FLA-284)', () => {
+      expect(toYahooBoolean('true')).toBe(true);
+      expect(toYahooBoolean('false')).toBe(false);
+      expect(toYahooBoolean('TRUE')).toBe(true);
+      expect(toYahooBoolean('False')).toBe(false);
+      expect(toYahooBoolean('  true  ')).toBe(true);
+    });
+
+    it('does not coerce other unrecognized strings/empty string/null to true (FLA-284 audit)', () => {
+      expect(toYahooBoolean('yes')).toBeUndefined();
+      expect(toYahooBoolean('')).toBeUndefined();
+      expect(toYahooBoolean(null)).toBeUndefined();
+    });
+  });
+
+  describe('toYahooFiniteNumber (FLA-284)', () => {
+    it('passes through finite numbers', () => {
+      expect(toYahooFiniteNumber(1)).toBe(1);
+      expect(toYahooFiniteNumber(0)).toBe(0);
+    });
+
+    it('parses numeric strings (real /settings fixture: trade_reject_time "1")', () => {
+      expect(toYahooFiniteNumber('1')).toBe(1);
+      expect(toYahooFiniteNumber('42')).toBe(42);
+      expect(toYahooFiniteNumber('0')).toBe(0);
+      expect(toYahooFiniteNumber('12')).toBe(12);
+    });
+
+    it('returns undefined for missing/non-finite/non-numeric values', () => {
+      expect(toYahooFiniteNumber(undefined)).toBeUndefined();
+      expect(toYahooFiniteNumber(null)).toBeUndefined();
+      expect(toYahooFiniteNumber('N/A')).toBeUndefined();
+      expect(toYahooFiniteNumber('abc')).toBeUndefined();
+      expect(toYahooFiniteNumber(Number.NaN)).toBeUndefined();
+    });
+
+    it('returns undefined for empty/whitespace-only strings rather than coercing to 0 (FLA-284 audit)', () => {
+      // Number('') and Number('   ') both evaluate to 0 — without an
+      // explicit guard, a blank/missing string field would misreport as
+      // the finite value 0 instead of "not sent."
+      expect(toYahooFiniteNumber('')).toBeUndefined();
+      expect(toYahooFiniteNumber('  ')).toBeUndefined();
     });
   });
 });

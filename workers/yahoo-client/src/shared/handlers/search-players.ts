@@ -3,7 +3,7 @@ import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, unwrapLeague } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractPlayerMeta, extractPlayerPercentOwned, toExecuteErrorResponse } from './utils';
+import { extractPlayerMeta, extractPlayerPercentOwned, normalizeIsKeeper, toExecuteErrorResponse } from './utils';
 import { enrichPlayerWithOwnership, fetchLeagueOwnershipMap } from './league-ownership';
 
 export function createSearchPlayersHandler(config: YahooHandlerContext): HandlerFn {
@@ -49,6 +49,9 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
         const normalizedPlayerId = typeof playerId === 'string' || typeof playerId === 'number'
           ? String(playerId)
           : undefined;
+        // See get-roster.ts for why isKeeper isn't gated on any
+        // historical/snapshot logic — player search has no such concept.
+        const isKeeper = normalizeIsKeeper(playerMeta.is_keeper);
 
         return {
           id: normalizedPlayerId as string,
@@ -58,6 +61,7 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
           market_percent_owned: extractPlayerPercentOwned(playerData),
           ownership_scope: 'platform_global' as const,
           ...enrichPlayerWithOwnership(playerId, ownership),
+          ...(isKeeper ? { isKeeper } : {}),
         };
       });
 

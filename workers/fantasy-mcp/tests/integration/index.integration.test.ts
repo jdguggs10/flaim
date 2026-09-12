@@ -4,6 +4,7 @@ import app from '../../src/index';
 import type { Env } from '../../src/types';
 import { getUnifiedTools, type UnifiedTool } from '../../src/mcp/tools';
 import { FLAIM_MCP_INSTRUCTIONS } from '../../src/mcp/instructions';
+import { WIDGET_READ_LOG_SAMPLE_RATE } from '../../src/mcp/server';
 import {
   LEGACY_USER_SESSION_WIDGET_HTML,
   LEGACY_USER_SESSION_WIDGET_URI,
@@ -11,7 +12,7 @@ import {
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
 } from '../../src/widgets/user-session-widget';
-import { INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
+import { CORRELATION_ID_HEADER, INTERNAL_SERVICE_TOKEN_HEADER, getDefaultSeasonYear } from '@flaim/worker-shared';
 
 // Mock the tools module so a single test can inject a custom tool (e.g. a
 // throwing handler) via mockReturnValueOnce, while every other test/request
@@ -32,7 +33,8 @@ function buildMcpJsonRpcRequest(
   pathname: '/mcp' | '/fantasy/mcp',
   method: string,
   params: Record<string, unknown> = {},
-  id = 'wire-test-1'
+  id = 'wire-test-1',
+  extraHeaders: Record<string, string> = {}
 ): Request {
   return new Request(`https://api.flaim.app${pathname}`, {
     method: 'POST',
@@ -40,6 +42,7 @@ function buildMcpJsonRpcRequest(
       Authorization: 'Bearer test-token',
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
+      ...extraHeaders,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -431,6 +434,7 @@ describe('fantasy-mcp gateway integration', () => {
       ['get_user_session', { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true }],
       ['refresh_leagues', { readOnlyHint: false, openWorldHint: true, destructiveHint: false, idempotentHint: false }],
       ['get_ancient_history', { readOnlyHint: true, openWorldHint: false, destructiveHint: false, idempotentHint: true }],
+      ['get_draft', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
       ['get_league_info', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
       ['get_standings', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
       ['get_matchups', { readOnlyHint: true, openWorldHint: true, destructiveHint: false, idempotentHint: true }],
@@ -528,8 +532,8 @@ describe('fantasy-mcp gateway integration', () => {
         body: LEGACY_USER_SESSION_WIDGET_HTML,
         hasDescription: false,
         redirectDomains: ['https://flaim.app'],
-        hasAttribution: false,
-        frozen: true,
+        linksYahoo: false,
+        frozenLegacyMeta: true,
       },
       {
         uri: V2_USER_SESSION_WIDGET_URI,
@@ -537,8 +541,8 @@ describe('fantasy-mcp gateway integration', () => {
         body: LEGACY_USER_SESSION_WIDGET_HTML,
         hasDescription: true,
         redirectDomains: ['https://flaim.app'],
-        hasAttribution: false,
-        frozen: true,
+        linksYahoo: false,
+        frozenLegacyMeta: true,
       },
       {
         uri: USER_SESSION_WIDGET_URI,
@@ -546,8 +550,8 @@ describe('fantasy-mcp gateway integration', () => {
         body: USER_SESSION_WIDGET_HTML,
         hasDescription: true,
         redirectDomains: ['https://flaim.app', 'https://sports.yahoo.com'],
-        hasAttribution: true,
-        frozen: false,
+        linksYahoo: true,
+        frozenLegacyMeta: false,
       },
     ] as const;
     expect(new Set(listPayload.result?.resources?.map((item) => item.uri))).toEqual(
@@ -592,7 +596,14 @@ describe('fantasy-mcp gateway integration', () => {
         resource_domains: [],
         redirect_domains: widget.redirectDomains,
       });
-      if (widget.frozen) {
+      // Every body credits the three providers; only a URI whose published
+      // widget CSP allows the Yahoo redirect domain may link the credit.
+      expect(content?.text).toContain(
+        widget.linksYahoo
+          ? 'Fantasy data provided by <a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>, ESPN, and Sleeper.'
+          : 'Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
+      );
+      if (widget.frozenLegacyMeta) {
         // Frozen published contracts (v1: original submission; v2: v2.1
         // submission): the read-result _meta must stay byte-identical to the
         // snapshots OpenAI scanned — strict-equal on the whole object so no
@@ -614,22 +625,40 @@ describe('fantasy-mcp gateway integration', () => {
             redirect_domains: ['https://flaim.app'],
           },
         });
-        // The frozen v1/v2 bodies stay attribution-free by design: published
-        // clients cached on these URIs keep rendering their scanned bytes.
-        expect(content?.text).not.toContain('Fantasy data provided by');
+        // The v1/v2 body carries no link the frozen v1/v2 CSP does not
+        // allow: every URL in it points at flaim.app.
+        expect(content?.text).not.toContain('sports.yahoo.com');
+        expect(
+          Array.from(new Set((content?.text?.match(/https?:\/\/[^"'\s<>)]+/g) || []).map((url) => new URL(url).origin)))
+        ).toEqual(['https://flaim.app']);
       } else {
-        expect(content?._meta?.['openai/widgetDescription']).toBe(
-          'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.'
-        );
-        // Provider attribution footer ships on the v3 body only.
-        expect(content?.text).toContain(
-          'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
-        );
+        // v3 is published too, so its read-result _meta is frozen on the same
+        // terms — strict-equal on the whole object, written out literally so
+        // an added or removed key cannot pass unnoticed.
+        expect(content?._meta).toEqual({
+          ui: {
+            csp: {
+              connectDomains: [],
+              resourceDomains: [],
+            },
+          },
+          'openai/widgetDescription':
+            'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
+          'openai/widgetCSP': {
+            connect_domains: [],
+            resource_domains: [],
+            redirect_domains: ['https://flaim.app', 'https://sports.yahoo.com'],
+          },
+        });
+        // Nothing in the v3 body reaches past the two domains its CSP allows.
+        expect(
+          Array.from(new Set((content?.text?.match(/https?:\/\/[^"'\s<>)]+/g) || []).map((url) => new URL(url).origin))).sort()
+        ).toEqual(['https://flaim.app', 'https://sports.yahoo.com']);
       }
     }
     expect(widgetBodies).toHaveLength(3);
-    // v1 and v2 share the frozen body; v3 is that body plus the provider
-    // attribution footer.
+    // v1 and v2 serve the identical flaim-only body; v3 differs only by the
+    // Yahoo Fantasy link its published CSP allows.
     expect(widgetBodies[1]).toBe(widgetBodies[0]);
     expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
@@ -679,18 +708,106 @@ describe('fantasy-mcp gateway integration', () => {
       widgetBodies.push(content?.text || '');
     }
     expect(widgetBodies).toHaveLength(3);
-    // v1/v2 stay frozen; v3 adds the provider attribution footer.
+    // v1/v2 share one body; v3 adds the linked Yahoo Fantasy credit.
     expect(widgetBodies[1]).toBe(widgetBodies[0]);
     expect(widgetBodies[2]).not.toBe(widgetBodies[0]);
     expect(authFetch).not.toHaveBeenCalled();
   });
 
+  it('logs widget_resource_read with the documented fields when sampled in', async () => {
+    // FLA-258: a structured, sampled log line on every widget resource read.
+    // Force sampling on (Math.random() * WIDGET_READ_LOG_SAMPLE_RATE < 1 is
+    // guaranteed when Math.random() returns 0) and assert the exact schema.
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const widgetUris = [
+      { uri: LEGACY_USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget' },
+      { uri: V2_USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v2' },
+      { uri: USER_SESSION_WIDGET_URI, resourceName: 'user-session-widget-v3' },
+    ] as const;
+
+    try {
+      for (const [index, { uri, resourceName }] of widgetUris.entries()) {
+        logSpy.mockClear();
+        const correlationId = `sampled-corr-${index + 1}`;
+        const readResponse = await app.fetch(
+          buildMcpJsonRpcRequest(
+            '/mcp',
+            'resources/read',
+            { uri },
+            `sampled-resources-read-${index + 1}`,
+            { [CORRELATION_ID_HEADER]: correlationId }
+          ),
+          env,
+          mockExecutionContext()
+        );
+        expect(readResponse.status).toBe(200);
+
+        const widgetReadLogLines = logSpy.mock.calls
+          .map((call) => call[0])
+          .filter(
+            (line): line is string =>
+              typeof line === 'string' && line.includes('"widget_resource_read"')
+          );
+        expect(widgetReadLogLines).toHaveLength(1);
+        expect(JSON.parse(widgetReadLogLines[0])).toMatchObject({
+          event: 'widget_resource_read',
+          uri,
+          resource_name: resourceName,
+          sample_rate: WIDGET_READ_LOG_SAMPLE_RATE,
+          correlation_id: correlationId,
+        });
+      }
+    } finally {
+      randomSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+    expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('does not log widget_resource_read when not sampled in', async () => {
+    const authFetch = vi.fn();
+    const env = buildEnv(authFetch);
+    // 0.5 * WIDGET_READ_LOG_SAMPLE_RATE (50) = 25, which is not < 1, so the
+    // sample check must reject it.
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+      const readResponse = await app.fetch(
+        buildMcpJsonRpcRequest(
+          '/mcp',
+          'resources/read',
+          { uri: USER_SESSION_WIDGET_URI },
+          'unsampled-resources-read-1'
+        ),
+        env,
+        mockExecutionContext()
+      );
+      expect(readResponse.status).toBe(200);
+
+      const widgetReadLogLines = logSpy.mock.calls
+        .map((call) => call[0])
+        .filter(
+          (line): line is string =>
+            typeof line === 'string' && line.includes('widget_resource_read')
+        );
+      expect(widgetReadLogLines).toHaveLength(0);
+    } finally {
+      randomSpy.mockRestore();
+      logSpy.mockRestore();
+    }
+  });
+
   it('HTTP fallback widget routes serve the current attributed body', async () => {
     // These version-less routes are a fallback for HTTP-fetching clients and
-    // deliberately track the CURRENT widget: live fetches must carry the
+    // deliberately serve the v3 body: live fetches must carry the linked
     // provider attribution the Yahoo agreement requires on rendering
-    // surfaces. Only the immutable ui://widget/... resource URIs serve the
-    // frozen v1/v2 contracts. Pinned so a future body change is deliberate.
+    // surfaces. The flaim-only body is reachable only through the v1/v2
+    // resource URIs, whose frozen CSP cannot allow the Yahoo link.
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
 
@@ -705,7 +822,7 @@ describe('fantasy-mcp gateway integration', () => {
       const body = await response.text();
       expect(body).toBe(USER_SESSION_WIDGET_HTML);
       expect(body).toContain(
-        'Fantasy data provided by <a href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener">Yahoo Fantasy</a>, ESPN, and Sleeper.'
+        'Fantasy data provided by <a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>, ESPN, and Sleeper.'
       );
     }
     expect(authFetch).not.toHaveBeenCalled();
@@ -1005,12 +1122,21 @@ describe('fantasy-mcp gateway integration', () => {
   });
 
   it('routes get_free_agents tools/call to sleeper worker when platform is sleeper', async () => {
-    const authFetch = vi.fn(async () =>
-      new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
+    const authFetch = vi.fn(async (request: Request) => {
+      if (new URL(request.url).pathname === '/internal/leagues/sleeper/authorize') {
+        expect(new URL(request.url).searchParams.get('league_id')).toBe('league-42');
+        expect(new URL(request.url).searchParams.get('sport')).toBe('football');
+        expect(new URL(request.url).searchParams.get('season_year')).toBe('2025');
+        return new Response(JSON.stringify({ allowed: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
-      })
-    );
+      });
+    });
     const sleeperFetch = vi.fn(async () =>
       new Response(
         JSON.stringify({
@@ -1520,6 +1646,28 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     });
   }
 
+  function buildUnauthenticatedRequest(url: string, method: string, params: Record<string, unknown> = {}): Request {
+    return new Request(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: `auth-required-${method}`,
+        method,
+        params,
+      }),
+    });
+  }
+
+  const initializeParams = {
+    protocolVersion: '2025-06-18',
+    capabilities: {},
+    clientInfo: { name: 'auth-required-probe', version: '1.0.0' },
+  };
+
   it('keeps every api.flaim.app metadata body byte-identical to the scanned production surface', async () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
@@ -1563,6 +1711,170 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
       'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"'
     );
     expect(authFetch).not.toHaveBeenCalled();
+  });
+
+  it('requires authentication for production and preview handshakes on the exact auth-required query', async () => {
+    const cases = [
+      {
+        origin: PROD_ORIGIN,
+        environment: undefined,
+        challenge: 'Bearer realm="fantasy-mcp", resource="https://api.flaim.app/mcp", resource_metadata="https://api.flaim.app/.well-known/oauth-protected-resource"',
+      },
+      {
+        origin: PREVIEW_ORIGIN,
+        environment: 'preview',
+        challenge: `Bearer realm="fantasy-mcp", resource="${PREVIEW_ORIGIN}/mcp", resource_metadata="${PREVIEW_ORIGIN}/.well-known/oauth-protected-resource"`,
+      },
+    ] as const;
+
+    for (const { origin, environment, challenge } of cases) {
+      const authFetch = vi.fn();
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
+
+      for (const [method, params] of [
+        ['initialize', initializeParams],
+        ['tools/list', {}],
+      ] as const) {
+        const response = await app.fetch(
+          buildUnauthenticatedRequest(`${origin}/mcp?auth=required`, method, params),
+          env,
+          mockExecutionContext()
+        );
+
+        expect(response.status, `${origin} ${method}`).toBe(401);
+        expect(response.headers.get('WWW-Authenticate'), `${origin} ${method}`).toBe(challenge);
+      }
+      expect(authFetch, origin).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps normal production and preview handshakes public', async () => {
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
+    ] as const) {
+      const authFetch = vi.fn();
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
+      const response = await app.fetch(
+        buildUnauthenticatedRequest(`${origin}/mcp`, 'initialize', initializeParams),
+        env,
+        mockExecutionContext()
+      );
+
+      expect(response.status, origin).toBe(200);
+      expect(authFetch, origin).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps auth-required URL near misses on the public handshake behavior', async () => {
+    const queryNearMisses = [
+      '?auth=Required',
+      '?auth=required&other=1',
+      '?other=1&auth=required',
+      '?auth=required%20',
+      '?authentication=required',
+      '?auth=required&auth=required',
+    ];
+
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
+    ] as const) {
+      for (const query of queryNearMisses) {
+        const authFetch = vi.fn();
+        const env = environment
+          ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+          : buildEnv(authFetch);
+        const response = await app.fetch(
+          buildUnauthenticatedRequest(`${origin}/mcp${query}`, 'initialize', initializeParams),
+          env,
+          mockExecutionContext()
+        );
+
+        expect(response.status, `${origin}/mcp${query}`).toBe(200);
+        expect(authFetch, `${origin}/mcp${query}`).not.toHaveBeenCalled();
+      }
+
+      const legacyAuthFetch = vi.fn();
+      const legacyEnv = environment
+        ? { ...buildEnv(legacyAuthFetch), ENVIRONMENT: environment }
+        : buildEnv(legacyAuthFetch);
+      const legacyAliasResponse = await app.fetch(
+        buildUnauthenticatedRequest(
+          `${origin}/fantasy/mcp?auth=required`,
+          'initialize',
+          initializeParams
+        ),
+        legacyEnv,
+        mockExecutionContext()
+      );
+      expect(legacyAliasResponse.status, `${origin}/fantasy/mcp?auth=required`).toBe(200);
+      expect(legacyAuthFetch, `${origin}/fantasy/mcp?auth=required`).not.toHaveBeenCalled();
+    }
+  });
+
+  it('keeps public widget reads available on the auth-required endpoint', async () => {
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
+    ] as const) {
+      const authFetch = vi.fn();
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
+      const response = await app.fetch(
+        buildUnauthenticatedRequest(
+          `${origin}/mcp?auth=required`,
+          'resources/read',
+          { uri: USER_SESSION_WIDGET_URI }
+        ),
+        env,
+        mockExecutionContext()
+      );
+
+      expect(response.status, origin).toBe(200);
+      const payload = await parseJsonRpcResponse(response);
+      expect(
+        payload.result?.contents?.some((item) => item.uri === USER_SESSION_WIDGET_URI),
+        origin
+      ).toBe(true);
+      expect(authFetch, origin).not.toHaveBeenCalled();
+    }
+  });
+
+  it('omits the auth-required query from the authenticated token resource', async () => {
+    for (const [origin, environment] of [
+      [PROD_ORIGIN, undefined],
+      [PREVIEW_ORIGIN, 'preview'],
+    ] as const) {
+      const authFetch = vi.fn(async () =>
+        new Response(
+          JSON.stringify({ valid: true, userId: 'user-123', scope: 'mcp:read mcp:write', authType: 'oauth' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+      const env = environment
+        ? { ...buildEnv(authFetch), ENVIRONMENT: environment }
+        : buildEnv(authFetch);
+      const request = buildUnauthenticatedRequest(
+        `${origin}/mcp?auth=required`,
+        'tools/list'
+      );
+      request.headers.set('Authorization', 'Bearer test-token');
+
+      const response = await app.fetch(request, env, mockExecutionContext());
+
+      expect(response.status, origin).toBe(200);
+      expect(authFetch, origin).toHaveBeenCalledTimes(1);
+      const introspectRequest = authFetch.mock.calls[0]?.[0] as Request;
+      expect(introspectRequest.headers.get('X-Flaim-Expected-Resource'), origin).toBe(
+        `${origin}/mcp`
+      );
+    }
   });
 
   it('appends RFC 6750 error params to the api.flaim.app 401 when a presented token fails', async () => {

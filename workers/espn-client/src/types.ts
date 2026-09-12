@@ -16,8 +16,36 @@ export interface EspnLeagueResponse {
   currentMatchupPeriod?: number;
   status?: EspnLeagueStatus;
   settings?: EspnLeagueSettings;
+  draftDetail?: EspnDraftDetail;
   teams?: EspnTeam[];
   schedule?: EspnMatchup[];
+}
+
+/** ESPN's `mDraftDetail` payload. Empty pre-draft board slots omit `playerId`. */
+export interface EspnDraftDetail {
+  drafted?: boolean;
+  inProgress?: boolean;
+  picks?: EspnDraftPick[];
+}
+
+export interface EspnDraftPick {
+  id?: number;
+  roundId?: number;
+  roundPickNumber?: number;
+  overallPickNumber?: number;
+  playerId?: number;
+  teamId?: number;
+  bidAmount?: number;
+  keeper?: boolean;
+  reservedForKeeper?: boolean;
+  lineupSlotId?: number;
+  nominatingTeamId?: number;
+  tradeLocked?: boolean;
+  autoDraftTypeId?: number;
+}
+
+export function isEspnLeagueResponse(value: unknown): value is EspnLeagueResponse {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 export interface EspnLeagueStatus {
@@ -50,6 +78,31 @@ export interface EspnLeagueSettings {
     playoffSeedingRule?: string;
     playoffMatchupPeriodLength?: number;
   };
+  /**
+   * Keeper/draft-format settings. `keeperCount`/`keeperCountFuture` are the
+   * per-team keeper caps for this season / next season; `keeperCount > 0`
+   * is the keeper-league signal (there is no separate `isKeeperLeague`
+   * flag from ESPN). `isTradingEnabled` toggles DRAFT-PICK trading, not
+   * in-season player trades (see tradeSettings for that). Verified live
+   * 2026-08-23 (research brief §7) on real ESPN keeper leagues.
+   */
+  draftSettings?: {
+    keeperCount?: number;
+    keeperCountFuture?: number;
+    keeperOrderType?: string; // 'TRADITIONAL' | 'END_OF_DRAFT' | 'SELECTED_ROUND'
+    keeperDeadlineDate?: number | null; // epoch ms; ESPN sends explicit null for "no deadline set"
+    type?: string; // 'AUCTION' | 'SNAKE' | 'AUTOPICK' | 'OFFLINE' (draft type)
+    auctionBudget?: number;
+    isTradingEnabled?: boolean; // draft-PICK trading toggle, not season trades
+  };
+  /** In-season player-trade rules (distinct from draftSettings.isTradingEnabled). */
+  tradeSettings?: {
+    deadlineDate?: number | null; // epoch ms; ESPN sends explicit null for "no deadline set"
+    revisionHours?: number;
+    vetoVotesRequired?: number;
+    allowOutOfUniverse?: boolean;
+    max?: number;
+  };
 }
 
 export interface EspnTeam {
@@ -76,6 +129,16 @@ export interface EspnTeam {
   roster?: {
     entries?: EspnRosterEntry[];
   };
+  /**
+   * Keeper designations. `keeperPlayerIds` = players kept from last season
+   * into this season's draft (verified: equals the set of `keeper:true`
+   * draft picks). `futureKeeperPlayerIds` = next-season designations,
+   * observed populated only on the authenticated user's own team.
+   */
+  draftStrategy?: {
+    keeperPlayerIds?: number[];
+    futureKeeperPlayerIds?: number[];
+  };
 }
 
 export interface EspnTeamRecord {
@@ -89,6 +152,19 @@ export interface EspnTeamRecord {
 export interface EspnRosterEntry {
   playerPoolEntry?: {
     player?: EspnPlayer;
+    /**
+     * Keeper cost for THIS season (derived from last season's acquisition).
+     * 0 = no cost defined / not keeper-eligible. Unit follows
+     * draftSettings.type: AUCTION -> dollars, SNAKE/AUTOPICK -> draft round.
+     */
+    keeperValue?: number;
+    /**
+     * Keeper cost for NEXT season (= this season's draft/auction price).
+     * Follows the player through trades; reset to 0 when the player passes
+     * through free agency/waivers (observed on real league data, see
+     * research brief §7.3 — may be an ESPN default rather than universal).
+     */
+    keeperValueFuture?: number;
   };
   lineupSlotId?: number;
   acquisitionType?: string;
@@ -130,6 +206,12 @@ export interface EspnMatchupTeam {
   totalProjectedPoints?: number;
   totalProjectedPointsLive?: number;
   pointsByScoringPeriod?: Record<string, number>;
+  /**
+   * The week-specific lineup returned by ESPN's mBoxscore view. This is the
+   * only roster shape used for matchup player detail: rosterForMatchupPeriod
+   * does not preserve trustworthy lineup-slot assignments.
+   */
+  rosterForCurrentScoringPeriod?: EspnMatchupRoster;
   cumulativeScore?: {
     wins?: number;
     losses?: number;
@@ -140,6 +222,22 @@ export interface EspnMatchupTeam {
       result?: string | null;
       score?: number;
     }>;
+  };
+}
+
+export interface EspnMatchupRoster {
+  entries?: EspnMatchupRosterEntry[];
+}
+
+export interface EspnMatchupRosterEntry {
+  playerId?: number;
+  lineupSlotId?: number;
+  playerPoolEntry?: {
+    appliedStatTotal?: number | null;
+    player?: {
+      id?: number;
+      fullName?: string | null;
+    };
   };
 }
 
@@ -171,6 +269,7 @@ export interface ToolParams {
   season_year: number;
   team_id?: string;
   week?: number;
+  detail?: 'players';
   /** Normalized get_roster snapshot request injected by the gateway. */
   snapshot?: RosterSnapshot;
   type?: 'add' | 'drop' | 'trade' | 'waiver' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';

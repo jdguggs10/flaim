@@ -22,7 +22,7 @@ describe('getLeagueTeams', () => {
   });
 
   it('throws EspnAuthenticationFailed on 401 response', async () => {
-    mockFetch.mockResolvedValueOnce({
+    mockFetch.mockResolvedValue({
       ok: false,
       status: 401,
       statusText: 'Unauthorized',
@@ -104,6 +104,39 @@ describe('getLeagueTeams', () => {
         }),
       })
     );
+  });
+
+  it('uses leagueHistory directly and unwraps teams before 2018', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify([{
+        teams: [{ id: 7, name: 'Original Team' }],
+      }]), { status: 200 }),
+    );
+
+    const teams = await getLeagueTeams('{swid}', 's2token', '98765', 2017, 'flb');
+
+    expect(teams).toEqual([{ teamId: '7', teamName: 'Original Team' }]);
+    expect(mockFetch.mock.calls[0]?.[0]).toBe(
+      'https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/leagueHistory/98765?seasonId=2017&view=mStandings&view=mTeam',
+    );
+  });
+
+  it('retries a modern historical 401 through leagueHistory', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([{
+          teams: [{ id: 7, name: 'Historical Team' }],
+        }]), { status: 200 }),
+      );
+
+    const teams = await getLeagueTeams('{swid}', 's2token', '98765', 2023, 'flb');
+
+    expect(teams).toEqual([{ teamId: '7', teamName: 'Historical Team' }]);
+    expect(mockFetch.mock.calls.map(([url]) => url)).toEqual([
+      'https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/seasons/2023/segments/0/leagues/98765?view=mStandings&view=mTeam',
+      'https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb/leagueHistory/98765?seasonId=2023&view=mStandings&view=mTeam',
+    ]);
   });
 });
 

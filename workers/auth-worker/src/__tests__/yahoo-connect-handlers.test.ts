@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  fetchYahooLeaguesReadOnly,
   handleYahooAuthorize,
   handleYahooCallback,
   handleYahooCredentials,
@@ -12,12 +13,10 @@ import {
 import { YahooStorage } from '../yahoo-storage';
 
 // Mock YahooStorage
-vi.mock('../yahoo-storage', () => ({
-  REFRESH_COOLDOWN_OWNER_PREFIX: 'cooldown:',
-  YahooStorage: {
-    fromEnvironment: vi.fn(),
-  },
-}));
+vi.mock('../yahoo-storage', async () => {
+  const actual = await vi.importActual<typeof import('../yahoo-storage')>('../yahoo-storage');
+  return { ...actual, YahooStorage: { fromEnvironment: vi.fn() } };
+});
 
 // Mock global fetch for Yahoo OAuth API calls
 const mockFetch = vi.fn();
@@ -288,7 +287,9 @@ describe('yahoo-connect-handlers', () => {
 
       const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
 
+      const beforeCall = Date.now();
       const response = await handleYahooCallback(request, env, corsHeaders);
+      const afterCall = Date.now();
 
       expect(response.status).toBe(302);
       const location = response.headers.get('Location')!;
@@ -305,6 +306,11 @@ describe('yahoo-connect-handlers', () => {
           appFingerprint: await expectedAppFingerprint('test-yahoo-client-id'),
         })
       );
+      // Stored expiry should be buffered ~60s under the raw expires_in (3600s),
+      // to absorb the token-exchange round-trip (FLA-126).
+      const savedExpiresAt = mockStorage.saveYahooCredentials.mock.calls[0][0].expiresAt as Date;
+      expect(savedExpiresAt.getTime()).toBeGreaterThanOrEqual(beforeCall + 3540 * 1000);
+      expect(savedExpiresAt.getTime()).toBeLessThanOrEqual(afterCall + 3540 * 1000);
       expect(mockFetch).toHaveBeenCalledTimes(1);
 
       const exchangeRequest = mockFetch.mock.calls[0][1] as RequestInit;
@@ -596,7 +602,9 @@ describe('yahoo-connect-handlers', () => {
         )
       );
 
+      const beforeCall = Date.now();
       const response = await handleYahooCredentials(env, 'user_123', corsHeaders);
+      const afterCall = Date.now();
 
       expect(response.status).toBe(200);
       const body = (await response.json()) as Record<string, unknown>;
@@ -623,6 +631,11 @@ describe('yahoo-connect-handlers', () => {
         }),
         expect.any(String)
       );
+      // Stored expiry should be buffered ~60s under the raw expires_in (3600s),
+      // to absorb the token-exchange round-trip (FLA-126).
+      const updateCall = mockStorage.updateYahooCredentials.mock.calls[0][1] as { expiresAt: Date };
+      expect(updateCall.expiresAt.getTime()).toBeGreaterThanOrEqual(beforeCall + 3540 * 1000);
+      expect(updateCall.expiresAt.getTime()).toBeLessThanOrEqual(afterCall + 3540 * 1000);
     });
 
     it('omits redirect_uri from refresh-token grants and records the request shape in diagnostics', async () => {
@@ -798,6 +811,7 @@ describe('yahoo-connect-handlers', () => {
     });
 
     it('returns error when refresh fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'old-access-token',
@@ -822,11 +836,21 @@ describe('yahoo-connect-handlers', () => {
       expect(response.status).toBe(401);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.error).toBe('refresh_failed');
+      // The client-facing error_description is unchanged (FLA-363 only touches
+      // the console.error log line, not the response Flaim returns to callers).
       expect(body.error_description).toBe('Refresh token expired');
       expect(body.upstream_status).toBe(400);
       expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockStorage.releaseRefreshLease).toHaveBeenCalledWith('user_123', expect.any(String));
+
+      // FLA-363: the logged line carries the closed-set diagnostic class, never
+      // Yahoo's free-form error_description text.
+      const loggedRefreshFailureLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.includes('Yahoo token refresh failed'));
+      expect(loggedRefreshFailureLine).toContain('yahoo_permanent');
+      expect(loggedRefreshFailureLine).not.toContain('Refresh token expired');
     });
 
     it('classifies unexpected Yahoo refresh errors without retry metadata', async () => {
@@ -2555,6 +2579,24 @@ describe('yahoo-connect-handlers', () => {
       expect(body.lastUpdated).toBeUndefined();
       expect(body.health).toBeUndefined();
     });
+
+    it('logs the error name only when the lookup throws, never the raw message (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentialHealth.mockResolvedValue(null);
+      // archive-storage.ts embeds the raw Postgres message in this throw (FLA-370).
+      mockStorage.getYahooLeagues.mockRejectedValue(
+        new Error('Failed to get archived map: row 461.l.777 "Private Dynasty" is invalid')
+      );
+
+      const response = await handleYahooStatus(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(500);
+      const logged = errorSpy.mock.calls.flat().map(String).join(' ');
+      expect(logged).toContain('[yahoo-connect] Status error: Error');
+      expect(logged).not.toContain('461.l.777');
+      expect(logged).not.toContain('Private Dynasty');
+      expect(logged).not.toContain('Failed to get archived map');
+    });
   });
 
   // ===========================================================================
@@ -2844,11 +2886,13 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.acquireRefreshLease).not.toHaveBeenCalled();
       expect(mockStorage.updateYahooCredentials).not.toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(mockFetch.mock.calls[0][0]).toContain('/users;use_login=1/games/leagues');
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_types=full/leagues;out=teams?format=json'
+      );
       const yahooApiRequest = mockFetch.mock.calls[0][1] as RequestInit;
       expect(yahooApiRequest.body).toBeUndefined();
       const body = (await response.json()) as Record<string, unknown>;
-      expect(body.success).toBe(true);
+      expect(body).toMatchObject({ success: true, count: 0, leagues: [] });
     });
 
     it('loser waits and proceeds with fresh token after winner finishes', async () => {
@@ -3104,6 +3148,49 @@ describe('yahoo-connect-handlers', () => {
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
     });
 
+    it('logs a bounded upstream body when Yahoo league discovery returns HTTP 500', async () => {
+      // Yahoo returns a deterministic 500 for some accounts. Logging only the
+      // status hides Yahoo's own reason, so the 5xx branch reads a bounded
+      // slice of the body for diagnostics. The response contract is unchanged:
+      // still the retryable 503 built from the classification, with no upstream
+      // text leaking into it.
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+
+      const upstreamBody = `{"error":{"description":"${'x'.repeat(600)}"}}`;
+      mockFetch.mockResolvedValue(new Response(upstreamBody, { status: 500 }));
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(503);
+      const body = (await response.json()) as Record<string, unknown>;
+      expect(body.error).toBe('yahoo_api_temporarily_unavailable');
+      expect(body.retryable).toBe(true);
+      expect(body.upstream_status).toBe(500);
+      expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        `[yahoo-connect] discovery upstream 500 body: ${upstreamBody.slice(0, 500)}`
+      );
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[yahoo-connect] Yahoo API error during discovery: 500'
+      );
+      // Bounded: the 601st character of the body never reaches the log line.
+      const loggedBodyLine = errorSpy.mock.calls
+        .map((call) => String(call[0]))
+        .find((line) => line.startsWith('[yahoo-connect] discovery upstream'));
+      expect(loggedBodyLine).toBeDefined();
+      expect(loggedBodyLine).not.toContain(upstreamBody);
+      // And it stays out of the client-facing payload.
+      expect(JSON.stringify(body)).not.toContain('xxxx');
+    });
+
     it('surfaces the app-review outage message on an application-level 403 during discovery', async () => {
       // Yahoo's approval program denies the APP platform-wide. That is not the
       // user's connection and reconnecting cannot fix it, so discovery must say
@@ -3113,6 +3200,7 @@ describe('yahoo-connect-handlers', () => {
       // Yahoo"; the non-retryable path shows error_description verbatim.
       // Regression: this path used to say only "Yahoo API returned 403", which
       // is what a brand-new Yahoo user saw during draft season.
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'fresh-token',
@@ -3141,11 +3229,22 @@ describe('yahoo-connect-handlers', () => {
       expect(body.retry_after).toBeUndefined();
       expect(body.upstream_status).toBe(403);
       expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+
+      // FLA-363: the access_denied body is read for classification only — the
+      // log carries the boolean it decided, never Yahoo's raw response text.
+      const loggedLines = logSpy.mock.calls.map((call) => String(call[0]));
+      expect(loggedLines).toContain(
+        '[yahoo-connect] discovery access_denied body classified: appLevelDenial=true'
+      );
+      for (const line of loggedLines) {
+        expect(line).not.toContain('not authorized to perform this action');
+      }
     });
 
     it('keeps the generic message on a resource-level 403 during discovery', async () => {
       // A 403 about a specific resource is not the platform-wide denial and
       // must not be dressed up as one.
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'fresh-token',
@@ -3169,9 +3268,18 @@ describe('yahoo-connect-handlers', () => {
       expect(body.error_description).toBe('Yahoo API returned 403');
       expect(body.retryable).toBeUndefined();
       expect(body.upstream_status).toBe(403);
+
+      // FLA-363: still classified (not app-level here), still never the raw body.
+      const loggedLines = logSpy.mock.calls.map((call) => String(call[0]));
+      expect(loggedLines).toContain(
+        '[yahoo-connect] discovery access_denied body classified: appLevelDenial=false'
+      );
+      for (const line of loggedLines) {
+        expect(line).not.toContain('not allowed to view this league');
+      }
     });
 
-    it('stores Yahoo team_key during league discovery', async () => {
+    it('stores historical multi-sport league and team associations', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'fresh-token',
@@ -3191,24 +3299,51 @@ describe('yahoo-connect-handlers', () => {
                     { guid: 'guid-123' },
                     {
                       games: {
-                        count: 1,
+                        count: 2,
                         0: {
                           game: [
-                            { code: 'nfl', season: '2025' },
+                            { code: 'nfl', season: '2026', game_type: 'full' },
                             {
                               leagues: {
                                 count: 1,
                                 0: {
                                   league: [
-                                    { league_key: '449.l.123', name: 'Test Yahoo League' },
+                                    { league_key: '461.l.123', name: 'Football League', renew: '' },
                                     {
                                       teams: {
                                         count: 1,
                                         0: {
                                           team: [[
-                                            { team_key: '449.l.123.t.3' },
+                                            { team_key: '461.l.123.t.3' },
                                             { team_id: '3' },
-                                            { name: 'Gerry Team' },
+                                            { name: 'Football Team' },
+                                          ]],
+                                        },
+                                      },
+                                    },
+                                  ],
+                                },
+                              },
+                            },
+                          ],
+                        },
+                        1: {
+                          game: [
+                            { code: 'mlb', season: '2007', game_type: 'full' },
+                            {
+                              leagues: {
+                                count: 1,
+                                0: {
+                                  league: [
+                                    { league_key: '175.l.456', name: 'Baseball League', renew: '' },
+                                    {
+                                      teams: {
+                                        count: 1,
+                                        0: {
+                                          team: [[
+                                            { team_key: '175.l.456.t.7' },
+                                            { team_id: '7' },
+                                            { name: 'Baseball Team' },
                                           ]],
                                         },
                                       },
@@ -3233,14 +3368,137 @@ describe('yahoo-connect-handlers', () => {
       const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      expect(mockStorage.upsertYahooLeague).toHaveBeenCalledWith(
-        expect.objectContaining({
-          clerkUserId: 'user_123',
-          leagueKey: '449.l.123',
-          teamId: '3',
-          teamKey: '449.l.123.t.3',
-          teamName: 'Gerry Team',
-        })
+      expect(mockStorage.upsertYahooLeague).toHaveBeenCalledTimes(2);
+      expect(mockStorage.upsertYahooLeague.mock.calls.map(([league]) => ({
+        sport: league.sport,
+        seasonYear: league.seasonYear,
+        leagueKey: league.leagueKey,
+        teamId: league.teamId,
+        teamKey: league.teamKey,
+        teamName: league.teamName,
+      }))).toEqual([
+        {
+          sport: 'football', seasonYear: 2026, leagueKey: '461.l.123',
+          teamId: '3', teamKey: '461.l.123.t.3', teamName: 'Football Team',
+        },
+        {
+          sport: 'baseball', seasonYear: 2007, leagueKey: '175.l.456',
+          teamId: '7', teamKey: '175.l.456.t.7', teamName: 'Baseball Team',
+        },
+      ]);
+    });
+
+    it('logs the error name only when the discovery body fails to parse (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      // A 200 whose body is not JSON: apiResponse.json() throws a SyntaxError
+      // whose message quotes a prefix of Yahoo's raw response body.
+      mockFetch.mockResolvedValue(
+        new Response('<html>league 461.l.777 "Private Dynasty"</html>', { status: 200 })
+      );
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(500);
+      const logged = errorSpy.mock.calls
+        .map((call) => call.map(String).join(' '))
+        .filter((line) => line.startsWith('[yahoo-connect] Discovery error:'))
+        .join(' ');
+      expect(logged).toBe('[yahoo-connect] Discovery error: SyntaxError');
+      expect(logged).not.toContain('461.l.777');
+      expect(logged).not.toContain('Private Dynasty');
+    });
+  });
+
+  describe('fetchYahooLeaguesReadOnly', () => {
+    it('logs the error name only when the read-only body fails to parse (FLA-368)', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      mockFetch.mockResolvedValue(
+        new Response('<html>league 461.l.777 "Private Dynasty"</html>', { status: 200 })
+      );
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toMatchObject({ status: 'error' });
+      const logged = errorSpy.mock.calls
+        .map((call) => call.map(String).join(' '))
+        .filter((line) => line.startsWith('[yahoo-connect] Read-only discovery error:'))
+        .join(' ');
+      expect(logged).toBe('[yahoo-connect] Read-only discovery error: SyntaxError');
+      expect(logged).not.toContain('461.l.777');
+      expect(logged).not.toContain('Private Dynasty');
+    });
+
+    it('uses the same full-game discovery filter and preserves an empty result', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      mockFetch.mockResolvedValue(
+        new Response(
+          JSON.stringify({ fantasy_content: { users: { count: 0 } } }),
+          { status: 200 }
+        )
+      );
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toEqual({ status: 'ok', leagues: [] });
+      expect(mockFetch).toHaveBeenCalledOnce();
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_types=full/leagues;out=teams?format=json'
+      );
+    });
+
+    it('classifies a timed-out leagues fetch as yahoo_timeout after a successful token refresh (FLA-188)', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'old-access-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 2 * 60 * 1000), // within the refresh buffer
+        needsRefresh: true,
+      });
+
+      // First fetch: Yahoo token refresh succeeds.
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            access_token: 'new-access-token',
+            refresh_token: 'new-refresh-token',
+            expires_in: 3600,
+          }),
+          { status: 200 }
+        )
+      );
+      // Second fetch: the leagues lookup times out.
+      mockFetch.mockRejectedValueOnce(new DOMException('The operation timed out.', 'TimeoutError'));
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toEqual({ status: 'error', errorCode: 'yahoo_timeout', retryable: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // The timeout classification only matters if the leagues request actually
+      // carries an abort signal — assert it's still wired up (FLA-188).
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.any(String),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
   });

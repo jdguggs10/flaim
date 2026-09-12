@@ -13,6 +13,7 @@ Lightweight in-repo frontend standards.
 - Use `Alert`, `Badge`, `Button`, and `Card` variants consistently.
 - Keep destructive actions visually distinct.
 - Use concise, plain-language UI copy.
+- Use monochrome Tabler outline icons for sport indicators, with a 1.5 stroke and inherited text color. Treat icons as decorative when a visible sport label supplies their meaning; give an icon-only indicator an accessible name. Avoid native sport emoji so the artwork stays consistent across platforms.
 
 ## Copy: Homepage vs Docs
 

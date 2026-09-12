@@ -8,6 +8,17 @@ const mockEspnStorage = vi.hoisted(() => ({
   getCredentialMetadata: vi.fn(),
 }));
 
+const mockHistoryStorage = vi.hoisted(() => ({
+  activeForUser: vi.fn(),
+  latestForUser: vi.fn(),
+  credentials: vi.fn(),
+  createOrCoalesce: vi.fn(),
+  setCurrentLeagues: vi.fn(),
+  terminal: vi.fn(),
+}));
+
+const mockStartQueuedEspnHistoryJob = vi.hoisted(() => vi.fn());
+
 vi.mock('../supabase-storage', () => ({
   EspnSupabaseStorage: {
     fromEnvironment: vi.fn().mockReturnValue(mockEspnStorage),
@@ -15,7 +26,27 @@ vi.mock('../supabase-storage', () => ({
 }));
 
 vi.mock('../v3/league-discovery', () => ({
+  discoverAndSaveCurrentLeagues: vi.fn(),
   discoverAndSaveLeagues: vi.fn(),
+}));
+
+vi.mock('../espn-history', () => ({
+  EspnHistoryRefreshWorkflow: class {},
+  EspnHistoryJobStorage: {
+    fromEnvironment: vi.fn().mockReturnValue(mockHistoryStorage),
+  },
+  durableHistoryEnabledFor: (
+    env: { ESPN_DURABLE_HISTORY_ENABLED?: string; ESPN_DURABLE_HISTORY_USERS?: string },
+    userId: string,
+  ) => env.ESPN_DURABLE_HISTORY_ENABLED === 'true'
+    && (env.ESPN_DURABLE_HISTORY_USERS ?? '').split(',').map((value) => value.trim()).includes(userId),
+  publicHistoryStatus: (job: { id: string; status: string } | null) => job ? ({
+    jobId: job.id,
+    state: job.status,
+    counts: { planned: 0, completed: 0, skipped: 0, failed: 0 },
+    retryable: false,
+  }) : null,
+  startQueuedEspnHistoryJob: mockStartQueuedEspnHistoryJob,
 }));
 
 vi.mock('../oauth-storage', () => ({
@@ -60,6 +91,7 @@ vi.mock('../sleeper-connect-handlers', () => ({
 
 const mockSyncState = vi.hoisted(() => ({
   acquireLease: vi.fn(),
+  transferLease: vi.fn(),
   settle: vi.fn(),
 }));
 
@@ -93,7 +125,7 @@ import { refreshLeaguesForUser } from '../league-refresh';
 import { validateOAuthToken } from '../oauth-handlers';
 import { refreshSleeperLeaguesFromStoredConnection } from '../sleeper-connect-handlers';
 import { handleYahooDiscover } from '../yahoo-connect-handlers';
-import { discoverAndSaveLeagues } from '../v3/league-discovery';
+import { discoverAndSaveCurrentLeagues, discoverAndSaveLeagues } from '../v3/league-discovery';
 
 const ISSUER = 'https://flaim-test.clerk.accounts.dev';
 const KEY_ID = 'league-refresh-route-test-key';
@@ -193,7 +225,17 @@ beforeEach(() => {
     },
   });
   mockSyncState.acquireLease.mockResolvedValue({ acquired: true });
+  mockSyncState.transferLease.mockResolvedValue(true);
   mockSyncState.settle.mockResolvedValue(undefined);
+  mockHistoryStorage.activeForUser.mockResolvedValue(null);
+  mockHistoryStorage.latestForUser.mockResolvedValue(null);
+  mockHistoryStorage.credentials.mockResolvedValue({
+    swid: '{swid}',
+    s2: 's2token',
+    updatedAt: '2026-08-26T20:00:00.000Z',
+  });
+  mockHistoryStorage.setCurrentLeagues.mockResolvedValue(true);
+  mockHistoryStorage.terminal.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -253,6 +295,163 @@ describe('POST /leagues/refresh', () => {
       error_description: 'platforms may include at most 3 entries',
     });
     expect(refreshSleeperLeaguesFromStoredConnection).not.toHaveBeenCalled();
+  });
+
+  it('returns current ESPN leagues immediately and transfers web history to a durable job', async () => {
+    const userId = 'user_durable_web';
+    const token = await signedClerkToken(userId);
+    const currentResult = {
+      discovered: [{
+        sport: 'baseball',
+        leagueId: '123',
+        leagueName: 'Current League',
+        teamId: '8',
+        teamName: 'Current Team',
+        seasonYear: 2026,
+      }],
+      currentSeason: { found: 1, added: 0, alreadySaved: 1, refreshed: 1 },
+      savedLeagues: [{
+        leagueId: '123',
+        gameId: 'flb',
+        leagueName: 'Current League',
+        teamId: 8,
+        teamName: 'Current Team',
+        seasonId: 2026,
+      }],
+    };
+    const job = { id: 'job-1', status: 'queued', workflow_instance_id: null };
+    vi.mocked(discoverAndSaveCurrentLeagues).mockResolvedValue(currentResult as never);
+    mockHistoryStorage.createOrCoalesce.mockResolvedValue({ job, created: true });
+    mockStartQueuedEspnHistoryJob.mockResolvedValue({
+      job: { ...job, workflow_instance_id: 'espn-history-job-1' },
+      created: true,
+    });
+
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), {
+      ...baseEnv,
+      ESPN_DURABLE_HISTORY_ENABLED: 'true',
+      ESPN_DURABLE_HISTORY_USERS: userId,
+      ESPN_HISTORY_REFRESH: { create: vi.fn() },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as any;
+    expect(body.results.espn.details.history).toMatchObject({ jobId: 'job-1', state: 'queued' });
+    expect(discoverAndSaveCurrentLeagues).toHaveBeenCalledOnce();
+    expect(discoverAndSaveLeagues).not.toHaveBeenCalled();
+    expect(mockHistoryStorage.setCurrentLeagues).toHaveBeenCalledWith('job-1', currentResult.savedLeagues);
+    expect(mockSyncState.transferLease).toHaveBeenCalledWith(
+      userId,
+      'espn',
+      expect.any(String),
+      'history:job-1',
+    );
+    expect(mockSyncState.settle).not.toHaveBeenCalled();
+  });
+
+  it('does not queue history when any discovered current ESPN row failed to save', async () => {
+    const userId = 'user_partial_current_write';
+    const token = await signedClerkToken(userId);
+    vi.mocked(discoverAndSaveCurrentLeagues).mockResolvedValue({
+      discovered: [],
+      currentSeason: { found: 2, added: 0, alreadySaved: 0, refreshed: 0 },
+      savedLeagues: [{ leagueId: '123' }],
+    } as never);
+
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), {
+      ...baseEnv,
+      ESPN_DURABLE_HISTORY_ENABLED: 'true',
+      ESPN_DURABLE_HISTORY_USERS: userId,
+      ESPN_HISTORY_REFRESH: { create: vi.fn() },
+    });
+
+    const body = await res.json() as any;
+    expect(body.results.espn).toMatchObject({ status: 'error', httpStatus: 500 });
+    expect(mockHistoryStorage.createOrCoalesce).not.toHaveBeenCalled();
+    expect(mockSyncState.transferLease).not.toHaveBeenCalled();
+    expect(mockSyncState.settle).toHaveBeenCalledOnce();
+  });
+
+  it('returns an existing caller-owned history job without taking another ESPN lease', async () => {
+    const userId = 'user_existing_history';
+    const token = await signedClerkToken(userId);
+    mockHistoryStorage.activeForUser.mockResolvedValue({ id: 'job-active', status: 'running' });
+    mockEspnStorage.getCurrentSeasonLeagues.mockResolvedValue([]);
+
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), {
+      ...baseEnv,
+      ESPN_DURABLE_HISTORY_ENABLED: 'true',
+      ESPN_DURABLE_HISTORY_USERS: userId,
+      ESPN_HISTORY_REFRESH: { create: vi.fn() },
+    });
+
+    const body = await res.json() as any;
+    expect(body.results.espn.details.history).toMatchObject({ jobId: 'job-active', state: 'running' });
+    expect(mockSyncState.acquireLease).not.toHaveBeenCalled();
+    expect(discoverAndSaveCurrentLeagues).not.toHaveBeenCalled();
+  });
+
+  it('terminalizes the job and releases the request lease when history lease transfer fails', async () => {
+    const userId = 'user_transfer_failure';
+    const token = await signedClerkToken(userId);
+    const currentResult = {
+      discovered: [{ sport: 'football', leagueId: '1', seasonYear: 2026 }],
+      currentSeason: { found: 1, added: 1, alreadySaved: 0, refreshed: 0 },
+      savedLeagues: [{
+        leagueId: '1', gameId: 'ffl', leagueName: 'League', teamId: 1,
+        teamName: 'Team', seasonId: 2026,
+      }],
+    };
+    const job = { id: 'job-transfer', status: 'queued', workflow_instance_id: null };
+    vi.mocked(discoverAndSaveCurrentLeagues).mockResolvedValue(currentResult as never);
+    mockHistoryStorage.createOrCoalesce.mockResolvedValue({ job, created: true });
+    mockSyncState.transferLease.mockResolvedValue(false);
+
+    const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ platforms: ['espn'] }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }), {
+      ...baseEnv,
+      ESPN_DURABLE_HISTORY_ENABLED: 'true',
+      ESPN_DURABLE_HISTORY_USERS: userId,
+      ESPN_HISTORY_REFRESH: { create: vi.fn() },
+    });
+
+    const body = await res.json() as any;
+    expect(body.results.espn.status).toBe('error');
+    expect(mockHistoryStorage.terminal).toHaveBeenCalledWith(
+      'job-transfer',
+      'failed',
+      'history_lease_transfer_failed',
+      expect.any(String),
+    );
+    expect(mockStartQueuedEspnHistoryJob).not.toHaveBeenCalled();
+    expect(mockSyncState.settle).toHaveBeenCalledOnce();
   });
 
   it('rejects empty platform arrays before provider refresh runs', async () => {
@@ -479,6 +678,27 @@ describe('POST /internal/leagues/refresh', () => {
 });
 
 describe('refreshLeaguesForUser', () => {
+  it('keeps MCP ESPN refresh synchronous even when the durable web rollout is enabled', async () => {
+    const userId = 'user_mcp_sync';
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    vi.mocked(discoverAndSaveLeagues).mockResolvedValue({
+      discovered: [],
+      currentSeason: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+      pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+    });
+
+    await refreshLeaguesForUser({
+      ...baseEnv,
+      ESPN_DURABLE_HISTORY_ENABLED: 'true',
+      ESPN_DURABLE_HISTORY_USERS: userId,
+      ESPN_HISTORY_REFRESH: { create: vi.fn() },
+    }, userId, ['espn'], {}, undefined, 'mcp');
+
+    expect(discoverAndSaveLeagues).toHaveBeenCalledOnce();
+    expect(discoverAndSaveCurrentLeagues).not.toHaveBeenCalled();
+    expect(mockHistoryStorage.createOrCoalesce).not.toHaveBeenCalled();
+  });
+
   it('starts requested platform refreshes concurrently', async () => {
     mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
     vi.mocked(discoverAndSaveLeagues).mockResolvedValue({

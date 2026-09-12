@@ -37,11 +37,17 @@ export function createGetStandingsHandler(): HandlerFn {
         // Bracket is the only source of outcome data for completed seasons — propagate errors
         const bracketRes = await sleeperFetch(`/league/${league_id}/winners_bracket`);
         if (!bracketRes.ok) return handleSleeperError(bracketRes);
-        bracket = await bracketRes.json();
+        // Sleeper returns HTTP 200 with a literal `null` body before a bracket exists —
+        // coerce non-array payloads to an empty array so downstream .length/array access is safe.
+        const parsedBracket: unknown = await bracketRes.json();
+        bracket = Array.isArray(parsedBracket) ? (parsedBracket as SleeperBracketMatch[]) : [];
       } else if (league.status === 'in_season') {
         const bracketRes = await sleeperFetch(`/league/${league_id}/winners_bracket`);
         if (bracketRes.ok) {
-          bracket = await bracketRes.json();
+          // Sleeper returns HTTP 200 with a literal `null` body before a bracket exists —
+          // coerce non-array payloads to an empty array so downstream .length/array access is safe.
+          const parsedBracket: unknown = await bracketRes.json();
+          bracket = Array.isArray(parsedBracket) ? (parsedBracket as SleeperBracketMatch[]) : [];
         } else {
           console.warn(`[get-standings] Bracket fetch failed for league ${league_id} (status ${bracketRes.status}); degrading seasonPhase to regular_season`);
         }

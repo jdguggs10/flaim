@@ -320,7 +320,7 @@ describe('yahoo-transactions', () => {
     expect(normalized).toHaveLength(1);
     expect(normalized[0]).toMatchObject({
       type: 'pending_trade',
-      status: 'unknown',
+      status: 'pending',
       team_ids: ['449.l.123.t.1', '449.l.123.t.5'],
     });
   });
@@ -368,5 +368,414 @@ describe('yahoo-transactions', () => {
       faab_bid: 25,
     });
     expect(normalized[0].players_added).toEqual([{ id: '99', name: 'Waiver Target' }]);
+  });
+
+  it('normalizes a pending trade with directional trade_sides (array-shaped transaction_data)', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  {
+                    status: 'proposed',
+                    trade_note: 'Synthetic proposed trade for testing',
+                    trade_proposed_time: '1700400000',
+                    tradee_team_key: '449.l.123.t.5',
+                    trader_team_key: '449.l.123.t.1',
+                    transaction_key: '449.l.123.pt.21',
+                    type: 'pending_trade',
+                  },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [
+                            { player_key: '449.p.1001' },
+                            { player_id: '1001' },
+                            { name: { full: 'Synthetic Pitcher One' } },
+                            { editorial_team_abbr: 'ATL' },
+                            { display_position: 'SP' },
+                            { position_type: 'P' },
+                          ],
+                          {
+                            transaction_data: [
+                              {
+                                destination_team_key: '449.l.123.t.5',
+                                destination_type: 'team',
+                                source_team_key: '449.l.123.t.1',
+                                source_type: 'team',
+                                type: 'pending_trade',
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [
+                            { player_key: '449.p.1002' },
+                            { player_id: '1002' },
+                            { name: { full: 'Synthetic Outfielder Two' } },
+                            { editorial_team_abbr: 'SEA' },
+                            { display_position: 'OF' },
+                            { position_type: 'B' },
+                          ],
+                          {
+                            transaction_data: [
+                              {
+                                destination_team_key: '449.l.123.t.5',
+                                destination_type: 'team',
+                                source_team_key: '449.l.123.t.1',
+                                source_type: 'team',
+                                type: 'pending_trade',
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      2: {
+                        player: [
+                          [
+                            { player_key: '449.p.1003' },
+                            { player_id: '1003' },
+                            { name: { full: 'Synthetic Infielder Three' } },
+                            { editorial_team_abbr: 'SD' },
+                            { display_position: '3B' },
+                            { position_type: 'B' },
+                          ],
+                          {
+                            transaction_data: [
+                              {
+                                destination_team_key: '449.l.123.t.1',
+                                destination_type: 'team',
+                                source_team_key: '449.l.123.t.5',
+                                source_type: 'team',
+                                type: 'pending_trade',
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      count: 3,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    const txn = normalized[0];
+    expect(txn).toMatchObject({
+      transaction_id: '449.l.123.pt.21',
+      type: 'pending_trade',
+      status: 'pending',
+    });
+    expect(txn.players_added).toEqual([]);
+    expect(txn.players_dropped).toEqual([]);
+    expect(txn.trade_sides).toEqual([
+      {
+        team_id: '449.l.123.t.1',
+        acquired: [{ id: '1003', name: 'Synthetic Infielder Three', position: '3B', team: 'SD' }],
+        gave_up: [
+          { id: '1001', name: 'Synthetic Pitcher One', position: 'SP', team: 'ATL' },
+          { id: '1002', name: 'Synthetic Outfielder Two', position: 'OF', team: 'SEA' },
+        ],
+      },
+      {
+        team_id: '449.l.123.t.5',
+        acquired: [
+          { id: '1001', name: 'Synthetic Pitcher One', position: 'SP', team: 'ATL' },
+          { id: '1002', name: 'Synthetic Outfielder Two', position: 'OF', team: 'SEA' },
+        ],
+        gave_up: [{ id: '1003', name: 'Synthetic Infielder Three', position: '3B', team: 'SD' }],
+      },
+    ]);
+  });
+
+  it('normalizes a completed trade with directional trade_sides (object-shaped transaction_data)', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.9' },
+                  { type: 'trade' },
+                  { status: 'successful' },
+                  { timestamp: '1700500000' },
+                  { trader_team_key: '449.l.123.t.2', tradee_team_key: '449.l.123.t.7' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [
+                            { player_id: '2001' },
+                            { name: { full: 'Synthetic Guard One' } },
+                            { display_position: 'PG' },
+                            { editorial_team_abbr: 'BOS' },
+                          ],
+                          {
+                            transaction_data: {
+                              type: 'trade',
+                              source_team_key: '449.l.123.t.2',
+                              destination_team_key: '449.l.123.t.7',
+                            },
+                          },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [
+                            { player_id: '2002' },
+                            { name: { full: 'Synthetic Forward Two' } },
+                            { display_position: 'SF' },
+                            { editorial_team_abbr: 'MIA' },
+                          ],
+                          {
+                            transaction_data: {
+                              type: 'trade',
+                              source_team_key: '449.l.123.t.7',
+                              destination_team_key: '449.l.123.t.2',
+                            },
+                          },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    const txn = normalized[0];
+    expect(txn).toMatchObject({
+      transaction_id: '449.l.123.tr.9',
+      type: 'trade',
+      status: 'complete',
+    });
+    expect(txn.players_added).toEqual([]);
+    expect(txn.players_dropped).toEqual([]);
+    expect(txn.trade_sides).toEqual([
+      {
+        team_id: '449.l.123.t.2',
+        acquired: [{ id: '2002', name: 'Synthetic Forward Two', position: 'SF', team: 'MIA' }],
+        gave_up: [{ id: '2001', name: 'Synthetic Guard One', position: 'PG', team: 'BOS' }],
+      },
+      {
+        team_id: '449.l.123.t.7',
+        acquired: [{ id: '2001', name: 'Synthetic Guard One', position: 'PG', team: 'BOS' }],
+        gave_up: [{ id: '2002', name: 'Synthetic Forward Two', position: 'SF', team: 'MIA' }],
+      },
+    ]);
+  });
+
+  it('maps accepted trade status to pending', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.pt.22' },
+                  { type: 'pending_trade' },
+                  { status: 'accepted' },
+                  { trader_team_key: '449.l.123.t.1', tradee_team_key: '449.l.123.t.5' },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0].status).toBe('pending');
+  });
+
+  it('omits trade_sides when a trade player is missing a destination team key', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.10' },
+                  { type: 'trade' },
+                  { status: 'successful' },
+                  { timestamp: '1700600000' },
+                  { trader_team_key: '449.l.123.t.2', tradee_team_key: '449.l.123.t.7' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [{ player_id: '2001' }, { name: { full: 'Synthetic Guard One' } }],
+                          {
+                            transaction_data: {
+                              type: 'trade',
+                              source_team_key: '449.l.123.t.2',
+                              destination_team_key: '449.l.123.t.7',
+                            },
+                          },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [{ player_id: '2002' }, { name: { full: 'Synthetic Forward Two' } }],
+                          {
+                            transaction_data: {
+                              type: 'trade',
+                              source_team_key: '449.l.123.t.7',
+                              // destination_team_key intentionally missing
+                            },
+                          },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0].trade_sides).toBeUndefined();
+  });
+
+  it('builds trade_sides from player movements when trader/tradee keys are absent', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.12' },
+                  { type: 'trade' },
+                  { status: 'successful' },
+                  { timestamp: '1700800000' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [{ player_id: '2001' }],
+                          { transaction_data: { type: 'trade', source_team_key: '449.l.123.t.7', destination_team_key: '449.l.123.t.2' } },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [{ player_id: '2002' }],
+                          { transaction_data: { type: 'trade', source_team_key: '449.l.123.t.2', destination_team_key: '449.l.123.t.7' } },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized[0].trade_sides).toEqual([
+      { team_id: '449.l.123.t.7', acquired: [{ id: '2002' }], gave_up: [{ id: '2001' }] },
+      { team_id: '449.l.123.t.2', acquired: [{ id: '2001' }], gave_up: [{ id: '2002' }] },
+    ]);
+  });
+
+  it('keeps trade_sides when a trade row also carries a non-trade drop', () => {
+    const raw = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.123' },
+          {
+            transactions: {
+              0: {
+                transaction: [
+                  { transaction_key: '449.l.123.tr.11' },
+                  { type: 'trade' },
+                  { status: 'successful' },
+                  { timestamp: '1700700000' },
+                  { trader_team_key: '449.l.123.t.2', tradee_team_key: '449.l.123.t.7' },
+                  {
+                    players: {
+                      0: {
+                        player: [
+                          [{ player_id: '2001' }, { name: { full: 'Synthetic Guard One' } }],
+                          {
+                            transaction_data: {
+                              type: 'trade',
+                              source_team_key: '449.l.123.t.2',
+                              destination_team_key: '449.l.123.t.7',
+                            },
+                          },
+                        ],
+                      },
+                      1: {
+                        player: [
+                          [{ player_id: '2003' }, { name: { full: 'Synthetic Bench Three' } }],
+                          {
+                            transaction_data: {
+                              type: 'drop',
+                              source_team_key: '449.l.123.t.7',
+                              destination_type: 'waivers',
+                            },
+                          },
+                        ],
+                      },
+                      count: 2,
+                    },
+                  },
+                ],
+              },
+              count: 1,
+            },
+          },
+        ],
+      },
+    };
+
+    const normalized = normalizeYahooTransactions(raw);
+    expect(normalized).toHaveLength(1);
+    expect(normalized[0].type).toBe('trade');
+    expect(normalized[0].players_dropped).toEqual([{ id: '2003', name: 'Synthetic Bench Three' }]);
+    expect(normalized[0].trade_sides).toEqual([
+      { team_id: '449.l.123.t.2', acquired: [], gave_up: [{ id: '2001', name: 'Synthetic Guard One' }] },
+      { team_id: '449.l.123.t.7', acquired: [{ id: '2001', name: 'Synthetic Guard One' }], gave_up: [] },
+    ]);
   });
 });

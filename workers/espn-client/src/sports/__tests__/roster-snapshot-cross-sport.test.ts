@@ -125,7 +125,7 @@ describe('espn get_roster snapshot contract', () => {
       expect(data.roster[0]).not.toHaveProperty('proTeam');
       expect(data.roster[0]).not.toHaveProperty('injuryStatus');
       // this fixture entry also carries no acquisitionType/acquisitionDate
-      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false });
+      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false, keeperValueFutureAvailable: false });
     });
 
     it('keeps proTeam/injuryStatus on the current roster', async () => {
@@ -219,7 +219,7 @@ describe('espn get_roster snapshot contract', () => {
       expect(data.snapshot).toEqual({ type: 'date', date: '2024-04-15', providerScoringPeriodId: 6 });
       // historical entries without acquisition fields flag the limitation,
       // alongside the always-on historical playerProTeamAvailable flag (FLA-278)
-      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false });
+      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false, keeperValueFutureAvailable: false });
     });
 
     it('omits the acquisition limitation but keeps playerProTeamAvailable when every historical entry carries acquisition data', async () => {
@@ -241,7 +241,7 @@ describe('espn get_roster snapshot contract', () => {
       // acquisition metadata is present, but the snapshot is still historical, so
       // playerProTeamAvailable: false remains — ESPN's mRoster payload never
       // carries historical pro-team/injury data regardless of acquisition detail.
-      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false, keeperValueFutureAvailable: false });
     });
 
     const partialAcquisitionEntries: Array<[string, Record<string, unknown>]> = [
@@ -273,7 +273,7 @@ describe('espn get_roster snapshot contract', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as { limitations?: Record<string, unknown> };
-      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false });
+      expect(data.limitations).toEqual({ acquisitionMetadataAvailable: false, playerProTeamAvailable: false, keeperValueFutureAvailable: false });
     });
 
     it('rejects a malformed injected snapshot without degrading to current', async () => {
@@ -329,7 +329,7 @@ describe('espn get_roster snapshot contract', () => {
       expect(data.roster[0]).not.toHaveProperty('proTeam');
       expect(data.roster[0]).not.toHaveProperty('injuryStatus');
       // acquisition metadata is complete here, so only the pro-team flag is set
-      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false, keeperValueFutureAvailable: false });
     });
 
     it('keeps proTeam/injuryStatus on the current roster', async () => {

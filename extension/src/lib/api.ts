@@ -176,6 +176,19 @@ export interface DiscoverResponse {
   discovered: DiscoveredLeague[];
   currentSeason: SeasonCounts;
   pastSeasons: SeasonCounts;
+  history?: EspnHistoryStatus | null;
+}
+
+export interface EspnHistoryStatus {
+  jobId: string;
+  state: 'queued' | 'running' | 'succeeded' | 'partial' | 'failed' | 'superseded' | 'cancelled';
+  counts: {
+    planned: number;
+    completed: number;
+    skipped: number;
+    failed: number;
+  };
+  retryable: boolean;
 }
 
 /**
@@ -198,4 +211,21 @@ export async function discoverLeagues(token: string): Promise<DiscoverResponse> 
   }
 
   return response.json() as Promise<DiscoverResponse>;
+}
+
+/** Caller-owned status for a durable ESPN history refresh. */
+export async function getEspnHistoryStatus(token: string): Promise<EspnHistoryStatus | null> {
+  const apiBase = await detectApiBase();
+  const response = await fetchWithTimeout(`${apiBase}/history`, {
+    method: 'GET',
+    headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
+    throw new Error(error.error_description || error.error || 'History status check failed');
+  }
+
+  const data = await response.json() as { history?: EspnHistoryStatus | null };
+  return data.history ?? null;
 }

@@ -22,7 +22,7 @@
  */
 
 import { Hono, Context } from 'hono';
-import { EspnSupabaseStorage, MAX_LEAGUES_PER_USER } from './supabase-storage';
+import { EspnSupabaseStorage } from './supabase-storage';
 import { EspnCredentials, EspnLeague, AutomaticLeagueDiscoveryFailed } from './espn-types';
 import {
   handleMetadataDiscovery,
@@ -47,9 +47,13 @@ import {
 } from './extension-handlers';
 import {
   discoverAndSaveLeagues,
+  discoverAndSaveCurrentLeagues,
   type DiscoveredLeague,
   type CurrentSeasonLeague,
 } from './v3/league-discovery';
+import { beginEspnLeagueMutation, EspnHistoryRefreshWorkflow as EspnHistoryRefreshWorkflowBase, EspnHistoryJobStorage, durableHistoryEnabledFor, publicHistoryStatus, startQueuedEspnHistoryJob } from './espn-history';
+// Wrangler resolves Workflow named entrypoints from this module itself.
+export class EspnHistoryRefreshWorkflow extends EspnHistoryRefreshWorkflowBase {}
 import {
   handleYahooAuthorize,
   handleYahooCallback,
@@ -63,6 +67,7 @@ import {
 } from './yahoo-connect-handlers';
 import { YahooStorage, type YahooLeague } from './yahoo-storage';
 import { ArchiveStorage, archivedKey, type ArchivePlatform, type ArchiveSport, type ArchiveMode, type ArchivedFilter } from './archive-storage';
+import { SleeperStorage } from './sleeper-storage';
 import { logSetupSignal, type SetupSignalEvent } from '@flaim/worker-shared';
 import {
   handleSleeperDiscover,
@@ -84,6 +89,18 @@ import {
 import { logSyncEnvelope, SyncStateStorage } from './sync-state';
 import { handleWebSetupSignal } from './signal-handlers';
 import { runReconciliation } from './reconciliation';
+import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } from './sleeper-recurring-backfill';
+import { runEspnHistoryBackfill } from './espn-history-backfill';
+import {
+  parseYahooSupportLeagueRequest,
+  parseYahooSupportRequest,
+  runYahooSupportDiagnose,
+  runYahooSupportInspect,
+  runYahooSupportProbeLeague,
+  runYahooSupportRefresh,
+  type YahooSupportEnv,
+} from './yahoo-support-diagnostics';
+import { handleClerkAccountDeletionWebhook, type ClerkWebhookEnv } from './clerk-webhook';
 
 // =============================================================================
 // TYPES
@@ -102,6 +119,7 @@ export interface Env {
   OAUTH_REFRESH_TOKEN_TTL_SECONDS?: string; // MCP OAuth refresh-token inactivity TTL
   OAUTH_CLIENT_REGISTRATION_SIGNING_KEY?: string; // Optional stable signing key for confidential MCP DCR clients
   CLERK_ISSUER?: string; // Expected Clerk JWT issuer (e.g. "https://clerk.flaim.app")
+  CLERK_ACCOUNT_DELETION_WEBHOOK_SIGNING_SECRET?: string; // Svix signing secret for the dedicated user.deleted webhook (FLA-311)
   // Yahoo OAuth
   YAHOO_CLIENT_ID?: string;
   YAHOO_CLIENT_SECRET?: string;
@@ -111,6 +129,11 @@ export interface Env {
   DEMO_API_KEY?: string;   // Static API key for public demo chat
   DEMO_USER_ID?: string;   // Clerk user ID that the demo API key resolves to
   INTERNAL_SERVICE_TOKEN?: string;
+  // Second, dedicated secret gating the operator support-diagnostic routes
+  // (/internal/support/*). Checked IN ADDITION to INTERNAL_SERVICE_TOKEN, so a
+  // leak of the widely-shared service token alone cannot target an arbitrary
+  // account. Preview and prod hold different values.
+  SUPPORT_TOOL_TOKEN?: string;
   // Scheduled league rollover reconciliation (FLA-161) — dry-run only.
   RECONCILIATION_ENABLED?: string;          // 'true' to run; anything else no-ops
   RECONCILIATION_DRY_RUN?: string;          // must be 'true' (default); writes do not exist
@@ -119,9 +142,16 @@ export interface Env {
   RECONCILIATION_PROVIDERS?: string;        // csv allowlist, default 'espn,sleeper'
   RECONCILIATION_SPORTS?: string;           // csv allowlist, default 'football'
   RECONCILIATION_TIMEOUT_BUDGET_MS?: string;
+  ESPN_DURABLE_HISTORY_ENABLED?: string;
+  ESPN_DURABLE_HISTORY_USERS?: string;
+  ESPN_HISTORY_BACKFILL_MODE?: string;
+  ESPN_HISTORY_BACKFILL_USERS?: string;
+  ESPN_HISTORY_BACKFILL_LEGACY_CUTOFF?: string;
+  ESPN_HISTORY_REFRESH: { create(options: { id: string; params: { jobId: string } }): Promise<{ id: string }> };
   // Rate limiting (Cloudflare Workers native)
   TOKEN_RATE_LIMITER: RateLimit;
   CREDENTIALS_RATE_LIMITER: RateLimit;
+  WEBHOOK_RATE_LIMITER: RateLimit;
 }
 
 type Jwk = {
@@ -143,8 +173,14 @@ type JwtPayload = { sub?: string; iss?: string; exp?: number; [k: string]: unkno
 const EVAL_RUN_HEADER = 'X-Flaim-Eval-Run';
 const EVAL_TRACE_HEADER = 'X-Flaim-Eval-Trace';
 const INTERNAL_SERVICE_TOKEN_HEADER = 'X-Flaim-Internal-Token';
+const SUPPORT_TOOL_TOKEN_HEADER = 'X-Flaim-Support-Token';
 const MASKED_ESPN_SWID = '{********-****-****-****-************}';
 const MASKED_ESPN_S2 = '************';
+// Abuse boundary for caller-supplied league rows only. Server-controlled ESPN
+// discovery and the durable history Workflow use verified storage paths and do
+// not inherit this limit. This remains well above a heavy user's expected
+// multi-sport, multi-season history.
+export const MAX_MANUAL_ESPN_LEAGUE_ROWS = 1000;
 
 async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, userId: string) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `refresh:${userId}` });
@@ -154,6 +190,30 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
     {
       error: 'rate_limit_exceeded',
       error_description: 'Too many refresh requests. Please try again later.',
+    },
+    429,
+    { 'Retry-After': '60' }
+  );
+}
+
+/**
+ * Bounds diagnose/refresh/probe-league to 15 calls/60s per action, deliberately
+ * keyed on the action alone rather than `${action}:${userId}` — a per-target
+ * key would let repeated calls across rotating target ids evade the limit
+ * entirely, which defeats the point for a route whose target id is
+ * caller-supplied. `inspect` is pure DB reads and does not need this.
+ */
+async function enforceSupportRateLimit(
+  c: Context<{ Bindings: Env }>,
+  action: 'diagnose' | 'refresh' | 'probe-league'
+) {
+  const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
+  if (success) return null;
+
+  return c.json(
+    {
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many support requests. Please try again later.',
     },
     429,
     { 'Retry-After': '60' }
@@ -464,7 +524,7 @@ async function getVerifiedUserId(
         userId: env.EVAL_USER_ID,
         authType: 'eval-api-key' as const,
         label: 'EVAL_API_KEY',
-        // The eval harness must exercise the full ten-tool contract, including
+        // The eval harness must exercise the full eleven-tool contract, including
         // the bounded registry refresh (refresh_leagues), so the eval identity
         // carries write scope. The write only touches Flaim's own league
         // registry and the refresh route is rate-limited.
@@ -558,6 +618,48 @@ async function requireInternalService(request: Request, env: Env): Promise<Inter
 
   if (!(await constantTimeEqual(providedToken, env.INTERNAL_SERVICE_TOKEN))) {
     return { error: `Missing or invalid ${INTERNAL_SERVICE_TOKEN_HEADER}`, status: 403 };
+  }
+
+  return null;
+}
+
+/**
+ * Second gate for operator support routes. Deliberately a separate secret from
+ * INTERNAL_SERVICE_TOKEN: support routes accept an arbitrary target user id from
+ * the request body, so they require two independent secrets rather than the one
+ * every internal caller already holds. Fails closed when unconfigured.
+ */
+async function requireSupportAuth(request: Request, env: Env): Promise<InternalAuthFailure | null> {
+  if (!env.SUPPORT_TOOL_TOKEN) {
+    return { error: 'Support tool authentication is not configured', status: 500 };
+  }
+
+  const providedToken = request.headers.get(SUPPORT_TOOL_TOKEN_HEADER);
+  if (!providedToken) {
+    return { error: `Missing or invalid ${SUPPORT_TOOL_TOKEN_HEADER}`, status: 403 };
+  }
+
+  if (!(await constantTimeEqual(providedToken, env.SUPPORT_TOOL_TOKEN))) {
+    return { error: `Missing or invalid ${SUPPORT_TOOL_TOKEN_HEADER}`, status: 403 };
+  }
+
+  return null;
+}
+
+/**
+ * Both support gates, in order, as one call — so the double gate cannot be
+ * half-applied to a route by accident. Returns the response to send, or null
+ * when the caller is allowed through.
+ */
+async function requireSupportRoute(c: Context<{ Bindings: Env }>): Promise<Response | null> {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const supportError = await requireSupportAuth(c.req.raw, c.env);
+  if (supportError) {
+    return c.json({ error: supportError.error }, supportError.status);
   }
 
   return null;
@@ -821,6 +923,32 @@ api.post('/revoke', (c) => {
   return handleRevoke(c.req.raw, c.env as OAuthEnv, getCorsHeaders(c.req.raw));
 });
 
+// Clerk user.deleted webhook (public; Svix-signature verified inside the
+// handler; rate-limited per IP). Reachable at /auth/webhooks/clerk/... and
+// /auth-preview/webhooks/clerk/... via the existing router mounts -- zero
+// wrangler.jsonc route changes needed for the route itself.
+//
+// Uses its own WEBHOOK_RATE_LIMITER, not the shared TOKEN_RATE_LIMITER: the
+// caller here is Svix's relay infrastructure, not an individual end user, so
+// CF-Connecting-IP reflects Svix's egress IP rather than a per-user identity.
+// Distinct users deleting their accounts within the same window can land on
+// the same IP and share one bucket. TOKEN_RATE_LIMITER's 10/60s ceiling is
+// sized for /authorize and /token, where the IP genuinely is the caller;
+// reusing it here risks 429-ing (and thereby delaying) unrelated, legitimate
+// deletions. A dedicated, more generous limiter keeps this endpoint's abuse
+// protection without coupling its capacity to those two callers' needs.
+api.post('/webhooks/clerk/account-deletion', async (c) => {
+  const clientIp = c.req.header('CF-Connecting-IP') || 'unknown';
+  const { success } = await c.env.WEBHOOK_RATE_LIMITER.limit({ key: `webhook:account-deletion:${clientIp}` });
+  if (!success) {
+    return c.json({
+      error: 'rate_limit_exceeded',
+      error_description: 'Too many webhook requests. Please try again later.',
+    }, 429, { 'Retry-After': '60' });
+  }
+  return handleClerkAccountDeletionWebhook(c.req.raw, c.env as ClerkWebhookEnv);
+});
+
 // Token introspection (internal — called by fantasy-mcp gateway via service binding)
 api.get('/internal/introspect', async (c) => {
   const expectedResource = c.req.header('X-Flaim-Expected-Resource') || undefined;
@@ -896,6 +1024,40 @@ api.post('/internal/reconciliation/run', async (c) => {
   return c.json(summary, refused ? 409 : 200);
 });
 
+// Manual trigger for the paced legacy ESPN history migration. This uses the
+// same default-off mode, fixed cohort cutoff, atomic claim, and global pacing
+// as the cron path. It can start at most one prepared Workflow job.
+api.post('/internal/backfill/espn-history', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const summary = await runEspnHistoryBackfill(c.env, 'manual');
+  const refused = summary.outcome === 'disabled' || summary.outcome === 'refused';
+  return c.json(summary, summary.outcome === 'failed' ? 500 : refused ? 409 : 200);
+});
+
+// One-off backfill for Sleeper recurring_league_id (FLA-168). Service-token
+// only. Defaults to dry-run; callers must explicitly opt into
+// { dryRun: false } to perform writes.
+api.post('/internal/backfill/sleeper-recurring-ids', async (c) => {
+  const internalError = await requireInternalService(c.req.raw, c.env);
+  if (internalError) {
+    return c.json({ error: internalError.error }, internalError.status);
+  }
+
+  const validation = await parseSleeperRecurringBackfillRequest(c.req.raw);
+  if (validation.error) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const summary = await runSleeperRecurringBackfill(c.env, validation.dryRun ?? true);
+  // A concurrent live run already holds the backfill's single-flight lease
+  // (sync-state.ts, FLA-168 audit Fix 5) — 409 rather than racing writes.
+  return c.json(summary, summary.outcome === 'blocked' ? 409 : 200);
+});
+
 // Usage analytics ingest (internal — called by fantasy-mcp gateway via service binding).
 // Service-token only: the gateway has already verified the user and passes user_id
 // in the body, so we do NOT re-verify identity here. Best-effort and tolerant — a
@@ -921,6 +1083,93 @@ api.post('/internal/usage-event', async (c) => {
   }
 
   return c.json({ ok: true });
+});
+
+// =============================================================================
+// SUPPORT DIAGNOSTICS (FLA-360) — permanent, operator-only
+//
+// Two independent secrets are required: the shared INTERNAL_SERVICE_TOKEN *and*
+// the dedicated SUPPORT_TOOL_TOKEN. Unlike every other identity-resolving route,
+// these take the target user id from the request body, because their entire
+// purpose is investigating an account whose own session has expired. That is
+// exactly why they carry a second secret. Never add getInternalUserId here, and
+// never accept a Clerk JWT / eval key / MCP token as an alternative.
+//
+// Ordering is load-bearing: internal gate -> support gate -> rate limit (for
+// diagnose/refresh only) -> body validation -> business logic. Nothing before
+// the gates may read or parse the body.
+//
+// Inspect is strictly read-only. Diagnose reaches Yahoo — capped at two
+// discovery calls, plus one credential-renewal call outside that budget when
+// the token needs it — but never persists league or sync-state data. Refresh
+// is the only one that writes, and it writes only through the ordinary
+// refreshLeaguesForUser path. diagnose/refresh (not inspect) are also
+// rate-limited per action, independent of which account is targeted.
+// =============================================================================
+
+api.post('/internal/support/yahoo/inspect', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const validation = await parseYahooSupportRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportInspect(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+api.post('/internal/support/yahoo/diagnose', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'diagnose');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportDiagnose(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+// Sibling of diagnose for the case diagnose structurally cannot reach: one
+// live per-league fetch, with the operator-supplied league identifier
+// substituted verbatim. Same two gates, same rate-limit discipline, one extra
+// validated body field, and still no league or sync-state write.
+api.post('/internal/support/yahoo/probe-league', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'probe-league');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportLeagueRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportProbeLeague(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+api.post('/internal/support/yahoo/refresh', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'refresh');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportRefresh(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
 });
 
 // =============================================================================
@@ -1032,6 +1281,16 @@ api.get('/extension/connection', async (c) => {
   return handleGetConnection(c.env as ExtensionEnv, userId, getCorsHeaders(c.req.raw));
 });
 
+// Narrow caller-owned durable-history status. The plan, credentials, and
+// rollout allowlist never leave the worker.
+api.get('/history/espn', async (c) => {
+  const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
+  if (!userId) return c.json({ error: 'unauthorized', error_description: authError || 'Authentication required' }, 401);
+  if (!durableHistoryEnabledFor(c.env, userId)) return c.json({ history: null });
+  const job = await EspnHistoryJobStorage.fromEnvironment(c.env).latestForUser(userId);
+  return c.json({ history: publicHistoryStatus(job) });
+});
+
 // Discover and save leagues (requires Clerk JWT)
 api.post('/extension/discover', async (c) => {
   const { userId, error: authError } = await getClerkUserId(c.req.raw, c.env);
@@ -1075,6 +1334,26 @@ api.post('/extension/discover', async (c) => {
     });
   }
 
+  // A duplicate extension click must surface the caller-owned durable job,
+  // not the provider lease's generic 429. MCP never reaches this branch.
+  if (durableHistoryEnabledFor(c.env, userId)) {
+    const activeJob = await EspnHistoryJobStorage.fromEnvironment(c.env).activeForUser(userId);
+    if (activeJob) {
+      const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
+      const currentSeasonWithDefault: CurrentSeasonLeague[] = currentSeasonLeagues.map(l => ({
+        sport: l.sport, leagueId: l.leagueId, leagueName: l.leagueName || '', teamId: l.teamId || '', teamName: l.teamName || '', seasonYear: l.seasonYear || 0,
+      }));
+      return c.json({
+        discovered: currentSeasonWithDefault,
+        currentSeasonLeagues: currentSeasonWithDefault,
+        currentSeason: { found: currentSeasonWithDefault.length, added: 0, alreadySaved: currentSeasonWithDefault.length, refreshed: 0 },
+        pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+        added: 0, skipped: currentSeasonWithDefault.length, refreshed: 0, historical: 0, historicalRefreshed: 0,
+        history: publicHistoryStatus(activeJob),
+      });
+    }
+  }
+
   // Single-flight + cooldown envelope (FLA-121). Acquired after the
   // credentials check so credential-less calls never burn a cooldown.
   const syncState = SyncStateStorage.fromEnvironment(c.env);
@@ -1099,6 +1378,7 @@ api.post('/extension/discover', async (c) => {
     }, 429, { 'Retry-After': String(lease.retryAfterSeconds) });
   }
   const startedAt = Date.now();
+  let transferredHistoryOwner: string | null = null;
 
   const settleDiscover = async (
     status: 'success' | 'error',
@@ -1133,13 +1413,49 @@ api.post('/extension/discover', async (c) => {
   };
 
   try {
-    // Run discovery (includes historical seasons, fully synchronous)
-    const result = await discoverAndSaveLeagues(
-      userId,
-      credentials.swid,
-      credentials.s2,
-      storage
-    );
+    const useDurableHistory = durableHistoryEnabledFor(c.env, userId);
+    const result = useDurableHistory
+      ? await discoverAndSaveCurrentLeagues(userId, credentials.swid, credentials.s2, storage, ownerId)
+      : await discoverAndSaveLeagues(userId, credentials.swid, credentials.s2, storage);
+
+    const savedLeagues = result.savedLeagues ?? [];
+    const pastSeasons = 'pastSeasons' in result ? result.pastSeasons : { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+    if (useDurableHistory && savedLeagues.length !== result.currentSeason.found) {
+      await settleDiscover('error', { errorCode: 'current_league_save_failed', errorMessage: 'Unable to save current ESPN leagues', httpStatus: 500 });
+      return c.json({ error: 'current_league_save_failed', error_description: 'Unable to save current ESPN leagues' }, 500);
+    }
+
+    let history = null;
+    if (useDurableHistory && savedLeagues.length > 0) {
+      const historyStorage = EspnHistoryJobStorage.fromEnvironment(c.env);
+      const credentialSnapshot = await historyStorage.credentials(userId);
+      if (!credentialSnapshot) throw new Error('ESPN credentials changed during refresh');
+      const queued = await historyStorage.createOrCoalesce(userId, credentialSnapshot.updatedAt);
+      if (queued.created) {
+        if (!await historyStorage.setCurrentLeagues(queued.job.id, savedLeagues)) {
+          await historyStorage.terminal(
+            queued.job.id,
+            'failed',
+            'job_context_failed',
+            'Unable to store current ESPN leagues for history refresh'
+          );
+          throw new Error('Unable to store ESPN history job context');
+        }
+        const historyOwner = `history:${queued.job.id}`;
+        if (!await syncState.transferLease(userId, 'espn', ownerId, historyOwner)) {
+          await historyStorage.terminal(
+            queued.job.id,
+            'failed',
+            'history_lease_transfer_failed',
+            'Unable to transfer the ESPN history lease'
+          );
+          throw new Error('Unable to transfer ESPN history lease');
+        }
+        transferredHistoryOwner = historyOwner;
+      }
+      const started = await startQueuedEspnHistoryJob(c.env, queued);
+      history = publicHistoryStatus(started.job);
+    }
 
     // Get current season leagues for default dropdown
     const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
@@ -1158,12 +1474,13 @@ api.post('/extension/discover', async (c) => {
       discovered: result.discovered,
       currentSeasonLeagues: currentSeasonWithDefault,
       currentSeason: result.currentSeason,
-      pastSeasons: result.pastSeasons,
+      pastSeasons,
       added: result.currentSeason.added,
       skipped: result.currentSeason.alreadySaved,
       refreshed: result.currentSeason.refreshed,
-      historical: result.pastSeasons.added,
-      historicalRefreshed: result.pastSeasons.refreshed,
+      historical: pastSeasons.added,
+      historicalRefreshed: pastSeasons.refreshed,
+      ...(history ? { history } : {}),
     });
 
   } catch (error) {
@@ -1221,6 +1538,21 @@ api.post('/extension/discover', async (c) => {
       auth_type: 'clerk',
     });
 
+    if (transferredHistoryOwner) {
+      await syncState.settle(userId, 'espn', transferredHistoryOwner, {
+        status: 'error',
+        cooldownSeconds: cooldownSecondsForResult({
+          platform: 'espn',
+          status: 'error',
+          httpStatus: isAuthError ? 401 : 500,
+          error_description: errorMessage,
+        }),
+        syncSource: 'extension',
+        errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
+        errorMessage,
+        durationMs: Date.now() - startedAt,
+      });
+    }
     await settleDiscover('error', {
       errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
       errorMessage,
@@ -1527,6 +1859,35 @@ api.get('/internal/leagues/sleeper', async (c) => {
   // 'historical' leagues browsable while still hiding 'hidden' ones.
   const archived: ArchivedFilter = c.req.query('archived') === 'exclude-hidden' ? 'exclude-hidden' : 'exclude-archived';
   return handleSleeperLeagues(c.env as SleeperConnectEnv, userId, getCorsHeaders(c.req.raw), { archived });
+});
+
+// Lightweight gateway authorization check. Unlike the league-list endpoint,
+// this reads the current connection, exact league row, and archive state
+// without enriching legacy rows from the public Sleeper API.
+api.get('/internal/leagues/sleeper/authorize', async (c) => {
+  const { userId, error: authError, status: authStatus } = await getInternalUserId(c.req.raw, c.env, undefined, { allowStaticApiKey: true });
+  if (!userId) {
+    return c.json({
+      error: 'unauthorized',
+      error_description: authError || 'Authentication required',
+    }, authStatus ?? 401);
+  }
+
+  const leagueId = c.req.query('league_id')?.trim();
+  const sport = c.req.query('sport')?.trim();
+  const seasonYear = Number(c.req.query('season_year'));
+  if (!leagueId || !sport || !Number.isInteger(seasonYear) || seasonYear < 1) {
+    return c.json({ error: 'league_id, sport, and season_year are required' }, 400);
+  }
+
+  try {
+    const storage = SleeperStorage.fromEnvironment(c.env);
+    const allowed = await storage.isSleeperLeagueAuthorized(userId, leagueId, sport, seasonYear);
+    return c.json({ allowed });
+  } catch (error) {
+    console.error('[internal/sleeper-authorize] stored authorization check failed', error);
+    return c.json({ error: 'Sleeper league authorization unavailable' }, 503);
+  }
 });
 
 // Delete Sleeper league (requires auth)
@@ -1897,6 +2258,28 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
 
   const storage = EspnSupabaseStorage.fromEnvironment(env);
 
+  const runCredentialMutation = async (operation: () => Promise<boolean>): Promise<boolean> => {
+    const syncState = SyncStateStorage.fromEnvironment(env);
+    const mutation = await beginEspnLeagueMutation(
+      durableHistoryEnabledFor(env, clerkUserId)
+        ? EspnHistoryJobStorage.fromEnvironment(env)
+        : null,
+      syncState,
+      clerkUserId
+    );
+    try {
+      return await operation();
+    } finally {
+      // Credential save is commonly followed immediately by discovery.
+      // Keep the old owner fenced without imposing a new-user cooldown.
+      await syncState.settle(clerkUserId, 'espn', mutation.ownerId, {
+        status: 'skipped',
+        cooldownSeconds: 0,
+        syncSource: 'web',
+      });
+    }
+  };
+
   if (method === 'POST' || method === 'PUT') {
     const body = await c.req.json() as { swid?: string; s2?: string; email?: string };
     const validation = validateEspnCredentials(body);
@@ -1917,7 +2300,14 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
       }, 400);
     }
 
-    const success = await storage.setCredentials(clerkUserId, body.swid!, body.s2!, body.email);
+    let success: boolean;
+    try {
+      success = await runCredentialMutation(
+        () => storage.setCredentials(clerkUserId, body.swid!, body.s2!, body.email)
+      );
+    } catch {
+      return c.json({ error: 'Failed to fence credential replacement' }, 500);
+    }
 
     if (!success) {
       logAuthWorkerFailure(c.req.raw, env, 'onboarding_failed', {
@@ -1986,7 +2376,12 @@ async function handleCredentialsEspn(c: Context<{ Bindings: Env }>, method: stri
     });
 
   } else if (method === 'DELETE') {
-    const success = await storage.deleteCredentials(clerkUserId);
+    let success: boolean;
+    try {
+      success = await runCredentialMutation(() => storage.deleteCredentials(clerkUserId));
+    } catch {
+      return c.json({ error: 'Failed to fence credential deletion' }, 500);
+    }
 
     if (!success) {
       return c.json({ error: 'Failed to delete credentials' }, 500);
@@ -2085,6 +2480,69 @@ api.get('/internal/leagues', async (c) => {
   });
 });
 
+async function beginLeagueMutationForUser(env: Env, clerkUserId: string) {
+  const syncState = SyncStateStorage.fromEnvironment(env);
+  const mutation = await beginEspnLeagueMutation(
+    durableHistoryEnabledFor(env, clerkUserId)
+      ? EspnHistoryJobStorage.fromEnvironment(env)
+      : null,
+    syncState,
+    clerkUserId
+  );
+  return { syncState, mutation };
+}
+
+async function settleLeagueMutationForUser(
+  syncState: SyncStateStorage,
+  clerkUserId: string,
+  ownerId: string
+): Promise<void> {
+  await syncState.settle(clerkUserId, 'espn', ownerId, {
+    status: 'skipped',
+    cooldownSeconds: 1,
+    syncSource: 'web',
+  });
+}
+
+/**
+ * Type-check one caller-supplied league object from `POST`/`PUT /leagues`.
+ *
+ * The request body is cast, never parsed, so nothing else checks the types the
+ * storage layer keys and writes on. A `seasonYear` that arrives as the string
+ * `"2025"` is the dangerous case: `setLeagues` matches a surviving league on an
+ * identity key built from `season_year`, which is a Postgres `integer` and so
+ * always reads back as a number. `"2025"` and `2025` produce different keys, the
+ * league looks brand new, and its `created_at` is reset — exactly the corruption
+ * FLA-359 fixed. `leagueId` and `sport` are text columns and carry the same
+ * hazard in the other direction (a numeric `leagueId` is stored as text and
+ * afterwards reads back as a string).
+ *
+ * Returns a description of the first problem, or `null` when the object is
+ * usable. Rejecting beats coercing: this endpoint is Clerk-authenticated and its
+ * callers can send well-typed JSON, whereas a silent `parseInt` would guess at
+ * what the caller meant and write the guess to durable storage.
+ */
+function describeInvalidManualLeague(league: unknown): string | null {
+  if (typeof league !== 'object' || league === null || Array.isArray(league)) {
+    return 'must be an object';
+  }
+  const { leagueId, sport, seasonYear } = league as Record<string, unknown>;
+  if (typeof leagueId !== 'string' || leagueId.length === 0) {
+    return 'leagueId must be a non-empty string';
+  }
+  if (typeof sport !== 'string' || sport.length === 0) {
+    return 'sport must be a non-empty string';
+  }
+  if (
+    seasonYear !== undefined &&
+    seasonYear !== null &&
+    (typeof seasonYear !== 'number' || !Number.isInteger(seasonYear))
+  ) {
+    return 'seasonYear must be an integer or null';
+  }
+  return null;
+}
+
 async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Promise<Response> {
   const env = c.env;
   const url = new URL(c.req.url);
@@ -2108,13 +2566,36 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       }, 400);
     }
 
-    if (leagues.length > MAX_LEAGUES_PER_USER) {
+    if (leagues.length > MAX_MANUAL_ESPN_LEAGUE_ROWS) {
       return c.json({
-        error: `Maximum of ${MAX_LEAGUES_PER_USER} leagues allowed per user`
+        error: `Caller-supplied league replacement is limited to ${MAX_MANUAL_ESPN_LEAGUE_ROWS} rows`
       }, 400);
     }
 
-    const success = await storage.setLeagues(clerkUserId, leagues);
+    // Type-check after the row bound, so an oversized body is rejected without
+    // walking it, and before the lease, so a malformed request never fences a
+    // mutation it cannot perform.
+    for (const [index, league] of leagues.entries()) {
+      const problem = describeInvalidManualLeague(league);
+      if (problem) {
+        return c.json({
+          error: `Invalid request: leagues[${index}] ${problem}`
+        }, 400);
+      }
+    }
+
+    let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
+    try {
+      mutation = await beginLeagueMutationForUser(env, clerkUserId);
+    } catch {
+      return c.json({ error: 'Failed to fence league replacement' }, 500);
+    }
+    let success: boolean;
+    try {
+      success = await storage.setLeagues(clerkUserId, leagues);
+    } finally {
+      await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
+    }
 
     if (!success) {
       return c.json({ error: 'Failed to store leagues' }, 500);
@@ -2168,7 +2649,21 @@ async function handleLeagues(c: Context<{ Bindings: Env }>, method: string): Pro
       }, 400);
     }
 
-    const success = await storage.removeLeague(clerkUserId, leagueId, sport);
+    // User deletion wins before, during, and after Workflow handoff. The
+    // mutation owner replaces any request/history lease before rows are
+    // removed, so every exact-owner refresh write after this point is rejected.
+    let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
+    try {
+      mutation = await beginLeagueMutationForUser(env, clerkUserId);
+    } catch {
+      return c.json({ error: 'Failed to fence league deletion' }, 500);
+    }
+    let success: boolean;
+    try {
+      success = await storage.removeLeague(clerkUserId, leagueId, sport);
+    } finally {
+      await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
+    }
 
     if (!success) {
       return c.json({ error: 'Failed to remove league' }, 500);
@@ -2307,12 +2802,30 @@ api.post('/leagues/add', async (c) => {
   }
 
   const storage = EspnSupabaseStorage.fromEnvironment(c.env);
-  const result = await storage.addLeague(clerkUserId, body);
+  let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
+  try {
+    mutation = await beginLeagueMutationForUser(c.env, clerkUserId);
+  } catch {
+    return c.json({ error: 'Failed to fence league addition' }, 500);
+  }
+
+  let result: Awaited<ReturnType<typeof storage.addLeague>>;
+  try {
+    const existingLeagues = await storage.getLeagues(clerkUserId);
+    if (existingLeagues.length >= MAX_MANUAL_ESPN_LEAGUE_ROWS) {
+      return c.json({
+        error: `Caller-supplied league storage is limited to ${MAX_MANUAL_ESPN_LEAGUE_ROWS} rows`,
+        code: 'LIMIT_EXCEEDED',
+      }, 400);
+    }
+    result = await storage.addLeague(clerkUserId, body);
+  } finally {
+    await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
+  }
 
   if (!result.success) {
     const statusMap: Record<string, 400 | 409 | 500> = {
       'DUPLICATE': 409,
-      'LIMIT_EXCEEDED': 400,
       'DB_ERROR': 500
     };
     const status = result.code ? statusMap[result.code] || 500 : 500;
@@ -2380,7 +2893,19 @@ api.patch('/leagues/:leagueId/team', async (c) => {
   if (teamName) updates.teamName = teamName;
   if (leagueName) updates.leagueName = leagueName;
 
-  const success = await storage.updateLeague(clerkUserId, leagueId, targetSport, targetSeasonYear, updates);
+  let mutation: Awaited<ReturnType<typeof beginLeagueMutationForUser>>;
+  try {
+    mutation = await beginLeagueMutationForUser(c.env, clerkUserId);
+  } catch {
+    return c.json({ error: 'Failed to fence team selection' }, 500);
+  }
+
+  let success: boolean;
+  try {
+    success = await storage.updateLeague(clerkUserId, leagueId, targetSport, targetSeasonYear, updates);
+  } finally {
+    await settleLeagueMutationForUser(mutation.syncState, clerkUserId, mutation.mutation.ownerId);
+  }
 
   if (!success) {
     return c.json({ error: 'Failed to update team selection' }, 500);
@@ -2431,6 +2956,10 @@ api.notFound((c) => {
       '/internal/connect/yahoo/credentials': 'GET - Get Yahoo access token for internal workers',
       '/connect/yahoo/status': 'GET - Check Yahoo connection status',
       '/connect/yahoo/disconnect': 'DELETE - Disconnect Yahoo account',
+      '/internal/support/yahoo/inspect': 'POST - Operator support snapshot for one Yahoo account (two service secrets)',
+      '/internal/support/yahoo/diagnose': 'POST - Operator support diagnosis of Yahoo league discovery (two service secrets)',
+      '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
+      '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport, per-sport defaults, hideLeagueWidget)',
       '/internal/user/preferences': 'GET - Get user preferences for internal workers',
       '/user/preferences/default-sport': 'POST - Set user default sport',
@@ -2482,11 +3011,30 @@ app.route('/', api);
 app.route('/auth', api);
 app.route('/auth-preview', api);
 
+export async function runScheduledAuthWorkerTask(
+  controller: { cron?: string },
+  env: Env
+): Promise<unknown> {
+  if (controller.cron === '17 10 * * *') {
+    return runReconciliation(env, 'cron');
+  }
+  if (controller.cron === '*/5 * * * *') {
+    return runEspnHistoryBackfill(env, 'cron');
+  }
+  console.log(JSON.stringify({
+    event: 'auth_worker_scheduled_task',
+    service: 'auth-worker',
+    status: 'ignored',
+    reason: 'unknown_cron',
+  }));
+  return undefined;
+}
+
 // Module-worker export: keep `fetch` behavior identical to the bare Hono app
-// and add the cron entry point for scheduled reconciliation (FLA-161).
+// and explicitly route each cron to its own default-off task.
 export default {
   fetch: app.fetch,
-  scheduled(_controller: unknown, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): void {
-    ctx.waitUntil(runReconciliation(env, 'cron'));
+  scheduled(controller: { cron?: string }, env: Env, ctx: { waitUntil(promise: Promise<unknown>): void }): void {
+    ctx.waitUntil(runScheduledAuthWorkerTask(controller, env));
   },
 };

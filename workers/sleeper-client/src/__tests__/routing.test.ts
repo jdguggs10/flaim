@@ -75,6 +75,34 @@ describe('sleeper-client sport routing', () => {
     expect(body.code).toBe('UNKNOWN_TOOL');
   });
 
+  it('routes get_draft for football through the internal execute boundary', async () => {
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      SLEEPER_PLAYERS_CACHE: {} as KVNamespace,
+    } as Env;
+    const handlerSpy = vi.spyOn(footballHandlers, 'get_draft').mockImplementation(async (_receivedEnv, params) => ({
+      success: params.draft_id === 'draft-7',
+      data: { platform: 'sleeper', sport: 'football', leagueId: params.league_id, seasonYear: params.season_year, draft: {}, picks: [] },
+    }));
+
+    const req = new Request('https://internal/execute', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Flaim-Internal-Token': 'internal-secret',
+      },
+      body: JSON.stringify({
+        tool: 'get_draft',
+        params: { sport: 'football', league_id: 'lg1', season_year: 2025, draft_id: 'draft-7' },
+      }),
+    });
+
+    const res = await app.fetch(req, env, mockExecutionContext());
+    const body = await res.json() as { success: boolean };
+    expect(handlerSpy).toHaveBeenCalledTimes(1);
+    expect(body.success).toBe(true);
+  });
+
   it('rejects a malformed get_roster snapshot at the /execute boundary without any upstream fetch', async () => {
     const env = {
       INTERNAL_SERVICE_TOKEN: 'internal-secret',

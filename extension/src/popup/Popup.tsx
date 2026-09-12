@@ -11,6 +11,8 @@ import {
   getSetupState,
   setSetupState,
   clearSetupState,
+  getEspnHistoryState,
+  setEspnHistoryState,
   type SeasonCounts,
 } from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
@@ -19,7 +21,9 @@ import {
   checkStatus,
   getSiteBase,
   discoverLeagues,
+  getEspnHistoryStatus,
   type DiscoveredLeague,
+  type EspnHistoryStatus,
 } from '../lib/api';
 
 // Simplified state machine
@@ -32,13 +36,129 @@ type State =
   | 'setup_complete'
   | 'setup_error';
 
-// Sport to emoji mapping
-const sportEmoji: Record<string, string> = {
-  football: '🏈',
-  baseball: '⚾',
-  basketball: '🏀',
-  hockey: '🏒',
+type SportIconDefinition = {
+  label: string;
+  paths: readonly string[];
 };
+
+/*!
+ * @license @tabler/icons-react v3.41.1 - MIT
+ *
+ * Copyright (c) 2020-2026 Paweł Kuna
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+const SPORT_ICONS = new Map<string, SportIconDefinition>([
+  [
+    'football',
+    {
+      label: 'Football',
+      paths: [
+        'M15 9l-6 6',
+        'M10 12l2 2',
+        'M12 10l2 2',
+        'M8 21a5 5 0 0 0 -5 -5',
+        'M16 3c-7.18 0 -13 5.82 -13 13a5 5 0 0 0 5 5c7.18 0 13 -5.82 13 -13a5 5 0 0 0 -5 -5',
+        'M16 3a5 5 0 0 0 5 5',
+      ],
+    },
+  ],
+  [
+    'baseball',
+    {
+      label: 'Baseball',
+      paths: [
+        'M5.636 18.364a9 9 0 1 0 12.728 -12.728a9 9 0 0 0 -12.728 12.728',
+        'M12.495 3.02a9 9 0 0 1 -9.475 9.475',
+        'M20.98 11.505a9 9 0 0 0 -9.475 9.475',
+        'M9 9l2 2',
+        'M13 13l2 2',
+        'M11 7l2 1',
+        'M7 11l1 2',
+        'M16 11l1 2',
+        'M11 16l2 1',
+      ],
+    },
+  ],
+  [
+    'basketball',
+    {
+      label: 'Basketball',
+      paths: [
+        'M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0',
+        'M5.65 5.65l12.7 12.7',
+        'M5.65 18.35l12.7 -12.7',
+        'M12 3a9 9 0 0 0 9 9',
+        'M3 12a9 9 0 0 1 9 9',
+      ],
+    },
+  ],
+  [
+    'hockey',
+    {
+      label: 'Hockey',
+      paths: [
+        'M5.905 5h3.418a1 1 0 0 1 .928 .629l1.143 2.856a3 3 0 0 0 2.207 1.83l4.717 .926a2.084 2.084 0 0 1 1.682 2.045v.714a1 1 0 0 1 -1 1h-13.895a1 1 0 0 1 -1 -1.1l.8 -8a1 1 0 0 1 1 -.9',
+        'M3 19h17a1 1 0 0 0 1 -1',
+        'M9 15v4',
+        'M15 15v4',
+      ],
+    },
+  ],
+]);
+
+const FALLBACK_SPORT_ICON: SportIconDefinition = {
+  label: 'Fantasy',
+  paths: [
+    'M8 21l8 0',
+    'M12 17l0 4',
+    'M7 4l10 0',
+    'M17 4v8a5 5 0 0 1 -10 0v-8',
+    'M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+    'M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+  ],
+};
+
+function SportIcon({ sport }: { sport: string }) {
+  // Discovered leagues come straight from the API response, so a missing
+  // sport must fall back rather than throw.
+  const definition = SPORT_ICONS.get(sport?.toLowerCase()) ?? FALLBACK_SPORT_ICON;
+
+  return (
+    <svg
+      aria-label={`${definition.label} league`}
+      className="sport-icon"
+      fill="none"
+      focusable="false"
+      role="img"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+      viewBox="0 0 24 24"
+    >
+      {definition.paths.map((d) => (
+        <path d={d} key={d} />
+      ))}
+    </svg>
+  );
+}
 
 // Cap error message length and provide fallbacks for unexpected errors
 function sanitizeError(msg: string, fallback: string): string {
@@ -108,6 +228,21 @@ function checkmark(value: boolean | null): string {
   return value ? '✓' : '–';
 }
 
+function isHistoryInProgress(history: EspnHistoryStatus | null): boolean {
+  return history?.state === 'queued' || history?.state === 'running';
+}
+
+function getHistoryMessage(history: EspnHistoryStatus): string {
+  if (history.state === 'queued') return 'Current leagues are synced. ESPN history is queued.';
+  if (history.state === 'running') return 'Current leagues are synced. ESPN history is continuing.';
+  if (history.state === 'partial') return 'Some ESPN history could not be indexed. Re-sync later to retry it.';
+  if (history.state === 'failed') return 'ESPN history could not be indexed. Re-sync later to retry it.';
+  if (history.state === 'superseded' || history.state === 'cancelled') {
+    return 'ESPN history stopped after your connection changed. Re-sync to start again.';
+  }
+  return 'ESPN history is up to date.';
+}
+
 export default function Popup() {
   // Clerk auth hooks
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -117,6 +252,7 @@ export default function Popup() {
   // Stable ref for getToken to avoid re-running init effect on every render
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
+  const espnHistoryOwnerRef = useRef<string | null>(null);
 
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? null;
@@ -134,8 +270,11 @@ export default function Popup() {
   const [supportCopied, setSupportCopied] = useState(false);
   const [hasEspnCookies, setHasEspnCookies] = useState<boolean | null>(null);
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
+  const [espnHistory, setEspnHistory] = useState<EspnHistoryStatus | null>(null);
+  const [espnHistoryStatusNeedsRetry, setEspnHistoryStatusNeedsRetry] = useState(false);
 
   const userId = user?.id ?? null;
+  const currentEspnHistory = espnHistoryOwnerRef.current === userId ? espnHistory : null;
 
   const supportInfo = useMemo(() => {
     const truncatedUserId = userId ? `${userId.slice(0, 12)}…` : 'unknown';
@@ -158,15 +297,29 @@ export default function Popup() {
   // Initialize on Clerk load
   useEffect(() => {
     if (!isLoaded) return;
+    let isActive = true;
 
     const init = async () => {
       // Check for saved setup state (popup close recovery)
       const savedSetup = await getSetupState();
+      if (!isActive) return;
+      // Never show a prior account's persisted job while this account's status loads.
+      espnHistoryOwnerRef.current = null;
+      setEspnHistory(null);
+      setEspnHistoryStatusNeedsRetry(false);
+      const savedHistory = await getEspnHistoryState(isSignedIn ? userId : null);
+      if (!isActive) return;
+      if (savedHistory && userId) {
+        espnHistoryOwnerRef.current = userId;
+        setEspnHistory(savedHistory);
+      }
 
       try {
         const info = await chrome.management.getSelf();
+        if (!isActive) return;
         setExtensionVersion(info.version);
       } catch {
+        if (!isActive) return;
         setExtensionVersion(null);
       }
 
@@ -199,20 +352,79 @@ export default function Popup() {
       // Check status with server using Clerk token
       try {
         const token = await getTokenRef.current();
+        if (!isActive) return;
         if (token) {
           const status = await checkStatus(token);
+          if (!isActive) return;
           setHasCredentials(status.hasCredentials);
           setLastSync(status.lastSync ?? null);
+          const history = await getEspnHistoryStatus(token);
+          if (!isActive) return;
+          espnHistoryOwnerRef.current = userId;
+          setEspnHistory(history);
+          setEspnHistoryStatusNeedsRetry(false);
+          await setEspnHistoryState(userId, history);
+        } else {
+          setEspnHistoryStatusNeedsRetry(true);
         }
         setState('ready');
       } catch {
-        // Token might be invalid - still show ready state
+        // Token or status reads may be transient; retry while the popup stays open.
+        setEspnHistoryStatusNeedsRetry(true);
         setState('ready');
       }
     };
 
-    init();
-  }, [isLoaded, isSignedIn]);
+    void init();
+    return () => {
+      isActive = false;
+    };
+  }, [isLoaded, isSignedIn, userId]);
+
+  useEffect(() => {
+    if ((!isHistoryInProgress(currentEspnHistory) && !espnHistoryStatusNeedsRetry) || !isLoaded || !isSignedIn || !userId) return;
+    let isActive = true;
+    let timer: number | undefined;
+    const hasKnownActiveJob = isHistoryInProgress(currentEspnHistory);
+    const retryDelays = [5_000, 10_000, 20_000];
+    let retryIndex = 0;
+    const pollHistory = async () => {
+      let receivedHistory = false;
+      let shouldPollActiveJob = hasKnownActiveJob;
+      try {
+        const token = await getTokenRef.current();
+        if (!token || !isActive) return;
+        const history = await getEspnHistoryStatus(token);
+        if (!isActive) return;
+        receivedHistory = true;
+        shouldPollActiveJob = isHistoryInProgress(history);
+        espnHistoryOwnerRef.current = userId;
+        setEspnHistory(history);
+        setEspnHistoryStatusNeedsRetry(false);
+        await setEspnHistoryState(userId, history);
+      } catch {
+        // A confirmed queued/running job keeps polling. An unknown initial
+        // status gets only the bounded recovery sequence below.
+      } finally {
+        if (!isActive) return;
+        if (shouldPollActiveJob) {
+          timer = window.setTimeout(() => void pollHistory(), 5_000);
+          return;
+        }
+        if (!receivedHistory && retryIndex < retryDelays.length) {
+          timer = window.setTimeout(() => void pollHistory(), retryDelays[retryIndex]);
+          retryIndex += 1;
+        }
+      }
+    };
+    const initialDelay = hasKnownActiveJob ? 5_000 : retryDelays[retryIndex];
+    if (!hasKnownActiveJob) retryIndex += 1;
+    timer = window.setTimeout(() => void pollHistory(), initialDelay);
+    return () => {
+      isActive = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [currentEspnHistory, espnHistoryStatusNeedsRetry, isLoaded, isSignedIn, userId]);
 
   // Handle full setup flow (sync + discover)
   const handleFullSetup = async () => {
@@ -270,6 +482,10 @@ export default function Popup() {
         currentSeason: result.currentSeason,
         pastSeasons: result.pastSeasons,
       });
+      espnHistoryOwnerRef.current = userId;
+      setEspnHistory(result.history ?? null);
+      setEspnHistoryStatusNeedsRetry(false);
+      await setEspnHistoryState(userId, result.history ?? null);
 
       // Complete setup
       setState('setup_complete');
@@ -312,6 +528,11 @@ export default function Popup() {
         const status = await checkStatus(token);
         setHasCredentials(status.hasCredentials);
         setLastSync(status.lastSync ?? null);
+        const history = await getEspnHistoryStatus(token);
+        espnHistoryOwnerRef.current = userId;
+        setEspnHistory(history);
+        setEspnHistoryStatusNeedsRetry(false);
+        await setEspnHistoryState(userId, history);
       }
       setState('ready');
     } catch (err) {
@@ -495,6 +716,7 @@ export default function Popup() {
             ) : (
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
+            {currentEspnHistory && <div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
             <button
               className="button primary full-width"
               onClick={handleFullSetup}
@@ -541,6 +763,7 @@ export default function Popup() {
 
         {state === 'setup_complete' && (
           <div className="content">
+            {currentEspnHistory && <div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
             {discoveredLeagues.length > 0 && (
               <>
                 <div className="message info">
@@ -552,7 +775,7 @@ export default function Popup() {
                       key={`${league.sport}-${league.leagueId}-${league.seasonYear}`}
                       className="league-item"
                     >
-                      <span className="sport-emoji">{sportEmoji[league.sport] || '🏆'}</span>
+                      <SportIcon sport={league.sport} />
                       <div className="league-info">
                         <span className="league-name">{league.leagueName}</span>
                         <span className="team-name">Team: {league.teamName}</span>

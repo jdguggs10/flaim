@@ -9,21 +9,25 @@ declare
   actual_count bigint;
   expected_count bigint;
   relation_name text;
+  wrapper_payload jsonb;
+  history_payload jsonb;
 begin
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'r';
-  if actual_count <> 23 then
-    raise exception 'expected 23 public tables, found %', actual_count;
+  if actual_count <> 26 then
+    raise exception 'expected 26 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'r';
-  if actual_count <> 3 then
-    raise exception 'expected 3 analytics tables, found %', actual_count;
+  -- dashboard_snapshot, internal_users, provider_flags_snapshot,
+  -- history_rollup_state, and the FLA-358 funnel_daily history.
+  if actual_count <> 5 then
+    raise exception 'expected 5 analytics tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -46,8 +50,8 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.prokind = 'f';
-  if actual_count <> 18 then
-    raise exception 'expected 18 public functions, found %', actual_count;
+  if actual_count <> 26 then
+    raise exception 'expected 26 public functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -56,25 +60,52 @@ begin
   where n.nspname = 'analytics' and p.prokind = 'f';
   -- dashboard_payload, refresh_dashboard_snapshot(), the FLA-264 per-variant
   -- refresh_dashboard_snapshot(boolean), provider_flags_payload, and
-  -- refresh_provider_flags_snapshot.
-  if actual_count <> 5 then
-    raise exception 'expected 5 analytics functions, found %', actual_count;
+  -- refresh_provider_flags_snapshot, plus the active history implementation.
+  if actual_count <> 6 then
+    raise exception 'expected 6 analytics functions, found %', actual_count;
+  end if;
+
+  -- The public dashboard contract is a deliberately thin wrapper over the
+  -- owner-only history implementation. CREATE OR REPLACE must retain the
+  -- original owner and default ACL while keeping an invoker-safe empty path.
+  if not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    join pg_language l on l.oid = p.prolang
+    where n.nspname = 'analytics'
+      and p.proname = 'dashboard_payload'
+      and p.pronargs = 1
+      and l.lanname = 'sql'
+      and p.provolatile = 's'
+      and not p.prosecdef
+      and p.proconfig @> array['search_path=""']
+      and pg_get_userbyid(p.proowner) = 'postgres'
+      and coalesce(p.proacl, acldefault('f', p.proowner))
+        @> acldefault('f', p.proowner)
+      and acldefault('f', p.proowner)
+        @> coalesce(p.proacl, acldefault('f', p.proowner))
+      and regexp_replace(p.prosrc, '\s+', '', 'g')
+        = 'selectanalytics.dashboard_payload_history(include_internal);'
+  ) then
+    raise exception 'dashboard_payload is not the canonical history wrapper';
   end if;
 
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
-  if actual_count <> 71 then
-    raise exception 'expected 71 public indexes, found %', actual_count;
+  if actual_count <> 78 then
+    raise exception 'expected 78 public indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'i';
-  if actual_count <> 3 then
-    raise exception 'expected 3 analytics indexes, found %', actual_count;
+  -- Four primary keys plus the FLA-358 funnel_daily (et_day, stage) grain.
+  if actual_count <> 5 then
+    raise exception 'expected 5 analytics indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -91,8 +122,8 @@ begin
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relrowsecurity;
-  if actual_count <> 23 then
-    raise exception 'expected RLS on all 23 public tables, found %', actual_count;
+  if actual_count <> 26 then
+    raise exception 'expected RLS on all 26 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -194,6 +225,69 @@ begin
       'the single provider_flags_snapshot grant is not analytics_readonly SELECT';
   end if;
 
+  -- FLA-358: funnel history takes the same posture. It is readable by the
+  -- internal dashboard role (unlike public.mcp_user_daily_et, which is
+  -- owner-only because it lives in the exposed schema and stores per-user
+  -- rows), and writable by nobody but the owner. The analytics schema's default
+  -- privileges would grant SELECT implicitly, so prove the stated ACL rather
+  -- than trusting the default.
+  select count(*) into actual_count
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  cross join lateral aclexplode(
+    coalesce(c.relacl, acldefault('r', c.relowner))
+  ) a
+  where n.nspname = 'analytics'
+    and c.relname = 'funnel_daily'
+    and case a.grantee
+      when 0 then 'PUBLIC'
+      else pg_get_userbyid(a.grantee)
+    end <> pg_get_userbyid(c.relowner);
+  if actual_count <> 1 then
+    raise exception
+      'funnel_daily has % non-owner grants, expected exactly 1',
+      actual_count;
+  end if;
+
+  if not has_table_privilege(
+       'analytics_readonly',
+       'analytics.funnel_daily',
+       'SELECT'
+     )
+     or exists (
+       select 1
+       from unnest(array[
+         'anon',
+         'authenticated',
+         'service_role',
+         'analytics_readonly'
+       ]) as r(role_name)
+       where has_table_privilege(r.role_name, 'analytics.funnel_daily', 'INSERT')
+          or has_table_privilege(r.role_name, 'analytics.funnel_daily', 'UPDATE')
+          or has_table_privilege(r.role_name, 'analytics.funnel_daily', 'DELETE')
+     ) then
+    raise exception
+      'funnel_daily must be analytics_readonly SELECT and owner-only writes';
+  end if;
+
+  -- RLS with no policies would hide every row from analytics_readonly, which
+  -- has no BYPASSRLS. Keeping it off is deliberate, not an oversight. The
+  -- role's own role_rows CTE further below folds rolbypassrls into a
+  -- determinism hash, but that only proves the value is stable across two
+  -- resets, not that it is actually false — assert that directly here, next
+  -- to the RLS-off check it justifies.
+  if (select relrowsecurity from pg_class where oid = 'analytics.funnel_daily'::regclass)
+  then
+    raise exception 'funnel_daily must not enable RLS; its only reader would see nothing';
+  end if;
+
+  if coalesce(
+    (select rolbypassrls from pg_roles where rolname = 'analytics_readonly'),
+    true
+  ) then
+    raise exception 'analytics_readonly must not have BYPASSRLS; funnel_daily''s RLS-off posture depends on it';
+  end if;
+
   -- The refresh path is owner-only, and never reachable as a definer shortcut.
   select count(*) into actual_count
   from pg_proc p
@@ -239,6 +333,45 @@ begin
 
   if has_schema_privilege('service_role', 'analytics', 'USAGE') then
     raise exception 'service_role unexpectedly has analytics schema usage';
+  end if;
+
+  -- FLA-265 preserves source dimensions at daily aggregate grain. They must
+  -- remain nullable and have no default so NULL is distinct from literal
+  -- empty strings under the NULLS NOT DISTINCT composite uniqueness rule.
+  if (
+    select count(*)
+    from pg_attribute a
+    where a.attrelid = 'public.mcp_user_daily_et'::regclass
+      and a.attname in ('platform', 'sport')
+      and a.attnum > 0
+      and not a.attisdropped
+      and a.atttypid = 'text'::regtype
+      and not a.attnotnull
+      and not a.atthasdef
+  ) <> 2 then
+    raise exception 'mcp_user_daily_et platform/sport columns must be nullable text without defaults';
+  end if;
+  if exists (
+    select 1
+    from pg_attribute a
+    where a.attrelid = 'public.mcp_user_daily_et'::regclass
+      and a.attname = 'tool_name'
+      and a.attnum > 0
+      and not a.attisdropped
+  ) then
+    raise exception 'mcp_user_daily_et must not add a tool_name dimension';
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint con
+    where con.conrelid = 'public.mcp_user_daily_et'::regclass
+      and con.conname = 'mcp_user_daily_et_grain'
+      and con.contype = 'u'
+      and pg_get_constraintdef(con.oid, true)
+        = 'UNIQUE NULLS NOT DISTINCT (et_day, env, user_id, auth_type, client_name, platform, sport)'
+  ) then
+    raise exception 'mcp_user_daily_et grain must include platform/sport with NULLS NOT DISTINCT';
   end if;
 
   if has_table_privilege('anon', 'public.demo_antigravity_cache', 'SELECT')
@@ -399,7 +532,8 @@ begin
       ('public.provider_sync_state', 2),
       ('analytics.dashboard_snapshot', 2),
       ('analytics.provider_flags_snapshot', 2),
-      ('analytics.internal_users', 1)
+      ('analytics.internal_users', 1),
+      ('analytics.history_rollup_state', 1)
     ) expected(relation_name, expected_count)
   loop
     execute format('select count(*) from %s', relation_name)
@@ -467,6 +601,96 @@ begin
     and computed_at is not null;
   if actual_count <> 2 then
     raise exception 'dashboard snapshot seed proof failed';
+  end if;
+
+  -- FLA-358: the migration creates funnel_daily empty and never backfills. The
+  -- seed's own scheduled-path refresh is what fills today, and it must record
+  -- one row per stage of the stored inclusive funnel, for that ET day only.
+  select count(*) into actual_count from analytics.funnel_daily;
+  if actual_count <> (
+    select jsonb_array_length(payload -> 'funnel')
+    from analytics.dashboard_snapshot
+    where id = 2
+  ) then
+    raise exception 'seeded funnel_daily does not hold one row per funnel stage';
+  end if;
+
+  if exists (
+    select 1
+    from analytics.funnel_daily
+    where et_day <> (now() at time zone 'America/New_York')::date
+  ) then
+    raise exception 'funnel_daily contains a day the seed never observed';
+  end if;
+
+  if not exists (
+    select 1
+    from analytics.history_rollup_state s
+    where s.id
+      and s.initial_history_start_et_day
+        = (now() at time zone 'America/New_York')::date - 1
+      and s.last_closed_et_day
+        = (now() at time zone 'America/New_York')::date - 1
+  ) then
+    raise exception 'seed did not initialize ET history through yesterday';
+  end if;
+
+  if exists (
+    (select et_day, env, user_id, auth_type, client_name, platform, sport, call_count
+     from public.mcp_user_daily_et
+     except all
+     select (e.ts at time zone 'America/New_York')::date,
+       e.env, e.user_id, e.auth_type, e.client_name, e.platform, e.sport,
+       count(*)
+     from public.mcp_tool_events e
+     where (e.ts at time zone 'America/New_York')::date
+       <= (now() at time zone 'America/New_York')::date - 1
+     group by 1, 2, 3, 4, 5, 6, 7)
+    union all
+    (select (e.ts at time zone 'America/New_York')::date,
+       e.env, e.user_id, e.auth_type, e.client_name, e.platform, e.sport,
+       count(*)
+     from public.mcp_tool_events e
+     where (e.ts at time zone 'America/New_York')::date
+       <= (now() at time zone 'America/New_York')::date - 1
+     group by 1, 2, 3, 4, 5, 6, 7
+     except all
+     select et_day, env, user_id, auth_type, client_name, platform, sport, call_count
+     from public.mcp_user_daily_et)
+  ) then
+    raise exception 'seeded ET summaries diverge from closed-day raw events';
+  end if;
+
+  for wrapper_payload, history_payload in
+    select analytics.dashboard_payload(include_internal),
+      analytics.dashboard_payload_history(include_internal)
+    from (values (false), (true)) variants(include_internal)
+  loop
+    if (wrapper_payload - 'user_concentration')
+         is distinct from (history_payload - 'user_concentration')
+       or exists (
+         (select value
+          from jsonb_array_elements(wrapper_payload -> 'user_concentration')
+          except all
+          select value
+          from jsonb_array_elements(history_payload -> 'user_concentration'))
+         union all
+         (select value
+          from jsonb_array_elements(history_payload -> 'user_concentration')
+          except all
+          select value
+          from jsonb_array_elements(wrapper_payload -> 'user_concentration'))
+       ) then
+      raise exception 'canonical dashboard wrapper diverges from its history implementation';
+    end if;
+  end loop;
+
+  if exists (
+    select 1
+    from analytics.dashboard_snapshot
+    where (payload ->> 'health_window_days')::integer is distinct from 30
+  ) then
+    raise exception 'seeded dashboard snapshots do not disclose the 30-day health window';
   end if;
 
   if not (select analytics.dashboard_payload(false) ? 'sync_recent') then
@@ -614,6 +838,20 @@ begin
   where version = '20260813012740';
   if actual_count <> 1 then
     raise exception 'snapshot cadence migration history row is missing';
+  end if;
+
+  select count(*) into actual_count
+  from supabase_migrations.schema_migrations
+  where version = '20260827004306';
+  if actual_count <> 1 then
+    raise exception 'ESPN history jobs migration history row is missing';
+  end if;
+
+  select count(*) into actual_count
+  from supabase_migrations.schema_migrations
+  where version = '20260908202843';
+  if actual_count <> 1 then
+    raise exception 'analytics history reader migration history row is missing';
   end if;
 end
 $proof$;
@@ -931,6 +1169,18 @@ select jsonb_pretty(jsonb_build_object(
     ),
     'provider_flags_snapshots', (
       select count(*) from analytics.provider_flags_snapshot
+    ),
+    'et_history_rows', (select count(*) from public.mcp_user_daily_et),
+    'funnel_daily_rows', (select count(*) from analytics.funnel_daily),
+    'et_history_start', (
+      select initial_history_start_et_day
+      from analytics.history_rollup_state
+      where id
+    ),
+    'et_history_closed_through', (
+      select last_closed_et_day
+      from analytics.history_rollup_state
+      where id
     )
   )
 )) as reproducibility_snapshot;

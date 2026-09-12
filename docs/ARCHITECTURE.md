@@ -22,13 +22,13 @@ Root, web, and workers use `pnpm` via Corepack. The Chrome extension is intentio
 
 - **Chrome Extension (`/extension`)**: Captures ESPN cookies (SWID, espn_s2) and syncs them to Flaim using Clerk Sync Host (no pairing codes).
 - **Next.js web app (`/web`)**: Site pages (discovery-first landing page, setup + management hub at `/leagues`, privacy policy), OAuth consent screens, and homepage live demo.
-- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs. Uses Hono for routing.
+- **Auth worker (`/workers/auth-worker`)**: Supabase credential + league storage, JWT verification, OAuth token management, extension APIs, durable ESPN history workflows, and the Svix-verified Clerk `user.deleted` webhook that drives account deletion. Uses Hono for routing.
 - **Unified Gateway (`/workers/fantasy-mcp`)**: Single MCP endpoint exposing unified tools for all platforms and sports. Routes to platform-specific workers via service bindings. For most tools the gateway is a pure conduit; where a tool's provider envelopes diverge enough to confuse consumers, the gateway may layer a canonical, additive normalization on the routed result (per-tool normalizer modules applied at the route seam — `get_free_agents` is the template). Canonical gateway fields use camelCase; the older provider-side `ownership_scope` fields emitted inside `get_players` predate this pattern and are a legacy variant to converge in a future reviewed version. Legacy provider fields are never removed or renamed by normalization — published clients pin old schemas.
 - **ESPN Client (`/workers/espn-client`)**: Internal worker handling all ESPN API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Yahoo Client (`/workers/yahoo-client`)**: Internal worker handling all Yahoo Fantasy API calls for all sports (football, baseball, basketball, hockey). Called by fantasy-mcp gateway.
 - **Sleeper Client (`/workers/sleeper-client`)**: Internal worker handling all Sleeper API calls for NFL and NBA (public API, no auth required). Called by fantasy-mcp gateway.
 - **Shared package (`/workers/shared`)**: Common utilities (CORS middleware, auth-fetch helper, types) used by all workers.
-- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `archived_leagues` (manual league archive), `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, plus deprecated `extension_tokens`/`extension_pairing_codes`.
+- **Supabase Postgres**: `espn_credentials`, `espn_leagues`, `espn_history_jobs`, `yahoo_credentials`, `yahoo_leagues`, `sleeper_connections`, `sleeper_leagues`, `archived_leagues` (manual league archive), `user_preferences` (defaults), `oauth_tokens`, `oauth_codes`, and `account_deletions` (permanent deletion tombstones). See `docs/DATABASE.md` for the full model.
 
 ## Runtime Choices (Next.js)
 
@@ -66,7 +66,7 @@ The public live showcase lives on the homepage, with `/chat` retained as a redir
 **Extension path (automatic on sync):**
 1. **Sign in** — Create an account at `flaim.app`
 2. **Connect ESPN** — Install extension → sync credentials
-3. **Auto-discover leagues + past seasons** — Runs during sync/re-sync
+3. **Auto-discover leagues + past seasons**: Current leagues save immediately; past seasons continue in the background
 4. **Set defaults** — Manage at `/leagues` (extension v1.4.0 no longer handles defaults)
 
 **Connect AI:**
@@ -117,7 +117,8 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
 | `POST /extension/sync` | Clerk JWT | Sync ESPN credentials |
-| `POST /extension/discover` | Clerk JWT | Discover leagues + historical seasons |
+| `POST /extension/discover` | Clerk JWT | Save current leagues and start historical discovery |
+| `GET /extension/history` | Clerk JWT | Read the latest historical discovery status |
 | `GET /extension/status` | Clerk JWT | Check connection status |
 | `GET /extension/connection` | Clerk | Web UI status check |
 
@@ -130,10 +131,17 @@ ESPN Cookies → POST /api/extension/sync → Auth Worker → Supabase
 ChatGPT, Claude, and optional manual MCP clients connect to Flaim's MCP servers:
 
 - **MCP URL**: `https://api.flaim.app/mcp` (unified gateway - handles all sports; `/fantasy/mcp` also works as legacy alias)
+- **Opt-in authenticated discovery**: The exact path `/mcp?auth=required` requires OAuth during connector discovery in production and preview. The canonical resource remains `/mcp`, public widget resources remain available, and the default unauthenticated `/mcp` discovery handshake is unchanged.
 - **OAuth Flow**: Full OAuth 2.1 with PKCE, Dynamic Client Registration (RFC 7591), Protected Resource Metadata (RFC 9728)
 - **Endpoints**: `/auth/register` (DCR), `/auth/authorize`, `/auth/token`, `/auth/revoke`
 - **Metadata**: `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource`
 - **Token lifetime**: MCP access tokens are short-lived (1 hour). Refresh tokens rotate on each successful refresh and use a 1-year inactivity window by default (`OAUTH_REFRESH_TOKEN_TTL_SECONDS`, default `31536000`, clamped to 1 hour minimum and 1 year maximum).
+
+The exact observed Grok OAuth callback, `https://grok.com/connectors-oauth-exchange-code/`, is accepted for registration and authorization. With the opt-in authenticated-discovery path, Grok completes the Flaim authorization flow and can use the authenticated `get_user_session` tool.
+
+Gemini Spark registers six callbacks together: `/r/` and `/a/` user-bound paths on each of its production, test, and sandbox Google redirect hosts. Flaim accepts only those exact hosts and path forms with Gemini's numeric identifier and Flaim production-host suffix; sibling hosts and structural URI variations remain rejected.
+
+Cursor's docs publish two fixed OAuth callbacks: `http://localhost:8787/callback` for the desktop app, already covered by the generic loopback rule (`/callback` is an allowed loopback path), and `https://www.cursor.com/agents/mcp/oauth/callback` for web and Cloud/Background Agents, accepted as an exact match. Separately, Flaim also matches Cursor's older `cursor://anysphere.cursor-*/oauth/{id}/callback` custom-scheme redirect structurally, for continuity with earlier desktop-IDE versions.
 
 **User flow**: Open Flaim Fantasy in ChatGPT or Claude, or add the MCP URL as an optional custom connector in a compatible AI platform → 401 triggers OAuth → user consents at `flaim.app/oauth/consent` → token exchange → tools available.
 
@@ -163,6 +171,7 @@ ChatGPT / Claude / manual MCP clients → fantasy-mcp (gateway) → espn-client 
 - `refresh_leagues` — Re-discover connected leagues and update Flaim's league records (`mcp:write`; non-destructive)
 - `get_ancient_history` — Past seasons and historical leagues (everything not in the current season)
 - `get_league_info` — Baseline league context: settings, roster config, teams/owners (requires platform, sport, league_id, season_year)
+- `get_draft`: Confirmed draft results and provider-grounded draft-pick ownership (optional round, team_id, and Sleeper draft_id)
 - `get_standings` — League standings
 - `get_matchups` — Current/specified week matchups
 - `get_roster` — Team roster with player details
@@ -181,6 +190,7 @@ ChatGPT / Claude / manual MCP clients → fantasy-mcp (gateway) → espn-client 
 - JWKS-based Clerk JWT verification in auth-worker (5m cache). Prod rejects spoofed headers.
 - MCP workers forward `Authorization`; auth-worker alone validates tokens.
 - Per-user isolation via verified `sub`; credentials never sent back to client after setup.
+- Self-service account deletion (FLA-311): Clerk's native delete-account flow fires a dedicated Svix-verified `user.deleted` webhook on auth-worker, which calls an atomic Postgres purge (permanent `account_deletions` tombstone + per-user advisory lock, all connected-platform credentials and league data removed in one transaction). Guard triggers on every user-keyed table reject later writes for a deleted account. Usage telemetry is retained per the privacy policy.
 - Rate limiting: Cloudflare Workers native `rate_limits` bindings — 10 req/60s per IP on token endpoint, 15 req/60s per user on credentials endpoint, and 60 req/60s per user on OAuth/Clerk-authenticated MCP requests (internal eval and demo API keys are exempt).
 - Public demo cache: the homepage reads precomputed answers from `demo_answer_cache`. The live-turn public-chat path has been removed.
 - Public demo refresh pipeline: an external private runner uses static MCP bearer auth to populate `demo_answer_cache` out of band on a scheduled cadence. The website only reads cached answers and never triggers refresh runs. The legacy ESPN demo contract is `public-demo-answer:{presetId}:{sport}:v7:v2`. Platform-aware targets use `public-demo-answer:{presetId}:{platform}:{sport}:v8:v3`, with matching `platform`, `sport`, `prompt_version`, and `context_version` columns. The platform-aware reader requires the target to be enabled and fully warmed through `/api/public-chat/capabilities`; during the current transition, only ESPN baseball may fall back from a missing v8/v3 target row to its legacy v7/v2 row. Version tags and homepage preset metadata live in `web/lib/public-chat.ts`, while LLM system prompts and per-preset generation instructions remain outside this public repository.
@@ -198,6 +208,18 @@ See `workers/README.md` for worker-to-worker communication requirements.
 3. User connects through ChatGPT, Claude, or an optional manual MCP client → OAuth flow → token stored in Supabase.
 4. ChatGPT, Claude, or the manual MCP client calls an MCP tool after connection → MCP worker fetches creds from auth-worker → calls ESPN → returns data.
 
+For allowlisted web and extension users, current ESPN leagues are discovered inside the request and historical seasons can be processed by a Cloudflare Workflow. This durable path is rollout-gated and disabled by default in every environment; it requires both `ESPN_DURABLE_HISTORY_ENABLED=true` and an exact Clerk user ID in `ESPN_DURABLE_HISTORY_USERS`. When enabled, the request and workflow share an exact ESPN sync lease, and every league write is checked against its current owner. Changing or removing ESPN credentials, or deleting or replacing saved ESPN leagues, takes over that lease before changing rows, so an in-flight refresh cannot restore stale data. The workflow checkpoints each historical league-season through a fenced Supabase RPC and can resume after worker retries. A versioned full-repair marker makes the first scan exhaustive; later scans skip existing historical rows. `get_ancient_history` remains a fast read-only index over the rows already committed by that workflow. MCP-triggered refresh remains synchronous until the separately gated MCP behavior change ships.
+
+Legacy ESPN repair uses a separate, default-off backend migration lane. Every
+five minutes, auth-worker may atomically claim one account from a fixed
+pre-deployment cohort, seed the durable job from the newest saved row for each
+league root, and transfer that account's exact ESPN lease to the same Workflow.
+Database constraints allow only one active scheduled job globally. Candidate
+selection excludes completed full repairs, hidden roots, active leases, recent
+failed attempts, exhausted credential snapshots, and accounts with no saved
+league roots. The interactive rollout gate does not enable or select these
+scheduled jobs.
+
 ## Usage Analytics
 
 The gateway emits one best-effort telemetry event per MCP tool call (FLA-156), independent of the tool-call path — it cannot slow or break a tool call.
@@ -211,6 +233,9 @@ fantasy-mcp tool call → waitUntil(POST /internal/usage-event) → auth-worker 
 - **Fire-and-forget:** emitted in `ctx.waitUntil` with swallowed errors — never awaited, adds no latency, and a logging failure can never break a tool call.
 - **Tagged for filtering:** every event carries `env` (`prod`/`preview`/`dev`) and `auth_type` (`oauth`/`clerk`/`eval-api-key`/`demo-api-key`). Real-user metrics filter `env='prod' AND auth_type='oauth'`, which excludes preview traffic, the demo runner (`demo-api-key`), and eval runs (`eval-api-key`).
 - **Two tiers:** raw `mcp_tool_events` is pruned after 90 days; `pg_cron` rolls each UTC day into the permanent, tiny `mcp_user_daily` / `mcp_tool_daily` rollups.
+- **ET history is the dashboard source:** the database contract contains an owner-only `mcp_user_daily_et` aggregate and serialized close/backfill function. The canonical dashboard payload delegates to an owner-only implementation that combines closed ET summaries with raw days after the marker. Migrations create no close cron; local synthetic seed data initializes the marker before its first snapshot refresh, while hosted backfill and scheduling remain explicit operations.
+- **Health stays exact:** the history implementation keeps latency and error health on raw events, using a disclosed 30-day window for the historical health keys and the existing seven-day window for recent health. It does not combine stored percentiles.
+- **Attribution retained:** ET summaries also preserve nullable platform and sport from each event. Missing attribution stays unknown; it is not inferred from current connections. Existing dashboard metrics sum across these dimensions.
 - **Telemetry only:** tool, platform, sport, status, latency, and a hashed league id — never rosters, players, or question text.
 
 Schema is summarized in `docs/DATABASE.md`; the reviewed, secret-free
@@ -295,7 +320,7 @@ Opening a PR triggers a full preview stack: Vercel preview deploy + all 5 Cloudf
 
 **Vercel env vars are scoped by environment.** `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `AUTH_WORKER_URL`, `NEXT_PUBLIC_AUTH_WORKER_URL`, and `NEXT_PUBLIC_FANTASY_MCP_URL` each have separate Production and Preview values. Preview points to dev Clerk and preview worker URLs. Server-only web routes should use `AUTH_WORKER_URL` with the direct `.workers.dev` worker URL; browser-visible configuration uses the `NEXT_PUBLIC_*` names and may point at the public custom gateway.
 
-**Auth-worker resolves frontend redirects dynamically in preview** — no static `FRONTEND_URL` needed. It reads the `Origin` header (OAuth consent) or stored `redirect_after` (Yahoo callback) and accepts any `flaim-*.vercel.app` origin.
+**Auth-worker's MCP OAuth consent redirect (`/authorize`) uses a static preview `FRONTEND_URL`** (`https://preview.flaim.app`, the domain pinned to the `staging` branch below) rather than resolving dynamically per PR branch. This is deliberate: an MCP client (ChatGPT, Claude) opens the user's browser directly at `/authorize` with no preceding Flaim webpage in that navigation, so there is no `flaim-*.vercel.app` Origin/Referer header to recover the calling branch from — a dynamic lookup here would have nothing to read and fall through to production. Auth-worker *does* resolve the frontend dynamically for the Yahoo-connect flow specifically (stored `redirect_after`, captured from the `Origin`/`X-Forwarded-Origin` header on the initiating request), since that flow starts from a user actively browsing a specific PR's Vercel preview URL.
 
 **Supabase is isolated.** Preview Workers use the dedicated preview database;
 production Workers use the production database. Preview verification uses

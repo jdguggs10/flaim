@@ -6,22 +6,33 @@ Flaim uses a small, restrained email system so product emails, auth emails, and 
 
 | Provider | Role | Sender |
 | --- | --- | --- |
-| Zoho | Real inboxes, aliases, and replies | `support@flaim.app` |
+| Fastmail | Real inboxes, aliases, and replies | `support@flaim.app` |
 | Clerk | Authentication and security emails | `Flaim <accounts@flaim.app>` |
 | Resend | Product and lifecycle emails | `Flaim <updates@flaim.app>` |
+| Resend | Broadcasts | `Flaim <updates@news.flaim.app>` |
 
 Use `support@flaim.app` as the reply-to address for product email.
 
-Resend's verified domain is `flaim.app`. The `send.flaim.app` DNS records are for Resend's bounce / MAIL FROM infrastructure, not the visible From address.
+Resend uses separate verified US East sending domains for the two lanes:
+
+- `flaim.app` carries product and lifecycle email. Open and click tracking are off; Flaim-owned links use first-party `ref=` attribution instead.
+- `news.flaim.app` carries Broadcasts. Open tracking is off and click tracking is on through `links.news.flaim.app`.
+
+The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses.
+
+Root DMARC stays at `p=quarantine`. Aggregate reports go to Cloudflare DMARC Management only: `postmaster@flaim.app` was dropped from the `rua` tag on 2026-09-12, once the mailbox move gave that alias a real destination and the daily XML reports began arriving in the support inbox. Read them in the Cloudflare dashboard under Email > DMARC Management, not by mail. DMARC policy is discovered from the visible From domain. Product and Clerk mail send as `flaim.app`, so the root record governs them directly. Only the Broadcast lane uses a From subdomain, `news.flaim.app`, and it publishes no `_dmarc` record of its own, so it falls back to the root policy. The `send.` and `clkmail.` subdomains are MAIL FROM and SPF authentication domains that never appear in a visible From, so a `_dmarc` record on any of them would have no effect.
+
+Moving to `p=reject` stays a provider-level decision, not a template change, and the templates are not what blocks it. DMARC passes when either aligned SPF or aligned DKIM passes, so `p=reject` changes the outcome only for mail that fails both. Before tightening the policy, confirm from current aggregate reports that every sending lane passes on aligned DKIM rather than on aligned SPF alone. SPF alignment is the half that breaks when a message is forwarded, so a lane leaning on it has no second mechanism left at that point. Check a window that includes a Broadcast send.
 
 ## Visual rules
 
 - Keep emails quiet and utilitarian: white card, light gray page background, one primary action.
 - Mirror the website tokens in `web/app/globals.css`, but use email-safe hex values in `web/emails/brand.ts`.
 - Use shared colors, type, button styling, support footer, and plain-language copy across providers.
-- Resend product emails use the Flaim mark at 28px next to the text wordmark in the header.
+- Resend product emails use the optimized transparent Flaim mark at 36px in the card's top-right corner, aligned with the eyebrow on the left or with the title when no eyebrow is used. The shared layout does not add a separate text wordmark above the card.
 - Clerk auth emails use the dashboard application logo at 72px with the `FLAIM FANTASY` label. Keep this provider-specific because Clerk/Revolvapp controls the final email HTML.
 - Use system fonts, 8px containers, 6px buttons, and plain-language copy.
+- Shared Resend cards use 20px top padding and 28px side/bottom padding. Callout body text uses the foreground color for readability against the muted box.
 - Do not add promotional hero art to auth or security emails.
 - Product and lifecycle emails must include a clear unsubscribe or notification-preferences link in the footer before they are connected to a live sender.
 
@@ -35,6 +46,10 @@ Run the local preview server:
 corepack pnpm --dir web run email:dev
 ```
 
+Use this browser preview as the visual editing surface. It refreshes while the
+React Email template changes, so copy length, spacing, hierarchy, and mobile
+layout can be judged before anything is created in Resend.
+
 Export static HTML previews:
 
 ```sh
@@ -43,12 +58,103 @@ corepack pnpm --dir web run email:export
 
 This writes ignored preview HTML to `web/.email-out/`.
 
+### Broadcast workflow
+
+Broadcasts are repo-authored and provider-sent. Follow this order:
+
+1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
+2. Run `corepack pnpm --dir web run email:dev` for local iteration.
+3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
+4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and load a dedicated full-access broadcast credential into `RESEND_BROADCASTS_API_KEY` from Flaim's password manager (currently 1Password) without printing it. An audience ID is not a segment ID; never substitute one for the other. Do not source this credential from `web/.env.local`: that file's `RESEND_API_KEY` is deliberately sending-only and cannot create broadcasts.
+
+   ```sh
+   # From the repository root. Nothing here prints either credential.
+   (
+     unset RESEND_API_KEY
+     : "${RESEND_BROADCASTS_API_KEY:?Load the full-access broadcast key from Flaim's password manager first}"
+     RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
+
+     RESEND_API_KEY="$RESEND_BROADCASTS_API_KEY" corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
+       --from "Flaim <updates@news.flaim.app>" \
+       --reply-to support@flaim.app \
+       --subject "Keepers, draft details, and more" \
+       --preview-text "Keeper costs, dynasty draft picks, and sharper trade detail for your connected leagues." \
+       --name "Football kickoff: keepers + Yahoo" \
+       --segment-id "${RESEND_BROADCAST_SEGMENT_ID:?Set a manually verified Resend Segment ID first}" \
+       --html-file .email-out/broadcast-2026-08-kickoff.html \
+       --text-file .email-out/broadcast-2026-08-kickoff.txt
+   )
+   unset RESEND_BROADCASTS_API_KEY
+   ```
+
+   The subshell first clears any ambient `RESEND_API_KEY`, then passes the dedicated broadcast credential only to the downloaded CLI under the variable name it expects. The segment ID exists only inside the subshell and is passed as an argument. The final `unset` clears the operator-supplied broadcast credential from the outer shell. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
+5. Use the Resend dashboard only to confirm the Segment, select the appropriate durable Topic, send proof emails, and send after review. Topics describe the kind of email and preserve a recipient's subscription preference; Segments describe who should receive a particular Broadcast. Provider-availability messages use the public `Service updates` Topic. Keep one-off cohorts such as the Yahoo access-update audience as campaign-specific Segments rather than creating provider-specific Topics. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
+6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
+
+Do not send a real email while developing this workflow. The local `RESEND_API_KEY` is sending-only and restricted to `flaim.app`; it must never be broadened for broadcast work. Keep full-access operator credentials out of `.env.local`, and do not change provider keys or feature flags as part of routine copy iteration. Load the broadcast credential per use because its pinned first-party CLI consumer can create and modify provider resources. Load the suppression credential per use as well: the reconciliation script has no write mode, but the raw credential still has Full access outside that script.
+
+The official [`resend-cli` v2 broadcast reference](https://github.com/resend/resend-cli/blob/main/skills/resend-cli/references/broadcasts.md) supports `--html-file`, `--text-file`, `--name`, `--reply-to`, and `--preview-text`, and saves a draft unless `--send` is supplied. It targets the current API's required `segment_id` contract and maps the CLI reply-to input to the API's `reply_to` array. The pinned CLI command above therefore replaces a custom draft creator.
+
 The first product templates are:
 
 - `web/emails/welcome.tsx`
-- `web/emails/league-connected.tsx`
+- `web/emails/broadcast-2026-08-kickoff.tsx`
+- `web/emails/broadcast-2026-08-yahoo-access.tsx`
+- `web/emails/broadcast-2026-09-update.tsx`
+- `web/emails/broadcast-2026-09-yahoo-back.tsx`
+- `web/emails/espn-setup-link.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
+
+### Yahoo operational Broadcast Segment
+
+`web/scripts/prepare-yahoo-broadcast-segment.mjs` prepares the one-off Yahoo
+access-update Segment. It is campaign-specific rather than a durable platform
+property sync. Every selected user must have a current Yahoo credential. Among
+those users, the default cohort includes credentials created on or after
+`2026-07-27T18:15:36Z` or users with a stored 2026 Yahoo league. Users in
+`analytics.internal_users` are excluded by SHA-256 hash before Clerk or Resend
+eligibility is evaluated.
+
+The script requires production `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, and
+`CLERK_SECRET_KEY`; an operator-only Full access Resend credential loaded into
+`RESEND_BROADCASTS_API_KEY`; and the current internal-user hashes in
+`FLAIM_INTERNAL_USER_HASHES`. Load credentials per command from the password
+manager without printing them, and unset them afterward. Do not store them in
+`.env.local`. Hash each exact Clerk user ID as UTF-8 with SHA-256, without a
+trailing newline, and pass the lowercase hex digests as a comma-separated list.
+
+The default command is read-only and prints aggregate counts only:
+
+```sh
+corepack pnpm --dir web exec node scripts/prepare-yahoo-broadcast-segment.mjs
+```
+
+After reviewing that count, manually create an empty, campaign-specific Resend
+Segment. Apply mode requires its exact ID and name plus the reviewed eligible
+count:
+
+```sh
+corepack pnpm --dir web exec node scripts/prepare-yahoo-broadcast-segment.mjs \
+  --apply \
+  --segment-id "..." \
+  --segment-name "Yahoo access update - 2026-08" \
+  --expected-eligible-count "..."
+```
+
+Apply mode verifies that any existing Segment members belong to the current
+eligible cohort, refreshes Resend contact and suppression state immediately
+before its first write, adds only missing eligible contacts, then refreshes
+eligibility and re-reads the Segment again to prove the final membership. Any
+count or membership drift fails closed. If any Segment write is attempted and
+population or final verification fails, do not use that Segment: create a new
+empty campaign Segment, review a fresh dry run, and retry. It never creates
+contacts, changes an unsubscribe state, removes a suppression, creates a
+Broadcast, or sends email.
+
+Run one final read-only dry run immediately before creating the provider draft
+or sending. Segment membership is not a substitute for current unsubscribe and
+suppression checks, and any changed count requires renewed review.
 
 ## Link attribution
 
@@ -72,9 +178,67 @@ Clerk is the source of truth for user identity. Resend is the product email audi
 
 The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and acknowledges verified Clerk events even if downstream Resend work fails, so Resend outages do not create Clerk webhook retry storms.
 
+## Delivery operations and recovery
+
+Email operations emit compact JSON records to Vercel structured logs. The stable
+event names are `email.welcome_event_failed`, `email.welcome_event_skipped`,
+`email.contact_sync_failed`, `email.send_failed`, `email.bounced`,
+`email.complained`, `email.failed`, and `email.delivery_delayed`. Webhook
+verification failures use `email.webhook_verification_failed`. These records
+include provider-safe IDs and failure categories but never recipient addresses,
+raw webhook bodies, signatures, or API keys.
+
+When a Resend welcome event or contact sync fails after a verified Clerk webhook,
+Flaim stores the matching retry marker in that user's Clerk private metadata at
+`flaim_email_ops.welcomeEvent` or `flaim_email_ops.contactSync`. Clerk's metadata
+write is a deep merge, so unrelated private metadata is retained. A retry marker
+is never refreshed when it already exists, which prevents marker-caused
+`user.updated` webhooks from looping during an outage. A successful contact sync
+clears only `contactSync`; it cannot clear a failed `welcomeEvent` marker.
+
+The marker bounds webhook retry loops; it is not an exactly-once delivery
+guarantee. Before a flagged recovery re-sends a welcome event, the recovery
+command checks whether the Resend contact exists. When the welcome automation
+owns contact creation, that is conservative evidence that the prior event landed,
+so the command clears the marker and reports a skip instead of sending again.
+That deduplication is reliable with the default disabled contact-sync flag and no
+preexisting contact. If `RESEND_CONTACT_SYNC_ENABLED=true` or the contact may
+have existed before the event, use `--force-resend` for an intentional override.
+
+Direct `resend.emails.send` calls may pass a caller-supplied SDK
+`idempotencyKey` only for a genuinely one-time business event with a stable
+semantic identifier. The send helper never derives a permanent key from a user
+and template: repeatable requests such as an ESPN setup-link resend omit the
+option so Resend does not replay-cache a legitimate later request. Resend
+currently supports that provider-side idempotency option for email endpoints,
+but not for `events.send`. Welcome automation events therefore rely on their
+Clerk retry marker and the flagged recovery command below instead of an
+unsupported SDK option.
+
+### Resend delivery-feedback webhook
+
+`POST /api/webhooks/resend` verifies `svix-id`, `svix-timestamp`, and
+`svix-signature` against the exact raw request text with
+`RESEND_WEBHOOK_SIGNING_SECRET`. Do not parse and stringify the body before
+verification because even whitespace changes invalidate the signature. The route
+records `email.bounced`, `email.complained`, `email.failed`, and
+`email.delivery_delayed`; delivery feedback is logged only and does not mutate
+Clerk users or Resend suppressions.
+
+Webhook setup requirements:
+
+1. Create a Resend webhook for `https://flaim.app/api/webhooks/resend` that sends
+   `email.bounced`, `email.complained`, `email.failed`, and
+   `email.delivery_delayed`.
+2. Set that endpoint's signing secret as `RESEND_WEBHOOK_SIGNING_SECRET` in the
+   Vercel environment before enabling the webhook.
+3. Send an intentional test through the configured Resend workflow and confirm a
+   structured delivery event in Vercel logs. Do not use a production recipient
+   without approval.
+
 The maintenance contact sync stores only email, first name, and last name. It updates first and creates only if Resend reports the contact is missing, avoiding a separate contact-existence preflight. It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, repaired contacts are assigned to that Resend Segment for future Broadcast targeting. Avoid writing custom Resend contact properties unless those properties have first been created in Resend.
 
-The first automated product email is a Resend Automation for new-user welcome email. Flaim does not queue, schedule, create the signup contact, or send this email itself. After a verified Clerk `user.created` webhook passes the `RESEND_WELCOME_AUTOMATION_ENABLED=true` gate, it emits `flaim.user_created` with the user's email and greeting payload. Resend identifies the contact by email, automatically creates a missing contact, adds the contact to the configured Segment, sends the templated welcome email, handles unsubscribe, and records the automation run history. Contact name enrichment remains on the `user.updated` repair path and the backfill script.
+The first automated product email is a Resend Automation for new-user welcome email. Flaim does not queue, schedule, create the signup contact, or send this email itself. After a verified Clerk `user.created` webhook passes the `RESEND_WELCOME_AUTOMATION_ENABLED=true` gate, it emits `flaim.user_created` with the user's email plus non-name metadata (`clerk_user_id`, `source`). The welcome template and signup automation do not depend on names. Resend identifies the contact by email, automatically creates a missing contact, adds the contact to the configured Segment, sends the templated welcome email, handles unsubscribe, and records the automation run history. Contact name enrichment remains on the `user.updated` repair path and the backfill script.
 
 Keep welcome delivery gated until the Resend event, template, automation, Segment, and real inbox test are verified. Production delivery requires both `RESEND_WELCOME_AUTOMATION_ENABLED=true` in Flaim and the Resend automation enabled in Resend. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
 
@@ -83,12 +247,12 @@ Before enabling the flag in production, confirm failed welcome event sends are v
 Create or refresh the Resend-side resources with:
 
 ```sh
-corepack pnpm --dir web exec node scripts/setup-resend-welcome-automation.mjs
+corepack pnpm --dir web exec tsx scripts/setup-resend-welcome-automation.mjs
 ```
 
 The setup script creates the `flaim.user_created` event, publishes the `flaim-welcome-v1` template, and creates/updates the `Flaim Welcome Email` automation as `disabled`. It requires `RESEND_CONTACT_SEGMENT_ID` (the `Flaim Users` segment id, visible in the Resend Audience → Segments URL) because the automation chain is `trigger -> add_to_segment -> send_email`. **Resend rejects API edits to an enabled automation** ("This automation is enabled and cannot be edited"), so the working order is: disable the automation in the Resend dashboard, run the script (it republishes the template and updates the automation, leaving it disabled), send a real test email, then re-enable it. The script's event and template steps run before the automation step, so if it fails on an enabled automation the template has already been republished; disable and re-run. Verified 2026-08-16. The signup automation does not enrich contact names; that remains the responsibility of the `user.updated` repair path and the backfill script. Re-running the script intentionally disables the automation again as a safety guard while templates are being revised. Enable the automation in Resend only after the production webhook event path has been tested.
 
-The Resend automation template is currently hand-built in `web/scripts/setup-resend-welcome-automation.mjs` and must stay visually synchronized with `web/emails/welcome.tsx`. Shared action URLs live in `web/emails/flaim-email-links.json`. When changing the welcome email, update the React preview and setup-script HTML together, run `corepack pnpm --dir web run email:export`, rerun the setup script, and send a real test email before enabling or re-enabling the automation.
+The Resend automation setup script renders `web/emails/welcome.tsx` directly with `@react-email/render`, so the React template is the single source for both automation HTML and plain text. Shared action URLs live in `web/emails/flaim-email-links.json`. When changing the welcome email, update the React template, run `corepack pnpm --dir web run email:export`, rerun the setup script, and send a real test email before enabling or re-enabling the automation.
 
 Existing users are backfilled or repaired with a separate dry-run-first script. This is not part of the normal signup welcome path. Run it from the repo root:
 
@@ -96,11 +260,66 @@ Existing users are backfilled or repaired with a separate dry-run-first script. 
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs
 ```
 
-The script requires `CLERK_SECRET_KEY` for dry-runs and also requires `RESEND_CONTACTS_API_KEY` when applying writes. `RESEND_API_KEY` should remain the send-only email key; the contact sync key needs Resend Contacts and Segments permissions. The script skips users without a primary email and users whose primary email is explicitly unverified. When applying writes, it updates first and creates only if Resend reports the contact is missing. Use `--delay-ms` to pace larger writes if needed. To write a single controlled contact before a full backfill:
+The script requires `CLERK_SECRET_KEY` for dry-runs and `RESEND_CONTACTS_API_KEY`
+when applying contact changes or normal flagged welcome recovery: the latter reads
+the contact before it can safely retry the event. `RESEND_API_KEY` should remain the
+send-only email key; the contact sync key needs Resend Contacts and Segments
+permissions. The script skips users without a primary email and users whose
+primary email is explicitly unverified. When applying writes, it updates first
+and creates only if Resend reports the contact is missing. Use `--delay-ms` to
+pace larger writes if needed. To write a single controlled contact before a full
+backfill:
 
 ```sh
 corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --apply --max-users 1
 ```
+
+To inspect only users with failed Clerk email-operation markers, keeping the
+default dry-run behavior:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --flagged-only
+```
+
+Apply the marked recovery only after reviewing that output:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --flagged-only --apply
+```
+
+The apply command retries contact syncs and failed welcome events. Welcome-event
+recovery first performs the contact-existence deduplication described above. It
+requires an explicit `--apply`, does not run automatically, and should be limited
+with `--max-users` when used for a controlled recovery. To deliberately re-send
+even when the contact exists, add `--force-resend`:
+
+```sh
+corepack pnpm --dir web exec node scripts/backfill-resend-contacts.mjs --flagged-only --apply --force-resend --max-users 1
+```
+
+### Read-only suppression reconciliation
+
+Resend's team-level suppression list protects sender reputation after bounces or
+complaints. Flaim does not remove suppressions automatically. The reconciliation
+script pages through the current Resend Suppressions API, compares masked
+addresses with Clerk primary emails, and reports matches without writing to
+either provider:
+
+```sh
+(
+  : "${RESEND_SUPPRESSIONS_API_KEY:?Load a Full access Resend maintenance key from Flaim's password manager first}"
+  RESEND_SUPPRESSIONS_API_KEY="$RESEND_SUPPRESSIONS_API_KEY" corepack pnpm --dir web exec node scripts/reconcile-resend-suppressions.mjs
+)
+unset RESEND_SUPPRESSIONS_API_KEY
+```
+
+It requires `CLERK_SECRET_KEY` and `RESEND_SUPPRESSIONS_API_KEY`. Resend does
+not offer a read-only API-key permission, so load an existing Full access
+maintenance credential into the suppression-specific shell alias without
+printing it. Keep it out of `.env.local` and deployed environments, and unset it
+after the command. The command itself is always read-only and has no write mode.
+Any suppression removal must be reviewed and performed manually in Resend after
+the underlying delivery problem is resolved.
 
 React Email's preview server may add lockfile entries for its own bundled Next.js version. Those entries are isolated to the preview tooling; the Flaim web app should continue to resolve the app-pinned Next.js version. Keep the React Email preview packages pinned to exact versions so preview tooling upgrades do not silently churn the lockfile.
 

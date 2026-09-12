@@ -21,11 +21,13 @@ migration `20260805112500_add_platform_to_demo_tables.sql` raises the current
 contract to 23 public tables and 71 public indexes. The FLA-264 forward
 migration `20260813012740_split_analytics_snapshot_cadence.sql` raises it to 3
 analytics tables, 3 analytics indexes, and 5 analytics functions, and adds a
-sixth separately controlled cron job. Every other count is unchanged.
+sixth separately controlled cron job. The FLA-308 forward migration
+`20260827004306_add_espn_history_jobs.sql` raises the current contract to 24
+public tables and 75 public indexes. Every other count is unchanged.
 
 All public tables — the 22 baseline tables and the forward-added
-`demo_target_state` — have RLS enabled and no policies. The two public views
-use `security_invoker`. The analytics schema has three tables without RLS
+`demo_target_state` and `espn_history_jobs` have RLS enabled and no policies.
+The two public views use `security_invoker`. The analytics schema has three tables without RLS
 because it is outside the Data API and is read through the direct
 `analytics_readonly` database role.
 
@@ -58,7 +60,8 @@ Tables:
 `archived_leagues`, `chat_runs`, `demo_answer_cache`,
 `demo_antigravity_cache`, `demo_context_cache`, `demo_refresh_attempts`,
 `demo_refresh_runs`, `demo_target_state` (added by the FLA-247 forward
-migration), `espn_credentials`, `espn_leagues`, `mcp_tool_daily`,
+migration), `espn_credentials`, `espn_history_jobs` (added by the FLA-308
+forward migration), `espn_leagues`, `mcp_tool_daily`,
 `mcp_tool_events`, `mcp_user_daily`, `oauth_codes`, `oauth_states`,
 `oauth_tokens`, `platform_oauth_states`, `provider_sync_state`,
 `sleeper_connections`, `sleeper_leagues`, `user_preferences`,
@@ -117,11 +120,9 @@ The separately controlled production schedule defines:
 | `dashboard-snapshot` | `*/5 * * * *` | `analytics.refresh_dashboard_snapshot()` |
 | `provider-flags-snapshot` | `*/5 * * * *` | `analytics.refresh_provider_flags_snapshot()` |
 
-That table is the phase 1 posture defined by `cron/production.sql`. The FLA-264
-phase 2 cutover — `dashboard-snapshot` hourly against
-`analytics.refresh_dashboard_snapshot(false)` plus a nightly
-`dashboard-snapshot-internal` — is defined separately in
-`cron/production-cadence-cutover.sql` and is gated on consumer verification.
+That table is the canonical posture defined by `cron/production.sql`. Both
+analytics jobs remain on five-minute schedules; the no-argument dashboard
+function controls which dashboard row is rebuilt.
 
 ## Intentional and environment-managed differences
 
@@ -168,15 +169,49 @@ the same id=1/id=2 variant contract as `dashboard_snapshot` and its own
 `analytics.refresh_provider_flags_snapshot()` functions, and a
 `analytics.refresh_dashboard_snapshot(boolean)` overload that refreshes a
 single dashboard variant. The no-argument `refresh_dashboard_snapshot()` is
-restated as a wrapper over that overload and still refreshes both variants.
+restated and still refreshes both variants.
 `analytics.dashboard_payload(boolean)` is untouched, including its
-`sync_recent` key, which remains as a consumer fallback during rollout.
+`sync_recent` key.
 
 The new relation grants `SELECT` to `analytics_readonly` and to nothing else;
 the new functions are security invokers with a fixed empty search path and no
 non-owner `EXECUTE` grants. The migration adds no policy, index outside the new
-primary key, extension, or scheduled job. Its cron activation is the two-phase
-operation described in `README.md`.
+primary key, extension, or scheduled job.
+
+The later FLA-264 forward migration
+`20260909005730_compute_single_inclusive_dashboard_snapshot.sql` replaces only
+the no-argument refresh body. It computes the internal-inclusive dashboard
+payload once and upserts id=2, leaving the existing external id=1 row
+unchanged. The boolean overload remains available to rebuild either variant
+explicitly. The migration changes no payload function, provider-flags object,
+privilege, relation, or schedule.
+
+The FLA-265 history migrations add an owner-only ET user-day aggregate, a
+serialized close marker and function, and the history-backed payload
+implementation. The forward reader migration
+`20260908202843_activate_analytics_history_reader.sql` makes
+`analytics.dashboard_payload(boolean)` a thin security-invoker wrapper over
+that implementation. It preserves the established function owner and ACL,
+changes no relation or schedule, and performs no refresh while migration-owned
+state is uninitialized. Fresh resets initialize their synthetic marker in
+`seed.sql` before materializing dashboard snapshots; hosted initialization and
+scheduling remain separately reviewed operations.
+
+The FLA-308 forward migration
+`20260827004306_add_espn_history_jobs.sql` adds the service-role-only
+`espn_history_jobs` table, its primary/unique/indexed job access paths, and
+the `advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
+`persist_espn_league_with_lease(...)` RPCs. All three functions are security
+invokers with an empty search path. The advance RPC locks an active job before
+the exact credential snapshot and live
+`history:<job>` lease, then fences the plan identity through `teamId`. The
+finish RPC requires those two fences only for `succeeded` and `partial` repair
+markers; terminal failure, supersession, and cancellation remain possible
+after a handoff. The league-write RPC locks the exact live provider lease before
+changing a current or historical league row. Destructive league mutations take
+over that same lease before deleting or replacing saved rows. This migration is
+a repository rollout boundary only; hosted preview or production application
+needs separate approval and verification.
 
 The hosted-preview and production migration ledgers remain environment state,
 not repository truth. Applying this or any later migration to a hosted database
