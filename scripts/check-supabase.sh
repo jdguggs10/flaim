@@ -34,8 +34,8 @@ readonly PROVIDER_FLAGS_JOB_BODY='$job$'"${PROVIDER_FLAGS_COMMAND}"'$job$'
 readonly DASHBOARD_COMMAND='select analytics.refresh_dashboard_snapshot();'
 readonly DASHBOARD_JOB_BODY='$job$'"${DASHBOARD_COMMAND}"'$job$'
 
-# Both analytics jobs stay at five-minute cadence. The dashboard function now
-# computes one inclusive payload per call; provider flags remain independent.
+# Provider health stays at five-minute cadence while the human dashboard runs
+# every fifteen minutes. The dashboard computes one inclusive payload per call.
 if ! rg --multiline --quiet \
   "cron\.schedule\(\s*'provider-flags-snapshot',\s*'\*/5 \* \* \* \*'" \
   "${CRON_PRODUCTION_SQL}"; then
@@ -45,16 +45,16 @@ if ! rg --multiline --quiet \
 fi
 
 if ! rg --multiline --quiet \
-  "cron\.schedule\(\s*'dashboard-snapshot',\s*'\*/5 \* \* \* \*'" \
+  "cron\.schedule\(\s*'dashboard-snapshot',\s*'\*/15 \* \* \* \*'" \
   "${CRON_PRODUCTION_SQL}"; then
-  printf '%s must schedule dashboard-snapshot at */5.\n' \
+  printf '%s must schedule dashboard-snapshot at */15.\n' \
     "${CRON_PRODUCTION_SQL}" >&2
   exit 1
 fi
 
 if rg --quiet "dashboard-snapshot-internal|refresh_dashboard_snapshot\(true\)" \
   "${CRON_PRODUCTION_SQL}"; then
-  printf '%s must keep one no-argument dashboard refresh at five-minute cadence.\n' \
+  printf '%s must keep one no-argument dashboard refresh at fifteen-minute cadence.\n' \
     "${CRON_PRODUCTION_SQL}" >&2
   exit 1
 fi

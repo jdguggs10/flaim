@@ -193,6 +193,15 @@ does not prove preservation is running. Failed jobs and a marker that has not
 advanced by the next scheduled close require timely operator notification.
 Activating a job and inspecting one successful run is not ongoing monitoring.
 
+The FLA-378 optimization keeps this payload contract unchanged while removing
+two growth-sensitive query shapes. Raw rows after the close marker are selected
+with an indexed `ts` lower bound derived from the next America/New_York
+midnight, rather than applying an ET-date expression to every retained event.
+User concentration computes each user's call-weighted client mode in one
+grouped pass, rather than rescanning materialized history once per user. The
+call-count descending and client-name lexical tie-break remains unchanged, and
+NULL clients remain excluded from mode selection.
+
 The reviewed scheduling artifact lives outside the migration path:
 `cron/analytics-history.sql` schedules history preservation only after an
 explicit initial close/backfill has been verified. The one-time guarded
@@ -238,10 +247,12 @@ boolean overload can still rebuild either row explicitly for comparison or
 rollback. The migration does not change function ownership, privileges, the
 provider-flags path, or cron.
 
-`cron/production.sql` keeps both `dashboard-snapshot` and
-`provider-flags-snapshot` at `*/5`. The provider consumer receives its rows and
-freshness timestamp only from `provider_flags_snapshot`; the dashboard is not
-an alerting fallback.
+`cron/production.sql` runs `dashboard-snapshot` at `*/15` and keeps
+`provider-flags-snapshot` at `*/5`. The human dashboard can therefore be up to
+fifteen minutes behind live activity. The provider consumer receives its rows
+and freshness timestamp only from `provider_flags_snapshot`; the dashboard is
+not an alerting fallback and its slower cadence does not delay provider-health
+signals.
 
 `supabase/tests/provider_flags.sql` proves, in a rolled-back transaction, that
 the dedicated payload equals the dashboard payload's `sync_recent` key for both

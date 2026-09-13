@@ -31,12 +31,12 @@ select cron.schedule(
   $job$select public.cleanup_expired_oauth_ephemeral();$job$
 );
 
--- FLA-264: both independent signals stay on the five-minute cadence. The
--- no-argument dashboard refresh computes only the human-facing,
--- internal-inclusive row; provider flags retain their own lightweight refresh.
+-- FLA-264 / FLA-378: the human dashboard refreshes every fifteen minutes;
+-- provider flags retain their independent five-minute alerting cadence. The
+-- no-argument dashboard refresh computes only the internal-inclusive row.
 select cron.schedule(
   'dashboard-snapshot',
-  '*/5 * * * *',
+  '*/15 * * * *',
   $job$select analytics.refresh_dashboard_snapshot();$job$
 );
 
