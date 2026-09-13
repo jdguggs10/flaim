@@ -168,7 +168,7 @@ describe('shipped Flaim fantasy skill contract', () => {
       'Never infer league ownership from `market_percent_owned`, `percentOwned`, or `ownership_scope`'
     );
     expect(skill).toContain(
-      "On Sleeper, `get_players` always resolves league ownership against the selected league's current rosters"
+      "On Sleeper, `get_players` always evaluates league ownership against the selected league's current rosters"
     );
     expect(skill).toContain(
       'trust `league_team_id` (Sleeper-only), `league_status`, `league_team_name`, and `league_owner_name` directly'
@@ -179,7 +179,7 @@ describe('shipped Flaim fantasy skill contract', () => {
 
     // get_players tools-reference section
     expect(skill).toContain(
-      "Sleeper always resolves league ownership against the selected league's current rosters and adds a Sleeper-only `league_team_id` (the Sleeper roster id, or `null`)"
+      "Sleeper always evaluates league ownership against the selected league's current rosters and adds a Sleeper-only `league_team_id` (the Sleeper roster id, or `null`)"
     );
     expect(skill).toContain(
       "Sleeper's market/global ownership stays unavailable (`market_percent_owned: null`, `ownership_scope: \"unavailable\"`)"
