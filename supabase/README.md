@@ -193,6 +193,15 @@ does not prove preservation is running. Failed jobs and a marker that has not
 advanced by the next scheduled close require timely operator notification.
 Activating a job and inspecting one successful run is not ongoing monitoring.
 
+The FLA-378 optimization keeps this payload contract unchanged while removing
+two growth-sensitive query shapes. Raw rows after the close marker are selected
+with an indexed `ts` lower bound derived from the next America/New_York
+midnight, rather than applying an ET-date expression to every retained event.
+User concentration computes each user's call-weighted client mode in one
+grouped pass, rather than rescanning materialized history once per user. The
+call-count descending and client-name lexical tie-break remains unchanged, and
+NULL clients remain excluded from mode selection.
+
 The reviewed scheduling artifact lives outside the migration path:
 `cron/analytics-history.sql` schedules history preservation only after an
 explicit initial close/backfill has been verified. The one-time guarded

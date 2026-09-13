@@ -91,6 +91,29 @@ begin
     raise exception 'dashboard_payload is not the canonical history wrapper';
   end if;
 
+  -- FLA-378: the history reader must keep the two production-proven hot paths
+  -- eliminated. The raw bridge compares the indexed timestamptz column with
+  -- the next ET midnight, while client modes are aggregated once rather than
+  -- rescanning the materialized history once per user.
+  if not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'analytics'
+      and p.proname = 'dashboard_payload_history'
+      and p.pronargs = 1
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%e.ts>=((history_marker_et_day+1)::timestampattimezone''America/New_York'')%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%per_user_clientas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%client_modeas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') not like
+        '%selectc.client_namefromhistory_callsascwherec.user_id=h.user_id%'
+  ) then
+    raise exception 'dashboard history hot-path optimization is missing';
+  end if;
+
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace

@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Dashboard Snapshot Query Cost (FLA-378)
+
+- **Changed**: The history-backed dashboard payload now converts the last closed Eastern day to its exact next-midnight UTC instant before filtering raw events. This lets the existing `mcp_tool_events(ts)` index read only the still-open portion of history instead of scanning and sorting the full retained event table every five minutes. America/New_York daylight-saving boundaries remain exact.
+- **Changed**: User concentration now calculates every user's call-weighted client mode in one grouped pass and joins it to per-user totals. The previous correlated subquery reread the complete materialized history once per user; on the measured production shape, that section alone took 36.8 seconds and read roughly 1.56 million temporary blocks. The replacement preserves the same NULL handling and call-count-then-lexical tie-break without changing any payload field, source, window, cadence, grant, or retention policy.
+
 ### Sleeper Player Search League Availability (FLA-382)
 
 - **Added**: Sleeper's `get_players` now resolves each matched player against that league's current rosters and adds four additive fields: `league_status` (`"ROSTERED"` | `"FREE_AGENT"` | `null`) and `league_team_id` / `league_team_name` / `league_owner_name` (populated when rostered, `null` when a free agent or when ownership is unresolvable). Previously `get_players` could only return player identity — it had no way to answer "who owns Player X in my league?" or "is Player X available?". `league_id` is now required for `get_players`; a request without it returns `MISSING_PARAM`. Sleeper's existing market-ownership fields (`market_percent_owned: null`, `ownership_scope: "unavailable"`) are untouched — league availability (this-league-only) and market ownership (cross-league popularity, which Sleeper doesn't expose) are deliberately kept separate.
