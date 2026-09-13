@@ -77,15 +77,11 @@ Prefer `corepack pnpm ...` from the repo root unless a package README says other
 
 ## Release Lanes (Directory-Review Gates)
 
-This repo ships two ways: continuous deploy to production on merge to `main`, and periodic frozen submission packets for AI app directories whose reviews freeze the advertised MCP contract.
+Merging to `main` deploys to production, but OpenAI's app directory reviews a frozen snapshot of the MCP contract. While a review is in flight, do not merge a change that moves the published `tools/list` descriptor or a published widget URI's `_meta`: tool names or count, `description:` strings, annotations, server instructions, declared schemas in `workers/fantasy-mcp/src/mcp/tools.ts`, shipped skill text under `.agents/skills/`, or a plugin manifest. Declaring a schema field counts even when it is optional and the payload already returns it. Track gated PRs against the active review-freeze issue.
 
-Before opening a PR, classify the change. The test is whether the published `tools/list` descriptor moves — that is the surface a directory snapshots at submission. It is **gated** (do not merge while a directory review is in flight; track it against the active review-freeze issue) if it touches any of: tool count; tool names, `description:` strings, annotations, or server instructions; declared input/output schemas in `workers/fantasy-mcp/src/mcp/tools.ts`; shipped skill text under `.agents/skills/`; or a plugin manifest. Declaring a field is gated even when it is optional and the payload already returned it. Everything else — worker internals, new fields inside passthrough response payloads, web, docs — merges normally, with `docs/CHANGELOG.md` updated in the same PR. Changing or removing a field the payload already returns is not covered by that carve-out.
+Everything else — worker internals, new fields in passthrough payloads, web, docs, backward-compatible widget bodies — merges normally with a `docs/CHANGELOG.md` entry. When unsure, treat it as gated and say so in the PR.
 
-A published widget resource body may change in place when the update is backward compatible; each published URI's resource read-result `_meta` (widget CSP, description, redirect domains) is part of the frozen surface and must stay byte-identical, so a body needing metadata its URI does not already declare needs a new URI instead.
-
-When unsure whether a change touches the frozen surface, treat it as gated and say so in the PR description.
-
-The gate is driven by OpenAI's versioned review model only. Anthropic's connector directory reads the live server and does not pin an approved contract — tools, schemas, descriptions, and scopes may change without resubmission there; only renaming the published listing or moving the endpoint URL is a directory-side event (see claude.com/docs/connectors/verification and /building/managing-your-listing).
+Anthropic's directory reads the live server; only renaming the listing or moving the endpoint URL is a directory-side change.
 
 ## Verification
 
