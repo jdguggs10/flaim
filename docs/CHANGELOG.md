@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Post-prune Analytics Hygiene (FLA-388)
+
+- **Changed**: The nightly UTC analytics rollup now recomputes the trailing seven completed days instead of only yesterday. Its date bounds are explicitly UTC, and the bounded replay repairs short missed or incomplete runs before raw-event pruning without touching the open day.
+- **Changed**: The history-backed dashboard payload now fails closed after 60 days without a successful ET-history close, leaving roughly 30 days to recover from retained raw events before the 90-day pruning boundary. The existing Pi monitor continues to provide the immediate daily failure alert.
+
 ### Dashboard Snapshot Query Cost (FLA-378)
 
 - **Changed**: The history-backed dashboard payload now converts the last closed Eastern day to its exact next-midnight UTC instant before filtering raw events. This lets the existing `mcp_tool_events(ts)` index read only the still-open portion of history instead of scanning and sorting the full retained event table every five minutes. America/New_York daylight-saving boundaries remain exact.

@@ -141,8 +141,8 @@ the close function and relations grant no access to Data API roles,
 `dashboard_payload_history(boolean)` is the owner-only implementation behind
 the canonical `dashboard_payload(boolean)` wrapper. After initialization, it
 combines aggregate rows through the marker with raw rows after the marker. It fails closed before that
-initialization or when the marker is too stale for the raw 90-day window to
-bridge safely. Its historical health summary and per-tool health use an exact
+initialization or after 60 stale days, while the 90-day raw window still leaves
+roughly 30 days to recover. Its historical health summary and per-tool health use an exact
 30-day raw window, disclosed as `health_window_days: 30`; recent rolling usage,
 seven-day health, UTC client mix, and operational keys keep their current
 sources. Snapshot refresh functions keep their existing signatures and now

@@ -113,7 +113,7 @@ The separately controlled production schedule defines:
 
 | Job | Schedule | Function |
 |---|---|---|
-| `mcp-rollup` | `15 5 * * *` | `public.rollup_mcp_usage()` |
+| `mcp-rollup` | `15 5 * * *` | Seven completed UTC days via `public.rollup_mcp_usage(day)` |
 | `mcp-prune` | `30 5 * * *` | `public.prune_mcp_events()` |
 | `oauth-tokens-cleanup` | `45 5 * * *` | `public.cleanup_expired_oauth_tokens()` |
 | `oauth-ephemeral-cleanup` | `47 5 * * *` | `public.cleanup_expired_oauth_ephemeral()` |
