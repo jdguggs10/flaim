@@ -2339,7 +2339,7 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('league_owner_name');
     expect(tool!.description).toContain('get_league_info');
     expect(tool!.description).toContain('get_roster');
-    expect(tool!.description).toContain('Sleeper always resolves league ownership against every current roster');
+    expect(tool!.description).toContain('Sleeper always evaluates league ownership against every current roster');
     expect(tool!.description).toContain('except during an active draft');
     expect(tool!.description).toContain('league_team_id');
     expect(tool!.description).toContain('Sleeper-only');

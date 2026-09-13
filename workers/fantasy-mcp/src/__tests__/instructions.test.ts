@@ -104,7 +104,7 @@ describe('Flaim MCP initialization instructions', () => {
 
   it('scopes get_players league ownership resolution and keeps the market-ownership guardrail platform-wide', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      "In get_players, Sleeper always resolves league ownership against the selected league's current rosters"
+      "In get_players, Sleeper always evaluates league ownership against the selected league's current rosters"
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('Sleeper-only league_team_id (the roster id, or null)');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
