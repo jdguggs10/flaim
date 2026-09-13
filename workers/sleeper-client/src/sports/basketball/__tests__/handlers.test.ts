@@ -316,7 +316,7 @@ describe('basketball get_players handler', () => {
     expect(freeGuard).toMatchObject({ league_status: 'FREE_AGENT', league_team_id: null });
   });
 
-  it('fails closed (no players payload leaked) when the rosters fetch errors', async () => {
+  it('degrades to unresolved ownership (still returns identity results) when the rosters fetch errors', async () => {
     routeByUrl({
       '/players/nba': () =>
         jsonResponse({
@@ -330,11 +330,25 @@ describe('basketball get_players handler', () => {
     const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
     const result = await basketballHandlers.get_players(env, params);
 
-    expect(result.success).toBe(false);
-    expect('players' in ((result.data as Record<string, unknown>) ?? {})).toBe(false);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as Record<string, unknown>;
+    expect(data.warnings).toEqual(['SLEEPER_OWNERSHIP_UNAVAILABLE: League ownership could not be resolved for this search; league_status is unavailable for these results.']);
+    const players = data.players as Array<Record<string, unknown>>;
+    const rostered = players.find((p) => p.id === '301');
+    expect(rostered).toMatchObject({
+      id: '301',
+      name: 'Test Rostered Hooper',
+      position: 'PG',
+      team: 'BOS',
+      league_status: null,
+      league_team_id: null,
+      league_team_name: null,
+      league_owner_name: null,
+    });
   });
 
-  it('fails closed (no players payload leaked) when the users fetch errors', async () => {
+  it('degrades to unresolved ownership (still returns identity results) when the users fetch errors', async () => {
     routeByUrl({
       '/players/nba': () =>
         jsonResponse({
@@ -351,8 +365,22 @@ describe('basketball get_players handler', () => {
     const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
     const result = await basketballHandlers.get_players(env, params);
 
-    expect(result.success).toBe(false);
-    expect('players' in ((result.data as Record<string, unknown>) ?? {})).toBe(false);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as Record<string, unknown>;
+    expect(data.warnings).toEqual(['SLEEPER_OWNERSHIP_UNAVAILABLE: League ownership could not be resolved for this search; league_status is unavailable for these results.']);
+    const players = data.players as Array<Record<string, unknown>>;
+    const rostered = players.find((p) => p.id === '301');
+    expect(rostered).toMatchObject({
+      id: '301',
+      name: 'Test Rostered Hooper',
+      position: 'PG',
+      team: 'BOS',
+      league_status: null,
+      league_team_id: null,
+      league_team_name: null,
+      league_owner_name: null,
+    });
   });
 
   it('fails closed (no players payload leaked) when the league is actively drafting, since in-progress picks are not yet reflected on rosters', async () => {
