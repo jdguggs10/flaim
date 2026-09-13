@@ -167,7 +167,7 @@ The reviewed production schedule defines six database-native jobs:
 - daily MCP raw-event pruning
 - daily OAuth token cleanup
 - daily ephemeral OAuth cleanup
-- five-minute dashboard snapshot refresh
+- fifteen-minute dashboard snapshot refresh
 - five-minute provider flags snapshot refresh
 
 Their definitions live in `supabase/cron/production.sql`, outside the

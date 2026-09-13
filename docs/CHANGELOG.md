@@ -8,6 +8,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 - **Changed**: The history-backed dashboard payload now converts the last closed Eastern day to its exact next-midnight UTC instant before filtering raw events. This lets the existing `mcp_tool_events(ts)` index read only the still-open portion of history instead of scanning and sorting the full retained event table every five minutes. America/New_York daylight-saving boundaries remain exact.
 - **Changed**: User concentration now calculates every user's call-weighted client mode in one grouped pass and joins it to per-user totals. The previous correlated subquery reread the complete materialized history once per user; on the measured production shape, that section alone took 36.8 seconds and read roughly 1.56 million temporary blocks. The replacement preserves the same NULL handling and call-count-then-lexical tie-break without changing any payload field, source, window, cadence, grant, or retention policy.
+- **Changed**: The reviewed production schedule now refreshes the human dashboard every fifteen minutes instead of every five, reducing its daily executions by two thirds after the query-cost fix. `provider-flags-snapshot` remains independent at five minutes, so provider-health alert freshness is unchanged; the tradeoff is that human dashboard activity can be up to fifteen minutes behind.
 
 ### Sleeper Player Search League Availability (FLA-382)
 

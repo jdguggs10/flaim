@@ -247,10 +247,12 @@ boolean overload can still rebuild either row explicitly for comparison or
 rollback. The migration does not change function ownership, privileges, the
 provider-flags path, or cron.
 
-`cron/production.sql` keeps both `dashboard-snapshot` and
-`provider-flags-snapshot` at `*/5`. The provider consumer receives its rows and
-freshness timestamp only from `provider_flags_snapshot`; the dashboard is not
-an alerting fallback.
+`cron/production.sql` runs `dashboard-snapshot` at `*/15` and keeps
+`provider-flags-snapshot` at `*/5`. The human dashboard can therefore be up to
+fifteen minutes behind live activity. The provider consumer receives its rows
+and freshness timestamp only from `provider_flags_snapshot`; the dashboard is
+not an alerting fallback and its slower cadence does not delay provider-health
+signals.
 
 `supabase/tests/provider_flags.sql` proves, in a rolled-back transaction, that
 the dedicated payload equals the dashboard payload's `sync_recent` key for both
