@@ -151,7 +151,13 @@ implementation behind the canonical `analytics.dashboard_payload(boolean)`
 wrapper. Once history is initialized, it reads the
 ET aggregate through the marker and raw ET days strictly after it. It fails
 closed when history is uninitialized or too stale to bridge from retained raw
-events. Existing raw recent-use windows, UTC `client_mix`, seven-day health,
+events. Its 60-day stale guard deliberately fails while the 90-day raw source
+still leaves roughly 30 days to recover. If the daily close stalls, inspect the
+failed `mcp-et-history-close` run, resolve its cause, then call
+`public.close_mcp_user_daily_et()` as `postgres`; the initialized function
+resumes at the day after the marker and catches up through yesterday. Confirm
+the marker advanced before refreshing or trusting the dashboard again.
+Existing raw recent-use windows, UTC `client_mix`, seven-day health,
 provider state, connector state, and league summaries keep their current
 sources. The historical `health_summary` and `tool_health` keys use exact
 trailing 30-day raw data and add `health_window_days: 30` to disclose that
@@ -192,6 +198,13 @@ raw bridge intentionally tolerates missed closes, so a fresh snapshot alone
 does not prove preservation is running. Failed jobs and a marker that has not
 advanced by the next scheduled close require timely operator notification.
 Activating a job and inspecting one successful run is not ongoing monitoring.
+
+The production `mcp-rollup` job reprocesses the trailing seven completed UTC
+days on every 05:15 run. `public.rollup_mcp_usage(date)` replaces one day's
+aggregate in the same transaction, and its raw-event bounds are explicitly
+UTC. This bounded replay repairs a short missed run before raw-event pruning
+without changing completed-day results. It is scheduled fifteen minutes before
+the 05:30 prune job; a longer outage needs explicit operator recovery.
 
 The FLA-378 optimization keeps this payload contract unchanged while removing
 two growth-sensitive query shapes. Raw rows after the close marker are selected

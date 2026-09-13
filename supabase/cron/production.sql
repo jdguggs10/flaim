@@ -10,7 +10,14 @@
 select cron.schedule(
   'mcp-rollup',
   '15 5 * * *',
-  $job$select public.rollup_mcp_usage();$job$
+  $job$
+    select public.rollup_mcp_usage(day::date)
+    from generate_series(
+      (now() at time zone 'UTC')::date - 7,
+      (now() at time zone 'UTC')::date - 1,
+      interval '1 day'
+    ) as completed_days(day);
+  $job$
 );
 
 select cron.schedule(

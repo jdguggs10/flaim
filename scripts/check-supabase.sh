@@ -25,6 +25,7 @@ readonly PROVIDER_FLAGS_PROOF_SQL="supabase/tests/provider_flags.sql"
 readonly DASHBOARD_SINGLE_REFRESH_PROOF_SQL="supabase/tests/dashboard_single_refresh.sql"
 readonly ESPN_HISTORY_JOBS_PROOF_SQL="supabase/tests/espn_history_jobs.sql"
 readonly ACCOUNT_DELETIONS_PROOF_SQL="supabase/tests/account_deletions.sql"
+readonly MCP_ROLLUP_CATCHUP_PROOF_SQL="supabase/tests/mcp_rollup_catchup.sql"
 readonly RAW_DASHBOARD_MIGRATION_SQL="supabase/migrations/20260802131749_add_sync_recent_dashboard_payload.sql"
 readonly CONTAINER_RAW_DASHBOARD_MIGRATION_SQL="/tmp/analytics_dashboard_raw_reference.sql"
 readonly CRON_PRODUCTION_SQL="supabase/cron/production.sql"
@@ -69,6 +70,26 @@ fi
 if ! rg --fixed-strings --quiet "${DASHBOARD_JOB_BODY}" \
   "${CRON_PRODUCTION_SQL}"; then
   printf '%s must schedule dashboard-snapshot with the canonical no-argument command.\n' \
+    "${CRON_PRODUCTION_SQL}" >&2
+  exit 1
+fi
+
+if ! node - "${CRON_PRODUCTION_SQL}" <<'NODE'
+const fs = require('node:fs');
+const sql = fs.readFileSync(process.argv[2], 'utf8').replace(/\s+/g, ' ');
+const expected = [
+  "cron.schedule( 'mcp-rollup', '15 5 * * *', $job$",
+  'select public.rollup_mcp_usage(day::date)',
+  "from generate_series( (now() at time zone 'UTC')::date - 7,",
+  "(now() at time zone 'UTC')::date - 1, interval '1 day' )",
+  'as completed_days(day); $job$ )',
+].join(' ');
+const matches = sql.split(expected).length - 1;
+const namedJobs = (sql.match(/'mcp-rollup'/g) || []).length;
+process.exit(matches === 1 && namedJobs === 1 ? 0 : 1);
+NODE
+then
+  printf '%s must re-roll the trailing seven completed UTC days at 05:15.\n' \
     "${CRON_PRODUCTION_SQL}" >&2
   exit 1
 fi
@@ -158,6 +179,7 @@ for reset_number in 1 2; do
 
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ESPN_HISTORY_JOBS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ACCOUNT_DELETIONS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
+  docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${MCP_ROLLUP_CATCHUP_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
   docker cp \
     "${RAW_DASHBOARD_MIGRATION_SQL}" \
     "${DB_CONTAINER}:${CONTAINER_RAW_DASHBOARD_MIGRATION_SQL}" \
