@@ -380,6 +380,8 @@ describe('get_standings output schema', () => {
           playoffOutcome: 'in_progress',
           outcomeConfidence: null,
           madePlayoffs: true,
+          waiverPriority: 2,
+          faabBalance: 125,
         },
       ],
     }));
