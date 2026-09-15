@@ -6,7 +6,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Yahoo and Sleeper Waiver Priority / FAAB Balance — Declared Schema and Tool Description (FLA-380, FLA-401)
 
-- **Changed**: `get_standings` now declares `waiverPriority` and `faabBalance` in `standingsEntrySchema` and documents them in the tool description, including that the two are not mutually exclusive, that both are returned on Yahoo and Sleeper and absent (not `null`) on ESPN, that Sleeper's `faabBalance` already reflects FAAB traded between teams (so it can exceed the starting budget), and that `waiverPriority` is the team's live priority — distinct from `get_transactions`' `waiver_priority`, which is the priority a past claim used. The data itself shipped separately (#287) as a passthrough-payload change with no contract impact; this entry is documentation only.
+- **Changed**: `get_standings` now declares `waiverPriority` and `faabBalance` in `standingsEntrySchema` and documents them in the tool description, including that the two are not mutually exclusive, that both are returned on Yahoo and Sleeper and absent (not `null`) on ESPN, that null can also mean the platform did not report a usable value rather than proving the league lacks FAAB or priority, that Sleeper's `faabBalance` already reflects FAAB traded between teams (so it can exceed the starting budget), and that `waiverPriority` is the team's live priority — distinct from `get_transactions`' `waiver_priority`, which is the priority a past claim used. The data itself shipped separately (Yahoo #287, Sleeper #294) as a passthrough-payload change with no contract impact; this entry is documentation only.
 
 ### get_transactions Description Matches Real Row Fields (FLA-374)
 
