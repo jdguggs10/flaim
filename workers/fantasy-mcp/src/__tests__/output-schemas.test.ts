@@ -569,6 +569,32 @@ describe('get_roster output schema', () => {
     }));
   });
 
+  // Weekly player points (football-only, additive passthrough): a
+  // week-scoped player carrying `points`, plus response-level
+  // `pointsCoverage` and `limitations.playerPointsAvailable`.
+  it('accepts the Yahoo roster envelope with weekly player points', () => {
+    expectValid('get_roster', routed({
+      teamKey: '449.l.123.t.1',
+      teamName: 'Yahoo Team',
+      ownerName: 'Gerry',
+      snapshot: { type: 'week', week: 5 },
+      limitations: { playerProTeamAvailable: false },
+      pointsCoverage: { type: 'week', week: 5 },
+      players: [{ playerId: '101', name: 'Synthetic Quarterback', position: 'QB', selectedPosition: 'QB', points: 22.16 }],
+    }));
+  });
+
+  it('accepts the Yahoo roster envelope with no usable weekly player points', () => {
+    expectValid('get_roster', routed({
+      teamKey: '449.l.123.t.1',
+      teamName: 'Yahoo Team',
+      ownerName: 'Gerry',
+      snapshot: { type: 'week', week: 5 },
+      limitations: { playerProTeamAvailable: false, playerPointsAvailable: false },
+      players: [{ playerId: '101', name: 'Synthetic Quarterback', position: 'QB', selectedPosition: 'QB' }],
+    }));
+  });
+
   it('accepts the Sleeper current roster for a selected team', () => {
     expectValid('get_roster', routed({
       leagueId: 'sleeper-2025',
