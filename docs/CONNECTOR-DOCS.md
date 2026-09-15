@@ -145,10 +145,11 @@ For Yahoo, avoid relying on explicit `week` filtering:
 - **“Authentication required” / “token expired”**: re-run the platform's connector flow, then approve access when prompted.
 - **ESPN stopped working**: re-sync using the extension, then confirm the league appears at `https://flaim.app/leagues`.
 - **No default league**: set one at `https://flaim.app/leagues` to avoid needing to specify IDs in prompts.
-- **`redirect_uri is not in the allowed list`**: your MCP client is sending an unsupported loopback path. Pin `"redirectUri": "http://127.0.0.1:7778/oauth/callback"` in your MCP config (any port works; only the path matters).
+- **`redirect_uri is not in the allowed list`**: your MCP client is sending a callback Flaim does not accept. Local (loopback) callbacks work on any port and any path, as long as they use plain `http://` on `localhost`, `127.0.0.1`, or `[::1]` and carry no query string or fragment (for example `http://127.0.0.1:7778/oauth/callback`). `https://` loopback callbacks are rejected, and remote callbacks must belong to a supported AI app.
+- **`403` with `error code: 1010` from `api.flaim.app`**: Cloudflare blocks some default HTTP-library user agents (for example Python's `urllib`). Send a descriptive `User-Agent` header from your client.
 
 ## Privacy + Support
 
 - Privacy policy: `https://flaim.app/privacy`
 - Terms of service: `https://flaim.app/terms`
-- Support: `privacy@flaim.app`
+- Support: `support@flaim.app`
