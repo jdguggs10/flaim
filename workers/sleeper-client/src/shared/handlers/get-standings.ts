@@ -1,9 +1,37 @@
 import type { HandlerFn } from './types';
-import type { SleeperLeague, SleeperLeagueUser, SleeperRoster, SleeperBracketMatch } from '../../types';
+import type { SleeperLeague, SleeperLeagueSettings, SleeperLeagueUser, SleeperRoster, SleeperBracketMatch } from '../../types';
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
 import { buildUserDirectory } from '../sleeper-enrichment';
+
+const SLEEPER_WAIVER_TYPE_FAAB = 2;
+
+/** Waiver order is a 1-based ordinal; a 0 or non-integer would read as ahead of first. */
+function toWaiverPriority(value: unknown): number | null {
+  return Number.isInteger(value) && (value as number) >= 1 ? (value as number) : null;
+}
+
+/**
+ * Remaining FAAB for one roster, or null when the league doesn't bid with
+ * FAAB or either input is missing. Sleeper sends waiver_budget (default 100)
+ * for every league, so the league's waiver_type — not the budget's presence —
+ * decides. waiver_budget_used is Sleeper's own running total: winning bids,
+ * plus FAAB sent in trades, minus FAAB received, plus any commissioner
+ * adjustment. Checked read-only against completed public leagues: every team
+ * that traded FAAB fit bids-plus-trades except where a commissioner
+ * transaction was present (e.g. 125 won in bids after receiving 25 reports
+ * 100 used). So no trade or transaction lookup is needed, and a team that
+ * received budget can hold more than the starting amount (used can go below
+ * 0). 0 is a real spent-out balance, not unknown.
+ */
+function toFaabBalance(leagueSettings: SleeperLeagueSettings | undefined, used: unknown): number | null {
+  if (leagueSettings?.waiver_type !== SLEEPER_WAIVER_TYPE_FAAB) return null;
+  const budget = leagueSettings.waiver_budget;
+  if (typeof budget !== 'number' || !Number.isFinite(budget)) return null;
+  if (typeof used !== 'number' || !Number.isFinite(used)) return null;
+  return budget - used;
+}
 
 export function createGetStandingsHandler(): HandlerFn {
   return async (_env, params) => {
@@ -135,6 +163,8 @@ export function createGetStandingsHandler(): HandlerFn {
             championshipWon,
             playoffOutcome,
             outcomeConfidence,
+            waiverPriority: toWaiverPriority(settings?.waiver_position),
+            faabBalance: toFaabBalance(league.settings, settings?.waiver_budget_used),
           };
         })
         .sort((a, b) => {

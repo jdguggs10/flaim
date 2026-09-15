@@ -62,6 +62,17 @@ export interface SleeperLeagueSettings {
   taxi_allow_vets?: number;      // 0/1
   taxi_deadline?: number;
   reserve_slots?: number;
+  /**
+   * 0 = rolling waivers, 1 = reverse standings, 2 = FAAB (undocumented
+   * community convention). Only `2` means the league bids with FAAB.
+   */
+  waiver_type?: number;
+  /**
+   * Starting FAAB budget per team. Sleeper sends a value (default 100) even
+   * for non-FAAB leagues, so its presence alone never means FAAB is in use —
+   * gate on waiver_type === 2.
+   */
+  waiver_budget?: number;
   [key: string]: unknown;
 }
 
@@ -161,7 +172,12 @@ export interface SleeperRoster {
     fpts_decimal?: number;
     fpts_against?: number;
     fpts_against_decimal?: number;
+    /** Current waiver-claim order, 1 = first. Also reported in FAAB leagues. */
     waiver_position?: number;
+    /**
+     * Sleeper's running FAAB total: winning bids, plus FAAB sent in trades,
+     * minus FAAB received, plus commissioner adjustments. Can be negative.
+     */
     waiver_budget_used?: number;
     total_moves?: number;
   };

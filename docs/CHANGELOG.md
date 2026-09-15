@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Sleeper Waiver Priority / FAAB Balance in Standings (FLA-401)
+
+- **Added**: Sleeper `get_standings` team entries now carry `waiverPriority` (from the roster's `waiver_position`, 1 = first) and `faabBalance` (the league's `waiver_budget` minus the roster's `waiver_budget_used`), with the same names and meaning as Yahoo's (FLA-380). Both inputs were already in the league and rosters responses the handler fetches, so there's no new Sleeper API call. `faabBalance` is `null` unless the league's `waiver_type` is FAAB (`2`): Sleeper sends a default `waiver_budget` of 100 even for rolling-waiver leagues, so the budget being present doesn't mean the league uses FAAB. `waiverPriority` is reported in FAAB leagues too, where it acts as the tie-breaker. `waiver_budget_used` is Sleeper's own running total and already includes FAAB traded between teams and commissioner adjustments (checked read-only against completed public leagues), so no extra transaction lookup is needed. A team that received budget in a trade can show more than the starting amount. No output schema change: `standingsEntrySchema` is a passthrough object. The declared schema and tool-description wording ship with the held FLA-380 contract change. Reported via support@flaim.app.
+
 ### Post-prune Analytics Hygiene (FLA-388)
 
 - **Changed**: The nightly UTC analytics rollup now recomputes the trailing seven completed days instead of only yesterday. Its date bounds are explicitly UTC, and the bounded replay repairs short missed or incomplete runs before raw-event pruning without touching the open day.

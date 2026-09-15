@@ -410,6 +410,78 @@ describe('football handlers', () => {
     expect(champion?.playoffOutcome).toBe('champion'); // isChampion path
     expect(champion?.outcomeConfidence).toBe('explicit');
   });
+
+  describe('waiverPriority and faabBalance', () => {
+    const baseRecord = { wins: 1, losses: 1, ties: 0, fpts: 100, fpts_decimal: 0, fpts_against: 100, fpts_against_decimal: 0 };
+    const users = [1, 2, 3, 4].map((n) => ({ user_id: `u${n}`, display_name: `Owner ${n}`, avatar: null }));
+
+    async function standingsFor(leagueSettings: Record<string, unknown>, rosterSettings: Array<Record<string, unknown>>) {
+      const league = { league_id: 'league_1', name: 'Test', sport: 'nfl', season: '2025', status: 'in_season', total_rosters: rosterSettings.length, roster_positions: [], scoring_settings: {}, settings: leagueSettings, previous_league_id: null, draft_id: 'd1', avatar: null };
+      const rosters = rosterSettings.map((extra, i) => ({
+        roster_id: i + 1,
+        owner_id: `u${i + 1}`,
+        players: [],
+        starters: [],
+        reserve: [],
+        settings: { ...baseRecord, ...extra },
+      }));
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse(league))
+        .mockResolvedValueOnce(jsonResponse(rosters))
+        .mockResolvedValueOnce(jsonResponse(users.slice(0, rosters.length)))
+        .mockResolvedValueOnce(jsonResponse([]));
+
+      const params: ToolParams = { sport: 'football', league_id: 'league_1', season_year: 2025 };
+      const result = await footballHandlers.get_standings({} as never, params);
+      if (!result.success) throw new Error('Expected standings request to succeed');
+      const standings = (result.data as { standings: Array<Record<string, unknown>> }).standings;
+      return (rosterId: number) => standings.find((s) => s.rosterId === rosterId);
+    }
+
+    it('reports remaining FAAB and waiver order for every team in a FAAB league', async () => {
+      const row = await standingsFor({ waiver_type: 2, waiver_budget: 100 }, [
+        { waiver_position: 3, waiver_budget_used: 37 },
+        { waiver_position: 1, waiver_budget_used: 100 }, // spent out
+        { waiver_position: 2, waiver_budget_used: -25 }, // received 25 in a trade, no winning bids yet
+        { waiver_position: 4, waiver_budget_used: 0 },
+      ]);
+
+      expect(row(1)).toMatchObject({ waiverPriority: 3, faabBalance: 63 });
+      expect(row(2)).toMatchObject({ waiverPriority: 1, faabBalance: 0 });
+      expect(row(3)).toMatchObject({ waiverPriority: 2, faabBalance: 125 });
+      expect(row(4)).toMatchObject({ waiverPriority: 4, faabBalance: 100 });
+    });
+
+    it('returns null faabBalance for a non-FAAB league even though Sleeper still sends a waiver_budget', async () => {
+      const row = await standingsFor({ waiver_type: 0, waiver_budget: 100 }, [
+        { waiver_position: 2, waiver_budget_used: 0 },
+        { waiver_position: 1, waiver_budget_used: 0 },
+      ]);
+
+      expect(row(1)).toMatchObject({ waiverPriority: 2, faabBalance: null });
+      expect(row(2)).toMatchObject({ waiverPriority: 1, faabBalance: null });
+    });
+
+    it('returns null when the waiver fields are missing or malformed', async () => {
+      const row = await standingsFor({ waiver_type: 2, waiver_budget: 100 }, [
+        {}, // no waiver fields at all
+        { waiver_position: 0, waiver_budget_used: 'unknown' },
+        { waiver_position: 1.5 },
+      ]);
+
+      for (const rosterId of [1, 2, 3]) {
+        expect(row(rosterId)).toMatchObject({ waiverPriority: null, faabBalance: null });
+      }
+    });
+
+    it('returns null faabBalance when a FAAB league has no usable budget or no waiver_type', async () => {
+      const noBudget = await standingsFor({ waiver_type: 2 }, [{ waiver_position: 1, waiver_budget_used: 10 }]);
+      expect(noBudget(1)).toMatchObject({ waiverPriority: 1, faabBalance: null });
+
+      const noType = await standingsFor({ waiver_budget: 100 }, [{ waiver_position: 1, waiver_budget_used: 10 }]);
+      expect(noType(1)).toMatchObject({ waiverPriority: 1, faabBalance: null });
+    });
+  });
 });
 
 describe('football get_players handler', () => {
