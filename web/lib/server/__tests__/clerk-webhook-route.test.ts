@@ -11,7 +11,9 @@ const mocks = vi.hoisted(() => {
     clearEmailRetry: vi.fn(),
     isWelcomeAutomationEnabled: vi.fn(),
     logEmailOps: vi.fn(),
+    mapClerkUserToSignup: vi.fn(),
     markEmailRetry: vi.fn(),
+    recordSignup: vi.fn(),
     sendWelcomeAutomationEvent: vi.fn(),
     syncClerkUserToResendContact: vi.fn(),
     verifyWebhook: vi.fn(),
@@ -35,6 +37,11 @@ vi.mock("@/lib/server/email-ops", () => ({
   logEmailOps: mocks.logEmailOps,
 }));
 
+vi.mock("@/lib/server/signup-log", () => ({
+  mapClerkUserToSignup: mocks.mapClerkUserToSignup,
+  recordSignup: mocks.recordSignup,
+}));
+
 vi.mock("@/lib/server/email-retry-marker", () => ({
   clearEmailRetry: mocks.clearEmailRetry,
   markEmailRetry: mocks.markEmailRetry,
@@ -51,7 +58,17 @@ vi.mock("next/server", async (importOriginal) => {
 
 import { POST } from "../../../app/api/webhooks/clerk/route";
 
+const SIGNUP_CREATED_AT_MS = 1756002400000;
+const SIGNUP_CREATED_AT_ISO = "2025-08-24T02:26:40.000Z";
+
+const signupRow = {
+  clerkUserId: "user_123",
+  createdAt: SIGNUP_CREATED_AT_ISO,
+  firstTouch: null,
+};
+
 const clerkUser = {
+  created_at: SIGNUP_CREATED_AT_MS,
   email_addresses: [{ id: "email_123", email_address: "gerry@example.com" }],
   first_name: "Gerry",
   id: "user_123",
@@ -68,6 +85,8 @@ function request() {
 beforeEach(() => {
   mocks.clearEmailRetry.mockResolvedValue({ ok: true, skipped: true });
   mocks.markEmailRetry.mockResolvedValue({ ok: true, skipped: false });
+  mocks.mapClerkUserToSignup.mockReturnValue(signupRow);
+  mocks.recordSignup.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -275,5 +294,84 @@ describe("POST /api/webhooks/clerk", () => {
     expect(mocks.markEmailRetry).toHaveBeenCalledWith("user_123", "contactSync", {
       metadata: markedUser.private_metadata,
     });
+  });
+
+  it("writes the signup log before the welcome email is scheduled", async () => {
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
+    mocks.isWelcomeAutomationEnabled.mockReturnValue(true);
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.mapClerkUserToSignup).toHaveBeenCalledWith(clerkUser);
+    expect(mocks.recordSignup).toHaveBeenCalledWith(signupRow, { source: "webhook" });
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+    expect(mocks.recordSignup.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.after.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("writes the signup log even when the welcome automation is disabled", async () => {
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
+    mocks.isWelcomeAutomationEnabled.mockReturnValue(false);
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      received: true,
+      welcome: { skipped: true, error: "Resend welcome automation is disabled" },
+    });
+    expect(mocks.recordSignup).toHaveBeenCalledWith(signupRow, { source: "webhook" });
+  });
+
+  it("writes the signup log for user.updated before the contact sync", async () => {
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.updated", data: clerkUser });
+    mocks.syncClerkUserToResendContact.mockResolvedValue({
+      action: "updated",
+      email: "gerry@example.com",
+      ok: true,
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.recordSignup).toHaveBeenCalledWith(signupRow, { source: "webhook" });
+    expect(mocks.syncClerkUserToResendContact).toHaveBeenCalled();
+  });
+
+  it("returns 500 and schedules nothing when the signup log write fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
+    mocks.isWelcomeAutomationEnabled.mockReturnValue(true);
+    mocks.recordSignup.mockRejectedValue(new Error("Failed to record signup (401)"));
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: "Signup log write failed" });
+    expect(mocks.after).not.toHaveBeenCalled();
+    expect(mocks.isWelcomeAutomationEnabled).not.toHaveBeenCalled();
+    expect(mocks.syncClerkUserToResendContact).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("returns 500 and schedules nothing when the payload cannot be mapped", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
+    mocks.mapClerkUserToSignup.mockImplementation(() => {
+      throw new Error("Clerk payload created_at is not an integer millisecond epoch");
+    });
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ error: "Unexpected webhook payload" });
+    expect(mocks.recordSignup).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 });
