@@ -159,6 +159,166 @@ begin
 end $catalog_proof$;
 
 -- ---------------------------------------------------------------------------
+-- 2b. Exact ACL shape, proved by aclexplode rather than has_*_privilege, so a
+-- stray extra grant (to PUBLIC, to a role nobody asked for, on a column
+-- nobody meant to expose) fails the test even though it would never trip a
+-- targeted has_table_privilege check. The owner's own entry is excluded by
+-- oid, not assumed away, since GRANT/REVOKE materializes it once any grant
+-- is touched.
+-- ---------------------------------------------------------------------------
+do $exact_acl_signup_log$
+declare
+  v_owner oid;
+begin
+  select relowner into v_owner from pg_class where oid = 'public.signup_log'::regclass;
+
+  if exists (
+    select 1 from pg_class c, aclexplode(c.relacl) a
+    where c.oid = 'public.signup_log'::regclass
+      and a.grantee in (0, 'anon'::regrole::oid, 'authenticated'::regrole::oid)
+  ) then
+    raise exception 'signup_log relacl grants PUBLIC, anon, or authenticated';
+  end if;
+  if exists (
+    select 1
+    from pg_attribute att, aclexplode(att.attacl) a
+    where att.attrelid = 'public.signup_log'::regclass
+      and att.attnum > 0 and not att.attisdropped
+      and a.grantee in (0, 'anon'::regrole::oid, 'authenticated'::regrole::oid)
+  ) then
+    raise exception 'signup_log column acl grants PUBLIC, anon, or authenticated';
+  end if;
+
+  -- Table level: INSERT to service_role, nothing else, from nobody else.
+  if exists (
+    select 1
+    from pg_class c, aclexplode(c.relacl) a
+    where c.oid = 'public.signup_log'::regclass
+      and a.grantee <> v_owner
+      and (a.grantee <> 'service_role'::regrole::oid or a.privilege_type <> 'INSERT')
+  ) then
+    raise exception 'signup_log relacl carries an unexpected non-owner grant';
+  end if;
+  if not exists (
+    select 1
+    from pg_class c, aclexplode(c.relacl) a
+    where c.oid = 'public.signup_log'::regclass
+      and a.grantee = 'service_role'::regrole::oid
+      and a.privilege_type = 'INSERT'
+  ) then
+    raise exception 'signup_log is missing the service_role INSERT grant';
+  end if;
+
+  -- Column level: UPDATE and SELECT on first_touch, SELECT on clerk_user_id,
+  -- to service_role only; created_at and source carry no column grant at all.
+  if exists (
+    select 1
+    from pg_attribute att, aclexplode(att.attacl) a
+    where att.attrelid = 'public.signup_log'::regclass
+      and att.attnum > 0 and not att.attisdropped
+      and a.grantee <> v_owner
+      and not (
+        (att.attname = 'first_touch' and a.grantee = 'service_role'::regrole::oid
+          and a.privilege_type in ('UPDATE', 'SELECT'))
+        or (att.attname = 'clerk_user_id' and a.grantee = 'service_role'::regrole::oid
+          and a.privilege_type = 'SELECT')
+      )
+  ) then
+    raise exception 'signup_log column acl carries an unexpected grant';
+  end if;
+  if not exists (
+    select 1 from pg_attribute att, aclexplode(att.attacl) a
+    where att.attrelid = 'public.signup_log'::regclass and att.attname = 'first_touch'
+      and a.grantee = 'service_role'::regrole::oid and a.privilege_type = 'UPDATE'
+  ) then
+    raise exception 'signup_log is missing service_role UPDATE on first_touch';
+  end if;
+  if not exists (
+    select 1 from pg_attribute att, aclexplode(att.attacl) a
+    where att.attrelid = 'public.signup_log'::regclass and att.attname = 'first_touch'
+      and a.grantee = 'service_role'::regrole::oid and a.privilege_type = 'SELECT'
+  ) then
+    raise exception 'signup_log is missing service_role SELECT on first_touch';
+  end if;
+  if not exists (
+    select 1 from pg_attribute att, aclexplode(att.attacl) a
+    where att.attrelid = 'public.signup_log'::regclass and att.attname = 'clerk_user_id'
+      and a.grantee = 'service_role'::regrole::oid and a.privilege_type = 'SELECT'
+  ) then
+    raise exception 'signup_log is missing service_role SELECT on clerk_user_id';
+  end if;
+end $exact_acl_signup_log$;
+
+do $exact_acl_record_signup$
+declare
+  v_owner oid;
+begin
+  select proowner into v_owner
+  from pg_proc where oid = 'public.record_signup(text, timestamptz, jsonb, text)'::regprocedure;
+
+  if exists (
+    select 1 from pg_proc p, aclexplode(p.proacl) a
+    where p.oid = 'public.record_signup(text, timestamptz, jsonb, text)'::regprocedure
+      and a.grantee <> v_owner
+      and (a.grantee <> 'service_role'::regrole::oid or a.privilege_type <> 'EXECUTE')
+  ) then
+    raise exception 'record_signup proacl carries an unexpected non-owner grant';
+  end if;
+  if exists (
+    select 1 from pg_proc p, aclexplode(p.proacl) a
+    where p.oid = 'public.record_signup(text, timestamptz, jsonb, text)'::regprocedure
+      and a.grantee in (0, 'anon'::regrole::oid, 'authenticated'::regrole::oid)
+  ) then
+    raise exception 'record_signup proacl grants PUBLIC, anon, or authenticated';
+  end if;
+  if not exists (
+    select 1 from pg_proc p, aclexplode(p.proacl) a
+    where p.oid = 'public.record_signup(text, timestamptz, jsonb, text)'::regprocedure
+      and a.grantee = 'service_role'::regrole::oid
+      and a.privilege_type = 'EXECUTE'
+  ) then
+    raise exception 'record_signup is missing the service_role EXECUTE grant';
+  end if;
+end $exact_acl_record_signup$;
+
+do $exact_acl_views$
+declare
+  v_view text;
+  v_owner oid;
+begin
+  foreach v_view in array array[
+    'analytics.signups_daily', 'analytics.signup_rollups', 'analytics.signup_sources_daily'
+  ]
+  loop
+    select relowner into v_owner from pg_class where oid = v_view::regclass;
+
+    if exists (
+      select 1 from pg_class c, aclexplode(c.relacl) a
+      where c.oid = v_view::regclass
+        and a.grantee in (0, 'anon'::regrole::oid, 'authenticated'::regrole::oid, 'service_role'::regrole::oid)
+    ) then
+      raise exception '% relacl grants PUBLIC, anon, authenticated, or service_role', v_view;
+    end if;
+    if exists (
+      select 1 from pg_class c, aclexplode(c.relacl) a
+      where c.oid = v_view::regclass
+        and a.grantee <> v_owner
+        and (a.grantee <> 'analytics_readonly'::regrole::oid or a.privilege_type <> 'SELECT')
+    ) then
+      raise exception '% relacl carries an unexpected non-owner grant', v_view;
+    end if;
+    if not exists (
+      select 1 from pg_class c, aclexplode(c.relacl) a
+      where c.oid = v_view::regclass
+        and a.grantee = 'analytics_readonly'::regrole::oid
+        and a.privilege_type = 'SELECT'
+    ) then
+      raise exception '% is missing the analytics_readonly SELECT grant', v_view;
+    end if;
+  end loop;
+end $exact_acl_views$;
+
+-- ---------------------------------------------------------------------------
 -- 3. service_role: the grants are the boundary, proved by running statements.
 -- ---------------------------------------------------------------------------
 set local role service_role;
@@ -370,6 +530,34 @@ begin
   end;
 end $service_role_proof$;
 
+-- Forbidden operations: the grants above hand service_role exactly INSERT
+-- plus the two column-scoped UPDATE/SELECT grants proved by aclexplode
+-- above. Every other mutating path must still raise 42501, proved here by
+-- execution rather than by re-reading the grants that were already checked.
+do $service_role_forbidden$
+begin
+  begin
+    update public.signup_log set created_at = now() where false;
+    raise exception 'service_role update on created_at unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.signup_log set source = 'backfill' where false;
+    raise exception 'service_role update on source unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.signup_log;
+    raise exception 'service_role delete on signup_log unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    truncate public.signup_log;
+    raise exception 'service_role truncate on signup_log unexpectedly succeeded';
+  exception when insufficient_privilege then null;
+  end;
+end $service_role_forbidden$;
+
 reset role;
 
 -- ---------------------------------------------------------------------------
@@ -529,5 +717,41 @@ begin
     raise exception 'signup_sources_daily exposed a deleted account''s attribution';
   end if;
 end $view_proof$;
+
+-- ---------------------------------------------------------------------------
+-- 6. Rollup boundary: the half-open d7/d7_prev windows, proved to the second.
+-- The view reads now() at query time inside this same transaction, so now()
+-- is stable; the fixtures below use the identical now() for that reason.
+-- ---------------------------------------------------------------------------
+delete from public.signup_log;
+delete from public.account_deletions;
+
+do $boundary_proof$
+declare
+  v_now timestamptz := now();
+  v_row record;
+begin
+  insert into public.signup_log (clerk_user_id, created_at, first_touch, source)
+  values
+    ('boundary_7d_in', v_now - interval '7 days' + interval '1 second', null, 'backfill'),
+    ('boundary_7d_out', v_now - interval '7 days' - interval '1 second', null, 'backfill'),
+    ('boundary_14d_in', v_now - interval '14 days' + interval '1 second', null, 'backfill'),
+    ('boundary_14d_out', v_now - interval '14 days' - interval '1 second', null, 'backfill');
+
+  select d7, d7_prev into v_row from analytics.signup_rollups;
+
+  -- d7 is >= now - 7 days: only the 1-second-inside row qualifies. The
+  -- 1-second-outside row, and both 14d rows further back, do not.
+  if v_row.d7 <> 1 then
+    raise exception 'signup_rollups d7 boundary wrong (found %, expected 1)', v_row.d7;
+  end if;
+
+  -- d7_prev is the half-open [now-14d, now-7d): the 7d-outside row (just
+  -- inside the 14d window) and the 14d-inside row both qualify; the 7d-inside
+  -- row (>= now-7d) and the 14d-outside row (< now-14d) do not.
+  if v_row.d7_prev <> 2 then
+    raise exception 'signup_rollups d7_prev boundary wrong (found %, expected 2)', v_row.d7_prev;
+  end if;
+end $boundary_proof$;
 
 rollback;
