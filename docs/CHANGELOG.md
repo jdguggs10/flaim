@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Permanent Signup Log Capture (FLA-396)
+
+- **Added**: The verified Clerk webhook now writes one row per signup to a permanent Supabase log before it does anything else. For both `user.created` and `user.updated` the route maps the snake_case payload, validates `created_at` as an integer millisecond epoch inside a sane range, normalizes and bounds the client-supplied first-touch attribution from `unsafe_metadata`, and awaits a single `record_signup` RPC. The write sits above the welcome-email feature flag, so turning welcome email off no longer turns signup capture off, and it is awaited rather than deferred to `after()`, which is best-effort and cancelled on timeout. A mapping or write failure returns `500` and schedules no `after()` work at all, so Svix retries the delivery and the retry cannot double-send a welcome email. The Supabase request is key-class aware: a new-style `sb_secret_` key is sent as `apikey` only, a legacy JWT service key in both `apikey` and `Authorization`. `SUPABASE_URL` and `SUPABASE_SERVICE_KEY` are now required for the Clerk webhook in production.
+- **Added**: `web/scripts/probe-supabase-key-class.mjs`, a non-secret pre-deploy probe that prints only which class of Supabase service key an environment holds and never any character of the value.
+
 ### Custom Client Docs and Relay Label
 
 - **Changed**: OAuth connections authorized through the allowlisted user-hosted relay callback (`https://flaim-relay.onrender.com/oauth/callback`) are now labeled `Tasklet Relay` instead of the generic `MCP Client`, matching how Littlebird's exact callback is labeled. Only the exact callback gets the label; other Render hosts still fall back to `MCP Client`. Existing connection rows are not backfilled.

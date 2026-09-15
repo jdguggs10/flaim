@@ -156,3 +156,41 @@ limited to capture time, landing pathname, external referring hostname, UTM
 fields, and an explicit `ref`; full referrer URLs and arbitrary query parameters
 are never stored. Both sign-up and transferable OAuth sign-in surfaces attach
 the same metadata because either Clerk flow can create a user.
+
+### Signup log backfill
+
+`web/scripts/backfill-signup-log.mjs` walks the Clerk user list as of a
+frozen cutoff and calls the `record_signup` RPC for every user, to backfill
+`public.signup_log` for accounts created before the webhook writer existed.
+
+Run only after the `signup_log` migration is applied and the webhook writer
+is deployed — running it earlier leaves a gap neither the backfill nor the
+writer will ever fill. The RPC is idempotent (it never overwrites an
+existing row's `created_at`/`source`, and fills `first_touch` only when null),
+so re-running the backfill after a partial run or a failure is always safe.
+
+```
+# Dry run first — env: CLERK_SECRET_KEY. Prints an aggregate report only.
+corepack pnpm --dir web exec node scripts/backfill-signup-log.mjs
+
+# Apply — also needs SUPABASE_URL and SUPABASE_SERVICE_KEY.
+corepack pnpm --dir web exec node scripts/backfill-signup-log.mjs --apply
+```
+
+`--limit` (capped at 500), `--delay-ms`, and `--cutoff <iso>` pace a larger
+run. `--offset` and `--max-users` narrow a dry run and are refused with
+`--apply`: the frozen cutoff freezes what Clerk adds, not what it removes, so
+a user deleted between two runs shifts every later offset and a windowed apply
+run can step straight over a live account. After an anomaly or a partial apply
+run, re-run `--apply` from the start — `record_signup` is idempotent, so
+re-writing rows costs nothing.
+
+The run exits non-zero if anything was left undone — a pagination anomaly, an
+invalid `created_at`, or a failed `record_signup` call — and the report ends
+with a `status:` line saying which. A user whose first-touch metadata is
+unusable still gets a row, with a null `first_touch`; only the attribution is
+dropped, and the report counts it as `skipped`.
+
+The report never prints an email, a metadata object, a first-touch value, a
+key, or any other per-user line — only counts, the observed `created_at`
+range, and (in dry-run) a resume offset.

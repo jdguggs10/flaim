@@ -13,6 +13,11 @@ import {
   isWelcomeAutomationEnabled,
   sendWelcomeAutomationEvent,
 } from "@/lib/server/resend-welcome-automation";
+import {
+  mapClerkUserToSignup,
+  recordSignup,
+  type SignupLogInput,
+} from "@/lib/server/signup-log";
 
 const CONTACT_SYNC_EVENTS = new Set(["user.updated"]);
 const WELCOME_EVENTS = new Set(["user.created"]);
@@ -51,6 +56,42 @@ export async function POST(request: NextRequest) {
   }
 
   const user = event.data;
+
+  // The permanent signup log is written before anything else, for both
+  // user.created and user.updated, and above the welcome-flag early return —
+  // otherwise a flag about email would quietly become a flag about analytics.
+  // It is awaited rather than scheduled in `after()` because `after()` work is
+  // best-effort and cancelled on timeout, and this capture may not be.
+  let signup: SignupLogInput;
+  try {
+    signup = mapClerkUserToSignup(event.data);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "signup_log.payload_invalid",
+        reason: error instanceof Error ? error.message : "unknown_error",
+        source: `clerk.${event.type}`,
+        userId: user.id,
+      })
+    );
+    return NextResponse.json({ error: "Unexpected webhook payload" }, { status: 500 });
+  }
+
+  try {
+    await recordSignup(signup, { source: "webhook" });
+  } catch (error) {
+    // Return 500 before the welcome is queued: Svix retries the delivery, and
+    // because nothing was scheduled the retry cannot double-send a welcome.
+    console.error(
+      JSON.stringify({
+        event: "signup_log.write_failed",
+        reason: error instanceof Error ? error.message : "unknown_error",
+        source: `clerk.${event.type}`,
+        userId: user.id,
+      })
+    );
+    return NextResponse.json({ error: "Signup log write failed" }, { status: 500 });
+  }
 
   if (WELCOME_EVENTS.has(event.type)) {
     if (!isWelcomeAutomationEnabled()) {

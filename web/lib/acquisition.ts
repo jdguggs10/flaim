@@ -1,7 +1,11 @@
 export const ACQUISITION_COOKIE = "flaim_first_touch_v1";
 export const ACQUISITION_COOKIE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
-const FIELD_LIMITS = {
+/**
+ * Per-field length ceilings for a first-touch object. Exported so the server
+ * signup-log mapper bounds the same fields to the same limits.
+ */
+export const FIELD_LIMITS = {
   landingPath: 200,
   referrerHost: 120,
   utmSource: 100,
@@ -43,7 +47,13 @@ function cleanValue(
   return cleaned || undefined;
 }
 
-function normalizeFirstTouchAcquisition(
+/**
+ * The single validator for a first-touch object. Exported because the server
+ * signup-log mapper (`lib/server/signup-log.ts`) normalises the same shape out
+ * of Clerk `unsafe_metadata` and must not drift from the writer that produced
+ * it.
+ */
+export function normalizeFirstTouchAcquisition(
   value: unknown
 ): FirstTouchAcquisition | null {
   if (!value || typeof value !== "object") return null;
