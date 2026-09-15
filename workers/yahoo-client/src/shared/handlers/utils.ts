@@ -1,6 +1,6 @@
 import type { ExecuteResponse } from '../../types';
 import { extractErrorCode } from '@flaim/worker-shared';
-import { asArray, parseYahooPercentOwned, toYahooBoolean, toYahooFiniteNumber } from '../normalizers';
+import { asArray, parseYahooPercentOwned, toYahooBoolean } from '../normalizers';
 import { defaultMetadataForYahooCode, isYahooClientError } from '../errors';
 
 export function toExecuteErrorResponse(error: unknown): ExecuteResponse {
@@ -36,57 +36,6 @@ export function extractPlayerPercentOwned(playerData: unknown[]): number | null 
   const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
   const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
   return parseYahooPercentOwned(ownership?.percent_owned);
-}
-
-/**
- * Scan a Yahoo player array (index 0 metadata, index 1+ sub-resources) for
- * the first plain object that owns `key`. Yahoo's sub-resource ordering is
- * not documented or guaranteed — existing code reads `ownership` and
- * `selected_position` at a fixed index 1 because every known capture puts
- * them there, but a resource this worker has never captured live (like
- * `player_points`) could land at any index depending on which stats
- * selectors were requested, so this scans rather than assuming a position.
- */
-export function findPlayerSubResource(playerData: unknown[], key: string): Record<string, unknown> | undefined {
-  if (!Array.isArray(playerData)) return undefined;
-  for (let i = 1; i < playerData.length; i++) {
-    const entry = playerData[i];
-    if (entry && typeof entry === 'object' && !Array.isArray(entry) && key in (entry as Record<string, unknown>)) {
-      return entry as Record<string, unknown>;
-    }
-  }
-  return undefined;
-}
-
-export interface YahooPlayerWeeklyPoints {
-  points?: number;
-  coverage?: { type: string; week?: number };
-}
-
-/**
- * Extract a player's `player_points` sub-resource (total score plus the
- * coverage Yahoo echoes back — `coverage_type`/`week`). `points` is emitted
- * only when the total parses as a finite number; a genuine `0.00` (e.g. a
- * bye-week starter) must survive as `0`, so this checks for `undefined`
- * rather than falsiness. There is no captured `player_points` fixture in
- * this repo — the shape is inferred from Yahoo's documentation, so callers
- * must treat a missing/unparseable value as "unavailable", not "zero".
- */
-export function extractPlayerWeeklyPoints(playerData: unknown[]): YahooPlayerWeeklyPoints {
-  const pointsData = findPlayerSubResource(playerData, 'player_points');
-  if (!pointsData) return {};
-
-  const playerPoints = pointsData.player_points as Record<string, unknown> | undefined;
-  const points = toYahooFiniteNumber(playerPoints?.total);
-  const coverageType = playerPoints?.coverage_type;
-  const coverageWeek = toYahooFiniteNumber(playerPoints?.week);
-
-  return {
-    ...(points !== undefined ? { points } : {}),
-    ...(typeof coverageType === 'string'
-      ? { coverage: { type: coverageType, ...(coverageWeek !== undefined ? { week: coverageWeek } : {}) } }
-      : {}),
-  };
 }
 
 export interface YahooKeeperStatus {
