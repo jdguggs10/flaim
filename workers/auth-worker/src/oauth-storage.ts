@@ -230,6 +230,7 @@ function getClientNameFromRedirectUri(redirectUri: string): string {
   if (uri.includes('gemini') || uri.includes('google.com')) return 'Gemini';
   if (uri.includes('perplexity.ai') || uri.includes('perplexity.com')) return 'Perplexity';
   if (uri === 'https://app.lilbird.co/mcp/oauth/callback') return 'Littlebird';
+  if (uri === 'https://flaim-relay.onrender.com/oauth/callback') return 'Tasklet Relay';
   if (uri.includes('localhost') || uri.includes('127.0.0.1')) return 'Development';
   return 'MCP Client';
 }

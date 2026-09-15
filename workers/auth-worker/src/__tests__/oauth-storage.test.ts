@@ -172,6 +172,23 @@ describe('OAuthStorage MCP token lifetimes', () => {
     expect(insertPayloads[0].client_name).toBe('Littlebird');
   });
 
+  it('labels only the exact relay callback as Tasklet Relay', async () => {
+    const { insertPayloads } = buildTableMock();
+    const storage = new OAuthStorage('https://example.supabase.co', 'test-key');
+
+    await storage.createAccessToken({
+      userId: 'user_123',
+      redirectUri: 'https://flaim-relay.onrender.com/oauth/callback',
+    });
+    await storage.createAccessToken({
+      userId: 'user_123',
+      redirectUri: 'https://other-service.onrender.com/oauth/callback',
+    });
+
+    expect(insertPayloads[0].client_name).toBe('Tasklet Relay');
+    expect(insertPayloads[1].client_name).toBe('MCP Client');
+  });
+
   it('marks confidential refresh tokens with the client binding', async () => {
     const { insertPayloads } = buildTableMock();
     const client = await createConfidentialClientRegistration(clientSigningKey);
