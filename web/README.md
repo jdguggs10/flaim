@@ -156,3 +156,28 @@ limited to capture time, landing pathname, external referring hostname, UTM
 fields, and an explicit `ref`; full referrer URLs and arbitrary query parameters
 are never stored. Both sign-up and transferable OAuth sign-in surfaces attach
 the same metadata because either Clerk flow can create a user.
+
+### Signup log backfill
+
+`web/scripts/backfill-signup-log.mjs` walks the Clerk user list as of a
+frozen cutoff and calls the `record_signup` RPC for every user, to backfill
+`public.signup_log` for accounts created before the webhook writer existed.
+
+Run only after the `signup_log` migration is applied and the webhook writer
+is deployed — running it earlier leaves a gap neither the backfill nor the
+writer will ever fill. The RPC is idempotent (it never overwrites an
+existing row's `created_at`/`source`, and fills `first_touch` only when null),
+so re-running the backfill after a partial run or a failure is always safe.
+
+```
+# Dry run first — env: CLERK_SECRET_KEY. Prints an aggregate report only.
+corepack pnpm --dir web exec node scripts/backfill-signup-log.mjs
+
+# Apply — also needs SUPABASE_URL and SUPABASE_SERVICE_KEY.
+corepack pnpm --dir web exec node scripts/backfill-signup-log.mjs --apply
+```
+
+`--offset`, `--limit` (capped at 500), `--delay-ms`, `--max-users`, and
+`--cutoff <iso>` pace and resume larger runs. The report never prints an
+email, a metadata object, a first-touch value, a key, or any other per-user
+line — only counts, the observed `created_at` range, and a resume offset.
