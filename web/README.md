@@ -189,7 +189,9 @@ The run exits non-zero if anything was left undone — a pagination anomaly, an
 invalid `created_at`, or a failed `record_signup` call — and the report ends
 with a `status:` line saying which. A user whose first-touch metadata is
 unusable still gets a row, with a null `first_touch`; only the attribution is
-dropped, and the report counts it as `skipped`.
+dropped, and the report counts it as `skipped`. A user with no first-touch
+record at all (every account from before attribution was collected) is not
+skipped; it is simply written without attribution.
 
 The report never prints an email, a metadata object, a first-touch value, a
 key, or any other per-user line — only counts, the observed `created_at`
