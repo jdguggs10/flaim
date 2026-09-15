@@ -1,6 +1,6 @@
 import type { ExecuteResponse } from '../../types';
 import { extractErrorCode } from '@flaim/worker-shared';
-import { asArray, parseYahooPercentOwned, toYahooBoolean } from '../normalizers';
+import { asArray, parseYahooPercentOwned, toYahooBoolean, toYahooFiniteNumber } from '../normalizers';
 import { defaultMetadataForYahooCode, isYahooClientError } from '../errors';
 
 export function toExecuteErrorResponse(error: unknown): ExecuteResponse {
@@ -36,6 +36,69 @@ export function extractPlayerPercentOwned(playerData: unknown[]): number | null 
   const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
   const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
   return parseYahooPercentOwned(ownership?.percent_owned);
+}
+
+/**
+ * Scan a Yahoo player array (index 0 metadata, index 1+ sub-resources) for
+ * the first plain object that owns `key`. Yahoo's sub-resource ordering is
+ * not documented or guaranteed — existing code reads `ownership` at a fixed
+ * index 1 because every known capture puts it there, but a roster request
+ * that also asks for player stats can carry `selected_position`,
+ * `player_stats`, and `player_points` in any order, so this scans rather
+ * than assuming a position.
+ */
+export function findPlayerSubResource(playerData: unknown[], key: string): Record<string, unknown> | undefined {
+  if (!Array.isArray(playerData)) return undefined;
+  for (let i = 1; i < playerData.length; i++) {
+    const entry = playerData[i];
+    if (entry && typeof entry === 'object' && !Array.isArray(entry) && key in (entry as Record<string, unknown>)) {
+      return entry as Record<string, unknown>;
+    }
+  }
+  return undefined;
+}
+
+export interface YahooPlayerWeeklyPoints {
+  points?: number;
+  coverage?: { type: string; week?: number };
+}
+
+/**
+ * Extract a player's `player_points` sub-resource: the total score plus the
+ * coverage Yahoo echoes back. A real captured NFL roster response
+ * (`;players/stats`) nests the coverage metadata under a numeric `"0"` key,
+ * sibling to `total`: `player_points: { "0": { coverage_type, week },
+ * total: "12.50" }` — `total` is a STRING at the top level, not under `"0"`.
+ * An unrecognized/legacy shape without a `"0"` container is tolerated by
+ * falling back to reading `coverage_type`/`week` directly off
+ * `player_points` itself.
+ *
+ * `points` is emitted only when the total parses as a finite number; a
+ * genuine `0.00` (e.g. a bye-week starter) must survive as `0`, so this
+ * checks for `undefined` rather than falsiness.
+ */
+export function extractPlayerWeeklyPoints(playerData: unknown[]): YahooPlayerWeeklyPoints {
+  const pointsData = findPlayerSubResource(playerData, 'player_points');
+  if (!pointsData) return {};
+
+  const playerPoints = pointsData.player_points as Record<string, unknown> | undefined;
+  if (!playerPoints) return {};
+
+  const points = toYahooFiniteNumber(playerPoints.total);
+
+  const coverageContainer =
+    (playerPoints['0'] && typeof playerPoints['0'] === 'object' && !Array.isArray(playerPoints['0'])
+      ? (playerPoints['0'] as Record<string, unknown>)
+      : undefined) ?? playerPoints;
+  const coverageType = coverageContainer.coverage_type;
+  const coverageWeek = toYahooFiniteNumber(coverageContainer.week);
+
+  return {
+    ...(points !== undefined ? { points } : {}),
+    ...(typeof coverageType === 'string'
+      ? { coverage: { type: coverageType, ...(coverageWeek !== undefined ? { week: coverageWeek } : {}) } }
+      : {}),
+  };
 }
 
 export interface YahooKeeperStatus {
