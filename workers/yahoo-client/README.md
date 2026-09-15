@@ -18,6 +18,14 @@ Yahoo's roster resource is sport-sensitive: `;week=` is valid for football only,
 
 Player entries omit `team` and `status` on any historical (`week`/`date`) snapshot, and the response adds `limitations: { playerProTeamAvailable: false }` (FLA-278). Yahoo's roster player object exposes `editorial_team_abbr`/`status` as the player's CURRENT club and CURRENT status only — there is no historical value in this payload for a past week/date, so a player traded or whose status changed since would otherwise show present-day facts mislabeled as historical. Current-roster entries are unaffected.
 
+### Weekly Player Points
+
+Football `get_roster` requests append Yahoo's week-scoped player stats sub-resource and emit an additive `points` per player, plus a response-level `pointsCoverage: { type: 'week', week }`. The request selectors are `/team/{team_key}/roster;week={N}/players/stats` for a week snapshot and `/team/{team_key}/roster;week=current/players/stats` for the current roster — no `;type=`, and current rosters must carry the literal `;week=current`; a bare `/players/stats` with no week selector 400s.
+
+If the stats-augmented request comes back non-ok, the handler logs one line and retries the plain legacy roster URL, continuing without points and reporting `limitations: { playerPointsAvailable: false }` rather than failing the whole roster read.
+
+Points only surface when Yahoo's echoed coverage confirms a single week: a week snapshot requires `coverage.type === 'week'` and `coverage.week` to exactly equal the requested week; a current snapshot resolves one positive-integer week from the first usable player and drops any player whose echoed week differs. A genuine `0.00` total is preserved as `0`, never omitted. `limitations.playerPointsAvailable: false` is added whenever no player's points were usable.
+
 ### Keeper / League-Format Context (FLA-284)
 
 **Status: coded and fixture-tested only, not live-verified.** Yahoo API access has been cut since 2026-07-27 (FLA-237); the fields below are shaped from real captured fixtures and Yahoo's own (sparse) documentation, not a live call against this worker. Treat them as best-effort until FLA-237 clears and a live check runs.

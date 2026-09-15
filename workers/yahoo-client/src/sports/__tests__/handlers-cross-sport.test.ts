@@ -1285,16 +1285,33 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it.each(scenarios)('$label current roster omits both selectors from the URL', async ({ sport, handlers }) => {
+    it.each(dailySports)('%s current roster omits both selectors from the URL', async (sport) => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
-      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
 
       expect(result.success).toBe(true);
       const path = fetchMock.mock.calls[0][0] as string;
       expect(path).not.toContain(';week=');
       expect(path).not.toContain(';date=');
+      expect(path).not.toContain('/players/stats');
+      const data = result.data as { snapshot: Record<string, unknown> };
+      expect(data.snapshot).toEqual({ type: 'current' });
+    });
+
+    // Football is the one sport with a points-capable `week` selector: the
+    // current roster now fetches the stats-augmented URL with the literal
+    // `;week=current` selector, which the daily sports above must never see.
+    it('football current roster fetches the ;week=current stats-augmented URL', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const path = fetchMock.mock.calls[0][0] as string;
+      expect(path).toBe('/team/449.l.123.t.1/roster;week=current/players/stats');
       const data = result.data as { snapshot: Record<string, unknown> };
       expect(data.snapshot).toEqual({ type: 'current' });
     });
@@ -1304,7 +1321,10 @@ describe('yahoo cross-sport handler characterization tests', () => {
     // relabel that present-day state as true-as-of-then, so `team`/`status`
     // are omitted entirely and `limitations.playerProTeamAvailable: false` is
     // added — mirroring the same rule already applied to ESPN and Sleeper.
-    it('football week snapshot omits team/status and flags playerProTeamAvailable', async () => {
+    // This fixture also carries no player_stats/player_points sub-resource,
+    // so the football-only stats-augmented request also yields
+    // `playerPointsAvailable: false` alongside it.
+    it('football week snapshot omits team/status and flags playerProTeamAvailable (and playerPointsAvailable, no stats in this fixture)', async () => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1', week: 5 };
@@ -1314,7 +1334,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const data = result.data as { players: Array<Record<string, unknown>>; limitations?: Record<string, unknown> };
       expect(data.players[0]).not.toHaveProperty('team');
       expect(data.players[0]).not.toHaveProperty('status');
-      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false, playerPointsAvailable: false });
     });
 
     it.each(dailySports)('%s date snapshot omits team/status and flags playerProTeamAvailable', async (sport) => {
@@ -1333,17 +1353,36 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.limitations).toEqual({ playerProTeamAvailable: false });
     });
 
-    it.each(scenarios)('$label current roster keeps team/status and has no limitations', async ({ sport, handlers }) => {
+    it.each(dailySports)('%s current roster keeps team/status and has no limitations', async (sport) => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
-      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
 
       expect(result.success).toBe(true);
       const data = result.data as { players: Array<Record<string, unknown>>; limitations?: unknown };
       expect(data.players[0].team).toBe('NYY');
       expect(data.players[0].status).toBe('healthy');
       expect(data.limitations).toBeUndefined();
+    });
+
+    // Football's current-roster fixture here carries no player_stats/
+    // player_points sub-resource (buildRosterResponse has none), so the
+    // stats-augmented request succeeds but yields no usable points — team/
+    // status still show (not a historical snapshot) but
+    // limitations.playerPointsAvailable is now set, unlike the daily sports
+    // above which never request stats at all.
+    it('football current roster keeps team/status but flags playerPointsAvailable false when Yahoo returns no stats', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>>; limitations?: Record<string, boolean> };
+      expect(data.players[0].team).toBe('NYY');
+      expect(data.players[0].status).toBe('healthy');
+      expect(data.limitations).toEqual({ playerPointsAvailable: false });
     });
   });
 
