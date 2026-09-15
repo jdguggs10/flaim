@@ -5,6 +5,7 @@ import {
   fetchUserCount,
   formatReport,
   listUsersAtCutoff,
+  hasFirstTouchRecord,
   normalizeFirstTouch,
   parseArgs,
   PaginationAnomalyError,
@@ -602,7 +603,7 @@ describe("backfill-signup-log script helpers", () => {
         latestCreatedAt = createdAtMs;
 
         const firstTouch = normalizeFirstTouch(user.unsafe_metadata);
-        if (user.unsafe_metadata && firstTouch === null) skipped += 1;
+        if (hasFirstTouchRecord(user.unsafe_metadata) && firstTouch === null) skipped += 1;
       }
 
       const report = formatReport({

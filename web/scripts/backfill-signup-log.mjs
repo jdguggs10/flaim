@@ -432,6 +432,14 @@ export function normalizeFirstTouchAcquisition(value) {
  * row keeps no `capturedAt`, strips markup from every dimension, and requires
  * `referrerHost` to look like a bare hostname.
  */
+export function hasFirstTouchRecord(metadata) {
+  return (
+    typeof metadata === "object" &&
+    metadata !== null &&
+    Object.prototype.hasOwnProperty.call(metadata, "flaimAcquisition")
+  );
+}
+
 export function normalizeFirstTouch(unsafeMetadata) {
   const outer = asRecord(unsafeMetadata);
   const acquisition = normalizeFirstTouchAcquisition(outer?.flaimAcquisition);
@@ -643,9 +651,11 @@ export async function run(argv, { env = process.env, fetchImpl = fetch, log = co
 
         // Unusable attribution is counted, never a reason to skip the user:
         // the signup itself is the fact worth keeping, so the row is still
-        // written with a null first_touch.
+        // written with a null first_touch. Clerk returns an empty metadata bag
+        // for every user, so "skipped" means a first-touch record was present
+        // and unusable, not that a user simply has no attribution.
         const firstTouch = normalizeFirstTouch(user.unsafe_metadata);
-        if (user.unsafe_metadata && firstTouch === null) {
+        if (hasFirstTouchRecord(user.unsafe_metadata) && firstTouch === null) {
           stats.skipped += 1;
         }
 
