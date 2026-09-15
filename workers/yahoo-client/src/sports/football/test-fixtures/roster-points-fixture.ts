@@ -171,3 +171,80 @@ export function buildRosterPointsSeasonCoverageFixture(): unknown {
 export function buildRosterPointsNoStatsFixture(): unknown {
   return buildRosterFromSpecs([BENCH_WR_NO_STATS], 'normal');
 }
+
+/**
+ * A single player whose `player_points` echoes `coverage_type: 'week'` but a
+ * DIFFERENT week (6) than the one requested (5) — simulates Yahoo drifting
+ * to an adjacent week. On a week-5 request, this player's points must never
+ * surface: the gate requires exact week equality, not just `type: 'week'`.
+ */
+export function buildRosterPointsWeekMismatchFixture(): unknown {
+  const wrongWeekPlayer: PlayerSpec = {
+    playerKey: '449.p.105',
+    playerId: 'p105',
+    fullName: 'Synthetic Wrong Week Player',
+    team: 'SF',
+    displayPosition: 'WR',
+    selectedPosition: 'WR',
+    points: { total: '15.40', coverageType: 'week', week: '6' },
+  };
+  return buildRosterFromSpecs([wrongWeekPlayer], 'normal');
+}
+
+/**
+ * Two players on a week-5 request: one whose `player_points` echoes week 5
+ * (matches), one whose echoes week 6 (drifted). Only the week-5 player
+ * should surface `points`; the mismatched player's points are omitted even
+ * though the response as a whole still has usable points from the other
+ * player.
+ */
+export function buildRosterPointsMixedWeekMatchFixture(): unknown {
+  const matchingWeekPlayer: PlayerSpec = {
+    playerKey: '449.p.106',
+    playerId: 'p106',
+    fullName: 'Synthetic Matching Week Player',
+    team: 'GB',
+    displayPosition: 'TE',
+    selectedPosition: 'TE',
+    points: { total: '9.80', coverageType: 'week', week: '5' },
+  };
+  const mismatchedWeekPlayer: PlayerSpec = {
+    playerKey: '449.p.107',
+    playerId: 'p107',
+    fullName: 'Synthetic Mismatched Week Player',
+    team: 'DAL',
+    displayPosition: 'WR',
+    selectedPosition: 'WR',
+    points: { total: '11.20', coverageType: 'week', week: '6' },
+  };
+  return buildRosterFromSpecs([matchingWeekPlayer, mismatchedWeekPlayer], 'normal');
+}
+
+/**
+ * Two players on a `current` request, echoing DIFFERENT weeks (3, then 4) —
+ * simulates Yahoo's stats sub-resource not being pinned to one week when no
+ * explicit week is requested. The single consistent week for the response is
+ * resolved from the first usable player (week 3); the second player's week 4
+ * points are treated as unusable even though they are otherwise well-formed.
+ */
+export function buildRosterPointsCurrentMixedWeeksFixture(): unknown {
+  const firstWeekPlayer: PlayerSpec = {
+    playerKey: '449.p.108',
+    playerId: 'p108',
+    fullName: 'Synthetic Week Three Player',
+    team: 'PHI',
+    displayPosition: 'RB',
+    selectedPosition: 'RB',
+    points: { total: '14.60', coverageType: 'week', week: '3' },
+  };
+  const secondWeekPlayer: PlayerSpec = {
+    playerKey: '449.p.109',
+    playerId: 'p109',
+    fullName: 'Synthetic Week Four Player',
+    team: 'NYJ',
+    displayPosition: 'WR',
+    selectedPosition: 'WR',
+    points: { total: '6.90', coverageType: 'week', week: '4' },
+  };
+  return buildRosterFromSpecs([firstWeekPlayer, secondWeekPlayer], 'normal');
+}

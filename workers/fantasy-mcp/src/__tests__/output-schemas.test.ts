@@ -578,9 +578,20 @@ describe('get_roster output schema', () => {
       teamName: 'Yahoo Team',
       ownerName: 'Gerry',
       snapshot: { type: 'week', week: 5 },
-      limitations: { playerProTeamAvailable: false, playerPointsAvailable: false },
+      limitations: { playerProTeamAvailable: false },
       pointsCoverage: { type: 'week', week: 5 },
       players: [{ playerId: '101', name: 'Synthetic Quarterback', position: 'QB', selectedPosition: 'QB', points: 22.16 }],
+    }));
+  });
+
+  it('accepts the Yahoo roster envelope with no usable weekly player points', () => {
+    expectValid('get_roster', routed({
+      teamKey: '449.l.123.t.1',
+      teamName: 'Yahoo Team',
+      ownerName: 'Gerry',
+      snapshot: { type: 'week', week: 5 },
+      limitations: { playerProTeamAvailable: false, playerPointsAvailable: false },
+      players: [{ playerId: '101', name: 'Synthetic Quarterback', position: 'QB', selectedPosition: 'QB' }],
     }));
   });
 

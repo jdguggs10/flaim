@@ -4,10 +4,13 @@ import type { ToolParams } from '../../../types';
 import { getYahooCredentials } from '../../../shared/auth';
 import { yahooFetch } from '../../../shared/yahoo-api';
 import {
+  buildRosterPointsCurrentMixedWeeksFixture,
   buildRosterPointsFixture,
+  buildRosterPointsMixedWeekMatchFixture,
   buildRosterPointsNoStatsFixture,
   buildRosterPointsReversedOrderFixture,
   buildRosterPointsSeasonCoverageFixture,
+  buildRosterPointsWeekMismatchFixture,
 } from '../test-fixtures/roster-points-fixture';
 
 vi.mock('../../../shared/auth', () => ({
@@ -186,5 +189,84 @@ describe('yahoo football get_roster weekly player points fixture integration', (
     expect(data.players[0].selectedPosition).toBe('BN');
     expect(data.pointsCoverage).toBeUndefined();
     expect(data.limitations?.playerPointsAvailable).toBe(false);
+  });
+
+  it('a week-5 request where Yahoo echoes a different week for the only player omits points and reports playerPointsAvailable false', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(buildRosterPointsWeekMismatchFixture()));
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      team_id: '449.l.123.t.1',
+      week: 5,
+    };
+    const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      players: Array<Record<string, unknown>>;
+      pointsCoverage?: unknown;
+      limitations?: Record<string, boolean>;
+    };
+
+    expect(data.players).toHaveLength(1);
+    expect(data.players[0]).not.toHaveProperty('points');
+    expect(data.pointsCoverage).toBeUndefined();
+    expect(data.limitations?.playerPointsAvailable).toBe(false);
+  });
+
+  it('a week-5 request with one matching-week player and one mismatched-week player only surfaces points for the match', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(buildRosterPointsMixedWeekMatchFixture()));
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      team_id: '449.l.123.t.1',
+      week: 5,
+    };
+    const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      players: Array<Record<string, unknown>>;
+      pointsCoverage?: { type: string; week: number };
+      limitations?: Record<string, boolean>;
+    };
+
+    expect(data.players).toHaveLength(2);
+    expect(data.players[0].points).toBe(9.8);
+    expect(data.players[1]).not.toHaveProperty('points');
+    expect(data.pointsCoverage).toEqual({ type: 'week', week: 5 });
+    expect(data.limitations?.playerPointsAvailable).toBeUndefined();
+  });
+
+  it('a current request with players echoing different weeks only surfaces points for the first usable week', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(buildRosterPointsCurrentMixedWeeksFixture()));
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      team_id: '449.l.123.t.1',
+    };
+    const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as {
+      players: Array<Record<string, unknown>>;
+      pointsCoverage?: { type: string; week: number };
+      limitations?: Record<string, boolean>;
+    };
+
+    expect(data.players).toHaveLength(2);
+    expect(data.players[0].points).toBe(14.6);
+    expect(data.players[1]).not.toHaveProperty('points');
+    expect(data.pointsCoverage).toEqual({ type: 'week', week: 3 });
+    expect(data.limitations?.playerPointsAvailable).toBeUndefined();
   });
 });

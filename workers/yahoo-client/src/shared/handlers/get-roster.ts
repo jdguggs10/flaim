@@ -57,11 +57,19 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
     // state, so it is temporally pure on a historical snapshot the same way
     // isKeeper is (see normalizeIsKeeper below) — unlike editorial_team_abbr/
     // status, points don't need isHistoricalSnapshot gating. What still needs
-    // gating is `current`: Yahoo's stats sub-resource can echo back a
-    // season-to-date total instead of a single week depending on what was
-    // requested, so a `current` roster's per-player points are only emitted
-    // when Yahoo's own echoed coverage confirms `type: 'week'` with a finite
-    // week — otherwise a season total could be mislabeled as this week's score.
+    // gating is Yahoo's own echoed coverage, and the exact rule differs by
+    // snapshot type: on a `week` snapshot, a player's points are usable only
+    // when Yahoo echoes `coverage.type === 'week'` AND `coverage.week` is
+    // EXACTLY the requested week — any other week (Yahoo drifting to an
+    // adjacent week, say) is treated as unusable for that player. On a
+    // `current` snapshot there is no requested week to check against, so
+    // instead every emitted player's points must share one SINGLE
+    // consistent week: the coverage week of the first player with usable
+    // (finite points, `type: 'week'`, positive-integer week) data is taken
+    // as that response's week, and any other player whose echoed week
+    // differs is treated as unusable — otherwise a season-to-date total, or
+    // players scored against different weeks, could be mislabeled or mixed
+    // together as "this week's score".
     const isHistoricalSnapshot = snapshot.type !== 'current';
 
     // Football only: `;players/stats;type=week` is an unverified selector for
@@ -98,10 +106,11 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
       const playersObj = getPath(rosterData, ['0', 'players']) as Record<string, unknown> | undefined;
       const playersArray = asArray(playersObj);
 
-      let sawWeekScopedPoints = false;
-      let pointsCoverageWeek: number | undefined;
-
-      const players = playersArray.map((playerWrapper: unknown) => {
+      // First pass: parse each player's own metadata/position/weekly-points
+      // independently of any other player, so the "which week is this
+      // response scoped to" decision below is made once from the parsed
+      // set rather than mutated player-by-player ("last player wins").
+      const parsedPlayers = playersArray.map((playerWrapper: unknown) => {
         const playerData = getPath(playerWrapper, ['player']) as unknown[];
         const playerMeta = extractPlayerMeta(playerData);
 
@@ -123,13 +132,47 @@ export function createGetRosterHandler(config: YahooHandlerContext): HandlerFn {
         const isKeeper = normalizeIsKeeper(playerMeta.is_keeper);
 
         const weeklyPoints = pointsSupported ? extractPlayerWeeklyPoints(playerData) : {};
+
+        return { playerMeta, position, isKeeper, weeklyPoints };
+      });
+
+      // On a `current` request, every emitted player's points must share one
+      // consistent week: take the coverage week of the first player with
+      // usable (finite points, coverage.type === 'week', positive-integer
+      // week) data as the single resolved week, and treat any other
+      // player's differing week as unusable. A `week` snapshot instead
+      // requires each player's own coverage.week to exactly equal the
+      // requested week — no cross-player resolution needed.
+      let resolvedCurrentWeek: number | undefined;
+      if (snapshot.type === 'current') {
+        for (const { weeklyPoints } of parsedPlayers) {
+          const week = weeklyPoints.coverage?.week;
+          if (
+            weeklyPoints.points !== undefined &&
+            weeklyPoints.coverage?.type === 'week' &&
+            week !== undefined &&
+            Number.isInteger(week) &&
+            week > 0
+          ) {
+            resolvedCurrentWeek = week;
+            break;
+          }
+        }
+      }
+
+      let sawWeekScopedPoints = false;
+      const pointsCoverageWeek = snapshot.type === 'week' ? snapshot.week : resolvedCurrentWeek;
+
+      const players = parsedPlayers.map(({ playerMeta, position, isKeeper, weeklyPoints }) => {
+        const week = weeklyPoints.coverage?.week;
         const hasUsableWeekPoints =
           weeklyPoints.points !== undefined &&
           weeklyPoints.coverage?.type === 'week' &&
-          weeklyPoints.coverage.week !== undefined;
+          week !== undefined &&
+          pointsCoverageWeek !== undefined &&
+          week === pointsCoverageWeek;
         if (hasUsableWeekPoints) {
           sawWeekScopedPoints = true;
-          pointsCoverageWeek = weeklyPoints.coverage!.week;
         }
 
         return {
