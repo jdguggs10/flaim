@@ -16,8 +16,9 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'r';
-  if actual_count <> 26 then
-    raise exception 'expected 26 public tables, found %', actual_count;
+  -- 27 since FLA-396 added public.signup_log.
+  if actual_count <> 27 then
+    raise exception 'expected 27 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -42,16 +43,19 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'v';
-  if actual_count <> 14 then
-    raise exception 'expected 14 analytics views, found %', actual_count;
+  -- 17 since FLA-396 added signups_daily, signup_rollups, and
+  -- signup_sources_daily.
+  if actual_count <> 17 then
+    raise exception 'expected 17 analytics views, found %', actual_count;
   end if;
 
   select count(*) into actual_count
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.prokind = 'f';
-  if actual_count <> 26 then
-    raise exception 'expected 26 public functions, found %', actual_count;
+  -- 27 since FLA-396 added public.record_signup.
+  if actual_count <> 27 then
+    raise exception 'expected 27 public functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -118,8 +122,9 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
-  if actual_count <> 78 then
-    raise exception 'expected 78 public indexes, found %', actual_count;
+  -- 79 since FLA-396 added public.signup_log's primary key.
+  if actual_count <> 79 then
+    raise exception 'expected 79 public indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -145,8 +150,8 @@ begin
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relrowsecurity;
-  if actual_count <> 26 then
-    raise exception 'expected RLS on all 26 public tables, found %', actual_count;
+  if actual_count <> 27 then
+    raise exception 'expected RLS on all 27 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count

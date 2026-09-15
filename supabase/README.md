@@ -13,7 +13,7 @@ migrations.
 The [reconciliation manifest](./reconciliation.md) records the live objects
 represented by this baseline and its one intentional omission.
 
-The current forward contract has 26 public tables and 78 public indexes. Its
+The current forward contract has 27 public tables and 79 public indexes. Its
 FLA-308 migration adds service-role-only `espn_history_jobs` and the
 `advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
 `persist_espn_league_with_lease(...)` RPCs. The FLA-311 migration adds the
@@ -88,6 +88,9 @@ docker cp supabase/tests/dashboard_single_refresh.sql supabase_db_flaim:/tmp/das
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/dashboard_single_refresh.sql
 docker cp supabase/tests/espn_history_jobs.sql supabase_db_flaim:/tmp/espn_history_jobs.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/espn_history_jobs.sql
+docker cp supabase/tests/signup_log.sql supabase_db_flaim:/tmp/signup_log.sql
+docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/signup_log.sql
+bash supabase/tests/signup_log_concurrency.sh
 corepack pnpm exec supabase db lint --local --schema public,analytics --level warning --fail-on error
 corepack pnpm exec supabase db advisors --local --type security --level warn --fail-on error
 corepack pnpm exec supabase db diff --local --schema public,analytics
@@ -368,6 +371,84 @@ migration therefore sets `lock_timeout = '5s'` for its own transaction, so a
 long-running transaction holding a conflicting lock fails the migration fast
 instead of stalling the ESPN credential path for as long as that transaction
 lives.
+
+## Signup log
+
+`20260915120000_add_signup_log.sql` adds `public.signup_log`, the
+`public.record_signup(...)` write RPC, and three aggregate `analytics` views,
+and adds one redaction statement to `public.purge_account_data(text)`.
+
+`signup_log` holds exactly four columns — `clerk_user_id` (the natural key and
+the only dedupe that matters), `created_at` (Clerk's own signup instant, never
+the observation time), nullable `first_touch`, and a `source` constrained to
+`webhook` or `backfill`. There is no email column here or in any view over it,
+and no index on `created_at`: the table holds roughly one row per account ever
+created and all three views scan it whole.
+
+The grants are the boundary. Both baseline default-privilege traps apply and
+`GRANT` is additive, so the migration revokes the table and the function from
+`public`, `anon`, `authenticated`, and `service_role` before granting
+`service_role` `INSERT`, `UPDATE (first_touch)`, and
+`SELECT (clerk_user_id, first_touch)` on the table and `EXECUTE` on the RPC.
+`select *` by `service_role` therefore fails. RLS is enabled with no policies
+as a second layer; it blocks the browser roles and does not bind
+`service_role`, which carries `BYPASSRLS`. The three `analytics` views are
+owned by `postgres` and so bypass the table's RLS by design, exactly as
+`analytics.funnel_snapshot` does; their boundary is the explicit view ACL plus
+`analytics` not being exposed on the Data API.
+
+`record_signup` is a contract and a place for the conflict logic, not a
+privilege boundary: it is `security invoker` with an empty search path, like
+`purge_account_data`. It validates its arguments, takes the same per-user
+advisory lock through `account_deletion_lock_key(text)`, and performs one
+upsert. `created_at` and `source` are never overwritten; `first_touch` is
+fill-if-null, so a later delivery can supply attribution an earlier one lacked
+but nothing replaces attribution already captured. When a tombstone exists,
+`first_touch` is written as NULL on both the insert and the conflict path and
+nothing is raised — the signup fact is still recorded, so counts stay right.
+The anti-resurrection guard trigger is deliberately not attached, because a
+late `user.created` retry would otherwise raise and burn every webhook retry on
+an event that is correct to record.
+
+`analytics.signups_daily` is one row per Eastern calendar day with `signups`
+(deleted accounts excluded) and `signups_including_deleted`.
+`analytics.signup_rollups` is a single row of the seven window counts, the live
+total, and the `now_at` they were all computed from, so a reader samples one
+clock with the data. `analytics.signup_sources_daily` is one row per ET day and
+bounded first-touch dimension, lower-cased in SQL, with a `has_campaign_fields`
+flag; it exposes attributed, non-deleted rows only. None of the three exposes
+`clerk_user_id`, raw `first_touch` jsonb, or `landing_path`, and
+`analytics_readonly` receives `SELECT` on them and nothing else.
+
+`purge_account_data` gains one statement — set `first_touch` to NULL for that
+identifier — placed after the tombstone insert and inside the lock. The table
+is deliberately not added to the delete list: the row survives and only the
+attribution goes, which is what the published retention promise requires. The
+statement reads `clerk_user_id`, so the column-scoped `SELECT` grant is
+load-bearing for the entire purge transaction.
+
+`supabase/tests/signup_log.sql` proves every grant by execution rather than by
+inspecting an ACL, plus replay, fill-if-null, update-before-create,
+tombstone-before-write, write-before-purge, a full purge run, and the view
+semantics including ET-versus-UTC day placement.
+`supabase/tests/signup_log_concurrency.sh` races two live sessions in both
+orders and requires the advisory lock to serialize them, with the
+tombstone-aware result in each case and no deadlock.
+
+### Rollback artifacts
+
+`supabase/rollback/` holds reviewed, shipped-but-not-applied reversal scripts.
+Like `supabase/cron/`, it sits outside the migration path on purpose: a local
+`supabase db reset` applies every timestamped file in `supabase/migrations`, so
+a rollback stored there would undo its own migration on every reset. Applying
+one is a separate, explicitly approved operation.
+
+`supabase/rollback/20260915_rollback_signup_log.sql` reverses the signup log in
+a fixed order — restore `purge_account_data` to its pre-FLA-396 definition
+first, then drop the three views, then the RPC, then the table. The restored
+function body is reproduced verbatim rather than referenced. Reversing that
+order would leave the live purge referencing a table that no longer exists, and
+the next real account deletion would fail outright.
 
 ## Demo platform contract
 
