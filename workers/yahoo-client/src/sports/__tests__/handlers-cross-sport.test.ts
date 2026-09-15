@@ -1222,15 +1222,8 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const path = fetchMock.mock.calls[0][0] as string;
       expect(path).toContain('/roster;date=2025-07-10');
       expect(path).not.toContain(';week=');
-      // Weekly player points are football-only (Yahoo's `;week=` roster
-      // selector is football-only too) — a daily sport's date-scoped roster
-      // request never appends the stats sub-resource, and its response never
-      // carries points/pointsCoverage.
-      expect(path).not.toContain('/players/stats');
-      const data = result.data as { snapshot: Record<string, unknown>; players: Array<Record<string, unknown>>; pointsCoverage?: unknown };
+      const data = result.data as { snapshot: Record<string, unknown> };
       expect(data.snapshot).toEqual({ type: 'date', date: '2025-07-10' });
-      expect(data.players[0]).not.toHaveProperty('points');
-      expect(data.pointsCoverage).toBeUndefined();
     });
 
     it.each(dailySports)('%s rejects legacy week instead of emitting ;week=', async (sport) => {
@@ -1321,11 +1314,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const data = result.data as { players: Array<Record<string, unknown>>; limitations?: Record<string, unknown> };
       expect(data.players[0]).not.toHaveProperty('team');
       expect(data.players[0]).not.toHaveProperty('status');
-      // This fixture carries no player_points sub-resource, so football's
-      // week-scoped points request also flags playerPointsAvailable: false
-      // alongside the pre-existing playerProTeamAvailable flag (weekly player
-      // points fixture).
-      expect(data.limitations).toEqual({ playerProTeamAvailable: false, playerPointsAvailable: false });
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
     });
 
     it.each(dailySports)('%s date snapshot omits team/status and flags playerProTeamAvailable', async (sport) => {
@@ -1344,7 +1333,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.limitations).toEqual({ playerProTeamAvailable: false });
     });
 
-    it.each(scenarios)('$label current roster keeps team/status', async ({ sport, handlers }) => {
+    it.each(scenarios)('$label current roster keeps team/status and has no limitations', async ({ sport, handlers }) => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
@@ -1354,16 +1343,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const data = result.data as { players: Array<Record<string, unknown>>; limitations?: unknown };
       expect(data.players[0].team).toBe('NYY');
       expect(data.players[0].status).toBe('healthy');
-      if (sport === 'football') {
-        // Football always requests week-scoped player stats, even on a
-        // current-roster call (weekly player points), so a fixture with no
-        // player_points sub-resource still flags playerPointsAvailable: false
-        // — the daily sports (baseball/basketball/hockey) never request stats
-        // at all and keep the pre-existing no-limitations behavior.
-        expect(data.limitations).toEqual({ playerPointsAvailable: false });
-      } else {
-        expect(data.limitations).toBeUndefined();
-      }
+      expect(data.limitations).toBeUndefined();
     });
   });
 
