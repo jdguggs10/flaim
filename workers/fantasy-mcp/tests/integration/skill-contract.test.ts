@@ -161,4 +161,47 @@ describe('shipped Flaim fantasy skill contract', () => {
       'Do not include `injuryStatus` or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
     );
   });
+
+  it('gives Sleeper an authoritative get_players league-ownership path while keeping the market-ownership guardrail and ESPN/Yahoo conditionality', () => {
+    // Scope rule 7
+    expect(skill).toContain(
+      'Never infer league ownership from `market_percent_owned`, `percentOwned`, or `ownership_scope`'
+    );
+    expect(skill).toContain(
+      "On Sleeper, `get_players` always evaluates league ownership against the selected league's current rosters"
+    );
+    expect(skill).toContain(
+      'trust `league_team_id` (Sleeper-only), `league_status`, `league_team_name`, and `league_owner_name` directly'
+    );
+    expect(skill).toContain(
+      'On ESPN and Yahoo those same `league_status`/`league_team_name`/`league_owner_name` fields populate only when credentials and league context allow'
+    );
+
+    // get_players tools-reference section
+    expect(skill).toContain(
+      "Sleeper always evaluates league ownership against the selected league's current rosters and adds a Sleeper-only `league_team_id` (the Sleeper roster id, or `null`)"
+    );
+    expect(skill).toContain(
+      "Sleeper's market/global ownership stays unavailable (`market_percent_owned: null`, `ownership_scope: \"unavailable\"`)"
+    );
+
+    // Updated worked example
+    expect(skill).toContain(
+      '"Who owns Player X in my league?" → Sleeper: `get_user_session` → `get_league_info` → `get_players` (trust `league_status`/`league_team_id`/`league_team_name`/`league_owner_name` directly). ESPN/Yahoo: `get_user_session` → `get_league_info` + `get_roster` per team (never use `market_percent_owned`, `percentOwned`, or `ownership_scope` as league ownership)'
+    );
+
+    // Superseded phrasing must be gone
+    expect(skill).not.toContain('do not use `get_players` market ownership as league ownership');
+
+    // The verbatim "Ben Rice" worked example must survive untouched.
+    expect(skill).toContain(
+      '"Find the right Ben Rice and show market ownership context" → `get_user_session` → `get_league_info` → `get_players`'
+    );
+
+    // Active-draft exception (FLA-382 cross-model audit fix 2) and league_status-keyed fallback (fix 1)
+    expect(skill).toContain('except during an active draft');
+    expect(skill).toContain(
+      'Fall back to `get_roster` only when `league_status` itself is absent or null'
+    );
+  });
 });
