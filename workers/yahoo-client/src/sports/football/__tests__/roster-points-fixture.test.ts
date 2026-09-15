@@ -6,7 +6,6 @@ import { yahooFetch } from '../../../shared/yahoo-api';
 import {
   buildRosterPointsCurrentMixedWeeksFixture,
   buildRosterPointsFixture,
-  buildRosterPointsLegacyTopLevelCoverageFixture,
   buildRosterPointsMixedWeekMatchFixture,
   buildRosterPointsNoStatsFixture,
   buildRosterPointsReversedOrderFixture,
@@ -165,29 +164,6 @@ describe('yahoo football get_roster weekly player points fixture integration', (
     expect(data.limitations?.playerPointsAvailable).toBe(false);
     // Historical rule is unaffected by the points gate.
     expect(data.limitations?.playerProTeamAvailable).toBe(false);
-  });
-
-  it('legacy top-level coverage_type/week (not nested under "0") is still tolerated and gates normally', async () => {
-    fetchMock.mockResolvedValue(jsonResponse(buildRosterPointsLegacyTopLevelCoverageFixture()));
-
-    const params: ToolParams = {
-      sport: 'football',
-      league_id: '449.l.123',
-      season_year: 2025,
-      team_id: '449.l.123.t.1',
-      week: 1,
-    };
-    const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
-
-    expect(result.success).toBe(true);
-    if (!result.success) return;
-    const data = result.data as {
-      players: Array<Record<string, unknown>>;
-      pointsCoverage?: { type: string; week: number };
-    };
-
-    expect(data.players[0].points).toBe(7.4);
-    expect(data.pointsCoverage).toEqual({ type: 'week', week: 1 });
   });
 
   it('a roster with no stats sub-resource on any player reports no points anywhere and flags playerPointsAvailable false', async () => {

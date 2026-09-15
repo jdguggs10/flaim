@@ -29,21 +29,15 @@ interface PlayerSpec {
     total: string;
     coverageType: string;
     week?: string;
-    /** Legacy tolerance: put coverage_type/week directly on player_points, not under "0". */
-    legacyTopLevelCoverage?: boolean;
   };
 }
 
 function buildPointsAndStatsResource(spec: NonNullable<PlayerSpec['points']>): Record<string, unknown> {
   const coverage = { coverage_type: spec.coverageType, ...(spec.week ? { week: spec.week } : {}) };
 
-  const player_points = spec.legacyTopLevelCoverage
-    ? { ...coverage, total: spec.total }
-    : { '0': coverage, total: spec.total };
-
   return {
     player_stats: { '0': coverage, stats: [{ stat: { stat_id: '00', value: '0' } }] },
-    player_points,
+    player_points: { '0': coverage, total: spec.total },
   };
 }
 
@@ -189,24 +183,6 @@ export function buildRosterPointsSeasonCoverageFixture(): unknown {
     points: { total: '84.30', coverageType: 'season', week: '2025' },
   };
   return buildRosterFromSpecs([seasonPlayer], 'normal');
-}
-
-/**
- * A single player whose `player_points` puts `coverage_type`/`week` directly
- * on the object rather than nested under "0" — legacy/unrecognized-shape
- * tolerance. Coverage should still resolve and gate normally.
- */
-export function buildRosterPointsLegacyTopLevelCoverageFixture(): unknown {
-  const legacyPlayer: PlayerSpec = {
-    playerKey: '449.p.110',
-    playerId: 'p110',
-    fullName: 'Synthetic Legacy Coverage Player',
-    team: 'LAR',
-    displayPosition: 'WR',
-    selectedPosition: 'WR',
-    points: { total: '7.40', coverageType: 'week', week: '1', legacyTopLevelCoverage: true },
-  };
-  return buildRosterFromSpecs([legacyPlayer], 'normal', { coverageType: 'week', week: '1' });
 }
 
 /**

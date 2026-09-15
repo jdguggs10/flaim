@@ -69,9 +69,9 @@ export interface YahooPlayerWeeklyPoints {
  * (`;players/stats`) nests the coverage metadata under a numeric `"0"` key,
  * sibling to `total`: `player_points: { "0": { coverage_type, week },
  * total: "12.50" }` — `total` is a STRING at the top level, not under `"0"`.
- * An unrecognized/legacy shape without a `"0"` container is tolerated by
- * falling back to reading `coverage_type`/`week` directly off
- * `player_points` itself.
+ * No other shape is tolerated: a response without the `"0"` coverage
+ * container yields no coverage, so the caller omits points rather than
+ * guessing, and Yahoo shape drift surfaces as `playerPointsAvailable: false`.
  *
  * `points` is emitted only when the total parses as a finite number; a
  * genuine `0.00` (e.g. a bye-week starter) must survive as `0`, so this
@@ -87,11 +87,11 @@ export function extractPlayerWeeklyPoints(playerData: unknown[]): YahooPlayerWee
   const points = toYahooFiniteNumber(playerPoints.total);
 
   const coverageContainer =
-    (playerPoints['0'] && typeof playerPoints['0'] === 'object' && !Array.isArray(playerPoints['0'])
+    playerPoints['0'] && typeof playerPoints['0'] === 'object' && !Array.isArray(playerPoints['0'])
       ? (playerPoints['0'] as Record<string, unknown>)
-      : undefined) ?? playerPoints;
-  const coverageType = coverageContainer.coverage_type;
-  const coverageWeek = toYahooFiniteNumber(coverageContainer.week);
+      : undefined;
+  const coverageType = coverageContainer?.coverage_type;
+  const coverageWeek = toYahooFiniteNumber(coverageContainer?.week);
 
   return {
     ...(points !== undefined ? { points } : {}),
