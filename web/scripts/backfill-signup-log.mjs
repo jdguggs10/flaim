@@ -116,6 +116,26 @@ export function parseArgs(argv) {
     throw new Error("--cutoff must be a valid ISO date");
   }
 
+  // The frozen `created_at_before` cutoff freezes what Clerk *adds*, not what
+  // it removes: a user deleted between two runs shifts every later offset up
+  // by one, so a second `--apply --offset N` would step over a live account
+  // that has never been written. Windowing an apply run is therefore refused
+  // outright. It costs nothing to forbid: `record_signup` is idempotent, so
+  // every apply run simply restarts at offset zero over the whole set. Both
+  // flags stay available for dry-run inspection, where nothing is written and
+  // a skipped user is only a miscount in a report.
+  if (args.apply && args.offset !== 0) {
+    throw new Error(
+      "--offset is not allowed with --apply: deletions shift later offsets, so a windowed apply run can skip a user. Re-run --apply from the start; record_signup is idempotent."
+    );
+  }
+
+  if (args.apply && args.maxUsers !== Number.POSITIVE_INFINITY) {
+    throw new Error(
+      "--max-users is not allowed with --apply: deletions shift later offsets, so a windowed apply run can skip a user. Re-run --apply from the start; record_signup is idempotent."
+    );
+  }
+
   return args;
 }
 
@@ -138,12 +158,20 @@ Options:
                      Defaults to now, read once at start.
   --delay-ms <n>     Wait between record_signup calls in --apply mode. Default 0.
   --limit <n>        Clerk page size. Default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}.
-  --max-users <n>    Stop after scanning this many Clerk users.
-  --offset <n>       Start at a Clerk list offset (for resuming after an anomaly).
+  --max-users <n>    Stop after scanning this many Clerk users. Dry-run only.
+  --offset <n>       Start at a Clerk list offset. Dry-run only.
 
-The report is aggregate-only: counts, the observed created_at range, and a
-resume offset. It never prints an email, a metadata object, a first-touch
-value, a key, or a per-user line.
+--offset and --max-users are refused with --apply: a user deleted between two
+runs shifts every later offset, so a windowed apply run can silently step over
+an account. After an anomaly or a partial apply run, re-run --apply from the
+start — record_signup is idempotent.
+
+The run exits non-zero if anything was left undone: a pagination anomaly, an
+invalid created_at, or a failed record_signup call.
+
+The report is aggregate-only: counts, the observed created_at range, and (in
+dry-run) a resume offset. It never prints an email, a metadata object, a
+first-touch value, a key, or a per-user line.
 `);
 }
 
@@ -271,30 +299,45 @@ export function validateCreatedAt(value, { now = Date.now() } = {}) {
   return value;
 }
 
-// Mirrors web/lib/server/signup-log.ts's normalizeFirstTouch (TypeScript) and
-// the validation/bounding rules ported from flaim-data/lib/acquisition.ts's
-// storedFirstTouch: same field names, the same schema-version check, the same
-// landing-path guard, and the same string bounding. Scripts are plain .mjs
-// and cannot import the TypeScript mapper, so this copy must be kept in sync
-// by hand with both of those files whenever the first-touch shape changes.
-const FIRST_TOUCH_FIELD_LIMITS = {
-  ref: 100,
+// Hand-kept port of the first-touch normalisers in web/lib/acquisition.ts
+// (`normalizeFirstTouchAcquisition`, the validator the browser writer itself
+// runs) and web/lib/server/signup-log.ts (`normalizeFirstTouch`, the server
+// mapper that delegates to it). Scripts are plain .mjs and cannot import
+// TypeScript, so this copy must be kept in sync with both files whenever the
+// first-touch shape or its rules change. A parity test in
+// web/lib/server/__tests__/ runs identical fixtures through both sides.
+const FIELD_LIMITS = {
+  landingPath: 200,
   referrerHost: 120,
-  utmCampaign: 120,
-  utmContent: 160,
-  utmMedium: 100,
   utmSource: 100,
+  utmMedium: 100,
+  utmCampaign: 120,
   utmTerm: 160,
+  utmContent: 160,
+  ref: 100,
 };
+
+const HOSTNAME_PATTERN = /^[^\s/:]+$/;
 
 function asRecord(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
+/** Mirrors `cleanValue` in web/lib/acquisition.ts. */
+function cleanValue(value, limit) {
+  if (!value) return undefined;
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .slice(0, limit);
+  return cleaned || undefined;
+}
+
+/** Mirrors `boundedString` in web/lib/server/signup-log.ts. */
 function boundedString(value, max) {
   if (typeof value !== "string") return undefined;
   const cleaned = value
-    .replace(/[ -]/g, "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
     .replace(/[\\|`[\]<>*~]/g, "")
     .replace(/\s+/g, " ")
     .trim()
@@ -302,30 +345,74 @@ function boundedString(value, max) {
   return cleaned || undefined;
 }
 
-export function normalizeFirstTouch(unsafeMetadata) {
-  const outer = asRecord(unsafeMetadata);
-  const candidate = asRecord(outer?.flaimAcquisition);
-
+/** Mirrors `normalizeFirstTouchAcquisition` in web/lib/acquisition.ts. */
+export function normalizeFirstTouchAcquisition(value) {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value;
+  const landingPath =
+    typeof candidate.landingPath === "string"
+      ? cleanValue(candidate.landingPath, FIELD_LIMITS.landingPath)
+      : undefined;
   if (
-    !candidate ||
     candidate.schemaVersion !== 1 ||
-    typeof candidate.landingPath !== "string" ||
-    !candidate.landingPath.startsWith("/")
+    typeof candidate.capturedAt !== "string" ||
+    Number.isNaN(Date.parse(candidate.capturedAt)) ||
+    !landingPath ||
+    !landingPath.startsWith("/") ||
+    landingPath.includes("?") ||
+    landingPath.includes("#")
   ) {
     return null;
   }
 
   const normalized = {
-    landingPath: candidate.landingPath.slice(0, 200),
     schemaVersion: 1,
+    capturedAt: new Date(candidate.capturedAt).toISOString(),
+    landingPath,
   };
 
-  for (const [field, max] of Object.entries(FIRST_TOUCH_FIELD_LIMITS)) {
-    const bounded = boundedString(candidate[field], max);
-    if (bounded !== undefined) normalized[field] = bounded;
+  for (const [field, limit] of Object.entries(FIELD_LIMITS)) {
+    if (field === "landingPath") continue;
+    const fieldValue = candidate[field];
+    if (fieldValue === undefined) continue;
+    if (typeof fieldValue !== "string" || fieldValue.length > limit) return null;
+    const cleaned = cleanValue(fieldValue, limit);
+    if (!cleaned) return null;
+    normalized[field] = cleaned;
   }
 
   return normalized;
+}
+
+/**
+ * Mirrors `normalizeFirstTouch` in web/lib/server/signup-log.ts: the stored
+ * row keeps no `capturedAt`, strips markup from every dimension, and requires
+ * `referrerHost` to look like a bare hostname.
+ */
+export function normalizeFirstTouch(unsafeMetadata) {
+  const outer = asRecord(unsafeMetadata);
+  const acquisition = normalizeFirstTouchAcquisition(outer?.flaimAcquisition);
+  if (!acquisition) return null;
+
+  const stored = {
+    schemaVersion: 1,
+    landingPath: acquisition.landingPath,
+  };
+
+  for (const [field, max] of Object.entries(FIELD_LIMITS)) {
+    if (field === "landingPath") continue;
+    const cleaned = boundedString(acquisition[field], max);
+    if (cleaned === undefined) continue;
+    if (field === "referrerHost") {
+      const host = cleaned.toLowerCase();
+      if (!HOSTNAME_PATTERN.test(host)) continue;
+      stored.referrerHost = host;
+      continue;
+    }
+    stored[field] = cleaned;
+  }
+
+  return stored;
 }
 
 /**
@@ -397,7 +484,12 @@ export function formatReport(summary) {
     `written: ${summary.written}`,
     `earliest_created_at: ${summary.earliestCreatedAt ?? "n/a"}`,
     `latest_created_at: ${summary.latestCreatedAt ?? "n/a"}`,
-    `resume_offset: ${summary.resumeOffset}`,
+    // A resume offset is only meaningful for a dry run. An apply run never
+    // resumes mid-list, because a deletion between runs would shift the
+    // offsets out from under it.
+    summary.apply
+      ? "resume: re-run --apply from the start (record_signup is idempotent)"
+      : `resume_offset: ${summary.resumeOffset}`,
     `anomaly: ${summary.anomaly ?? "none"}`,
   ];
 
@@ -410,12 +502,41 @@ export function formatReport(summary) {
     }
   }
 
+  const reasons = failureReasons(summary);
+  lines.push(
+    reasons.length === 0
+      ? "status: complete"
+      : `status: incomplete (${reasons.join(", ")})`
+  );
+
   return lines.join("\n");
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+/**
+ * Why the run must exit non-zero. An invalid `created_at` is not a cosmetic
+ * counter: that user has no row and never will unless someone notices, so a
+ * run that saw one is incomplete in both dry-run and apply mode.
+ */
+export function failureReasons(summary) {
+  const reasons = [];
+  if (summary.anomaly) reasons.push("pagination anomaly");
+  if (summary.invalid > 0) reasons.push(`${summary.invalid} invalid created_at`);
+  const failedCalls = Object.values(summary.failuresByStatus ?? {}).reduce(
+    (total, count) => total + count,
+    0
+  );
+  if (failedCalls > 0) reasons.push(`${failedCalls} failed record_signup calls`);
+  return reasons;
+}
+
+/**
+ * The whole job, with its I/O injected so tests can drive it end to end.
+ * Returns the process exit code: zero only when every scanned user was
+ * accounted for. Configuration problems (missing env, refused flags) throw.
+ */
+export async function run(argv, { env = process.env, fetchImpl = fetch, log = console.log } = {}) {
+  const args = parseArgs(argv);
+  const clerkSecretKey = env.CLERK_SECRET_KEY;
 
   if (!clerkSecretKey) {
     throw new Error("CLERK_SECRET_KEY is required");
@@ -425,8 +546,8 @@ async function main() {
   let supabaseServiceKey = null;
 
   if (args.apply) {
-    supabaseUrl = process.env.SUPABASE_URL?.trim().replace(/\/+$/, "") ?? "";
-    supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY?.trim() ?? "";
+    supabaseUrl = env.SUPABASE_URL?.trim().replace(/\/+$/, "") ?? "";
+    supabaseServiceKey = env.SUPABASE_SERVICE_KEY?.trim() ?? "";
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error("SUPABASE_URL and SUPABASE_SERVICE_KEY are required with --apply");
     }
@@ -455,6 +576,7 @@ async function main() {
     for await (const page of listUsersAtCutoff({
       clerkSecretKey,
       cutoffMs,
+      fetchImpl,
       limit: args.limit,
       maxUsers: args.maxUsers,
       offset: args.offset,
@@ -476,6 +598,9 @@ async function main() {
           stats.latestCreatedAt = createdAtMs;
         }
 
+        // Unusable attribution is counted, never a reason to skip the user:
+        // the signup itself is the fact worth keeping, so the row is still
+        // written with a null first_touch.
         const firstTouch = normalizeFirstTouch(user.unsafe_metadata);
         if (user.unsafe_metadata && firstTouch === null) {
           stats.skipped += 1;
@@ -485,7 +610,7 @@ async function main() {
           const result = await callRecordSignup({
             clerkUserId: user.id,
             createdAtIso: new Date(createdAtMs).toISOString(),
-            fetchImpl: fetch,
+            fetchImpl,
             firstTouch,
             supabaseServiceKey,
             supabaseUrl,
@@ -528,15 +653,18 @@ async function main() {
     written: stats.written,
   };
 
-  console.log(formatReport(summary));
+  log(formatReport(summary));
 
-  const hasCallFailures = Object.keys(stats.failuresByStatus).length > 0;
-  if (anomaly || hasCallFailures) {
-    process.exitCode = 1;
-  }
+  return failureReasons(summary).length > 0 ? 1 : 0;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+async function main() {
+  process.exitCode = await run(process.argv.slice(2));
+}
+
+const entryUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : null;
+
+if (entryUrl && import.meta.url === entryUrl) {
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);

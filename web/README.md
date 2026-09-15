@@ -177,7 +177,20 @@ corepack pnpm --dir web exec node scripts/backfill-signup-log.mjs
 corepack pnpm --dir web exec node scripts/backfill-signup-log.mjs --apply
 ```
 
-`--offset`, `--limit` (capped at 500), `--delay-ms`, `--max-users`, and
-`--cutoff <iso>` pace and resume larger runs. The report never prints an
-email, a metadata object, a first-touch value, a key, or any other per-user
-line — only counts, the observed `created_at` range, and a resume offset.
+`--limit` (capped at 500), `--delay-ms`, and `--cutoff <iso>` pace a larger
+run. `--offset` and `--max-users` narrow a dry run and are refused with
+`--apply`: the frozen cutoff freezes what Clerk adds, not what it removes, so
+a user deleted between two runs shifts every later offset and a windowed apply
+run can step straight over a live account. After an anomaly or a partial apply
+run, re-run `--apply` from the start — `record_signup` is idempotent, so
+re-writing rows costs nothing.
+
+The run exits non-zero if anything was left undone — a pagination anomaly, an
+invalid `created_at`, or a failed `record_signup` call — and the report ends
+with a `status:` line saying which. A user whose first-touch metadata is
+unusable still gets a row, with a null `first_touch`; only the attribution is
+dropped, and the report counts it as `skipped`.
+
+The report never prints an email, a metadata object, a first-touch value, a
+key, or any other per-user line — only counts, the observed `created_at`
+range, and (in dry-run) a resume offset.
