@@ -248,7 +248,7 @@ describe("backfill-signup-log script helpers", () => {
       });
 
       expect(request.headers.apikey).toBe("sb_secret_abc");
-      expect(request.headers.Authorization).toBeUndefined();
+      expect((request.headers as Record<string, string>).Authorization).toBeUndefined();
       expect(request.url).toBe("https://proj.supabase.co/rest/v1/rpc/record_signup");
       expect(JSON.parse(request.body)).toEqual({
         p_clerk_user_id: "user_1",
@@ -266,7 +266,7 @@ describe("backfill-signup-log script helpers", () => {
       });
 
       expect(request.headers.apikey).toBe("eyJhbGciOi...");
-      expect(request.headers.Authorization).toBe("Bearer eyJhbGciOi...");
+      expect((request.headers as Record<string, string>).Authorization).toBe("Bearer eyJhbGciOi...");
     });
   });
 
