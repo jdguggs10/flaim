@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   buildRecordSignupRequest,
+  fetchUserCount,
   formatReport,
   listUsersAtCutoff,
   normalizeFirstTouch,
@@ -37,8 +38,10 @@ function clerkUser(id: string, createdAt: number) {
 }
 
 /**
- * A Clerk pager fixture plus a record_signup responder, so `run` can be driven
- * end to end without touching the network.
+ * A Clerk pager fixture routed by URL path, matching the real REST shapes:
+ * `/v1/users` returns a bare array, `/v1/users/count` returns the
+ * `{ object: "total_count", total_count }` envelope, and the record_signup
+ * RPC endpoint returns a plain status.
  */
 function fixtureFetch({
   users,
@@ -49,22 +52,17 @@ function fixtureFetch({
 }) {
   const recordSignupCalls: string[] = [];
   const fetchImpl = vi.fn(async (input: URL | string) => {
-    const url = String(input);
-    if (url.includes("/rpc/record_signup")) {
-      recordSignupCalls.push(url);
-      return {
-        json: async () => ({}),
-        ok: recordSignupStatus >= 200 && recordSignupStatus < 300,
-        status: recordSignupStatus,
-        statusText: "",
-      };
+    const url = new URL(String(input));
+    if (url.pathname.includes("/rpc/record_signup")) {
+      recordSignupCalls.push(url.toString());
+      return jsonResponse({}, recordSignupStatus);
     }
-    const offset = Number(new URL(url).searchParams.get("offset") ?? 0);
-    const limit = Number(new URL(url).searchParams.get("limit") ?? 100);
-    return jsonResponse({
-      data: users.slice(offset, offset + limit),
-      total_count: users.length,
-    });
+    if (url.pathname.endsWith("/users/count")) {
+      return jsonResponse({ object: "total_count", total_count: users.length });
+    }
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number(url.searchParams.get("limit") ?? 100);
+    return jsonResponse(users.slice(offset, offset + limit));
   });
 
   return { fetchImpl, recordSignupCalls };
@@ -147,71 +145,84 @@ describe("backfill-signup-log script helpers", () => {
   });
 
   describe("listUsersAtCutoff", () => {
-    it("sends the frozen cutoff and ascending order on every page", async () => {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValueOnce(
-          jsonResponse({ data: [clerkUser("user_1", 1000)], total_count: 1 })
-        );
+    it("sends the frozen cutoff and ascending order on every page, including count calls", async () => {
+      const fetchImpl = vi.fn(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          return jsonResponse({ object: "total_count", total_count: 1 });
+        }
+        return jsonResponse([clerkUser("user_1", 1000)]);
+      });
 
       const pages = [];
       for await (const page of listUsersAtCutoff({
         clerkSecretKey: "sk_test",
         cutoffMs: 5000,
-        fetchImpl,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
         limit: 10,
       })) {
         pages.push(page);
       }
 
       expect(pages).toHaveLength(1);
-      expect(fetchImpl).toHaveBeenCalledTimes(1);
-      const [url] = fetchImpl.mock.calls[0];
-      expect(url.searchParams.get("created_at_before")).toBe("5000");
-      expect(url.searchParams.get("order_by")).toBe("+created_at");
+      expect(fetchImpl.mock.calls.length).toBeGreaterThan(0);
+      for (const [input] of fetchImpl.mock.calls) {
+        const url = input as URL;
+        expect(url.searchParams.get("created_at_before")).toBe("5000");
+        if (!url.pathname.endsWith("/users/count")) {
+          expect(url.searchParams.get("order_by")).toBe("+created_at");
+        }
+      }
     });
 
     it("freezes the cutoff across multiple pages", async () => {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValueOnce(
-          jsonResponse({ data: [clerkUser("user_1", 1000)], total_count: 2 })
-        )
-        .mockResolvedValueOnce(
-          jsonResponse({ data: [clerkUser("user_2", 2000)], total_count: 2 })
-        );
+      const listPages = [[clerkUser("user_1", 1000)], [clerkUser("user_2", 2000)]];
+      let listCallIndex = 0;
+      const fetchImpl = vi.fn(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          return jsonResponse({ object: "total_count", total_count: 2 });
+        }
+        const page = listPages[listCallIndex] ?? [];
+        listCallIndex += 1;
+        return jsonResponse(page);
+      });
 
       const pages = [];
       for await (const page of listUsersAtCutoff({
         clerkSecretKey: "sk_test",
         cutoffMs: 5000,
-        fetchImpl,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
         limit: 1,
       })) {
         pages.push(page);
       }
 
       expect(pages).toHaveLength(2);
-      for (const call of fetchImpl.mock.calls) {
-        expect(call[0].searchParams.get("created_at_before")).toBe("5000");
+      for (const [input] of fetchImpl.mock.calls) {
+        expect((input as URL).searchParams.get("created_at_before")).toBe("5000");
       }
     });
 
     it("throws with a resume offset when total_count changes mid-pagination", async () => {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValueOnce(
-          jsonResponse({ data: [clerkUser("user_1", 1000)], total_count: 2 })
-        )
-        .mockResolvedValueOnce(
-          jsonResponse({ data: [clerkUser("user_2", 2000)], total_count: 3 })
-        );
+      let countCallIndex = 0;
+      const fetchImpl = vi.fn(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          countCallIndex += 1;
+          return jsonResponse({
+            object: "total_count",
+            total_count: countCallIndex === 1 ? 2 : 3,
+          });
+        }
+        return jsonResponse([clerkUser("user_1", 1000)]);
+      });
 
       const drain = async () => {
         for await (const _page of listUsersAtCutoff({
           clerkSecretKey: "sk_test",
           cutoffMs: 5000,
-          fetchImpl,
+          fetchImpl: fetchImpl as unknown as typeof fetch,
           limit: 1,
         })) {
           // drain
@@ -230,20 +241,19 @@ describe("backfill-signup-log script helpers", () => {
     });
 
     it("throws on a duplicate id", async () => {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse({
-            data: [clerkUser("user_1", 1000), clerkUser("user_1", 2000)],
-            total_count: 2,
-          })
-        );
+      const fetchImpl = vi.fn(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          return jsonResponse({ object: "total_count", total_count: 2 });
+        }
+        return jsonResponse([clerkUser("user_1", 1000), clerkUser("user_1", 2000)]);
+      });
 
       const drain = async () => {
         for await (const _page of listUsersAtCutoff({
           clerkSecretKey: "sk_test",
           cutoffMs: 5000,
-          fetchImpl,
+          fetchImpl: fetchImpl as unknown as typeof fetch,
           limit: 10,
         })) {
           // drain
@@ -254,17 +264,19 @@ describe("backfill-signup-log script helpers", () => {
     });
 
     it("throws on a short page before the reported total is reached", async () => {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse({ data: [clerkUser("user_1", 1000)], total_count: 5 })
-        );
+      const fetchImpl = vi.fn(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          return jsonResponse({ object: "total_count", total_count: 5 });
+        }
+        return jsonResponse([clerkUser("user_1", 1000)]);
+      });
 
       const drain = async () => {
         for await (const _page of listUsersAtCutoff({
           clerkSecretKey: "sk_test",
           cutoffMs: 5000,
-          fetchImpl,
+          fetchImpl: fetchImpl as unknown as typeof fetch,
           limit: 10,
         })) {
           // drain
@@ -273,6 +285,39 @@ describe("backfill-signup-log script helpers", () => {
 
       await expect(drain()).rejects.toThrow(/short page/);
       await expect(drain()).rejects.toMatchObject({ resumeOffset: 1 });
+    });
+  });
+
+  describe("fetchUserCount", () => {
+    it("sends created_at_before and returns the integer total", async () => {
+      const fetchImpl = vi.fn(async (_input) =>
+        jsonResponse({ object: "total_count", total_count: 42 })
+      );
+
+      const total = await fetchUserCount({ clerkSecretKey: "sk_test", cutoffMs: 5000, fetchImpl });
+
+      expect(total).toBe(42);
+      const [url] = fetchImpl.mock.calls[0];
+      expect(String(url)).toContain("/v1/users/count");
+      expect((url as URL).searchParams.get("created_at_before")).toBe("5000");
+    });
+
+    it("throws on a non-2xx response", async () => {
+      const fetchImpl = vi.fn(async () => jsonResponse({ message: "nope" }, 500));
+
+      await expect(
+        fetchUserCount({ clerkSecretKey: "sk_test", cutoffMs: 5000, fetchImpl })
+      ).rejects.toThrow(/Clerk user count failed/);
+    });
+
+    it("throws when total_count is not a non-negative integer", async () => {
+      const fetchImpl = vi.fn(async () =>
+        jsonResponse({ object: "total_count", total_count: "42" })
+      );
+
+      await expect(
+        fetchUserCount({ clerkSecretKey: "sk_test", cutoffMs: 5000, fetchImpl })
+      ).rejects.toThrow(/unexpected response shape/);
     });
   });
 
@@ -462,11 +507,13 @@ describe("backfill-signup-log script helpers", () => {
     });
 
     it("exits non-zero on a pagination anomaly", async () => {
-      const fetchImpl = vi
-        .fn()
-        .mockResolvedValueOnce(
-          jsonResponse({ data: [clerkUser("user_1", Date.parse("2026-01-01T00:00:00.000Z"))], total_count: 9 })
-        );
+      const fetchImpl = vi.fn(async (input: URL | string) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          return jsonResponse({ object: "total_count", total_count: 9 });
+        }
+        return jsonResponse([clerkUser("user_1", Date.parse("2026-01-01T00:00:00.000Z"))]);
+      });
       const log = vi.fn();
 
       const exitCode = await runScript(["--limit", "10"], { env: DRY_RUN_ENV, fetchImpl, log });

@@ -33,6 +33,7 @@
 import { pathToFileURL } from "node:url";
 
 const CLERK_USERS_URL = "https://api.clerk.com/v1/users";
+const CLERK_USERS_COUNT_URL = "https://api.clerk.com/v1/users/count";
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 const MIN_CREATED_AT_MS = Date.parse("2020-01-01T00:00:00.000Z");
@@ -208,11 +209,49 @@ async function fetchUsersPage({ clerkSecretKey, limit, offset, cutoffMs, fetchIm
     throw new Error(`Clerk user list failed: ${response.status} ${message}`);
   }
 
-  if (!Array.isArray(body?.data) || typeof body?.total_count !== "number") {
+  // The raw REST list endpoint returns a bare JSON array of users, not the
+  // `{ data, total_count }` envelope the Backend SDK's getUserList
+  // synthesizes by combining this call with a separate /users/count call.
+  // Tolerate `{ data: [...] }` too, for robustness, but no longer require
+  // total_count here — the count comes from fetchUserCount instead.
+  const users = Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : null;
+
+  if (users === null) {
     throw new Error("Clerk user list returned an unexpected response shape");
   }
 
-  return { totalCount: body.total_count, users: body.data };
+  return { users };
+}
+
+/**
+ * Read the total user count as of the frozen cutoff from Clerk's separate
+ * `/v1/users/count` endpoint, which accepts the same `created_at_before`
+ * filter as the list endpoint. This is the only source of "total" now that
+ * the list endpoint itself returns a bare array.
+ */
+export async function fetchUserCount({ clerkSecretKey, cutoffMs, fetchImpl }) {
+  const url = new URL(CLERK_USERS_COUNT_URL);
+  url.searchParams.set("created_at_before", String(cutoffMs));
+
+  const response = await fetchImpl(url, {
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${clerkSecretKey}`,
+    },
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message = body?.errors?.[0]?.message ?? body?.message ?? response.statusText;
+    throw new Error(`Clerk user count failed: ${response.status} ${message}`);
+  }
+
+  if (!Number.isSafeInteger(body?.total_count) || body.total_count < 0) {
+    throw new Error("Clerk user count returned an unexpected response shape");
+  }
+
+  return body.total_count;
 }
 
 /**
@@ -234,9 +273,14 @@ export async function* listUsersAtCutoff({
   offset = 0,
 }) {
   const seenIds = new Set();
-  let expectedTotal = null;
   let currentOffset = offset;
   let scanned = 0;
+
+  // The frozen cutoff applies to both the list and the count: read the
+  // expected total once, up front, exactly as the list pages will be read.
+  // fetchUserCount itself throws on a non-integer or negative total_count, so
+  // there is nothing further to validate here.
+  const expectedTotal = await fetchUserCount({ clerkSecretKey, cutoffMs, fetchImpl });
 
   while (scanned < maxUsers) {
     const pageLimit = Math.min(limit, maxUsers - scanned);
@@ -247,19 +291,6 @@ export async function* listUsersAtCutoff({
       limit: pageLimit,
       offset: currentOffset,
     });
-
-    if (!Number.isSafeInteger(page.totalCount) || page.totalCount < 0) {
-      throw new PaginationAnomalyError("Clerk returned an invalid total_count", currentOffset);
-    }
-
-    if (expectedTotal === null) {
-      expectedTotal = page.totalCount;
-    } else if (page.totalCount !== expectedTotal) {
-      throw new PaginationAnomalyError(
-        `total_count changed mid-pagination (was ${expectedTotal}, now ${page.totalCount})`,
-        currentOffset,
-      );
-    }
 
     for (const user of page.users) {
       if (!user?.id || seenIds.has(user.id)) {
@@ -279,6 +310,18 @@ export async function* listUsersAtCutoff({
     scanned += page.users.length;
 
     if (page.users.length === 0) return;
+
+    // Re-read the count after every page. The frozen cutoff means it should
+    // never move; if it does, someone (or something) has changed the set out
+    // from under this run and pagination can no longer be trusted.
+    const currentTotal = await fetchUserCount({ clerkSecretKey, cutoffMs, fetchImpl });
+    if (currentTotal !== expectedTotal) {
+      throw new PaginationAnomalyError(
+        `total_count changed mid-pagination (was ${expectedTotal}, now ${currentTotal})`,
+        currentOffset,
+      );
+    }
+
     if (currentOffset < expectedTotal && page.users.length < pageLimit) {
       throw new PaginationAnomalyError(
         `short page before the reported total was reached (read ${currentOffset} of ${expectedTotal})`,
