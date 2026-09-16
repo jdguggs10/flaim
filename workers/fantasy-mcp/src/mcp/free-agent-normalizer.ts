@@ -61,6 +61,11 @@ const PLATFORM_CONFIG: Record<Platform, PlatformFreeAgentConfig> = {
   },
 };
 
+/** Key the platform's free-agent payload lists its entries under. */
+export function freeAgentEntryArrayKey(platform: Platform): 'freeAgents' | 'players' {
+  return PLATFORM_CONFIG[platform].entryArrayKey;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

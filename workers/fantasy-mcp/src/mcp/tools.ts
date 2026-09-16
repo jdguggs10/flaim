@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
-import { normalizeFreeAgentsResult } from './free-agent-normalizer';
+import { freeAgentEntryArrayKey, normalizeFreeAgentsResult } from './free-agent-normalizer';
 import {
   ErrorCode,
   getDefaultSeasonYear,
@@ -21,6 +21,9 @@ import { USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
 
 const AUTH_WORKER_REFRESH_TIMEOUT_MS = 60_000;
 const MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT = 24_000;
+// Ceiling for anomalies, not a routine trimmer: a full 100-player ESPN response
+// measures ~105 KB typical and ~152 KB with maximally verbose entries.
+const FREE_AGENTS_SERIALIZED_TOOL_RESULT_BYTE_LIMIT = 200_000;
 
 // =============================================================================
 // MCP RESPONSE TYPES
@@ -1017,12 +1020,58 @@ function mcpError(message: string, code: string = 'ERROR'): McpToolResponse {
   };
 }
 
+// The tool result carries the same payload twice: pretty JSON in content and
+// structuredContent. This stable measurement deliberately excludes the outer
+// JSON-RPC envelope (including its variable request id) and SSE framing.
+function serializedToolResultByteLength(response: McpToolResponse): number {
+  return new TextEncoder().encode(JSON.stringify(response)).byteLength;
+}
+
 function exceedsMatchupPlayerDetailSerializedToolResultLimit(response: McpToolResponse): boolean {
-  // The tool result carries the same payload twice: pretty JSON in content and
-  // structuredContent. This stable limit deliberately excludes the outer
-  // JSON-RPC envelope (including its variable request id) and SSE framing.
-  return new TextEncoder().encode(JSON.stringify(response)).byteLength
-    > MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT;
+  return serializedToolResultByteLength(response) > MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT;
+}
+
+/**
+ * Bound the get_free_agents tool result (FLA-132). Every platform returns its
+ * list already ranked or ordered, so dropping trailing entries preserves the
+ * caller's intent; the kept entries are reported through the existing count and
+ * flagged with truncated so a shortened list is never read as the whole pool.
+ */
+function boundFreeAgentsResponse(result: RouteResult, params: ToolParams): McpToolResponse {
+  const response = routeResultToMcp(result);
+  if (!result.success || response.isError) return response;
+  if (serializedToolResultByteLength(response) <= FREE_AGENTS_SERIALIZED_TOOL_RESULT_BYTE_LIMIT) return response;
+
+  const data = result.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return response;
+
+  const record = data as Record<string, unknown>;
+  const entryArrayKey = freeAgentEntryArrayKey(params.platform);
+  const entries = record[entryArrayKey];
+  if (!Array.isArray(entries) || entries.length === 0) return response;
+
+  const truncateTo = (keep: number): McpToolResponse =>
+    routeResultToMcp({
+      ...result,
+      data: { ...record, [entryArrayKey]: entries.slice(0, keep), count: keep, truncated: true },
+    });
+
+  // Serialized size grows monotonically with entry count, so binary-search the
+  // longest prefix that fits instead of re-serializing once per dropped entry.
+  let low = 0;
+  let high = entries.length - 1;
+  let best = 0;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (serializedToolResultByteLength(truncateTo(mid)) <= FREE_AGENTS_SERIALIZED_TOOL_RESULT_BYTE_LIMIT) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return truncateTo(best);
 }
 
 function didRefreshBatchFail(payload: unknown): boolean {
@@ -1959,7 +2008,7 @@ export function getUnifiedTools(): UnifiedTool[] {
 
         return withToolLogging(correlationId, 'get_free_agents', `${params.platform} ${params.sport} league=provided pos=${params.position || 'ALL'}`, async () => {
           const result = await routeToClient(env, 'get_free_agents', params, authHeader, correlationId, evalRunId, evalTraceId);
-          return routeResultToMcp(normalizeFreeAgentsResult(result, params));
+          return boundFreeAgentsResponse(normalizeFreeAgentsResult(result, params), params);
         }, evalRunId, evalTraceId);
       },
     },
