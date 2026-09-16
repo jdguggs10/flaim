@@ -426,14 +426,19 @@ export function createPlunkClient({
   return { applyTarget, listContacts };
 }
 
-async function readState(path, fingerprint) {
+async function readState(path, fingerprint, targetHashes) {
   try {
     const state = JSON.parse(await readFile(path, "utf8"));
-    if (state.fingerprint !== fingerprint) {
-      throw new Error("Migration state does not match the current source snapshot");
+    const completed = new Set(Array.isArray(state.completed) ? state.completed : []);
+    for (const hash of completed) {
+      if (typeof hash !== "string" || !targetHashes.has(hash)) {
+        throw new Error(
+          "Migration state contains a completed target that changed or disappeared",
+        );
+      }
     }
     return {
-      completed: new Set(Array.isArray(state.completed) ? state.completed : []),
+      completed,
       fingerprint,
     };
   } catch (error) {
@@ -455,7 +460,8 @@ async function writeState(path, state) {
 
 export async function applyMigrationPlan({ client, stateFile, targets, onProgress = () => {} }) {
   const fingerprint = migrationFingerprint(targets);
-  const state = await readState(stateFile, fingerprint);
+  const targetHashes = new Set(targets.map(targetHash));
+  const state = await readState(stateFile, fingerprint, targetHashes);
   const counts = { applied: 0, resumed: 0 };
 
   for (const target of targets) {

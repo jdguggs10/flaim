@@ -219,6 +219,52 @@ describe("Plunk marketing contact migration", () => {
     expect(state).not.toContain("true@example.com");
   });
 
+  it("resumes safely when a live signup adds a new unchanged target", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "flaim-plunk-migration-growth-"));
+    const stateFile = join(directory, "state.json");
+    const existing = { data: {}, email: "existing@example.com", subscribed: true };
+    const lateSignup = { data: {}, email: "late@example.com", subscribed: true };
+    const applyTarget = vi.fn().mockResolvedValue({ action: "tracked_true" });
+
+    await applyMigrationPlan({
+      client: { applyTarget },
+      stateFile,
+      targets: [existing],
+    });
+    await expect(
+      applyMigrationPlan({
+        client: { applyTarget },
+        stateFile,
+        targets: [existing, lateSignup],
+      }),
+    ).resolves.toEqual({ applied: 1, resumed: 1 });
+
+    expect(applyTarget).toHaveBeenCalledTimes(2);
+    expect(applyTarget).toHaveBeenLastCalledWith(lateSignup);
+  });
+
+  it("refuses to resume when a completed target's subscription state changed", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "flaim-plunk-migration-change-"));
+    const stateFile = join(directory, "state.json");
+    const applyTarget = vi.fn().mockResolvedValue({ action: "tracked_true" });
+
+    await applyMigrationPlan({
+      client: { applyTarget },
+      stateFile,
+      targets: [{ data: {}, email: "changed@example.com", subscribed: true }],
+    });
+    await expect(
+      applyMigrationPlan({
+        client: { applyTarget },
+        stateFile,
+        targets: [{ data: {}, email: "changed@example.com", subscribed: false }],
+      }),
+    ).rejects.toThrow(
+      "Migration state contains a completed target that changed or disappeared",
+    );
+    expect(applyTarget).toHaveBeenCalledTimes(1);
+  });
+
   it("reconciles false targets strictly while accepting a concurrent opt-out", () => {
     const result = reconcileAppliedPlan({
       plunkContacts: [
