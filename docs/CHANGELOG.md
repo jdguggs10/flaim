@@ -13,6 +13,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Added**: Verified Clerk `user.created` events can now queue a default-off, non-blocking Plunk marketing-contact sync. It uses Plunk's public `/v1/track` endpoint without a `subscribed` field, which atomically creates a new contact subscribed while retaining an existing contact's current state, so webhook replays and identity enrichment cannot reactivate a Plunk opt-out.
 - **Added**: A dry-run-first, resumable migration command builds the audience from the union of current Clerk users, the Resend all-status export, and live Resend suppressions. This explicitly includes post-cutover Clerk-only signups and retained Resend-only contacts; Resend unsubscribe/suppression and existing false Plunk state always win, false contacts are applied first, and the state file stores only hashes.
 - **Hardened**: Plunk failures use the redacted structured email-operations log and a distinct Clerk retry marker. The welcome send remains independent, `user.updated` stays off the Plunk path, and no API key or production flag is added by the code change.
+- **Documented**: Current provider ownership is now explicit: Fastmail receives human mail, Clerk owns authentication, Resend retains transactional product email, and Plunk owns marketing contacts and Broadcasts. The public privacy disclosure and operator Broadcast workflow reflect that split while Resend remains a temporary rollback lane.
 
 ### Direct Transactional Welcome Mode (FLA-273)
 
