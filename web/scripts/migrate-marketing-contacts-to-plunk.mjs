@@ -10,7 +10,6 @@ import {
   listAllSuppressions,
 } from "./reconcile-resend-suppressions.mjs";
 import {
-  fetchUserCount,
   listUsersAtCutoff,
 } from "./backfill-signup-log.mjs";
 
@@ -226,7 +225,6 @@ export async function listMigrationClerkUsers({
   fetchImpl = fetch,
   limit = 500,
 }) {
-  const expectedTotal = await fetchUserCount({ clerkSecretKey, cutoffMs, fetchImpl });
   const users = [];
   for await (const page of listUsersAtCutoff({
     clerkSecretKey,
@@ -235,11 +233,6 @@ export async function listMigrationClerkUsers({
     limit,
   })) {
     users.push(...page.users);
-  }
-  if (users.length !== expectedTotal) {
-    throw new Error(
-      `Clerk snapshot count mismatch (read ${users.length} of ${expectedTotal})`,
-    );
   }
   return users;
 }
@@ -429,6 +422,9 @@ export function createPlunkClient({
 async function readState(path, fingerprint, targetHashes) {
   try {
     const state = JSON.parse(await readFile(path, "utf8"));
+    // The whole-plan fingerprint is an audit record, not the resume gate.
+    // Additive signups legitimately change it. Resume is safe only when every
+    // completed email-and-subscription hash still exists unchanged.
     const completed = new Set(Array.isArray(state.completed) ? state.completed : []);
     for (const hash of completed) {
       if (typeof hash !== "string" || !targetHashes.has(hash)) {

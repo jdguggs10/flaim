@@ -141,7 +141,7 @@ describe("Plunk marketing contact migration", () => {
         limit: 2,
       }),
     ).resolves.toEqual(users);
-    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
   });
 
   it("uses the atomic track path for true targets without a subscribed override", async () => {
