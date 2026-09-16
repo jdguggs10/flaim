@@ -110,7 +110,8 @@ function hasExplicitUnverifiedStatus(emailAddress: ClerkEmailAddress | null | un
   return Boolean(status && status !== "verified");
 }
 
-// Keep primary email selection aligned with web/scripts/backfill-resend-contacts.mjs.
+// Keep primary email selection aligned with web/scripts/backfill-resend-contacts.mjs
+// and web/scripts/migrate-marketing-contacts-to-plunk.mjs.
 function getClerkUserPrimaryEmailAddress(user: ClerkUserEmailSyncPayload) {
   const emailAddresses = user.email_addresses ?? [];
   if (emailAddresses.length === 1) {

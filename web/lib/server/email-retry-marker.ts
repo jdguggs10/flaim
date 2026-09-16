@@ -3,7 +3,7 @@ import { clerkClient } from "@clerk/nextjs/server";
 
 export const EMAIL_RETRY_METADATA_KEY = "flaim_email_ops";
 
-export type EmailRetryKind = "contactSync" | "welcomeEvent";
+export type EmailRetryKind = "contactSync" | "plunkContactSync" | "welcomeEvent";
 
 type RetryMarker = {
   failedAt: string;

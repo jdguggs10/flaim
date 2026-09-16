@@ -8,6 +8,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 - **Fixed**: Yahoo football `get_free_agents` and `get_players` silently dropped the position filter for individual defensive player (IDP) positions (`D`, `DL`, `DE`, `DT`, `LB`, `DB`, `CB`, `S`) in leagues with defensive roster slots enabled, returning unfiltered top-owned (offensive) players instead of the requested defensive position or an error. `get_roster` already surfaced these positions correctly since it passes through Yahoo's `display_position` unmapped; the two search paths went through a separate `FA_POSITION_FILTER` allow-list in `workers/yahoo-client/src/sports/football/mappings.ts` that had no IDP entries, so `getPositionFilter` fell back to its "no filter" default for any unrecognized position. Found during support triage; caught only in IDP leagues, which are a minority of Yahoo leagues.
 
+### Plunk Marketing Contact Sync (FLA-289)
+
+- **Added**: Verified Clerk `user.created` events can now queue a default-off, non-blocking Plunk marketing-contact sync. It uses Plunk's public `/v1/track` endpoint without a `subscribed` field, which atomically creates a new contact subscribed while retaining an existing contact's current state, so webhook replays and identity enrichment cannot reactivate a Plunk opt-out.
+- **Added**: A dry-run-first, resumable migration command builds the audience from the union of current Clerk users, the Resend all-status export, and live Resend suppressions. This explicitly includes post-cutover Clerk-only signups and retained Resend-only contacts; Resend unsubscribe/suppression and existing false Plunk state always win, false contacts are applied first, and the state file stores only hashes.
+- **Hardened**: Plunk failures use the redacted structured email-operations log and a distinct Clerk retry marker. The welcome send remains independent, `user.updated` stays off the Plunk path, and no API key or production flag is added by the code change.
+
 ### Direct Transactional Welcome Mode (FLA-273)
 
 - **Added**: One mutually exclusive `FLAIM_WELCOME_DELIVERY_MODE` now selects the hosted Resend automation, a direct transactional Resend send, or disabled delivery. Leaving it unset preserves the legacy `RESEND_WELCOME_AUTOMATION_ENABLED` behavior, while invalid explicit values fail closed. Direct mode uses a stable `welcome/<clerk-user-id>` idempotency key and the existing structured failure/retry-marker path, so one signup cannot intentionally select both delivery lanes.
