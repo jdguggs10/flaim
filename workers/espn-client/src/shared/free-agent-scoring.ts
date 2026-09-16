@@ -1,12 +1,5 @@
 import type { EspnPlayerStat } from '../types';
 
-/**
- * Rankable per-player scoring scalars for get_free_agents (FLA-132).
- *
- * Replaces the raw per-stat dictionary the free-agent handlers used to emit.
- * That dictionary carried no fantasy-points scalar, dropped projections, and
- * was read from whichever split ESPN happened to list first.
- */
 export interface FreeAgentScoring {
   /** Fantasy points scored so far this season; null when ESPN reports none. */
   seasonPoints: number | null;
