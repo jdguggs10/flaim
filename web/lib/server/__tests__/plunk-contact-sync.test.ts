@@ -62,6 +62,33 @@ describe("Plunk marketing contact sync", () => {
     });
   });
 
+  it("skips an unusable Clerk email without creating retry debt", async () => {
+    const request = vi.fn();
+    const unverifiedUser = {
+      ...clerkUser,
+      email_addresses: [
+        {
+          ...clerkUser.email_addresses[0],
+          verification: { status: "unverified" },
+        },
+      ],
+    };
+
+    await expect(
+      syncClerkUserToPlunkContact(unverifiedUser, {
+        apiKey: "pk_test",
+        enabled: true,
+        fetch: request,
+      }),
+    ).resolves.toEqual({
+      error: "Clerk user primary email is not verified",
+      ok: false,
+      retryable: false,
+      skipped: true,
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("atomically tracks a signup without sending a subscribed override", async () => {
     const request = vi.fn<typeof fetch>().mockResolvedValueOnce(
       jsonResponse({ success: true, data: { contact: "contact_123", event: "event_123" } }),
