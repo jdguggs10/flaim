@@ -29,6 +29,20 @@ export const FA_POSITION_FILTER: Record<string, string> = {
   'K': 'K',
   'DEF': 'DEF',
   'FLEX': 'W/R/T',     // Maps to Yahoo's flex designation
+  // IDP (individual defensive player) positions — only present in leagues
+  // with defensive roster slots enabled. Yahoo's roster/display_position
+  // already surfaces these codes (see get-roster.ts, which passes them
+  // through unmapped); without an entry here getPositionFilter fell back to
+  // "no filter" and get_free_agents/get_players returned unfiltered
+  // top-owned players instead of an error or the requested position.
+  'D': 'D',
+  'DL': 'DL',
+  'DE': 'DE',
+  'DT': 'DT',
+  'LB': 'LB',
+  'DB': 'DB',
+  'CB': 'CB',
+  'S': 'S',
 };
 
 export function getPositionFilter(position?: string): string {

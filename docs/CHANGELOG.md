@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Fix Yahoo IDP Position Filter for Free Agents and Player Search
+
+- **Fixed**: Yahoo football `get_free_agents` and `get_players` silently dropped the position filter for individual defensive player (IDP) positions (`D`, `DL`, `DE`, `DT`, `LB`, `DB`, `CB`, `S`) in leagues with defensive roster slots enabled, returning unfiltered top-owned (offensive) players instead of the requested defensive position or an error. `get_roster` already surfaced these positions correctly since it passes through Yahoo's `display_position` unmapped; the two search paths went through a separate `FA_POSITION_FILTER` allow-list in `workers/yahoo-client/src/sports/football/mappings.ts` that had no IDP entries, so `getPositionFilter` fell back to its "no filter" default for any unrecognized position. Found during support triage; caught only in IDP leagues, which are a minority of Yahoo leagues.
+
 ### Direct Transactional Welcome Mode (FLA-273)
 
 - **Added**: One mutually exclusive `FLAIM_WELCOME_DELIVERY_MODE` now selects the hosted Resend automation, a direct transactional Resend send, or disabled delivery. Leaving it unset preserves the legacy `RESEND_WELCOME_AUTOMATION_ENABLED` behavior, while invalid explicit values fail closed. Direct mode uses a stable `welcome/<clerk-user-id>` idempotency key and the existing structured failure/retry-marker path, so one signup cannot intentionally select both delivery lanes.
