@@ -15,6 +15,10 @@ import {
 } from "@/lib/server/resend-welcome-automation";
 import { sendWelcomeEmail } from "@/lib/server/product-email";
 import {
+  isPlunkMarketingSyncEnabled,
+  syncClerkUserToPlunkContact,
+} from "@/lib/server/plunk-contact-sync";
+import {
   mapClerkUserToSignup,
   recordSignup,
   type SignupLogInput,
@@ -45,6 +49,77 @@ async function sendDirectWelcome(user: ClerkUserEmailSyncPayload) {
   });
 
   return { ...result, retryable: result.skipped === true };
+}
+
+function queuePlunkMarketingContactSync(user: ClerkUserEmailSyncPayload) {
+  if (!isPlunkMarketingSyncEnabled()) return;
+
+  after(async () => {
+    try {
+      const result = await syncClerkUserToPlunkContact(user, { enabled: true });
+      if (!result.ok) {
+        if (!result.skipped) {
+          logEmailOps("email.contact_sync_failed", {
+            error: result.error,
+            provider: "plunk",
+            reason: "plunk_marketing_contact_sync_failed",
+            source: "clerk.user.created",
+            userId: user.id,
+          });
+        }
+
+        if (result.retryable) {
+          const marker = await markEmailRetry(user.id, "plunkContactSync", {
+            metadata: user.private_metadata,
+          });
+          if (!marker.ok) {
+            logEmailOps("email.contact_sync_failed", {
+              error: marker.error,
+              provider: "clerk",
+              reason: "plunk_retry_marker_write_failed",
+              source: "clerk.user.created",
+              userId: user.id,
+            });
+          }
+        }
+        return;
+      }
+
+      const marker = await clearEmailRetry(user.id, "plunkContactSync", {
+        metadata: user.private_metadata,
+      });
+      if (!marker.ok) {
+        logEmailOps("email.contact_sync_failed", {
+          error: marker.error,
+          provider: "clerk",
+          reason: "plunk_retry_marker_clear_failed",
+          source: "clerk.user.created",
+          userId: user.id,
+        });
+      }
+    } catch (error) {
+      logEmailOps("email.contact_sync_failed", {
+        error,
+        provider: "plunk",
+        reason: "plunk_marketing_contact_sync_after_failed",
+        source: "clerk.user.created",
+        userId: user.id,
+      });
+
+      const marker = await markEmailRetry(user.id, "plunkContactSync", {
+        metadata: user.private_metadata,
+      });
+      if (!marker.ok) {
+        logEmailOps("email.contact_sync_failed", {
+          error: marker.error,
+          provider: "clerk",
+          reason: "plunk_retry_marker_write_failed",
+          source: "clerk.user.created",
+          userId: user.id,
+        });
+      }
+    }
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -109,6 +184,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (WELCOME_EVENTS.has(event.type)) {
+    // Marketing contact ownership is independent of welcome delivery. It has
+    // its own feature gate and never blocks Clerk's verified webhook response.
+    queuePlunkMarketingContactSync(user);
+
     const delivery = getWelcomeDeliveryConfig();
     if (delivery.mode === "disabled") {
       logEmailOps("email.welcome_event_skipped", {

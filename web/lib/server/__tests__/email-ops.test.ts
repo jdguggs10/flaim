@@ -39,4 +39,17 @@ describe("email operations logs", () => {
     expect(record.error).toContain("sk_not_a_secret");
     error.mockRestore();
   });
+
+  it("redacts a Plunk server key", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    logEmailOps("email.contact_sync_failed", {
+      error: "Plunk rejected sk_1234567890abcdefghij",
+      provider: "plunk",
+    });
+
+    const record = JSON.parse(error.mock.calls[0][0]) as { error: string };
+    expect(record.error).toBe("Plunk rejected [redacted-secret]");
+    error.mockRestore();
+  });
 });

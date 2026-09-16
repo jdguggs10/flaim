@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => {
     afterCallbacks,
     clearEmailRetry: vi.fn(),
     getClerkUserProductEmail: vi.fn(),
+    isPlunkMarketingSyncEnabled: vi.fn(),
     getWelcomeDeliveryConfig: vi.fn(),
     logEmailOps: vi.fn(),
     mapClerkUserToSignup: vi.fn(),
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => {
     sendWelcomeEmail: vi.fn(),
     sendWelcomeAutomationEvent: vi.fn(),
     syncClerkUserToResendContact: vi.fn(),
+    syncClerkUserToPlunkContact: vi.fn(),
     verifyWebhook: vi.fn(),
   };
 });
@@ -33,6 +35,11 @@ vi.mock("@/lib/server/resend-contact-sync", () => ({
 
 vi.mock("@/lib/server/resend-welcome-automation", () => ({
   sendWelcomeAutomationEvent: mocks.sendWelcomeAutomationEvent,
+}));
+
+vi.mock("@/lib/server/plunk-contact-sync", () => ({
+  isPlunkMarketingSyncEnabled: mocks.isPlunkMarketingSyncEnabled,
+  syncClerkUserToPlunkContact: mocks.syncClerkUserToPlunkContact,
 }));
 
 vi.mock("@/lib/server/product-email", () => ({
@@ -95,6 +102,7 @@ function request() {
 beforeEach(() => {
   mocks.clearEmailRetry.mockResolvedValue({ ok: true, skipped: true });
   mocks.getClerkUserProductEmail.mockReturnValue({ ok: true, email: "gerry@example.com" });
+  mocks.isPlunkMarketingSyncEnabled.mockReturnValue(false);
   mocks.getWelcomeDeliveryConfig.mockReturnValue({ mode: "automation", source: "legacy" });
   mocks.markEmailRetry.mockResolvedValue({ ok: true, skipped: false });
   mocks.mapClerkUserToSignup.mockReturnValue(signupRow);
@@ -286,6 +294,58 @@ describe("POST /api/webhooks/clerk", () => {
     });
   });
 
+  it("queues Plunk contact ownership independently when welcome delivery is disabled", async () => {
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
+    mocks.getWelcomeDeliveryConfig.mockReturnValue({ mode: "disabled", source: "explicit" });
+    mocks.isPlunkMarketingSyncEnabled.mockReturnValue(true);
+    mocks.syncClerkUserToPlunkContact.mockResolvedValue({ action: "tracked", ok: true });
+
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({
+      received: true,
+      welcome: { skipped: true, error: "Welcome delivery is disabled" },
+    });
+    expect(mocks.after).toHaveBeenCalledTimes(1);
+
+    await mocks.afterCallbacks[0]();
+
+    expect(mocks.syncClerkUserToPlunkContact).toHaveBeenCalledWith(clerkUser, {
+      enabled: true,
+    });
+    expect(mocks.clearEmailRetry).toHaveBeenCalledWith("user_123", "plunkContactSync", {
+      metadata: undefined,
+    });
+  });
+
+  it("records a retry marker when the non-blocking Plunk sync fails", async () => {
+    mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
+    mocks.getWelcomeDeliveryConfig.mockReturnValue({ mode: "disabled", source: "explicit" });
+    mocks.isPlunkMarketingSyncEnabled.mockReturnValue(true);
+    mocks.syncClerkUserToPlunkContact.mockResolvedValue({
+      error: "Plunk contact lookup failed (503)",
+      ok: false,
+      retryable: true,
+    });
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    await mocks.afterCallbacks[0]();
+    expect(mocks.logEmailOps).toHaveBeenCalledWith("email.contact_sync_failed", {
+      error: "Plunk contact lookup failed (503)",
+      provider: "plunk",
+      reason: "plunk_marketing_contact_sync_failed",
+      source: "clerk.user.created",
+      userId: "user_123",
+    });
+    expect(mocks.markEmailRetry).toHaveBeenCalledWith("user_123", "plunkContactSync", {
+      metadata: undefined,
+    });
+  });
+
   it("fails closed on an invalid explicit welcome mode", async () => {
     mocks.verifyWebhook.mockResolvedValue({ type: "user.created", data: clerkUser });
     mocks.getWelcomeDeliveryConfig.mockReturnValue({
@@ -331,6 +391,7 @@ describe("POST /api/webhooks/clerk", () => {
     expect(mocks.getWelcomeDeliveryConfig).not.toHaveBeenCalled();
     expect(mocks.after).toHaveBeenCalledTimes(1);
     expect(mocks.sendWelcomeAutomationEvent).not.toHaveBeenCalled();
+    expect(mocks.syncClerkUserToPlunkContact).not.toHaveBeenCalled();
 
     await mocks.afterCallbacks[0]();
 

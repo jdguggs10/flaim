@@ -14,7 +14,7 @@ export type EmailOpsEvent =
 export interface EmailOpsDetails {
   error?: unknown;
   eventId?: string;
-  provider?: "clerk" | "resend";
+  provider?: "clerk" | "plunk" | "resend";
   reason?: string;
   resendEmailId?: string;
   source?: string;
@@ -23,9 +23,9 @@ export interface EmailOpsDetails {
 
 const EMAIL_ADDRESS_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const SECRET_PATTERN = /\b(?:re|whsec)_[A-Za-z0-9_-]+\b/gi;
-// Clerk secret keys are prefixed with sk_test_ or sk_live_. Keep this narrow so
-// normal words beginning with "sk_" are not unexpectedly removed from logs.
-const CLERK_SECRET_PATTERN = /\bsk_(?:test|live)_[A-Za-z0-9_-]+\b/gi;
+// Clerk and Plunk both use sk_ server keys. Keep a minimum suffix length so
+// ordinary diagnostic text beginning with "sk_" is not unexpectedly removed.
+const SERVER_SECRET_PATTERN = /\bsk_(?:(?:test|live)_[A-Za-z0-9_-]+|[A-Za-z0-9_-]{16,})\b/gi;
 const BEARER_PATTERN = /\bBearer\s+[^\s]+/gi;
 const MAX_DETAIL_LENGTH = 240;
 
@@ -33,7 +33,7 @@ function sanitizeText(value: string) {
   return value
     .replace(EMAIL_ADDRESS_PATTERN, "[redacted-email]")
     .replace(SECRET_PATTERN, "[redacted-secret]")
-    .replace(CLERK_SECRET_PATTERN, "[redacted-secret]")
+    .replace(SERVER_SECRET_PATTERN, "[redacted-secret]")
     .replace(BEARER_PATTERN, "Bearer [redacted]")
     .replace(/[\r\n\t]+/g, " ")
     .trim()

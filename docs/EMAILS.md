@@ -180,7 +180,9 @@ Clerk is the source of truth for user identity. Resend delivers product email bu
 
 `user.updated` can lightly repair a Resend contact only when `RESEND_CONTACT_SYNC_ENABLED=true` and the welcome mode is not `direct`. Direct mode fails the legacy repair path closed even if that old flag is accidentally left true, so an email update cannot restart Resend audience growth.
 
-The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and acknowledges verified Clerk events even if downstream Resend work fails, so Resend outages do not create Clerk webhook retry storms.
+Plunk marketing-contact ownership is a separate, default-off path selected by `PLUNK_MARKETING_SYNC_ENABLED=true`. Only verified Clerk `user.created` events enter it; `user.updated` never does. The server calls Plunk's atomic `/v1/track` endpoint with `PLUNK_PUBLIC_API_KEY`, persistent identity metadata, and no `subscribed` field. Plunk therefore creates a new contact subscribed by default but preserves an existing contact's current state, including an opt-out. A stable Clerk-user idempotency key contains webhook replays within Plunk's 24-hour window; later replays may record another inert event but still cannot change subscription state. Do not attach a sending workflow to the `flaim.user_created` sync event.
+
+The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and acknowledges verified Clerk events even if downstream email-provider work fails, so provider outages do not create Clerk webhook retry storms.
 
 ## Delivery operations and recovery
 
@@ -192,13 +194,32 @@ verification failures use `email.webhook_verification_failed`. These records
 include provider-safe IDs and failure categories but never recipient addresses,
 raw webhook bodies, signatures, or API keys.
 
-When a Resend welcome delivery or contact sync fails after a verified Clerk webhook,
+When a Resend welcome delivery, Resend contact sync, or Plunk contact sync fails after a verified Clerk webhook,
 Flaim stores the matching retry marker in that user's Clerk private metadata at
-`flaim_email_ops.welcomeEvent` or `flaim_email_ops.contactSync`. Clerk's metadata
+`flaim_email_ops.welcomeEvent`, `flaim_email_ops.contactSync`, or
+`flaim_email_ops.plunkContactSync`. Clerk's metadata
 write is a deep merge, so unrelated private metadata is retained. A retry marker
 is never refreshed when it already exists, which prevents marker-caused
-`user.updated` webhooks from looping during an outage. A successful contact sync
-clears only `contactSync`; it cannot clear a failed `welcomeEvent` marker.
+`user.updated` webhooks from looping during an outage. Each successful operation
+clears only its own marker; it cannot clear a failure from another lane.
+
+The Plunk sync runs in its own `after()` callback and never changes the webhook response or welcome result. Provider failures are acknowledged to Clerk, logged as `email.contact_sync_failed` with `provider: "plunk"`, and leave the durable Plunk retry marker for reconciliation. Flag-off and unusable-email skips do not create retry debt. The production feature flag remains off until the server key is deployed and a separately approved internal proof has passed.
+
+Historical ownership moves through `web/scripts/migrate-marketing-contacts-to-plunk.mjs`. It is dry-run by default and requires the Resend all-status contact export, live Clerk users, live Resend suppressions, and current Plunk contacts. The candidate set is their normalized union: this captures Clerk users created after Resend contact growth stopped while retaining Resend-only records under the existing account-deletion policy. Clerk is read through a frozen, ascending, count-checked snapshot so live signup growth cannot shift offset pages. Resend unsubscribe, Resend suppression, and existing false Plunk state always beat a subscribed candidate. The apply pass writes false targets first through the secret contacts API, then sends true targets through `/v1/track` without a subscription override, which atomically creates new contacts subscribed while preserving any false state established concurrently. It honors `Retry-After`, stores only email hashes in its required resumable state file, then re-reads Plunk and a fresh frozen Clerk snapshot. Missing current Clerk contacts or unsafe final states fail the run. Keep the source CSV and state file outside git.
+
+```sh
+# Read-only planning and exact count reconciliation.
+corepack pnpm --dir web exec node scripts/migrate-marketing-contacts-to-plunk.mjs \
+  --resend-contacts /path/outside-repo/resend-contacts.csv
+
+# Separately approved write pass, resumable from a private state file.
+corepack pnpm --dir web exec node scripts/migrate-marketing-contacts-to-plunk.mjs \
+  --resend-contacts /path/outside-repo/resend-contacts.csv \
+  --apply \
+  --state-file /path/outside-repo/plunk-migration-state.json
+```
+
+The command requires `CLERK_SECRET_KEY`, `RESEND_SUPPRESSIONS_API_KEY`, `PLUNK_SECRET_API_KEY`, and `PLUNK_PUBLIC_API_KEY`. The broad Plunk secret belongs in the operator shell for this command only, not in Vercel. Do not apply from an old dry-run: refresh the Clerk and suppression reads, use the same reviewed Resend export, and confirm the printed Clerk-only gap and false-state counts immediately before the write gate. Keep Plunk campaign and workflow sending disabled throughout the import.
 
 The marker bounds webhook retry loops; it is not an exactly-once delivery
 guarantee. In automation mode, the flagged recovery command can conservatively
