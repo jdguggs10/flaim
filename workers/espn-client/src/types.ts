@@ -188,6 +188,11 @@ export interface EspnPlayer {
 export interface EspnPlayerStat {
   seasonId?: number;
   statSourceId?: number;
+  /** 0 = season total; higher values are weekly and recent-window rollups. */
+  statSplitTypeId?: number;
+  scoringPeriodId?: number;
+  appliedTotal?: number | null;
+  appliedAverage?: number | null;
   stats?: Record<string, number>;
 }
 
