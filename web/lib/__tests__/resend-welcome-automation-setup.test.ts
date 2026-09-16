@@ -3,6 +3,7 @@ import * as React from "react";
 import { describe, expect, it } from "vitest";
 import WelcomeEmail from "@/emails/welcome";
 import {
+  assertHostedWelcomeAutomationMode,
   buildAutomation,
   buildWelcomeHtml,
   buildWelcomeText,
@@ -10,6 +11,22 @@ import {
 } from "../../scripts/setup-resend-welcome-automation.mjs";
 
 describe("Resend welcome automation setup", () => {
+  it("refuses to recreate the hosted automation after direct cutover", () => {
+    expect(() => assertHostedWelcomeAutomationMode({
+      FLAIM_WELCOME_DELIVERY_MODE: "direct",
+    })).toThrow("Hosted welcome automation setup is disabled");
+  });
+
+  it("omits the unsubscribe link for the direct transactional welcome", async () => {
+    const html = await render(React.createElement(WelcomeEmail));
+    const text = await render(React.createElement(WelcomeEmail), { plainText: true });
+
+    expect(html).toContain("You are receiving this because you created a Flaim account.");
+    expect(text).toContain("You are receiving this because you created a Flaim account.");
+    expect(html).not.toContain("Unsubscribe");
+    expect(text).not.toContain("Unsubscribe");
+  });
+
   it("renders the HTML and plain text from the React welcome template", async () => {
     const automationMergeProps = {
       unsubscribeUrl: "{{{RESEND_UNSUBSCRIBE_URL}}}",

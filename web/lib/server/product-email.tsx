@@ -31,9 +31,8 @@ interface SendProductEmailParams {
 
 interface SendWelcomeEmailParams {
   idempotencyKey?: string;
-  leaguesUrl: string;
+  leaguesUrl?: string;
   to: string;
-  unsubscribeUrl: string;
   userId: string;
 }
 
@@ -108,16 +107,12 @@ export function sendWelcomeEmail({
   idempotencyKey,
   leaguesUrl,
   to,
-  unsubscribeUrl,
   userId,
 }: SendWelcomeEmailParams) {
   return sendProductEmail({
     idempotencyKey,
     react: (
-      <WelcomeEmail
-        leaguesUrl={leaguesUrl}
-        unsubscribeUrl={unsubscribeUrl}
-      />
+      <WelcomeEmail leaguesUrl={leaguesUrl} />
     ),
     subject: "Welcome to Flaim",
     template: "welcome",
