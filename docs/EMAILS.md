@@ -251,6 +251,8 @@ The production cutover is deliberately one switch, not two independent welcome f
 
 The Clerk webhook intentionally acknowledges verified user events even if downstream Resend work fails, so a Resend outage does not create Clerk webhook retry storms. Confirm failed direct welcome sends are visible through the existing structured log and retry-marker path before the production switch.
 
+Direct mode also writes a retry marker when application email is globally disabled or the transactional API key is unavailable. This is intentional: signups during a rollout-order mistake remain identifiable for recovery instead of being silently lost.
+
 Create or refresh the Resend-side resources with:
 
 ```sh
