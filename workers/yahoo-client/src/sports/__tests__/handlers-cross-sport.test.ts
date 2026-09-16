@@ -1522,6 +1522,22 @@ describe('yahoo cross-sport handler characterization tests', () => {
       ]);
     });
 
+    // Regression: IDP (individual defensive player) leagues show defensive
+    // positions like LB/DB on the roster, but FA_POSITION_FILTER previously
+    // had no entries for them, so getPositionFilter silently fell back to "no
+    // filter" and the request came back with unfiltered (offensive) players.
+    it('football forwards an IDP position filter instead of dropping it', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, position: 'LB' };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-idp');
+
+      expect(result.success).toBe(true);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain(
+        '/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=LB/ownership'
+      );
+    });
+
     // FLA-284: same is_keeper passthrough as get_roster.
     it.each(scenarios)('$label includes normalized isKeeper when a free agent has is_keeper', async ({ sport, handlers }) => {
       fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponseWithKeeper()));
