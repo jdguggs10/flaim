@@ -31,10 +31,10 @@ Moving to `p=reject` stays a provider-level decision, not a template change, and
 - Keep emails quiet and utilitarian: white card, light gray page background, one primary action.
 - Mirror the website tokens in `web/app/globals.css`, but use email-safe hex values in `web/emails/brand.ts`.
 - Use shared colors, type, button styling, support footer, and plain-language copy across providers.
-- Resend product emails use the optimized transparent Flaim mark at 36px in the card's top-right corner, aligned with the eyebrow on the left or with the title when no eyebrow is used. The shared layout does not add a separate text wordmark above the card.
+- Repo-rendered product emails use the optimized transparent Flaim mark at 36px in the card's top-right corner, aligned with the eyebrow on the left or with the title when no eyebrow is used. The shared layout does not add a separate text wordmark above the card.
 - Clerk auth emails use the dashboard application logo at 72px with the `FLAIM FANTASY` label. Keep this provider-specific because Clerk/Revolvapp controls the final email HTML.
 - Use system fonts, 8px containers, 6px buttons, and plain-language copy.
-- Shared Resend cards use 20px top padding and 28px side/bottom padding. Callout body text uses the foreground color for readability against the muted box.
+- Shared email cards use 20px top padding and 28px side/bottom padding. Callout body text uses the foreground color for readability against the muted box.
 - Do not add promotional hero art to auth or security emails.
 - Optional product-update Broadcasts must include a clear unsubscribe link. Transactional messages such as the one-time welcome and user-requested setup link do not use the marketing unsubscribe.
 
