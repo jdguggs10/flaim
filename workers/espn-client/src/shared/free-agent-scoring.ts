@@ -21,8 +21,16 @@ const SEASON_SPLIT_TYPE_ID = 0;
 const ACTUAL_STAT_SOURCE_ID = 0;
 const PROJECTED_STAT_SOURCE_ID = 1;
 
+/**
+ * ESPN reports applied totals and averages as raw floats carrying the full
+ * accumulated error of its own arithmetic (0.30000000000000004,
+ * 100.33867256000001). Two decimals is past the precision any fantasy site
+ * displays, so the noise is rounded off before the value leaves the worker.
+ * A legitimate 0 stays 0; a missing or non-finite value stays null.
+ */
 function finiteOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.round(value * 100) / 100;
 }
 
 /**
@@ -76,4 +84,24 @@ export function summarizeFreeAgentScoring(
     pointsPerGame: finiteOrNull(actual?.appliedAverage),
     projectedSeasonPoints: finiteOrNull(projected?.appliedTotal),
   };
+}
+
+/**
+ * The raw per-stat map of the same pinned actual-season entry that
+ * `summarizeFreeAgentScoring` derives its scalars from.
+ *
+ * Sports whose leagues ESPN often does not score in points (baseball, and some
+ * basketball and hockey leagues) get all-null scalars, so they still ship this
+ * dictionary as their only free-agent performance signal. Reusing
+ * `selectSeasonEntry` keeps that dictionary on the deterministic season split
+ * rather than whichever entry happens to be listed first.
+ */
+export function selectActualSeasonStats(
+  stats: EspnPlayerStat[] | undefined,
+  seasonId: number
+): Record<string, number> | undefined {
+  const entries = Array.isArray(stats) ? stats : [];
+  if (!Number.isFinite(seasonId)) return undefined;
+
+  return selectSeasonEntry(entries, seasonId, ACTUAL_STAT_SOURCE_ID)?.stats;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeFreeAgentScoring } from '../free-agent-scoring';
+import { selectActualSeasonStats, summarizeFreeAgentScoring } from '../free-agent-scoring';
 import type { EspnPlayerStat } from '../../types';
 
 const SEASON_ID = 2024;
@@ -239,7 +239,8 @@ describe('summarizeFreeAgentScoring', () => {
       expect(summarizeFreeAgentScoring(stats, LIVE_SEASON)).toEqual({
         seasonPoints: 3.0,
         pointsPerGame: 3.0,
-        projectedSeasonPoints: 11.2629927,
+        // ESPN's raw 11.2629927, rounded to the two decimals callers display.
+        projectedSeasonPoints: 11.26,
       });
     });
 
@@ -352,5 +353,137 @@ describe('summarizeFreeAgentScoring', () => {
       appliedAverage: 5,
     };
     expect(summarizeFreeAgentScoring([noMatch], SEASON_ID)).toEqual(allNull);
+  });
+
+  it('rounds each scalar to two decimals without disturbing null or a real 0', () => {
+    const actual: EspnPlayerStat = {
+      seasonId: SEASON_ID,
+      statSourceId: 0,
+      statSplitTypeId: 0,
+      scoringPeriodId: 0,
+      appliedTotal: 100.33867256000001,
+      appliedAverage: 0.30000000000000004,
+    };
+    const projected: EspnPlayerStat = {
+      seasonId: SEASON_ID,
+      statSourceId: 1,
+      statSplitTypeId: 0,
+      scoringPeriodId: 0,
+      appliedTotal: 11.2629927,
+    };
+
+    expect(summarizeFreeAgentScoring([actual, projected], SEASON_ID)).toEqual({
+      seasonPoints: 100.34,
+      pointsPerGame: 0.3,
+      projectedSeasonPoints: 11.26,
+    });
+
+    // Rounds up past the cent, and leaves an already-short value untouched.
+    expect(
+      summarizeFreeAgentScoring(
+        [{ ...actual, appliedTotal: 1.006, appliedAverage: 12.5 }, projected],
+        SEASON_ID
+      )
+    ).toEqual({
+      seasonPoints: 1.01,
+      pointsPerGame: 12.5,
+      projectedSeasonPoints: 11.26,
+    });
+
+    // Rounding must not turn a missing value into 0 or a real 0 into null.
+    expect(
+      summarizeFreeAgentScoring([{ ...actual, appliedTotal: 0, appliedAverage: null }], SEASON_ID)
+    ).toEqual({
+      seasonPoints: 0,
+      pointsPerGame: null,
+      projectedSeasonPoints: null,
+    });
+  });
+});
+
+describe('selectActualSeasonStats', () => {
+  it('returns the raw stats map of the pinned actual-season entry, not a weekly or projected one', () => {
+    const stats: EspnPlayerStat[] = [
+      // Weekly entry first, so a naive .find() would return { '0': 1 }.
+      {
+        id: '012026',
+        seasonId: 2026,
+        statSourceId: 0,
+        statSplitTypeId: 1,
+        scoringPeriodId: 7,
+        stats: { '0': 1 },
+      },
+      {
+        id: '102026',
+        seasonId: 2026,
+        statSourceId: 1,
+        statSplitTypeId: 0,
+        scoringPeriodId: 0,
+        stats: { '0': 500 },
+      },
+      {
+        id: '002026',
+        seasonId: 2026,
+        statSourceId: 0,
+        statSplitTypeId: 0,
+        scoringPeriodId: 0,
+        stats: { '0': 12, '1': 3 },
+      },
+      {
+        id: '002025',
+        seasonId: 2025,
+        statSourceId: 0,
+        statSplitTypeId: 0,
+        scoringPeriodId: 0,
+        stats: { '0': 550 },
+      },
+    ];
+
+    expect(selectActualSeasonStats(stats, 2026)).toEqual({ '0': 12, '1': 3 });
+    expect(selectActualSeasonStats([...stats].reverse(), 2026)).toEqual({ '0': 12, '1': 3 });
+  });
+
+  it('returns undefined when there is no matching entry, when the entry carries no stats map, and for unusable input', () => {
+    const noStatsMap: EspnPlayerStat = {
+      seasonId: SEASON_ID,
+      statSourceId: 0,
+      statSplitTypeId: 0,
+      scoringPeriodId: 0,
+      appliedTotal: 150.5,
+    };
+    expect(selectActualSeasonStats([noStatsMap], SEASON_ID)).toBeUndefined();
+
+    const otherSeason: EspnPlayerStat = {
+      seasonId: SEASON_ID - 1,
+      statSourceId: 0,
+      statSplitTypeId: 0,
+      scoringPeriodId: 0,
+      stats: { '0': 9 },
+    };
+    expect(selectActualSeasonStats([otherSeason], SEASON_ID)).toBeUndefined();
+
+    expect(selectActualSeasonStats(undefined, SEASON_ID)).toBeUndefined();
+    expect(selectActualSeasonStats([], SEASON_ID)).toBeUndefined();
+    expect(selectActualSeasonStats([{ ...otherSeason, seasonId: SEASON_ID }], Number.NaN)).toBeUndefined();
+  });
+
+  it('agrees with summarizeFreeAgentScoring on which entry is the season split', () => {
+    // Live baseball shape: the season split is selectable but carries no
+    // applied totals, so the scalars are null while the dictionary is present.
+    const seasonSplit: EspnPlayerStat = {
+      id: '002026',
+      seasonId: 2026,
+      statSourceId: 0,
+      statSplitTypeId: 0,
+      scoringPeriodId: 0,
+      stats: { '0': 12, '1': 3 },
+    };
+
+    expect(summarizeFreeAgentScoring([seasonSplit], 2026)).toEqual({
+      seasonPoints: null,
+      pointsPerGame: null,
+      projectedSeasonPoints: null,
+    });
+    expect(selectActualSeasonStats([seasonSplit], 2026)).toEqual({ '0': 12, '1': 3 });
   });
 });

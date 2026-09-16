@@ -23,11 +23,17 @@ vi.mock('../../shared/espn-api', async () => {
 // football/baseball look up stats by the raw season_year; basketball/hockey
 // convert canonicalYear 2024 -> ESPN-native espnYear 2025 first (see
 // search-players-cross-sport.test.ts for the same conversion table).
+//
+// Football is the only sport where the raw per-stat dictionary was dropped:
+// ESPN scores every football league in points, so the scalars always carry a
+// number there. Baseball, basketball, and hockey leagues are often category or
+// rotisserie leagues where ESPN applies no points at all, so those three keep
+// the dictionary alongside the scalars.
 const scenarios = [
-  { label: 'football', sport: 'football', handlers: footballHandlers, statsSeasonId: 2024 },
-  { label: 'baseball', sport: 'baseball', handlers: baseballHandlers, statsSeasonId: 2024 },
-  { label: 'basketball', sport: 'basketball', handlers: basketballHandlers, statsSeasonId: 2025 },
-  { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers, statsSeasonId: 2025 },
+  { label: 'football', sport: 'football', handlers: footballHandlers, statsSeasonId: 2024, keepsStatsDictionary: false },
+  { label: 'baseball', sport: 'baseball', handlers: baseballHandlers, statsSeasonId: 2024, keepsStatsDictionary: true },
+  { label: 'basketball', sport: 'basketball', handlers: basketballHandlers, statsSeasonId: 2025, keepsStatsDictionary: true },
+  { label: 'hockey', sport: 'hockey', handlers: hockeyHandlers, statsSeasonId: 2025, keepsStatsDictionary: true },
 ] as const;
 
 function makeParams(sport: Sport): HandlerToolParams {
@@ -39,13 +45,19 @@ function makeParams(sport: Sport): HandlerToolParams {
   });
 }
 
+// Stat id 999 maps to no named stat in any of the four sports, so every
+// sport's transformStats renders it as "STAT_999" and one expectation covers
+// all of them.
+const UNMAPPED_STAT_ID = '999';
+
 function playerPoolResponse(statsSeasonId: number): Response {
   const buildStats = (offset: number) => [
-    // weekly entries listed first to defeat a naive .find()
-    { seasonId: statsSeasonId, statSourceId: 0, statSplitTypeId: 1, scoringPeriodId: 7, appliedTotal: 999, appliedAverage: 999 },
-    { seasonId: statsSeasonId, statSourceId: 1, statSplitTypeId: 1, scoringPeriodId: 7, appliedTotal: 888, appliedAverage: 888 },
-    { seasonId: statsSeasonId, statSourceId: 0, statSplitTypeId: 0, scoringPeriodId: 0, appliedTotal: 100 + offset, appliedAverage: 10 + offset },
-    { seasonId: statsSeasonId, statSourceId: 1, statSplitTypeId: 0, scoringPeriodId: 0, appliedTotal: 150 + offset, appliedAverage: 15 + offset },
+    // weekly entries listed first, and each raw stats map carries a distinct
+    // value, so a naive .find() would surface the wrong dictionary too
+    { seasonId: statsSeasonId, statSourceId: 0, statSplitTypeId: 1, scoringPeriodId: 7, appliedTotal: 999, appliedAverage: 999, stats: { [UNMAPPED_STAT_ID]: 777 } },
+    { seasonId: statsSeasonId, statSourceId: 1, statSplitTypeId: 1, scoringPeriodId: 7, appliedTotal: 888, appliedAverage: 888, stats: { [UNMAPPED_STAT_ID]: 666 } },
+    { seasonId: statsSeasonId, statSourceId: 0, statSplitTypeId: 0, scoringPeriodId: 0, appliedTotal: 100 + offset, appliedAverage: 10 + offset, stats: { [UNMAPPED_STAT_ID]: 7 + offset } },
+    { seasonId: statsSeasonId, statSourceId: 1, statSplitTypeId: 0, scoringPeriodId: 0, appliedTotal: 150 + offset, appliedAverage: 15 + offset, stats: { [UNMAPPED_STAT_ID]: 555 } },
   ];
 
   return new Response(JSON.stringify({
@@ -89,7 +101,7 @@ describe('espn cross-sport get_free_agents handlers (FLA-132)', () => {
     getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
   });
 
-  it.each(scenarios)('$label returns rankable scoring scalars instead of a raw stats dictionary', async ({ sport, handlers, statsSeasonId }) => {
+  it.each(scenarios)('$label returns rankable scoring scalars from the pinned season split', async ({ sport, handlers, statsSeasonId, keepsStatsDictionary }) => {
     espnFetchMock.mockResolvedValue(playerPoolResponse(statsSeasonId));
 
     const params = makeParams(sport);
@@ -125,7 +137,6 @@ describe('espn cross-sport get_free_agents handlers (FLA-132)', () => {
     });
     expect(data.freeAgents[0]).toHaveProperty('position');
     expect(data.freeAgents[0]).toHaveProperty('proTeam');
-    expect(data.freeAgents[0]).not.toHaveProperty('stats');
 
     expect(data.freeAgents[1]).toMatchObject({
       playerId: 2,
@@ -138,6 +149,17 @@ describe('espn cross-sport get_free_agents handlers (FLA-132)', () => {
       pointsPerGame: 11,
       projectedSeasonPoints: 151,
     });
-    expect(data.freeAgents[1]).not.toHaveProperty('stats');
+
+    if (!keepsStatsDictionary) {
+      // Football only: the raw dictionary is gone from the payload entirely.
+      expect(data.freeAgents[0]).not.toHaveProperty('stats');
+      expect(data.freeAgents[1]).not.toHaveProperty('stats');
+      return;
+    }
+
+    // The dictionary must come from the pinned actual-season split, not the
+    // weekly entry listed first (777) and not the projected season split (555).
+    expect(data.freeAgents[0].stats).toEqual({ STAT_999: 7 });
+    expect(data.freeAgents[1].stats).toEqual({ STAT_999: 8 });
   });
 });

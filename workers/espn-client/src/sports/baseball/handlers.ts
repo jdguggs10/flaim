@@ -7,7 +7,7 @@ import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
 import { buildRosterLimitations, currentClubAndInjuryFields, resolveKeeperValueUnit } from '../../shared/roster-entry';
 import { epochMsToIso } from '../../shared/dates';
-import { summarizeFreeAgentScoring } from '../../shared/free-agent-scoring';
+import { selectActualSeasonStats, summarizeFreeAgentScoring } from '../../shared/free-agent-scoring';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import { resolveScoringPeriodForDate } from '../../shared/scoring-period';
 import {
@@ -695,6 +695,10 @@ async function handleGetFreeAgents(
     // Transform player data
     const freeAgents = players.map((entry) => {
       const player = entry.player;
+      // ESPN scores few baseball leagues in points, so the scoring scalars are
+      // usually all null here; the raw season-split dictionary stays as the
+      // only performance signal this sport can offer.
+      const seasonStats = selectActualSeasonStats(player?.stats, season_year);
 
       return {
         playerId: player?.id,
@@ -707,6 +711,7 @@ async function handleGetFreeAgents(
         percentStarted: player?.ownership?.percentStarted,
         status: entry.status, // FREEAGENT or WAIVERS
         waiverProcessDate: entry.waiverProcessDate,
+        stats: seasonStats ? transformStats(seasonStats) : undefined,
         ...summarizeFreeAgentScoring(player?.stats, season_year)
       };
     });
