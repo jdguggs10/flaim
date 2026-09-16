@@ -2117,9 +2117,6 @@ describe('fantasy-mcp tools', () => {
   describe('get_free_agents serialized-byte guard (FLA-132)', () => {
     const freeAgentsTool = () => getUnifiedTools().find((t) => t.name === 'get_free_agents')!;
 
-    // This is the stable MCP tool-result object returned by the handler, not
-    // the outer JSON-RPC envelope or stream/SSE transport framing — the same
-    // measurement boundFreeAgentsResponse uses internally.
     function serializedToolResultBytes(response: unknown): number {
       return new TextEncoder().encode(JSON.stringify(response)).byteLength;
     }
@@ -2186,8 +2183,6 @@ describe('fantasy-mcp tools', () => {
       expect(payload.data.count).toBe(100);
       expect('truncated' in payload.data).toBe(false);
       expect(JSON.stringify(result)).not.toContain('truncated');
-
-      // Reference measurement, reported alongside FLA-132's other observed sizes.
       expect(serializedToolResultBytes(result)).toBeLessThan(200_000);
     });
 
@@ -2211,10 +2206,6 @@ describe('fantasy-mcp tools', () => {
       expect(payload.data.count).toBe(kept.length);
       expect(payload.data.truncated).toBe(true);
 
-      // Reconstruct the full normalized entry list the production normalizer
-      // produces for the same input, so the prefix/order check and the
-      // tightness check reflect real normalization (id coercion, team
-      // derivation) rather than a hand-copied guess at its shape.
       const params: ToolParams = { platform: 'espn', sport: 'football', league_id: '336777', season_year: 2025 };
       const fullNormalized = normalizeFreeAgentsResult(routeResult, params);
       expect(fullNormalized.success).toBe(true);
@@ -2224,9 +2215,6 @@ describe('fantasy-mcp tools', () => {
       expect(kept[0]).toEqual(fullEntries[0]);
       expect(kept).toEqual(fullEntries.slice(0, kept.length));
 
-      // Tightness: the binary search inside boundFreeAgentsResponse must have
-      // kept the longest prefix that fits — one more entry, wrapped in the
-      // same envelope shape the source produces, has to cross the limit.
       const oneMoreData = {
         ...fullData,
         freeAgents: fullEntries.slice(0, kept.length + 1),
