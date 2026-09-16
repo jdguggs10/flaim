@@ -237,8 +237,8 @@ export default function PrivacyPage() {
               <li>
                 <strong>Marketing email:</strong> Deleting your account does
                 not remove or unsubscribe any existing marketing-contact
-                record with our email provider. Use the unsubscribe link in
-                any marketing email to opt out of that separately.
+                record with our marketing email provider. Use the unsubscribe
+                link in any marketing email to opt out of that separately.
               </li>
               <li>
                 <strong>Signup attribution:</strong> A first-party cookie keeps

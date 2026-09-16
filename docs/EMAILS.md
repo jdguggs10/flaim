@@ -67,7 +67,7 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
 1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
 2. Run `corepack pnpm --dir web run email:dev` for local iteration.
 3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
-4. Create exactly one Plunk campaign draft from the reviewed export. Convert the provider-specific unsubscribe slot to Plunk's `{{unsubscribeUrl}}`; never ship a Resend unsubscribe token in a Plunk campaign. Use `Gerry <updates@news.flaim.app>` with `gerry@news.flaim.app` as Reply-To.
+4. Create exactly one Plunk campaign draft from the reviewed export in the Plunk dashboard, which is the current campaign-creation surface. Convert the provider-specific unsubscribe slot to Plunk's `{{unsubscribeUrl}}`; never ship a Resend unsubscribe token in a Plunk campaign. Use `Gerry <updates@news.flaim.app>` with `gerry@news.flaim.app` as Reply-To.
 5. Confirm the intended Plunk audience or segment and its final recipient count. Ordinary product updates go to all subscribed contacts. One-off operational cohorts such as affected Yahoo users remain campaign-specific segments rather than permanent audience structure.
 6. Send a proof only to the internal test contacts. Verify Gmail, iCloud, and Fastmail rendering, the recipient-specific unsubscribe link, reply routing into Fastmail, Flaim `ref=` parameters, provider branding, and the raw bulk-sender headers before approving an audience send.
 7. Show the final subject, body, sender, reply-to, audience or segment, recipient count, proof result, and review state. Wait for immediate explicit approval before sending to the audience.
@@ -248,11 +248,12 @@ The hosted Resend Automation remains a rollback lane. In automation mode, the ve
 
 The completed production cutover used one switch, not two independent welcome flags:
 
-1. Deploy code with `FLAIM_WELCOME_DELIVERY_MODE` unset. The existing legacy automation flag continued to select the prior behavior.
-2. Confirm `FLAIM_EMAILS_ENABLED=true`, the send-only `RESEND_API_KEY` is present, and `RESEND_CONTACT_SYNC_ENABLED=false`.
-3. Set `FLAIM_WELCOME_DELIVERY_MODE=direct`. From that point each new webhook selects only the direct branch; it cannot also emit the automation event.
-4. Canary one fresh signup. Require one welcome in the inbox, no new Resend Audience contact, a cleared retry marker, and the expected structured logs.
-5. Keep the hosted automation available but event-idle for rollback. To roll back, set the single mode to `automation`; do not run two modes together.
+1. Code was deployed with `FLAIM_WELCOME_DELIVERY_MODE` unset, so the existing legacy automation flag continued to select the prior behavior.
+2. `FLAIM_EMAILS_ENABLED=true`, the send-only `RESEND_API_KEY`, and `RESEND_CONTACT_SYNC_ENABLED=false` were confirmed.
+3. `FLAIM_WELCOME_DELIVERY_MODE=direct` was set. From that point each new webhook selected only the direct branch and could not also emit the automation event.
+4. One fresh signup canary delivered one welcome, created no new Resend Audience contact, cleared its retry marker, and produced the expected structured logs.
+
+The hosted automation remains available but event-idle for rollback. To roll back, set the single mode to `automation`; do not run two modes together.
 
 The Clerk webhook intentionally acknowledges verified user events even if downstream Resend work fails, so a Resend outage does not create Clerk webhook retry storms. Failed direct welcome sends remain visible through the existing structured log and retry-marker path.
 
