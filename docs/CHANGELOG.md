@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Direct Transactional Welcome Mode (FLA-273)
+
+- **Added**: One mutually exclusive `FLAIM_WELCOME_DELIVERY_MODE` now selects the hosted Resend automation, a direct transactional Resend send, or disabled delivery. Leaving it unset preserves the legacy `RESEND_WELCOME_AUTOMATION_ENABLED` behavior, while invalid explicit values fail closed. Direct mode uses a stable `welcome/<clerk-user-id>` idempotency key and the existing structured failure/retry-marker path, so one signup cannot intentionally select both delivery lanes.
+- **Changed**: The direct welcome omits the marketing unsubscribe link and creates no Resend Audience contact. The hosted automation still renders the same React Email template with its recipient-specific Resend unsubscribe token for rollback.
+- **Hardened**: Direct mode blocks the legacy `user.updated` Resend contact repair even if its old flag is accidentally enabled. Resend contact backfill, quota-event recovery, and hosted-automation setup write paths also fail closed in direct mode so an old command cannot restart marketing-contact growth after cutover.
+
 ### Yahoo Weekly Player Points in get_roster
 
 - **Added**: Yahoo football `get_roster` requests now append the week-scoped player stats sub-resource and emit an additive `points` per player, a response-level `pointsCoverage`, and `limitations.playerPointsAvailable: false` when nothing usable came back. This supersedes the earlier attempt (#298), reverted the same day because it parsed the wrong `player_points` JSON shape (coverage metadata is nested under a numeric `"0"` key, sibling to a string `total`, not flat on the object) and, for current rosters, built a URL ending in `/players/stats;type=week` with no week selector at all — Yahoo rejects that with a 400, breaking every current-week Yahoo football roster in production. The corrected selectors are `/team/{team_key}/roster;week={N}/players/stats` for a week snapshot and `/team/{team_key}/roster;week=current/players/stats` for the current roster (no `;type=`, no second `;week=`) — verified against yfpy's `get_team_roster_player_stats_by_week` and a real captured NFL response.

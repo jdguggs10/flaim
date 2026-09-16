@@ -57,6 +57,22 @@ function failureEvent(record: ReturnType<typeof welcome>, reason = "reached_mont
 }
 
 describe("recover-resend-welcome-quota script", () => {
+  it("refuses welcome-event recovery writes after direct cutover", () => {
+    expect(() => parseArgs([
+      "--incident-after", "2026-09-06T22:10:00Z",
+      "--incident-before", "2026-09-07T00:41:00Z",
+      "--expected-failed", "1",
+      "--failure-manifest", "/tmp/failures.json",
+      "--expected-failure-reason", "reached_monthly_quota",
+      "--expected-cohort-hash", "hash",
+      "--ledger", "/tmp/ledger.jsonl",
+      "--max-send", "1",
+      "--apply",
+    ], {
+      FLAIM_WELCOME_DELIVERY_MODE: "direct",
+    })).toThrow("Resend welcome-event recovery is disabled");
+  });
+
   it("requires explicit incident bounds and a reviewed hash for apply mode", () => {
     expect(() => parseArgs([])).toThrow("--incident-after is required");
     expect(() => parseArgs([

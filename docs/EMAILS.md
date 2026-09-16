@@ -168,13 +168,17 @@ Readout: `/leagues` reports a `leagues_page_view` setup signal (with the `ref` v
 
 `@react-email/render`, `resend`, and `server-only` are production dependencies because the server send helper renders and sends these templates. `react-email` and `@react-email/ui` remain dev-only preview dependencies; do not remove `@react-email/ui` just because templates do not import it directly.
 
-This package includes a server-only Resend send helper, but no user action should call it until the corresponding trigger has an explicit send guard and unsubscribe/preference URL. Product email sending stays disabled unless `FLAIM_EMAILS_ENABLED=true` is set.
+This package includes a server-only Resend send helper. Product email sending stays disabled unless `FLAIM_EMAILS_ENABLED=true` is set. Transactional messages need an explicit reviewed trigger and idempotency policy; marketing messages additionally need a real unsubscribe mechanism.
 
-Clerk is the source of truth for user identity. Resend is the product email audience and delivery layer, not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` handles two separate Resend paths:
+Clerk is the source of truth for user identity. Resend delivers product email but is not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` supports one mutually exclusive signup-welcome mode:
 
-- `user.created`: emit the custom Resend event `flaim.user_created` for the welcome automation.
-- `user.updated`: lightly repair the Resend contact when `RESEND_CONTACT_SYNC_ENABLED=true`.
-- Disabled welcome automation: if `RESEND_WELCOME_AUTOMATION_ENABLED=false`, new `user.created` webhooks do not create or update Resend contacts; signup contact creation is owned by the enabled Resend automation. Run the backfill script for any signup window where the automation was disabled.
+- `automation`: emit the custom Resend event `flaim.user_created`; the hosted automation creates the contact, adds it to the Segment, and sends the welcome.
+- `direct`: call the send-only Resend email API with the React welcome template and the stable idempotency key `welcome/<clerk-user-id>`; no Resend contact or Segment membership is created.
+- `disabled`: record the signup but do not queue welcome delivery.
+
+`FLAIM_WELCOME_DELIVERY_MODE` selects `automation`, `direct`, or `disabled`. While it is unset, the legacy `RESEND_WELCOME_AUTOMATION_ENABLED=true` flag maps to `automation`; any other legacy value maps to `disabled`. This preserves existing production behavior through the backward-compatible deployment. An invalid explicit mode fails closed as disabled.
+
+`user.updated` can lightly repair a Resend contact only when `RESEND_CONTACT_SYNC_ENABLED=true` and the welcome mode is not `direct`. Direct mode fails the legacy repair path closed even if that old flag is accidentally left true, so an email update cannot restart Resend audience growth.
 
 The handler verifies Clerk's webhook signature with `CLERK_WEBHOOK_SIGNING_SECRET` and acknowledges verified Clerk events even if downstream Resend work fails, so Resend outages do not create Clerk webhook retry storms.
 
@@ -188,7 +192,7 @@ verification failures use `email.webhook_verification_failed`. These records
 include provider-safe IDs and failure categories but never recipient addresses,
 raw webhook bodies, signatures, or API keys.
 
-When a Resend welcome event or contact sync fails after a verified Clerk webhook,
+When a Resend welcome delivery or contact sync fails after a verified Clerk webhook,
 Flaim stores the matching retry marker in that user's Clerk private metadata at
 `flaim_email_ops.welcomeEvent` or `flaim_email_ops.contactSync`. Clerk's metadata
 write is a deep merge, so unrelated private metadata is retained. A retry marker
@@ -197,23 +201,18 @@ is never refreshed when it already exists, which prevents marker-caused
 clears only `contactSync`; it cannot clear a failed `welcomeEvent` marker.
 
 The marker bounds webhook retry loops; it is not an exactly-once delivery
-guarantee. Before a flagged recovery re-sends a welcome event, the recovery
-command checks whether the Resend contact exists. When the welcome automation
-owns contact creation, that is conservative evidence that the prior event landed,
-so the command clears the marker and reports a skip instead of sending again.
-That deduplication is reliable with the default disabled contact-sync flag and no
-preexisting contact. If `RESEND_CONTACT_SYNC_ENABLED=true` or the contact may
-have existed before the event, use `--force-resend` for an intentional override.
+guarantee. In automation mode, the flagged recovery command can conservatively
+use Resend contact existence as evidence that the prior event landed. In direct
+mode, contact existence says nothing about the send. The direct path instead
+uses Resend's email idempotency key `welcome/<clerk-user-id>`. Legacy contact and
+event recovery write modes refuse to run while direct mode is selected.
 
 Direct `resend.emails.send` calls may pass a caller-supplied SDK
 `idempotencyKey` only for a genuinely one-time business event with a stable
-semantic identifier. The send helper never derives a permanent key from a user
-and template: repeatable requests such as an ESPN setup-link resend omit the
-option so Resend does not replay-cache a legitimate later request. Resend
-currently supports that provider-side idempotency option for email endpoints,
-but not for `events.send`. Welcome automation events therefore rely on their
-Clerk retry marker and the flagged recovery command below instead of an
-unsupported SDK option.
+semantic identifier. The one-time welcome uses the immutable Clerk user id;
+repeatable requests such as an ESPN setup-link resend omit the option so Resend
+does not replay-cache a legitimate later request. Resend supports that
+provider-side idempotency option for email endpoints, but not for `events.send`.
 
 ### Resend delivery-feedback webhook
 
@@ -238,11 +237,19 @@ Webhook setup requirements:
 
 The maintenance contact sync stores only email, first name, and last name. It updates first and creates only if Resend reports the contact is missing, avoiding a separate contact-existence preflight. It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, repaired contacts are assigned to that Resend Segment for future Broadcast targeting. Avoid writing custom Resend contact properties unless those properties have first been created in Resend.
 
-The first automated product email is a Resend Automation for new-user welcome email. Flaim does not queue, schedule, create the signup contact, or send this email itself. After a verified Clerk `user.created` webhook passes the `RESEND_WELCOME_AUTOMATION_ENABLED=true` gate, it emits `flaim.user_created` with the user's email plus non-name metadata (`clerk_user_id`, `source`). The welcome template and signup automation do not depend on names. Resend identifies the contact by email, automatically creates a missing contact, adds the contact to the configured Segment, sends the templated welcome email, handles unsubscribe, and records the automation run history. Contact name enrichment remains on the `user.updated` repair path and the backfill script.
+The welcome email is transactional onboarding sent once after account creation. In direct mode, Flaim renders `web/emails/welcome.tsx` and sends it through the send-only Resend API. The direct version contains no unsubscribe link; optional product-update Broadcasts own marketing unsubscribe separately. It does not create a Resend contact.
 
-Keep welcome delivery gated until the Resend event, template, automation, Segment, and real inbox test are verified. Production delivery requires both `RESEND_WELCOME_AUTOMATION_ENABLED=true` in Flaim and the Resend automation enabled in Resend. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
+The hosted Resend Automation remains a rollback lane during migration. In automation mode, the verified Clerk webhook emits `flaim.user_created` with the user's email plus non-name metadata (`clerk_user_id`, `source`). Resend creates a missing contact, adds it to the configured Segment, sends the templated welcome, and records the automation run. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
 
-Before enabling the flag in production, confirm failed welcome event sends are visible in the production logs or alerting path. The Clerk webhook intentionally acknowledges verified user events even if the downstream Resend event call fails, so a Resend outage or expired events key will not retry through Clerk. Deploy order for welcome automation changes is: deploy the app, disable the `Flaim Welcome Email` automation in the Resend dashboard, rerun `web/scripts/setup-resend-welcome-automation.mjs`, verify a real test email, then re-enable the automation in Resend.
+The production cutover is deliberately one switch, not two independent welcome flags:
+
+1. Deploy code with `FLAIM_WELCOME_DELIVERY_MODE` unset. The existing legacy automation flag continues to select today's behavior.
+2. Confirm `FLAIM_EMAILS_ENABLED=true`, the send-only `RESEND_API_KEY` is present, and `RESEND_CONTACT_SYNC_ENABLED=false`.
+3. Set `FLAIM_WELCOME_DELIVERY_MODE=direct`. From that point each new webhook selects only the direct branch; it cannot also emit the automation event.
+4. Canary one fresh signup. Require one welcome in the inbox, no new Resend Audience contact, a cleared retry marker, and the expected structured logs.
+5. Keep the hosted automation available but event-idle for rollback. To roll back, set the single mode to `automation`; do not run two modes together.
+
+The Clerk webhook intentionally acknowledges verified user events even if downstream Resend work fails, so a Resend outage does not create Clerk webhook retry storms. Confirm failed direct welcome sends are visible through the existing structured log and retry-marker path before the production switch.
 
 Create or refresh the Resend-side resources with:
 
@@ -251,6 +258,8 @@ corepack pnpm --dir web exec tsx scripts/setup-resend-welcome-automation.mjs
 ```
 
 The setup script creates the `flaim.user_created` event, publishes the `flaim-welcome-v1` template, and creates/updates the `Flaim Welcome Email` automation as `disabled`. It requires `RESEND_CONTACT_SEGMENT_ID` (the `Flaim Users` segment id, visible in the Resend Audience → Segments URL) because the automation chain is `trigger -> add_to_segment -> send_email`. **Resend rejects API edits to an enabled automation** ("This automation is enabled and cannot be edited"), so the working order is: disable the automation in the Resend dashboard, run the script (it republishes the template and updates the automation, leaving it disabled), send a real test email, then re-enable it. The script's event and template steps run before the automation step, so if it fails on an enabled automation the template has already been republished; disable and re-run. Verified 2026-08-16. The signup automation does not enrich contact names; that remains the responsibility of the `user.updated` repair path and the backfill script. Re-running the script intentionally disables the automation again as a safety guard while templates are being revised. Enable the automation in Resend only after the production webhook event path has been tested.
+
+The setup script refuses to run when `FLAIM_WELCOME_DELIVERY_MODE=direct`. The contact backfill and quota-incident recovery commands remain usable for read-only inspection, but their write modes also fail closed in direct mode. This prevents an old runbook command from silently restarting Resend contact growth after cutover.
 
 The Resend automation setup script renders `web/emails/welcome.tsx` directly with `@react-email/render`, so the React template is the single source for both automation HTML and plain text. Shared action URLs live in `web/emails/flaim-email-links.json`. When changing the welcome email, update the React template, run `corepack pnpm --dir web run email:export`, rerun the setup script, and send a real test email before enabling or re-enabling the automation.
 

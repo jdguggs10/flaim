@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
@@ -59,6 +59,10 @@ function makeClient(existing: boolean) {
   };
 }
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("getClerkUserPrimaryEmail", () => {
   it("returns the primary Clerk email normalized to lowercase", () => {
     expect(getClerkUserPrimaryEmail(clerkUser)).toBe("gerry@example.com");
@@ -81,6 +85,24 @@ describe("getClerkUserPrimaryEmail", () => {
 });
 
 describe("syncClerkUserToResendContact", () => {
+  it("fails closed in direct welcome mode even if the legacy sync flag is enabled", async () => {
+    vi.stubEnv("FLAIM_WELCOME_DELIVERY_MODE", "direct");
+    vi.stubEnv("RESEND_CONTACT_SYNC_ENABLED", "true");
+    const { client, update } = makeClient(false);
+
+    const result = await syncClerkUserToResendContact(clerkUser, {
+      client,
+      enabled: true,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      skipped: true,
+      error: "Resend contact sync is disabled in direct welcome mode",
+    });
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("skips when contact sync is disabled", async () => {
     const { client, update } = makeClient(false);
 

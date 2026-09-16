@@ -8,6 +8,7 @@ import {
   getResendContactsClient,
   getResendErrorMessage,
 } from "@/lib/server/resend-client";
+import { getWelcomeDeliveryConfig } from "@/lib/server/welcome-delivery-mode";
 
 type ClerkEmailAddress = {
   email_address?: string | null;
@@ -76,6 +77,7 @@ function isAlreadyInSegment(error: ContactApiError) {
 }
 
 function isContactSyncEnabled(options: SyncClerkUserOptions) {
+  if (getWelcomeDeliveryConfig().mode === "direct") return false;
   return options.enabled ?? process.env.RESEND_CONTACT_SYNC_ENABLED === "true";
 }
 
@@ -137,7 +139,13 @@ export async function syncClerkUserToResendContact(
   options: SyncClerkUserOptions = {},
 ): Promise<ContactSyncResult> {
   if (!isContactSyncEnabled(options)) {
-    return { ok: false, skipped: true, error: "Resend contact sync is disabled" };
+    return {
+      ok: false,
+      skipped: true,
+      error: getWelcomeDeliveryConfig().mode === "direct"
+        ? "Resend contact sync is disabled in direct welcome mode"
+        : "Resend contact sync is disabled",
+    };
   }
 
   const emailResult = getClerkUserProductEmail(user);
