@@ -266,9 +266,11 @@ export default function PrivacyPage() {
               We do not sell, rent, or share your personal information or
               platform credentials with any third parties. Your data is used
               exclusively to provide Flaim&apos;s services to you. Our service
-              providers (Clerk for authentication, Supabase for data storage,
-              and Resend for product, account, and marketing email) process data only as
-              necessary to operate the service.
+              providers (Clerk for authentication and account email, Supabase
+              for data storage, Resend for transactional product email, Plunk
+              for product-update subscriptions and email, and Fastmail for
+              human correspondence) process data only as necessary to operate
+              the service.
             </p>
           </section>
 

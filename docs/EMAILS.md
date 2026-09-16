@@ -6,19 +6,21 @@ Flaim uses a small, restrained email system so product emails, auth emails, and 
 
 | Provider | Role | Sender |
 | --- | --- | --- |
-| Fastmail | Real inboxes, aliases, and replies | `support@flaim.app` |
+| Fastmail | Real inboxes, aliases, and replies | `support@flaim.app`, `gerry@flaim.app`, `gerry@news.flaim.app` |
 | Clerk | Authentication and security emails | `Flaim <accounts@flaim.app>` |
-| Resend | Product and lifecycle emails | `Flaim <updates@flaim.app>` |
-| Resend | Broadcasts | `Flaim <updates@news.flaim.app>` |
+| Resend | Transactional product emails | `Flaim <updates@flaim.app>` |
+| Plunk | Marketing contacts and Broadcasts | `Gerry <updates@news.flaim.app>` |
 
-Use `support@flaim.app` as the reply-to address for product email.
+Transactional product email uses `support@flaim.app` as its reply-to address. Plunk Broadcasts use `gerry@news.flaim.app`; Fastmail receives those replies, and Gerry normally answers from `gerry@flaim.app`.
 
-Resend uses separate verified US East sending domains for the two lanes:
+The live sending lanes are:
 
-- `flaim.app` carries product and lifecycle email. Open and click tracking are off; Flaim-owned links use first-party `ref=` attribution instead.
-- `news.flaim.app` carries Broadcasts. Open tracking is off and click tracking is on through `links.news.flaim.app`.
+- Resend's verified `flaim.app` domain carries direct transactional product email. Open and click tracking are off; Flaim-owned links use first-party `ref=` attribution instead.
+- Plunk's verified `news.flaim.app` domain carries optional product-update Broadcasts. Keep Flaim's first-party `ref=` attribution on links and treat provider metrics as operational evidence rather than product analytics.
 
-The `send.flaim.app` and `send.news.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses.
+The `send.flaim.app` DNS records are Resend bounce / MAIL FROM infrastructure, not visible From addresses. Resend's former `news.flaim.app` sending records and audience remain available only for rollback until the first real Plunk Broadcast completes its two-week rollback window; retire them through a separately reviewed provider and DNS change.
+
+Production cut over on 2026-09-16. Direct Resend welcome delivery and real-time Plunk signup sync are enabled. The historical import reconciled 10,595 target contacts: all 10,515 current Clerk primary emails plus 80 retained Resend-only contacts, with 144 unsubscribe or suppression states preserved as not subscribed. The remaining acceptance gate is the first real Plunk audience Broadcast, followed by its two-week rollback window and a separately approved Resend marketing downgrade.
 
 Root DMARC stays at `p=quarantine`. Aggregate reports go to Cloudflare DMARC Management only: `postmaster@flaim.app` was dropped from the `rua` tag on 2026-09-12, once the mailbox move gave that alias a real destination and the daily XML reports began arriving in the support inbox. Read them in the Cloudflare dashboard under Email > DMARC Management, not by mail. DMARC policy is discovered from the visible From domain. Product and Clerk mail send as `flaim.app`, so the root record governs them directly. Only the Broadcast lane uses a From subdomain, `news.flaim.app`, and it publishes no `_dmarc` record of its own, so it falls back to the root policy. The `send.` and `clkmail.` subdomains are MAIL FROM and SPF authentication domains that never appear in a visible From, so a `_dmarc` record on any of them would have no effect.
 
@@ -34,9 +36,9 @@ Moving to `p=reject` stays a provider-level decision, not a template change, and
 - Use system fonts, 8px containers, 6px buttons, and plain-language copy.
 - Shared Resend cards use 20px top padding and 28px side/bottom padding. Callout body text uses the foreground color for readability against the muted box.
 - Do not add promotional hero art to auth or security emails.
-- Product and lifecycle emails must include a clear unsubscribe or notification-preferences link in the footer before they are connected to a live sender.
+- Optional product-update Broadcasts must include a clear unsubscribe link. Transactional messages such as the one-time welcome and user-requested setup link do not use the marketing unsubscribe.
 
-## Resend templates
+## Email templates
 
 Templates live in `web/emails`.
 
@@ -48,7 +50,7 @@ corepack pnpm --dir web run email:dev
 
 Use this browser preview as the visual editing surface. It refreshes while the
 React Email template changes, so copy length, spacing, hierarchy, and mobile
-layout can be judged before anything is created in Resend.
+layout can be judged before anything is created in a provider.
 
 Export static HTML previews:
 
@@ -65,35 +67,15 @@ Broadcasts are repo-authored and provider-sent. Follow this order:
 1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
 2. Run `corepack pnpm --dir web run email:dev` for local iteration.
 3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
-4. Create exactly one provider draft from those exports. Before this step, manually obtain the intended Resend **Segment** ID from the dashboard and load a dedicated full-access broadcast credential into `RESEND_BROADCASTS_API_KEY` from Flaim's password manager (currently 1Password) without printing it. An audience ID is not a segment ID; never substitute one for the other. Do not source this credential from `web/.env.local`: that file's `RESEND_API_KEY` is deliberately sending-only and cannot create broadcasts.
+4. Create exactly one Plunk campaign draft from the reviewed export. Convert the provider-specific unsubscribe slot to Plunk's `{{unsubscribeUrl}}`; never ship a Resend unsubscribe token in a Plunk campaign. Use `Gerry <updates@news.flaim.app>` with `gerry@news.flaim.app` as Reply-To.
+5. Confirm the intended Plunk audience or segment and its final recipient count. Ordinary product updates go to all subscribed contacts. One-off operational cohorts such as affected Yahoo users remain campaign-specific segments rather than permanent audience structure.
+6. Send a proof only to the internal test contacts. Verify Gmail, iCloud, and Fastmail rendering, the recipient-specific unsubscribe link, reply routing into Fastmail, Flaim `ref=` parameters, provider branding, and the raw bulk-sender headers before approving an audience send.
+7. Show the final subject, body, sender, reply-to, audience or segment, recipient count, proof result, and review state. Wait for immediate explicit approval before sending to the audience.
+8. Comment every real proof or audience send on its Linear issue with the campaign ID, audience, proof result, and final send state.
 
-   ```sh
-   # From the repository root. Nothing here prints either credential.
-   (
-     unset RESEND_API_KEY
-     : "${RESEND_BROADCASTS_API_KEY:?Load the full-access broadcast key from Flaim's password manager first}"
-     RESEND_BROADCAST_SEGMENT_ID="...manually verified Segment ID..."
+Do not send a real audience email while developing this workflow. The Plunk secret key is an operator-only credential and must not be stored in `.env.local` or deployed to Vercel. The server-side signup sync uses only `PLUNK_PUBLIC_API_KEY` and cannot create or send campaigns.
 
-     RESEND_API_KEY="$RESEND_BROADCASTS_API_KEY" corepack pnpm --dir web dlx resend-cli@2.14.0 broadcasts create \
-       --from "Flaim <updates@news.flaim.app>" \
-       --reply-to support@flaim.app \
-       --subject "Keepers, draft details, and more" \
-       --preview-text "Keeper costs, dynasty draft picks, and sharper trade detail for your connected leagues." \
-       --name "Football kickoff: keepers + Yahoo" \
-       --segment-id "${RESEND_BROADCAST_SEGMENT_ID:?Set a manually verified Resend Segment ID first}" \
-       --html-file .email-out/broadcast-2026-08-kickoff.html \
-       --text-file .email-out/broadcast-2026-08-kickoff.txt
-   )
-   unset RESEND_BROADCASTS_API_KEY
-   ```
-
-   The subshell first clears any ambient `RESEND_API_KEY`, then passes the dedicated broadcast credential only to the downloaded CLI under the variable name it expects. The segment ID exists only inside the subshell and is passed as an argument. The final `unset` clears the operator-supplied broadcast credential from the outer shell. Never echo, copy, or commit either value. The command contains no `--send` or `--scheduled-at`, so the CLI creates a draft only. Do not run it with an empty or unverified segment value.
-5. Use the Resend dashboard only to confirm the Segment, select the appropriate durable Topic, send proof emails, and send after review. Topics describe the kind of email and preserve a recipient's subscription preference; Segments describe who should receive a particular Broadcast. Provider-availability messages use the public `Service updates` Topic. Keep one-off cohorts such as the Yahoo access-update audience as campaign-specific Segments rather than creating provider-specific Topics. Do not edit email content in the dashboard: Resend's editor lock prevents reliable code-side revision after a dashboard edit, so content changes require a new repo export and draft.
-6. Comment every real test or audience send on its Linear issue with the draft ID, audience, proof result, and final send state.
-
-Do not send a real email while developing this workflow. The local `RESEND_API_KEY` is sending-only and restricted to `flaim.app`; it must never be broadened for broadcast work. Keep full-access operator credentials out of `.env.local`, and do not change provider keys or feature flags as part of routine copy iteration. Load the broadcast credential per use because its pinned first-party CLI consumer can create and modify provider resources. Load the suppression credential per use as well: the reconciliation script has no write mode, but the raw credential still has Full access outside that script.
-
-The official [`resend-cli` v2 broadcast reference](https://github.com/resend/resend-cli/blob/main/skills/resend-cli/references/broadcasts.md) supports `--html-file`, `--text-file`, `--name`, `--reply-to`, and `--preview-text`, and saves a draft unless `--send` is supplied. It targets the current API's required `segment_id` contract and maps the CLI reply-to input to the API's `reply_to` array. The pinned CLI command above therefore replaces a custom draft creator.
+The prior Resend Segment, Topic, CLI-draft, and dashboard-send workflow is now a rollback lane. Keep its contacts, suppressions, credentials, and DNS intact through the first successful Plunk audience Broadcast and the two-week rollback window. Do not create new Resend Broadcasts in normal operation, and do not retire the rollback lane without a separate reviewed provider and DNS change.
 
 The first product templates are:
 
@@ -106,7 +88,9 @@ The first product templates are:
 
 Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
 
-### Yahoo operational Broadcast Segment
+### Legacy Resend Yahoo operational Segment
+
+This script targets Resend and remains available only for rollback or historical incident review. Do not use it to prepare a new Plunk campaign. If another provider-specific Yahoo cohort is needed, adapt the guarded selection and eligibility checks to Plunk in the campaign's own reviewed work.
 
 `web/scripts/prepare-yahoo-broadcast-segment.mjs` prepares the one-off Yahoo
 access-update Segment. It is campaign-specific rather than a durable platform
@@ -161,7 +145,7 @@ suppression checks, and any changed count requires renewed review.
 Every `flaim.app` link in an outbound email must carry a `ref` query param naming the campaign (`ref=email-<campaign>`, lowercase/digits/hyphens). This is what makes post-send activity attributable instead of timing-guessed.
 
 - **Code-sent email** (transactional templates, API-created broadcasts): build the URL with `withEmailRef(url, 'email-<campaign>')` from `web/emails/link-ref.ts` at the send call.
-- **Dashboard-composed Resend broadcasts**: the helper can't run there — add `?ref=email-<campaign>` to each `flaim.app` link by hand before sending. Treat this as part of the pre-send checklist, alongside the unsubscribe link.
+- **Dashboard-composed Plunk Broadcasts**: the helper can't run there, so add `?ref=email-<campaign>` to each `flaim.app` link by hand before sending. Treat this as part of the pre-send checklist, alongside `{{unsubscribeUrl}}`.
 - Do not tag external links (Chrome Web Store, ChatGPT app listing); only Flaim-owned URLs read the param.
 
 Readout: `/leagues` reports a `leagues_page_view` setup signal (with the `ref` value and device class) whenever a signed-in visitor arrives via a tagged link, and includes `ref` on `espn_connect_ui_view`. Query these in the auth-worker's Workers Logs, filtered by `event` and faceted by `ref`.
@@ -170,7 +154,7 @@ Readout: `/leagues` reports a `leagues_page_view` setup signal (with the `ref` v
 
 This package includes a server-only Resend send helper. Product email sending stays disabled unless `FLAIM_EMAILS_ENABLED=true` is set. Transactional messages need an explicit reviewed trigger and idempotency policy; marketing messages additionally need a real unsubscribe mechanism.
 
-Clerk is the source of truth for user identity. Resend delivers product email but is not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` supports one mutually exclusive signup-welcome mode:
+Clerk is the source of truth for user identity. Plunk owns the marketing audience and subscription state. Resend delivers transactional product email and is not the canonical CRM. The Clerk webhook at `web/app/api/webhooks/clerk/route.ts` supports one mutually exclusive signup-welcome mode:
 
 - `automation`: emit the custom Resend event `flaim.user_created`; the hosted automation creates the contact, adds it to the Segment, and sends the welcome.
 - `direct`: call the send-only Resend email API with the React welcome template and the stable idempotency key `welcome/<clerk-user-id>`; no Resend contact or Segment membership is created.
@@ -203,7 +187,7 @@ is never refreshed when it already exists, which prevents marker-caused
 `user.updated` webhooks from looping during an outage. Each successful operation
 clears only its own marker; it cannot clear a failure from another lane.
 
-The Plunk sync runs in its own `after()` callback and never changes the webhook response or welcome result. Provider failures are acknowledged to Clerk, logged as `email.contact_sync_failed` with `provider: "plunk"`, and leave the durable Plunk retry marker for reconciliation. Flag-off and unusable-email skips do not create retry debt. The Plunk marker is deliberately passive in this phase: `backfill-resend-contacts.mjs` does not consume it, and no background retry worker is being introduced. Treat it as durable operator evidence, reconcile the affected current Clerk user through the Plunk migration command, confirm the contact exists with the intended subscription state, and only then clear that marker in Clerk. This avoids coupling the retired Resend repair lane to Plunk or creating a second automatic writer during migration. The production feature flag remains off until the server key is deployed and a separately approved internal proof has passed.
+The Plunk sync runs in its own `after()` callback and never changes the webhook response or welcome result. Provider failures are acknowledged to Clerk, logged as `email.contact_sync_failed` with `provider: "plunk"`, and leave the durable Plunk retry marker for reconciliation. Flag-off and unusable-email skips do not create retry debt. The Plunk marker is deliberately passive: `backfill-resend-contacts.mjs` does not consume it, and no background retry worker is being introduced. Treat it as durable operator evidence, reconcile the affected current Clerk user through the Plunk migration command, confirm the contact exists with the intended subscription state, and only then clear that marker in Clerk. This avoids coupling the retired Resend repair lane to Plunk or creating a second automatic writer. The production key and feature flag were enabled after the internal proof passed on 2026-09-16.
 
 Historical ownership moves through `web/scripts/migrate-marketing-contacts-to-plunk.mjs`. It is dry-run by default and requires the Resend all-status contact export, live Clerk users, live Resend suppressions, and current Plunk contacts. The candidate set is their normalized union: this captures Clerk users created after Resend contact growth stopped while retaining Resend-only records under the existing account-deletion policy. Clerk is read through a frozen, ascending, count-checked snapshot so live signup growth cannot shift offset pages. Resend unsubscribe, Resend suppression, and existing false Plunk state always beat a subscribed candidate. The apply pass writes false targets first through the secret contacts API, then sends true targets through `/v1/track` without a subscription override, which atomically creates new contacts subscribed while preserving any false state established concurrently. It honors `Retry-After`, stores only email-and-subscription hashes in its required resumable state file, then re-reads Plunk and a fresh frozen Clerk snapshot. Those unsalted hashes avoid placing raw addresses in the file but are private identifiers, not anonymization; keep the state file protected alongside the source export. An interrupted run may resume across additive live signups only when every previously completed target is still present with the same subscription state; a changed or removed completed target fails closed and requires operator review. Missing current Clerk contacts or unsafe final states also fail the run. Keep the source CSV and state file outside git.
 
@@ -256,21 +240,21 @@ Webhook setup requirements:
    structured delivery event in Vercel logs. Do not use a production recipient
    without approval.
 
-The maintenance contact sync stores only email, first name, and last name. It updates first and creates only if Resend reports the contact is missing, avoiding a separate contact-existence preflight. It intentionally does not resubscribe existing contacts during updates, so Resend unsubscribe state remains authoritative for product and broadcast email. If `RESEND_CONTACT_SEGMENT_ID` is set, repaired contacts are assigned to that Resend Segment for future Broadcast targeting. Avoid writing custom Resend contact properties unless those properties have first been created in Resend.
+The legacy Resend maintenance contact sync stores only email, first name, and last name. It is disabled in direct welcome mode and retained only for rollback inspection or deliberately switching the whole welcome lane back to automation. It updates first and creates only if Resend reports the contact is missing, avoiding a separate contact-existence preflight. It intentionally does not resubscribe existing contacts during updates. If `RESEND_CONTACT_SEGMENT_ID` is set, repaired contacts are assigned to that Resend Segment. Avoid writing custom Resend contact properties unless those properties have first been created in Resend.
 
 The welcome email is transactional onboarding sent once after account creation. In direct mode, Flaim renders `web/emails/welcome.tsx` and sends it through the send-only Resend API. The direct version contains no unsubscribe link; optional product-update Broadcasts own marketing unsubscribe separately. It does not create a Resend contact.
 
-The hosted Resend Automation remains a rollback lane during migration. In automation mode, the verified Clerk webhook emits `flaim.user_created` with the user's email plus non-name metadata (`clerk_user_id`, `source`). Resend creates a missing contact, adds it to the configured Segment, sends the templated welcome, and records the automation run. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
+The hosted Resend Automation remains a rollback lane. In automation mode, the verified Clerk webhook emits `flaim.user_created` with the user's email plus non-name metadata (`clerk_user_id`, `source`). Resend creates a missing contact, adds it to the configured Segment, sends the templated welcome, and records the automation run. The event emitter uses `RESEND_EVENTS_API_KEY` when set, otherwise it falls back to `RESEND_CONTACTS_API_KEY`; do not use the send-only `RESEND_API_KEY` for event/automation management.
 
-The production cutover is deliberately one switch, not two independent welcome flags:
+The completed production cutover used one switch, not two independent welcome flags:
 
-1. Deploy code with `FLAIM_WELCOME_DELIVERY_MODE` unset. The existing legacy automation flag continues to select today's behavior.
+1. Deploy code with `FLAIM_WELCOME_DELIVERY_MODE` unset. The existing legacy automation flag continued to select the prior behavior.
 2. Confirm `FLAIM_EMAILS_ENABLED=true`, the send-only `RESEND_API_KEY` is present, and `RESEND_CONTACT_SYNC_ENABLED=false`.
 3. Set `FLAIM_WELCOME_DELIVERY_MODE=direct`. From that point each new webhook selects only the direct branch; it cannot also emit the automation event.
 4. Canary one fresh signup. Require one welcome in the inbox, no new Resend Audience contact, a cleared retry marker, and the expected structured logs.
 5. Keep the hosted automation available but event-idle for rollback. To roll back, set the single mode to `automation`; do not run two modes together.
 
-The Clerk webhook intentionally acknowledges verified user events even if downstream Resend work fails, so a Resend outage does not create Clerk webhook retry storms. Confirm failed direct welcome sends are visible through the existing structured log and retry-marker path before the production switch.
+The Clerk webhook intentionally acknowledges verified user events even if downstream Resend work fails, so a Resend outage does not create Clerk webhook retry storms. Failed direct welcome sends remain visible through the existing structured log and retry-marker path.
 
 Direct mode also writes a retry marker when application email is globally disabled or the transactional API key is unavailable. This is intentional: signups during a rollout-order mistake remain identifiable for recovery instead of being silently lost.
 
@@ -357,10 +341,10 @@ React Email's preview server may add lockfile entries for its own bundled Next.j
 
 ## Personalization
 
-**Broadcasts must not depend on `{{{FIRST_NAME}}}` or other name merge fields.** Signup is email verification code only — no name field exists anywhere in the flow, so Resend contacts have no names to merge (verified against all production users, July 2026). A bare `{{{FIRST_NAME}}}` renders as an empty string for every recipient.
+**Broadcasts must not depend on first-name or other name merge fields.** Signup is email verification code only, so the marketing audience has no reliable name source (verified against all production users, July 2026). Provider-specific name tokens can therefore render as an empty string for every recipient.
 
 - House style is a collective greeting: "Hey everyone," (as used in the July 2026 football send).
-- If a merge field is ever used, always include a fallback so it degrades safely: `{{{FIRST_NAME|there}}}`.
+- If a merge field is ever used, always include a provider-tested fallback so it degrades safely.
 - The contact backfill script above only matters if a name source is ever added to signup; until then there is nothing to backfill.
 
 ## Clerk templates
