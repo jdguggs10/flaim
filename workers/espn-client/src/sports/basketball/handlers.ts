@@ -7,6 +7,7 @@ import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
 import { buildRosterLimitations, currentClubAndInjuryFields, resolveKeeperValueUnit } from '../../shared/roster-entry';
 import { epochMsToIso } from '../../shared/dates';
+import { selectActualSeasonStats, summarizeFreeAgentScoring } from '../../shared/free-agent-scoring';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import { resolveScoringPeriodForDate } from '../../shared/scoring-period';
 import {
@@ -634,12 +635,10 @@ async function handleGetFreeAgents(
     // Transform player data
     const freeAgents = players.map((entry) => {
       const player = entry.player;
-      const stats = player?.stats || [];
-
-      // Get current season stats if available
-      const currentStats = stats.find((s) =>
-        s.seasonId === espnYear && s.statSourceId === 0
-      );
+      // Category and rotisserie basketball leagues get no applied totals from
+      // ESPN, so the scoring scalars can be all null; the raw season-split
+      // dictionary stays as the fallback performance signal.
+      const seasonStats = selectActualSeasonStats(player?.stats, espnYear);
 
       return {
         playerId: player?.id,
@@ -652,7 +651,8 @@ async function handleGetFreeAgents(
         percentStarted: player?.ownership?.percentStarted,
         status: entry.status, // FREEAGENT or WAIVERS
         waiverProcessDate: entry.waiverProcessDate,
-        stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined
+        stats: seasonStats ? transformStats(seasonStats) : undefined,
+        ...summarizeFreeAgentScoring(player?.stats, espnYear)
       };
     });
 

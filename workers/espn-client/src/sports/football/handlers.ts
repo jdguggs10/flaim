@@ -7,6 +7,7 @@ import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
 import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
 import { buildRosterLimitations, currentClubAndInjuryFields, resolveKeeperValueUnit } from '../../shared/roster-entry';
 import { epochMsToIso } from '../../shared/dates';
+import { summarizeFreeAgentScoring } from '../../shared/free-agent-scoring';
 import { extractErrorCode, malformedRosterSnapshotError, resolveRosterSnapshotFromParams, rosterSnapshotUnsupportedError, toSnapshotMetadata } from '@flaim/worker-shared';
 import {
   getPositionName,
@@ -671,12 +672,6 @@ async function handleGetFreeAgents(
     // Transform player data
     const freeAgents = players.map((entry) => {
       const player = entry.player;
-      const stats = player?.stats || [];
-
-      // Get current season stats if available
-      const currentStats = stats.find((s) =>
-        s.seasonId === season_year && s.statSourceId === 0
-      );
 
       return {
         playerId: player?.id,
@@ -689,7 +684,7 @@ async function handleGetFreeAgents(
         percentStarted: player?.ownership?.percentStarted,
         status: entry.status, // FREEAGENT or WAIVERS
         waiverProcessDate: entry.waiverProcessDate,
-        stats: currentStats?.stats ? transformStats(currentStats.stats) : undefined
+        ...summarizeFreeAgentScoring(player?.stats, season_year)
       };
     });
 

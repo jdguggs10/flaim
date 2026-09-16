@@ -186,8 +186,21 @@ export interface EspnPlayer {
 }
 
 export interface EspnPlayerStat {
+  /**
+   * ESPN's composite split key. Season splits are `${statSourceId}${statSplitTypeId}${seasonId}`:
+   * "002026" is the actual season total, "102026" the projected one. Period
+   * splits carry extra digits ("0120264", "01401872930") and are not parsed.
+   * Present on every entry in observed responses.
+   */
+  id?: string;
+  externalId?: string;
   seasonId?: number;
   statSourceId?: number;
+  /** 0 = season total; higher values are weekly and recent-window rollups. */
+  statSplitTypeId?: number;
+  scoringPeriodId?: number;
+  appliedTotal?: number | null;
+  appliedAverage?: number | null;
   stats?: Record<string, number>;
 }
 

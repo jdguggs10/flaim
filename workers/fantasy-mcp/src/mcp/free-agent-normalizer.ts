@@ -6,8 +6,9 @@ import type { RouteResult } from '../router';
  * Provider-neutral normalization for get_free_agents (FLA-216).
  *
  * Additive and in place: canonical fields are layered onto the provider
- * envelope and entries; every legacy provider field stays untouched, because
- * published clients pin old schemas and the wire carries no client version.
+ * envelope and entries; every legacy field the provider sends stays untouched
+ * here, because published clients pin old schemas and the wire carries no
+ * client version. What a provider chooses to send is the provider's contract.
  *
  * SAFETY: the gateway declares the canonical envelope fields as required in
  * the tool's outputSchema, and the MCP SDK turns a non-error structuredContent
@@ -60,6 +61,11 @@ const PLATFORM_CONFIG: Record<Platform, PlatformFreeAgentConfig> = {
     normalizeEntry: normalizeSleeperEntry,
   },
 };
+
+/** Key the platform's free-agent payload lists its entries under. */
+export function freeAgentEntryArrayKey(platform: Platform): 'freeAgents' | 'players' {
+  return PLATFORM_CONFIG[platform].entryArrayKey;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
