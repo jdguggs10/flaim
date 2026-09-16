@@ -187,10 +187,10 @@ export interface EspnPlayer {
 
 export interface EspnPlayerStat {
   /**
-   * ESPN's composite split key: statSourceId, then statSplitTypeId, then the
-   * season, then the scoring period for period splits. "002026" is the actual
-   * season total, "102026" the projected season total, "0120264" a single
-   * period. Present on every entry in observed responses.
+   * ESPN's composite split key. Season splits are `${statSourceId}${statSplitTypeId}${seasonId}`:
+   * "002026" is the actual season total, "102026" the projected one. Period
+   * splits carry extra digits ("0120264", "01401872930") and are not parsed.
+   * Present on every entry in observed responses.
    */
   id?: string;
   externalId?: string;

@@ -1,12 +1,10 @@
 import type { EspnPlayerStat } from '../types';
 
 /**
- * All three fields are null whenever ESPN applies no fantasy scoring to the
- * stat entry. That is not only a missing-data case: ESPN carries appliedTotal
- * and appliedAverage on football stat entries but omits them entirely on
- * baseball ones, because a category or rotisserie league has no single fantasy
- * points number to report. Callers must treat null as "this league does not
- * score in points", not as an error.
+ * All three fields are null whenever the season entry carries no applied
+ * totals. ESPN omits appliedTotal/appliedAverage when it applies no points
+ * scoring to an entry — observed on every baseball entry, where category and
+ * rotisserie leagues are the norm — so null is an expected state, not an error.
  */
 export interface FreeAgentScoring {
   /** Fantasy points scored so far this season; null when ESPN applies none. */
@@ -36,14 +34,10 @@ function finiteOrNull(value: unknown): number | null {
 /**
  * ESPN returns several splits per season (season total, single scoring period,
  * recent-window rollups) in no guaranteed order, so the season split is pinned
- * explicitly rather than taken by list position.
- *
- * The composite `id` is the primary key because it is the one field observed on
- * every entry of every response, and it encodes source and split together, so a
- * single equality check cannot land on a weekly or recent-window rollup. The
- * field triple is kept as a fallback for entries that omit `id`, and entries
- * that also omit statSplitTypeId fall back to the scoring period ESPN uses for
- * season totals.
+ * explicitly rather than taken by list position. The composite `id` encodes
+ * source and split together and is present on every observed entry; the
+ * explicit field match is a fallback for an entry that omits `id`. An entry
+ * with neither is not a season split we can identify, so it is skipped.
  */
 function selectSeasonEntry(
   stats: EspnPlayerStat[],
@@ -51,18 +45,13 @@ function selectSeasonEntry(
   statSourceId: number
 ): EspnPlayerStat | undefined {
   const seasonEntryId = `${statSourceId}${SEASON_SPLIT_TYPE_ID}${seasonId}`;
-  const byId = stats.find((entry) => entry?.id === seasonEntryId);
-  if (byId) return byId;
-
-  const candidates = stats.filter(
-    (entry) => entry?.seasonId === seasonId && entry?.statSourceId === statSourceId
-  );
   return (
-    candidates.find((entry) => entry.statSplitTypeId === SEASON_SPLIT_TYPE_ID) ??
-    candidates.find(
+    stats.find((entry) => entry?.id === seasonEntryId) ??
+    stats.find(
       (entry) =>
-        entry.statSplitTypeId === undefined &&
-        (entry.scoringPeriodId === undefined || entry.scoringPeriodId === 0)
+        entry?.seasonId === seasonId &&
+        entry?.statSourceId === statSourceId &&
+        entry?.statSplitTypeId === SEASON_SPLIT_TYPE_ID
     )
   );
 }

@@ -75,29 +75,22 @@ describe('summarizeFreeAgentScoring', () => {
     });
   });
 
-  it('falls back to scoringPeriodId 0 (or absent) when statSplitTypeId is entirely absent, not to a weekly entry', () => {
-    const legacySeasonActual: EspnPlayerStat = {
+  it('skips entries that carry neither a composite id nor statSplitTypeId rather than guessing from scoringPeriodId', () => {
+    const unidentifiedSeasonLike: EspnPlayerStat = {
       seasonId: SEASON_ID,
       statSourceId: 0,
       scoringPeriodId: 0,
       appliedTotal: 150.5,
       appliedAverage: 15.05,
     };
-    const legacyWeeklyActual: EspnPlayerStat = {
+    const unidentifiedWeekly: EspnPlayerStat = {
       seasonId: SEASON_ID,
       statSourceId: 0,
       scoringPeriodId: 7,
       appliedTotal: 999,
       appliedAverage: 999,
     };
-
-    expect(summarizeFreeAgentScoring([legacyWeeklyActual, legacySeasonActual], SEASON_ID)).toEqual({
-      seasonPoints: 150.5,
-      pointsPerGame: 15.05,
-      projectedSeasonPoints: null,
-    });
-
-    const legacySeasonActualNoScoringPeriod: EspnPlayerStat = {
+    const unidentifiedNoPeriod: EspnPlayerStat = {
       seasonId: SEASON_ID,
       statSourceId: 0,
       appliedTotal: 75,
@@ -105,10 +98,19 @@ describe('summarizeFreeAgentScoring', () => {
     };
 
     expect(
-      summarizeFreeAgentScoring([legacyWeeklyActual, legacySeasonActualNoScoringPeriod], SEASON_ID)
+      summarizeFreeAgentScoring([unidentifiedWeekly, unidentifiedSeasonLike, unidentifiedNoPeriod], SEASON_ID)
     ).toEqual({
-      seasonPoints: 75,
-      pointsPerGame: 7.5,
+      seasonPoints: null,
+      pointsPerGame: null,
+      projectedSeasonPoints: null,
+    });
+
+    const explicitSeasonSplit: EspnPlayerStat = { ...unidentifiedSeasonLike, statSplitTypeId: 0 };
+    expect(
+      summarizeFreeAgentScoring([unidentifiedWeekly, explicitSeasonSplit], SEASON_ID)
+    ).toEqual({
+      seasonPoints: 150.5,
+      pointsPerGame: 15.05,
       projectedSeasonPoints: null,
     });
   });
