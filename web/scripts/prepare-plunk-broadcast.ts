@@ -17,8 +17,8 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const webDirectory = path.resolve(scriptDirectory, "..");
 const outputDirectory = path.join(webDirectory, ".email-out");
 const resendUnsubscribePattern = /\{\{\{?\s*RESEND_UNSUBSCRIBE_URL\s*\}?\}\}/i;
-const plunkUnsubscribeLinkPattern = new RegExp(
-  `<a\\b[^>]*href=["']${escapeRegExp(plunkUnsubscribeUrl)}["'][^>]*>[\\s\\S]*?unsubscribe[\\s\\S]*?<\\/a>`,
+const plunkUnsubscribeAnchorPattern = new RegExp(
+  `<a\\b[^>]*href=["']${escapeRegExp(plunkUnsubscribeUrl)}["'][^>]*>([\\s\\S]*?)<\\/a>`,
   "i",
 );
 
@@ -36,7 +36,8 @@ export function validatePlunkBroadcastHtml(
     throw new Error("Plunk export contains a Resend unsubscribe token");
   }
 
-  if (!plunkUnsubscribeLinkPattern.test(html)) {
+  const unsubscribeAnchor = plunkUnsubscribeAnchorPattern.exec(html);
+  if (!unsubscribeAnchor || !/unsubscribe/i.test(unsubscribeAnchor[1])) {
     throw new Error(
       "Plunk export must include a visible Unsubscribe link using {{unsubscribeUrl}}",
     );

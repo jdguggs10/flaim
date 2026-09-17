@@ -111,6 +111,18 @@ describe("Plunk broadcast preparation", () => {
     expect(() => validatePlunkBroadcastHtml(validLinks, manifest)).toThrow(
       "visible Unsubscribe link",
     );
+
+    expect(() =>
+      validatePlunkBroadcastHtml(
+        [
+          validLinks,
+          `<a href="${plunkUnsubscribeUrl}">Manage preferences</a>`,
+          "<p>Read our unsubscribe policy.</p>",
+          '<a href="https://example.com/help">Help</a>',
+        ].join(""),
+        manifest,
+      ),
+    ).toThrow("visible Unsubscribe link");
   });
 
   it("fails closed when plain text loses the unsubscribe affordance", () => {
