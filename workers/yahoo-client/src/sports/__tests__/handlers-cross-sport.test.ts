@@ -269,6 +269,15 @@ function buildMatchupsResponse(): unknown {
   };
 }
 
+// `ownership` and `percent_owned` are sibling sub-resources on the player
+// array (never nested), and `percent_owned` is itself an array of
+// single-key objects where `value` has no fixed position.
+function yahooPercentOwned(value: number | string, coverage: 'week' | 'date' = 'week'): unknown[] {
+  return coverage === 'week'
+    ? [{ coverage_type: 'week' }, { week: '3' }, { value }, { delta: '1.5' }]
+    : [{ coverage_type: 'date' }, { date: '2026-09-16' }, { value }, { delta: '1.5' }];
+}
+
 function buildFreeAgentsResponse(): unknown {
   return {
     fantasy_content: {
@@ -279,7 +288,8 @@ function buildFreeAgentsResponse(): unknown {
             '0': {
               player: [
                 [{ player_key: 'fa101', player_id: '201', name: { full: 'Free Agent' }, editorial_team_abbr: 'BOS', display_position: 'OF', status: undefined }],
-                { ownership: { percent_owned: '12.5' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned('12.5') },
               ],
             },
             count: 1,
@@ -308,7 +318,8 @@ function buildFreeAgentsResponseWithKeeper(): unknown {
                   display_position: 'OF',
                   is_keeper: { status: true, cost: false, kept: true },
                 }],
-                { ownership: { percent_owned: '12.5' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned('12.5') },
               ],
             },
             count: 1,
@@ -325,11 +336,15 @@ function buildFreeAgentsPageResponse(players: Array<{
   full_name: string;
   team: string;
   position: string;
-  percent_owned?: string;
+  percent_owned?: string | number;
 }>): unknown {
   const playersObj: Record<string, unknown> = {};
 
   players.forEach((player, index) => {
+    const subResources: unknown[] = [{ ownership: { ownership_type: 'freeagents' } }];
+    if (player.percent_owned != null) {
+      subResources.push({ percent_owned: yahooPercentOwned(player.percent_owned) });
+    }
     playersObj[String(index)] = {
       player: [
         [{
@@ -339,7 +354,7 @@ function buildFreeAgentsPageResponse(players: Array<{
           editorial_team_abbr: player.team,
           display_position: player.position,
         }],
-        player.percent_owned == null ? {} : { ownership: { percent_owned: player.percent_owned } },
+        ...subResources,
       ],
     };
   });
@@ -1450,7 +1465,8 @@ describe('yahoo cross-sport handler characterization tests', () => {
                 '0': {
                   player: [
                     [{ player_key: 'fa101', player_id: '201', name: { full: 'Zero Owned' }, editorial_team_abbr: 'BOS', display_position: 'OF' }],
-                    { ownership: { percent_owned: '0' } },
+                    { ownership: { ownership_type: 'freeagents' } },
+                    { percent_owned: yahooPercentOwned('0', 'date') },
                   ],
                 },
                 count: 1,
@@ -1482,7 +1498,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       const secondPagePlayers = [
         { player_key: 'fa201', player_id: '201', full_name: 'Aaron Ace', team: 'NYY', position: 'OF', percent_owned: '99' },
-        { player_key: 'fa202', player_id: '202', full_name: 'Ben Bat', team: 'LAD', position: 'OF', percent_owned: '99' },
+        { player_key: 'fa202', player_id: '202', full_name: 'Ben Bat', team: 'LAD', position: 'OF', percent_owned: 99 },
         { player_key: 'fa203', player_id: '203', full_name: 'Carl Curve', team: 'ATL', position: 'OF', percent_owned: '88.5' },
         { player_key: 'fa204', player_id: '204', full_name: 'Null Guy', team: 'SEA', position: 'OF' },
       ];
@@ -1508,10 +1524,10 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock.mock.calls[0]?.[0]).toContain(
-        `/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=${FREE_AGENT_POSITION_FILTER[sport]}/ownership`
+        `/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
       );
       expect(fetchMock.mock.calls[1]?.[0]).toContain(
-        `/league/449.l.123/players;status=A;count=100;sort=OR;start=100;position=${FREE_AGENT_POSITION_FILTER[sport]}/ownership`
+        `/league/449.l.123/players;status=A;count=100;sort=OR;start=100;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
       );
 
       expect(data.count).toBe(3);
@@ -1534,7 +1550,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       expect(fetchMock.mock.calls[0]?.[0]).toContain(
-        '/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=LB/ownership'
+        '/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=LB;out=ownership,percent_owned'
       );
     });
 
@@ -1559,6 +1575,23 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(result.success).toBe(true);
       const data = result.data as { freeAgents: Array<Record<string, unknown>> };
       expect(data.freeAgents[0]).not.toHaveProperty('isKeeper');
+    });
+
+    it.each(scenarios)('$label preserves Yahoo\'s original order when no player in the page has percent_owned', async ({ sport, handlers }) => {
+      const players = [
+        { player_key: 'fa301', player_id: '301', full_name: 'Zeb Zander', team: 'BOS', position: 'OF' },
+        { player_key: 'fa302', player_id: '302', full_name: 'Mia Mid', team: 'NYY', position: 'OF' },
+        { player_key: 'fa303', player_id: '303', full_name: 'Aaron Ace', team: 'LAD', position: 'OF' },
+      ];
+      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse(players)));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<{ name: string; percentOwned: number | null }> };
+      expect(data.freeAgents.map((p) => p.name)).toEqual(['Zeb Zander', 'Mia Mid', 'Aaron Ace']);
+      expect(data.freeAgents.every((p) => p.percentOwned === null)).toBe(true);
     });
   });
 });

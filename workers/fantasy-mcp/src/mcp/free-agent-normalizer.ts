@@ -29,6 +29,13 @@ interface FreeAgentCapabilities {
 
 interface PlatformFreeAgentConfig {
   capabilities: FreeAgentCapabilities;
+  /**
+   * Derive `capabilities.rosteredRate` from the returned entries instead of
+   * asserting the platform constant. Yahoo's rate is a separate upstream
+   * sub-resource that can come back empty for a whole response, and a
+   * hard-coded `true` told clients to expect rates that were not there.
+   */
+  deriveRosteredRate: boolean;
   ordering: 'platform_rostered_rate_desc' | 'alphabetical';
   ownershipScope: 'platform_global' | 'unavailable';
   entryArrayKey: 'freeAgents' | 'players';
@@ -37,10 +44,12 @@ interface PlatformFreeAgentConfig {
 
 // One config per platform — adding a platform means adding exactly one entry here.
 // ESPN sorts provider-side by platform-wide rostered rate (draft-rank tiebreak);
-// Yahoo is sorted locally the same way (nulls last, name/id tiebreak).
+// Yahoo is sorted locally the same way (nulls last, name/id tiebreak between
+// equal rates, otherwise the provider's own overall-rank order).
 const PLATFORM_CONFIG: Record<Platform, PlatformFreeAgentConfig> = {
   espn: {
     capabilities: { acquisitionState: true, rosteredRate: true, startedRate: true },
+    deriveRosteredRate: false,
     ordering: 'platform_rostered_rate_desc',
     ownershipScope: 'platform_global',
     entryArrayKey: 'freeAgents',
@@ -48,6 +57,7 @@ const PLATFORM_CONFIG: Record<Platform, PlatformFreeAgentConfig> = {
   },
   yahoo: {
     capabilities: { acquisitionState: false, rosteredRate: true, startedRate: false },
+    deriveRosteredRate: true,
     ordering: 'platform_rostered_rate_desc',
     ownershipScope: 'platform_global',
     entryArrayKey: 'freeAgents',
@@ -55,6 +65,7 @@ const PLATFORM_CONFIG: Record<Platform, PlatformFreeAgentConfig> = {
   },
   sleeper: {
     capabilities: { acquisitionState: false, rosteredRate: false, startedRate: false },
+    deriveRosteredRate: false,
     ordering: 'alphabetical',
     ownershipScope: 'unavailable',
     entryArrayKey: 'players',
@@ -93,6 +104,28 @@ function malformed(platform: Platform, detail: string): RouteResult {
     // and gateway workers), so a single retry is worthwhile — matching the
     // prose advice above.
     retryable: true,
+  };
+}
+
+/** A rate the client can actually quote: finite and provider-supplied. */
+function hasRosteredRate(entry: Record<string, unknown>): boolean {
+  return typeof entry.percentOwned === 'number' && Number.isFinite(entry.percentOwned);
+}
+
+/**
+ * Derive `capabilities` for a platform from the entries actually present.
+ * Exported so callers that reshape the entry array after normalization (the
+ * response-size truncation guard) can recompute `rosteredRate` against the
+ * kept entries instead of leaving it stale from the full, pre-truncation set.
+ */
+export function deriveFreeAgentCapabilities(
+  platform: Platform,
+  entries: Record<string, unknown>[]
+): FreeAgentCapabilities {
+  const config = PLATFORM_CONFIG[platform];
+  return {
+    ...config.capabilities,
+    ...(config.deriveRosteredRate ? { rosteredRate: entries.some(hasRosteredRate) } : {}),
   };
 }
 
@@ -222,7 +255,7 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
       position: (params.position || 'ALL').toUpperCase(),
       count: entries.length,
       ordering: config.ordering,
-      capabilities: { ...config.capabilities },
+      capabilities: deriveFreeAgentCapabilities(platform, entries),
       ownershipScope: config.ownershipScope,
     };
     normalized[config.entryArrayKey] = entries;

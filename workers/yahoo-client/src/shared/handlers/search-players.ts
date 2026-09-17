@@ -3,7 +3,13 @@ import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, unwrapLeague } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractPlayerMeta, extractPlayerPercentOwned, normalizeIsKeeper, toExecuteErrorResponse } from './utils';
+import {
+  PLAYER_SUB_RESOURCES,
+  extractPlayerMeta,
+  extractPlayerPercentOwned,
+  normalizeIsKeeper,
+  toExecuteErrorResponse,
+} from './utils';
 import { enrichPlayerWithOwnership, fetchLeagueOwnershipMap } from './league-ownership';
 
 export function createSearchPlayersHandler(config: YahooHandlerContext): HandlerFn {
@@ -29,8 +35,10 @@ export function createSearchPlayersHandler(config: YahooHandlerContext): Handler
       if (posFilter) {
         queryParams += `;position=${posFilter}`;
       }
+      // See get-free-agents.ts: `;out=` is what carries percent_owned.
+      queryParams += `;out=${PLAYER_SUB_RESOURCES}`;
 
-      const response = await yahooFetch(`/league/${league_id}/players${queryParams}/ownership`, { credentials });
+      const response = await yahooFetch(`/league/${league_id}/players${queryParams}`, { credentials });
       if (!response.ok) {
         await handleYahooError(response);
       }

@@ -88,17 +88,64 @@ export function unwrapTeam(teamArray: unknown): Record<string, unknown> {
   return result;
 }
 
+// A percent-owned string must be the whole value — an optional-whitespace,
+// non-negative decimal with an optional trailing '%' — never a numeric
+// prefix of a longer string (Number.parseFloat's old behavior accepted
+// "47oops" as 47, which this deliberately rejects).
+const PERCENT_OWNED_STRING_PATTERN = /^\s*\d+(\.\d+)?\s*%?\s*$/;
+
+function isValidPercentOwned(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
 /**
- * Parse Yahoo ownership.percent_owned safely.
- * Returns null for missing/non-finite values and preserves valid 0 values.
+ * Parse a Yahoo percent-owned scalar safely.
+ * Returns null for missing, non-finite, out-of-range (outside 0-100), or
+ * partially-numeric string values, and preserves valid 0 values.
  */
 export function parseYahooPercentOwned(value: unknown): number | null {
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
+    return isValidPercentOwned(value) ? value : null;
   }
   if (typeof value === 'string') {
+    if (!PERCENT_OWNED_STRING_PATTERN.test(value)) return null;
     const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    return isValidPercentOwned(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
+ * Read the rate out of Yahoo's `percent_owned` sub-resource body.
+ *
+ * Yahoo's primary wire form on the players collection is an array of
+ * single-key objects — `[{coverage_type:'week'},{week:'3'},{value:42},
+ * {delta:'1.5'}]` — so `value` has no fixed index and is found by key.
+ * Coverage is `week` for football and `date` for daily sports; only `value`
+ * is read, so the coverage period never needs interpreting. Wrapper libraries
+ * and some captures flatten the same payload to `{coverage_type, week, value,
+ * delta}`, and Yahoo's numeric-keyed container form is handled by `asArray`,
+ * so all three are accepted. `value` has been observed as a number and is
+ * parsed as a numeric string too, since sibling fields (`week`, `delta`) vary
+ * between the two encodings across real captures.
+ */
+export function extractYahooPercentOwnedValue(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number' || typeof raw === 'string') {
+    return parseYahooPercentOwned(raw);
+  }
+  if (typeof raw !== 'object') return null;
+
+  if (!Array.isArray(raw) && 'value' in (raw as Record<string, unknown>)) {
+    return parseYahooPercentOwned((raw as Record<string, unknown>).value);
+  }
+
+  const entries = Array.isArray(raw) ? raw : asArray(raw as Record<string, unknown>);
+  for (const entry of entries) {
+    if (entry && typeof entry === 'object' && !Array.isArray(entry) && 'value' in entry) {
+      const parsed = parseYahooPercentOwned((entry as Record<string, unknown>).value);
+      if (parsed !== null) return parsed;
+    }
   }
   return null;
 }

@@ -2254,6 +2254,45 @@ describe('fantasy-mcp tools', () => {
       expect(kept[0].id).toBe(String(platform === 'yahoo' ? 6000 : 5000));
     });
 
+    it('recomputes Yahoo capabilities.rosteredRate after truncation drops the only rated entry', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const league_id = '449.l.123';
+      // Every leading entry has no rate; only the last (trailing) entry does.
+      // A byte-size truncation keeps a leading prefix, so the rated entry is
+      // dropped — the post-truncation capabilities must reflect that.
+      const rawEntries = Array.from({ length: 300 }, (_, i) => {
+        const entry = yahooEntry(i, 300);
+        entry.percentOwned = i === 299 ? 42 : null;
+        return entry;
+      });
+      routeToClientMock.mockResolvedValue({ success: true, data: { leagueKey: league_id, freeAgents: rawEntries } });
+
+      const result = await callFreeAgents({ platform: 'yahoo', sport: 'football', league_id, season_year: 2025 });
+
+      expect(result.isError).not.toBe(true);
+      const payload = result.structuredContent as { success: boolean; data: Record<string, unknown> };
+      expect(payload.data.truncated).toBe(true);
+      const kept = payload.data.freeAgents as Array<Record<string, unknown>>;
+      expect(kept.length).toBeLessThan(rawEntries.length);
+      expect(kept.every((entry) => entry.percentOwned === null)).toBe(true);
+      expect((payload.data.capabilities as Record<string, unknown>).rosteredRate).toBe(false);
+    });
+
+    it('keeps Yahoo capabilities.rosteredRate true when a rated entry survives truncation', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const league_id = '449.l.123';
+      const rawEntries = Array.from({ length: 300 }, (_, i) => yahooEntry(i, 300));
+
+      routeToClientMock.mockResolvedValue({ success: true, data: { leagueKey: league_id, freeAgents: rawEntries } });
+
+      const result = await callFreeAgents({ platform: 'yahoo', sport: 'football', league_id, season_year: 2025 });
+
+      expect(result.isError).not.toBe(true);
+      const payload = result.structuredContent as { success: boolean; data: Record<string, unknown> };
+      expect(payload.data.truncated).toBe(true);
+      expect((payload.data.capabilities as Record<string, unknown>).rosteredRate).toBe(true);
+    });
+
     it('passes a failed route result through unchanged, with no truncated key added', async () => {
       const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
       routeToClientMock.mockResolvedValue({ success: false, code: 'ESPN_TIMEOUT', error: 'upstream timeout' });

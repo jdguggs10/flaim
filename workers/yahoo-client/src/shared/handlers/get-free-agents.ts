@@ -4,6 +4,7 @@ import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, unwrapLeague } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
 import {
+  PLAYER_SUB_RESOURCES,
   extractPlayerMeta,
   extractPlayerPercentOwned,
   normalizeIsKeeper,
@@ -24,13 +25,20 @@ type YahooFreeAgent = {
   isKeeper?: YahooKeeperStatus;
 };
 
+/**
+ * Rate desc, rate-less entries last. Two rate-less entries compare equal so
+ * the (stable) sort leaves them in Yahoo's returned `sort=OR` overall-rank
+ * order: falling through to a name tiebreak here would silently re-rank a
+ * whole rate-less response into alphabetical order.
+ */
 function compareFreeAgents(a: YahooFreeAgent, b: YahooFreeAgent): number {
   const aOwned = a.percentOwned;
   const bOwned = b.percentOwned;
 
-  if (aOwned == null && bOwned != null) return 1;
-  if (aOwned != null && bOwned == null) return -1;
-  if (aOwned != null && bOwned != null && aOwned !== bOwned) return bOwned - aOwned;
+  if (aOwned == null && bOwned == null) return 0;
+  if (aOwned == null) return 1;
+  if (bOwned == null) return -1;
+  if (aOwned !== bOwned) return bOwned - aOwned;
 
   const nameCompare = a.name.localeCompare(b.name);
   if (nameCompare !== 0) return nameCompare;
@@ -66,8 +74,11 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
         if (posFilter) {
           queryParams += `;position=${posFilter}`;
         }
+        // `;out=` is the only form that returns percent_owned alongside
+        // ownership; a trailing /ownership path yields league owner state only.
+        queryParams += `;out=${PLAYER_SUB_RESOURCES}`;
 
-        const response = await yahooFetch(`/league/${league_id}/players${queryParams}/ownership`, { credentials });
+        const response = await yahooFetch(`/league/${league_id}/players${queryParams}`, { credentials });
         if (!response.ok) {
           await handleYahooError(response);
         }

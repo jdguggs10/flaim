@@ -26,6 +26,14 @@ If the stats-augmented request comes back non-ok, the handler logs one line and 
 
 Points only surface when Yahoo's echoed coverage confirms a single week: a week snapshot requires `coverage.type === 'week'` and `coverage.week` to exactly equal the requested week; a current snapshot resolves one positive-integer week from the first usable player and drops any player whose echoed week differs. A genuine `0.00` total is preserved as `0`, never omitted. `limitations.playerPointsAvailable: false` is added whenever no player's points were usable.
 
+### Market Ownership Rate (`percent_owned`)
+
+`get_free_agents` and `get_players` request both player sub-resources through Yahoo's `;out=` filter — `/league/{key}/players;status=A;count=100;sort=OR;start={N}[;position={P}];out=ownership,percent_owned` — because the platform-wide rostered rate lives in `percent_owned`, a **sibling** of `ownership`, not inside it. A trailing `/ownership` path segment returns league-level owner and waiver state only, with no rate anywhere in the payload, which is why every rate came back `null` before FLA-9. `;out=` takes a comma-separated list and accepts no parameters of its own, so it cannot be combined with a trailing sub-resource path; the filter goes last, after `;position=`.
+
+`percent_owned` is expected, as observed by referenced clients; not yet live-verified from this worker, to arrive as an array of single-key objects (`[{coverage_type}, {week|date}, {value}, {delta}]`), so `value` is found by key at any position; the flattened-object and numeric-keyed container forms are accepted too. Only `value` is read, so football's `week` coverage and the daily sports' `date` coverage need no separate handling. A value is accepted only within 0-100 inclusive (a numeric string must fully match the expected decimal-with-optional-`%` shape, not merely start with one); a genuine `0` rate is preserved, and a missing sub-resource, out-of-range, or non-numeric value yields `null`.
+
+`get_free_agents` sorts locally by rate descending, with a name/id tiebreak between equal rates. Entries without a rate sort last and keep Yahoo's returned `sort=OR` (overall rank) order rather than falling through to a name comparison — a response with no rates at all would otherwise be re-ranked alphabetically. The gateway reports `capabilities.rosteredRate` for Yahoo from the entries actually returned, so a rate-less response tells clients the rate is unavailable instead of advertising one.
+
 ### Keeper / League-Format Context (FLA-284)
 
 **Status: coded and fixture-tested only, not live-verified.** Yahoo API access has been cut since 2026-07-27 (FLA-237); the fields below are shaped from real captured fixtures and Yahoo's own (sparse) documentation, not a live call against this worker. Treat them as best-effort until FLA-237 clears and a live check runs.
@@ -139,6 +147,7 @@ Yahoo's JSON is structurally quirky:
 - `getPath()` - Safe deep path traversal
 - `toYahooBoolean()` - Normalizes a boolean flag that may arrive as a native boolean, `"0"`/`"1"` string, or `0`/`1` number, depending on resource
 - `toYahooFiniteNumber()` - Parses a numeric field that may arrive as a string
+- `extractYahooPercentOwnedValue()` - Reads `value` out of the `percent_owned` sub-resource in any of its observed shapes (see [Market Ownership Rate](#market-ownership-rate-percent_owned))
 
 ### Resource Keys
 Yahoo uses hierarchical keys:

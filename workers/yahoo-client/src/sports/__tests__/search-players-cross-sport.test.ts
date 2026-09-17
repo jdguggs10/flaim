@@ -33,6 +33,15 @@ const SEARCH_POSITION_FILTER: Record<(typeof scenarios)[number]['sport'], string
   hockey: 'C',
 };
 
+// `ownership` and `percent_owned` are sibling sub-resources on the player
+// array (never nested), and `percent_owned` is itself an array of
+// single-key objects where `value` has no fixed position.
+function yahooPercentOwned(value: number | string, coverage: 'week' | 'date' = 'week'): unknown[] {
+  return coverage === 'week'
+    ? [{ coverage_type: 'week' }, { week: '3' }, { value }, { delta: '1.5' }]
+    : [{ coverage_type: 'date' }, { date: '2026-09-16' }, { value }, { delta: '1.5' }];
+}
+
 function buildSearchResponse(): unknown {
   return {
     fantasy_content: {
@@ -48,7 +57,8 @@ function buildSearchResponse(): unknown {
                   editorial_team_abbr: 'NYY',
                   display_position: 'OF',
                 }],
-                { ownership: { percent_owned: '47' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned('47') },
               ],
             },
             '1': {
@@ -59,7 +69,8 @@ function buildSearchResponse(): unknown {
                   editorial_team_abbr: 'NYY',
                   display_position: '1B',
                 }],
-                { ownership: { percent_owned: '0' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned(0, 'date') },
               ],
             },
             '2': {
@@ -70,10 +81,22 @@ function buildSearchResponse(): unknown {
                   editorial_team_abbr: 'NYY',
                   display_position: 'C',
                 }],
-                { ownership: { percent_owned: 'n/a' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned('n/a') },
               ],
             },
-            count: 3,
+            '3': {
+              player: [
+                [{
+                  player_id: '104',
+                  name: { full: 'No Percent Owned Element' },
+                  editorial_team_abbr: 'NYY',
+                  display_position: 'SS',
+                }],
+                { ownership: { ownership_type: 'freeagents' } },
+              ],
+            },
+            count: 4,
           },
         },
       ],
@@ -99,7 +122,8 @@ function buildSearchResponseWithKeeper(): unknown {
                   display_position: 'OF',
                   is_keeper: { status: true, cost: false, kept: true },
                 }],
-                { ownership: { percent_owned: '47' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned('47') },
               ],
             },
             count: 1,
@@ -239,7 +263,7 @@ describe('yahoo cross-sport get_players handlers', () => {
       }>;
     };
 
-    expect(data.count).toBe(3);
+    expect(data.count).toBe(4);
     expect(data.players[0]).toMatchObject({
       id: '101',
       market_percent_owned: 47,
@@ -264,11 +288,19 @@ describe('yahoo cross-sport get_players handlers', () => {
       league_team_name: 'Team B',
       league_owner_name: null,
     });
+    expect(data.players[3]).toMatchObject({
+      id: '104',
+      market_percent_owned: null,
+      ownership_scope: 'platform_global',
+      league_status: 'FREE_AGENT',
+      league_team_name: null,
+      league_owner_name: null,
+    });
     expect(data.players[0].playerKey).toBeUndefined();
     expect(data.players[0].playerId).toBeUndefined();
   });
 
-  it.each(scenarios)('$label requests Yahoo ownership sub-resource for player search', async ({ sport, handlers }) => {
+  it.each(scenarios)('$label requests Yahoo ownership and percent_owned sub-resources for player search', async ({ sport, handlers }) => {
     getCredsMock.mockResolvedValue({ accessToken: 'token' });
     fetchMock
       .mockResolvedValueOnce(
@@ -308,7 +340,7 @@ describe('yahoo cross-sport get_players handlers', () => {
     const result = await handlers.get_players({} as never, params, 'Bearer x', `cid-${sport}`);
     expect(result.success).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(fetchMock.mock.calls[0]?.[0]).toContain(`/league/449.l.123/players;search=rice;count=10;position=${SEARCH_POSITION_FILTER[sport]}/ownership`);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(`/league/449.l.123/players;search=rice;count=10;position=${SEARCH_POSITION_FILTER[sport]};out=ownership,percent_owned`);
     expect(fetchMock.mock.calls[1]?.[0]).toBe('/league/449.l.123/teams');
     expect(fetchMock.mock.calls[2]?.[0]).toBe('/team/449.l.123.t.1/roster');
     expect(fetchMock.mock.calls[3]?.[0]).toBe('/team/449.l.123.t.2/roster');
