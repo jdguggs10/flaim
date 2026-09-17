@@ -2,17 +2,22 @@
 
 Chrome extension that auto-captures ESPN credentials (SWID, espn_s2 cookies) and syncs them to Flaim via Clerk Sync Host (no pairing codes). Eliminates manual DevTools cookie extraction.
 
-## User Flow (v1.5.2)
+## User Flow (v1.6.0)
 
 1. Install extension from [Chrome Web Store](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
-2. Sign in to `flaim.app` (session syncs to the extension)
-3. Log into ESPN.com (if not already)
+2. Sign in to `flaim.app` in the Chrome profile where you installed the extension (the session syncs to the extension)
+3. Log into [ESPN Fantasy](https://www.espn.com/fantasy/) in that same Chrome profile and confirm the intended league opens there
 4. Click "Sync to Flaim" - the extension will:
    - Sync your ESPN credentials
    - Auto-discover current leagues via ESPN Fan API
    - For users enabled in the durable-history rollout, continue past-season discovery in the background, even after the popup closes
-   - Show current discovery results and, when enabled, background history status
+   - Show current discovery results and, when enabled, background history status. Keep the popup open until a league result appears.
 5. Manage leagues and set defaults at `flaim.app/leagues`
+
+If setup does not complete, use the in-popup **ESPN setup help** link or the
+[ESPN setup guide](https://flaim.app/docs/espn). A saved credential and a
+confirmed league result are separate states: a timeout can save ESPN access
+without confirming the current league result.
 
 **Automation boundaries**
 - The extension runs ESPN discovery when you click **Sync / Re-sync**.
@@ -41,12 +46,29 @@ npm install
 # Development build (includes localhost for local testing)
 npm run build:dev
 
+# Preview build (uses the preview mode settings below)
+npm run build:preview
+
 # Production build (strips localhost, ready for CWS)
 npm run build
 
 # Create zip for Chrome Web Store upload (manifest.json must be at archive root)
-cd dist && zip -r ../flaim-extension-v1.5.2.zip . && cd ..
+cd dist && zip -r ../flaim-extension-v1.6.0.zip . && cd ..
 ```
+
+For a stable preview extension, create the gitignored
+`extension/.env.preview.local` before running `npm run build:preview`:
+
+```dotenv
+VITE_SITE_BASE=https://preview.flaim.app
+VITE_EXTENSION_DEV_KEY=<stable-public-preview-manifest-key>
+```
+
+Add the preview Clerk values used by the website to that local file as well.
+Reuse the same public manifest key for every preview build so Chrome keeps the
+same extension ID. Preview manifests include that key and add `(Preview)` to
+the extension name. Production builds ignore `VITE_EXTENSION_DEV_KEY` and keep
+the normal extension name.
 
 ### Load Unpacked Extension
 
@@ -59,6 +81,8 @@ cd dist && zip -r ../flaim-extension-v1.5.2.zip . && cd ..
 
 The extension uses `chrome.management.getSelf()` to detect install type:
 - **Unpacked** (development): Routes to `localhost:3000`
+- **Preview build**: `VITE_SITE_BASE` routes the unpacked extension to the
+  configured preview website
 - **Chrome Web Store** (production): Routes to `flaim.app`
 
 This is handled in `src/lib/api.ts`. The `vite.config.ts` also strips localhost from `host_permissions` in production builds.
@@ -150,7 +174,7 @@ web/app/(site)/privacy/         # Privacy policy page
 | Permission | Justification |
 |------------|---------------|
 | `cookies` | Read ESPN authentication cookies (SWID, espn_s2) to sync fantasy league access to Flaim. This is the extension's core and only purpose. |
-| `storage` | Store setup state locally (popup recovery). |
+| `storage` | Store account-scoped ESPN history and the optional review-invitation preference locally. |
 | `host_permissions: espn.com` | Access ESPN.com cookies for user authentication. Required for core functionality. |
 | `host_permissions: flaim.app` | Communicate with Flaim API to sync credentials securely over HTTPS. |
 
@@ -190,8 +214,10 @@ The website can ping the extension directly to verify it's installed and signed 
 | Issue | Cause | Fix |
 |-------|-------|-----|
 | "Failed to fetch" | Production build loaded locally | Rebuild with `npm run build:dev` |
-| Extension shows "Not Signed In" | Clerk session not synced | Close/reopen the extension popup |
-| ESPN cookies not found | Not logged into ESPN | Log into espn.com, then retry |
+| Extension shows "Not Signed In" | Clerk session not synced | Close/reopen the extension popup, then sign in to Flaim in the same Chrome profile |
+| ESPN cookies not found | Not logged into ESPN in this Chrome profile | Log into ESPN Fantasy in the same Chrome profile, then retry |
+| League result is unknown | ESPN access was saved, but the league check timed out | Check Your Leagues, then retry from the popup when ready |
+| No current-season leagues found | ESPN account or league is not available to the current profile | Confirm the intended league opens in ESPN Fantasy, then retry or use ESPN setup help |
 | Website shows "Not Connected" in Chrome | Extension ID mismatch | Check `NEXT_PUBLIC_EXTENSION_IDS` matches your local extension ID |
 
 ## Future Enhancements

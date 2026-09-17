@@ -16,6 +16,7 @@ const consumerSurfaces = [
   "docs/CONNECTOR-DOCS.md",
   "web/app/(site)/about/page.tsx",
   "web/app/(site)/docs/ai/page.tsx",
+  "web/app/(site)/docs/espn/page.tsx",
   "web/app/(site)/docs/flaim/page.tsx",
   "web/app/(site)/docs/page.tsx",
   "web/app/(site)/docs/platforms/page.tsx",

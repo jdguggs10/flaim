@@ -126,6 +126,11 @@ import { validateOAuthToken } from '../oauth-handlers';
 import { refreshSleeperLeaguesFromStoredConnection } from '../sleeper-connect-handlers';
 import { handleYahooDiscover } from '../yahoo-connect-handlers';
 import { discoverAndSaveCurrentLeagues, discoverAndSaveLeagues } from '../v3/league-discovery';
+import {
+  AutomaticLeagueDiscoveryFailed,
+  EspnAuthenticationFailed,
+  NoFantasyLeaguesFound,
+} from '../espn-types';
 
 const ISSUER = 'https://flaim-test.clerk.accounts.dev';
 const KEY_ID = 'league-refresh-route-test-key';
@@ -678,6 +683,101 @@ describe('POST /internal/leagues/refresh', () => {
 });
 
 describe('refreshLeaguesForUser', () => {
+  it('returns a valid empty ESPN result without substituting saved leagues', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    mockEspnStorage.getCurrentSeasonLeagues.mockResolvedValue([
+      { sport: 'football', leagueId: 'old', leagueName: 'Old', teamId: '1', teamName: 'Old Team', seasonYear: 2025 },
+    ]);
+    vi.mocked(discoverAndSaveLeagues).mockRejectedValue(new NoFantasyLeaguesFound());
+
+    const result = await refreshLeaguesForUser(baseEnv, 'user_empty_espn', ['espn'], {});
+
+    expect(result.results.espn).toMatchObject({
+      status: 'success',
+      httpStatus: 200,
+      details: {
+        discovered: [],
+        currentSeason: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+      },
+    });
+    expect(mockEspnStorage.getCurrentSeasonLeagues).not.toHaveBeenCalled();
+  });
+
+  it('keeps a real ESPN discovery failure as an error result', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    vi.mocked(discoverAndSaveLeagues).mockRejectedValue(
+      new AutomaticLeagueDiscoveryFailed('Invalid JSON response from Fan API', 502)
+    );
+
+    const result = await refreshLeaguesForUser(baseEnv, 'user_failed_espn', ['espn'], {});
+
+    expect(result.results.espn).toMatchObject({
+      status: 'error',
+      httpStatus: 500,
+      error: 'discovery_failed',
+    });
+  });
+
+  const durableEnv = (userId: string) => ({
+    ...baseEnv,
+    ESPN_DURABLE_HISTORY_ENABLED: 'true',
+    ESPN_DURABLE_HISTORY_USERS: userId,
+    ESPN_HISTORY_REFRESH: { create: vi.fn() },
+  });
+
+  it('returns a valid empty ESPN result on the durable web path', async () => {
+    const userId = 'user_durable_empty';
+    vi.mocked(discoverAndSaveCurrentLeagues).mockRejectedValue(new NoFantasyLeaguesFound());
+
+    const result = await refreshLeaguesForUser(durableEnv(userId), userId, ['espn'], {});
+
+    expect(discoverAndSaveCurrentLeagues).toHaveBeenCalledOnce();
+    expect(result.success).toBe(true);
+    expect(result.results.espn).toEqual({
+      platform: 'espn',
+      status: 'success',
+      httpStatus: 200,
+      details: {
+        discovered: [],
+        currentSeason: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+        pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+        currentSeasonCount: 0,
+        pastSeasonsCount: 0,
+      },
+    });
+    expect(mockHistoryStorage.createOrCoalesce).not.toHaveBeenCalled();
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      userId,
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'success', cooldownSeconds: 75, leagueCount: 0 }),
+    );
+  });
+
+  it.each([
+    ['rate limit', new AutomaticLeagueDiscoveryFailed('Fan API returned 429: Too Many Requests', 429), 429],
+    ['timeout', new AutomaticLeagueDiscoveryFailed('Fan API request timed out', 504), 504],
+  ])('keeps an ESPN %s status and long backoff on the durable web path', async (_name, failure, status) => {
+    const userId = `user_durable_${status}`;
+    vi.mocked(discoverAndSaveCurrentLeagues).mockRejectedValue(failure);
+
+    const result = await refreshLeaguesForUser(durableEnv(userId), userId, ['espn'], {});
+
+    expect(result.results.espn).toMatchObject({
+      status: 'error',
+      httpStatus: status,
+      error: 'discovery_failed',
+    });
+    expect(mockHistoryStorage.createOrCoalesce).not.toHaveBeenCalled();
+    expect(mockSyncState.settle).toHaveBeenCalledOnce();
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      userId,
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'error', errorCode: 'discovery_failed', cooldownSeconds: 300 }),
+    );
+  });
+
   it('keeps MCP ESPN refresh synchronous even when the durable web rollout is enabled', async () => {
     const userId = 'user_mcp_sync';
     mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
@@ -920,5 +1020,65 @@ describe('refresh cooldown envelope (FLA-121)', () => {
         cooldownSeconds: 75,
       }),
     );
+  });
+
+  it('returns a valid empty extension discovery without relabeling saved rows', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    mockEspnStorage.getCurrentSeasonLeagues.mockResolvedValue([
+      { sport: 'football', leagueId: 'old', leagueName: 'Old', teamId: '1', teamName: 'Old Team', seasonYear: 2025 },
+    ]);
+    vi.mocked(discoverAndSaveLeagues).mockRejectedValue(new NoFantasyLeaguesFound());
+
+    const token = await signedClerkToken('user_discover_empty');
+    const res = await app.fetch(makeRequest('/auth/extension/discover', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      discovered: [],
+      currentSeasonLeagues: [expect.objectContaining({ leagueId: 'old' })],
+      currentSeason: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+      added: 0,
+      skipped: 0,
+    });
+  });
+
+  it.each([
+    ['ESPN authentication', new EspnAuthenticationFailed(), 401, 'espn_auth_failed'],
+    ['ESPN rate limit', new AutomaticLeagueDiscoveryFailed('Fan API returned 429: Too Many Requests', 429), 429, 'discovery_failed'],
+    ['ESPN timeout', new AutomaticLeagueDiscoveryFailed('Fan API request timed out', 504), 504, 'discovery_failed'],
+    ['invalid ESPN response', new AutomaticLeagueDiscoveryFailed('Invalid JSON response from Fan API', 502), 500, 'discovery_failed'],
+    ['ESPN upstream failure', new AutomaticLeagueDiscoveryFailed('Fan API returned 500', 500), 500, 'discovery_failed'],
+  ])('does not convert %s into extension discovery success', async (_name, failure, status, code) => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    mockEspnStorage.getCurrentSeasonLeagues.mockResolvedValue([
+      { sport: 'football', leagueId: 'old', leagueName: 'Old', teamId: '1', teamName: 'Old Team', seasonYear: 2025 },
+    ]);
+    vi.mocked(discoverAndSaveLeagues).mockRejectedValue(failure);
+
+    const token = await signedClerkToken(`user_discover_${status}`);
+    const res = await app.fetch(makeRequest('/auth/extension/discover', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }), baseEnv);
+
+    expect(res.status).toBe(status);
+    const body = await res.json() as { error: string; retry_after?: number };
+    expect(body).toMatchObject({ error: code });
+    if (status === 429 || status === 504) {
+      // Mirrors the long upstream backoff written to the sync-state cooldown.
+      expect(body.retry_after).toBe(300);
+      expect(res.headers.get('Retry-After')).toBe('300');
+      expect(mockSyncState.settle).toHaveBeenCalledWith(
+        `user_discover_${status}`,
+        'espn',
+        expect.any(String),
+        expect.objectContaining({ status: 'error', cooldownSeconds: 300 }),
+      );
+    } else {
+      expect(body).not.toHaveProperty('retry_after');
+    }
   });
 });
