@@ -6,7 +6,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Release Lanes for OpenAI Continuous Review (FLA-226) - 2026-09-16
 
-- **Changed**: Release Lanes rewritten for OpenAI's continuous review model: tool-level metadata (names, descriptions, annotations, schemas, `_meta`, CSP, server instructions) ships by deploy-then-confirm; only skill text and portal listing fields need a reviewed version. Test pins on tool count, annotations, widget `_meta`, and discovery bodies are kept as drift detectors.
+- **Changed**: Release Lanes rewritten for OpenAI's continuous review model: tool-level metadata (names, descriptions, annotations, schemas, `_meta`, CSP, server instructions) ships by deploy-then-confirm; only skill text, portal listing fields, and (until observed passing a scan) adding a tool need a reviewed version. Test pins on tool count, annotations, widget `_meta`, and discovery bodies are kept as drift detectors.
 
 ### Rankable ESPN Free-Agent Scoring and a get_free_agents Size Guard (FLA-132)
 

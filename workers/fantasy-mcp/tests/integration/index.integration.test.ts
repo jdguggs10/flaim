@@ -447,8 +447,9 @@ describe('fantasy-mcp gateway integration', () => {
     ]);
     // Completeness first: a clear count diff beats a per-tool toEqual(undefined)
     // failure when a tool is added or removed without updating expectations.
-    // This is a drift detector, not a freeze: changing the tool set is fine as
-    // long as it is deliberate and confirmed on the OpenAI portal scan.
+    // This is a drift detector, not a freeze: changing a tool is fine when it
+    // is deliberate and confirmed on the OpenAI portal scan. Adding a tool still
+    // rides a reviewed version (see AGENTS.md Release Lanes).
     expect(expectedAnnotations.size).toBe(tools?.length);
     for (const tool of tools || []) {
       expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
@@ -811,7 +812,8 @@ describe('fantasy-mcp gateway integration', () => {
     // deliberately serve the v3 body: live fetches must carry the linked
     // provider attribution the Yahoo agreement requires on rendering
     // surfaces. The flaim-only body is reachable only through the v1/v2
-    // resource URIs, whose frozen CSP cannot allow the Yahoo link.
+    // resource URIs, whose published CSP (a cache key for older clients)
+    // does not allow the Yahoo link.
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
 
