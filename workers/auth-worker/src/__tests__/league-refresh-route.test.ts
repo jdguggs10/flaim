@@ -1065,6 +1065,20 @@ describe('refresh cooldown envelope (FLA-121)', () => {
     }), baseEnv);
 
     expect(res.status).toBe(status);
-    expect(await res.json()).toMatchObject({ error: code });
+    const body = await res.json() as { error: string; retry_after?: number };
+    expect(body).toMatchObject({ error: code });
+    if (status === 429 || status === 504) {
+      // Mirrors the long upstream backoff written to the sync-state cooldown.
+      expect(body.retry_after).toBe(300);
+      expect(res.headers.get('Retry-After')).toBe('300');
+      expect(mockSyncState.settle).toHaveBeenCalledWith(
+        `user_discover_${status}`,
+        'espn',
+        expect.any(String),
+        expect.objectContaining({ status: 'error', cooldownSeconds: 300 }),
+      );
+    } else {
+      expect(body).not.toHaveProperty('retry_after');
+    }
   });
 });

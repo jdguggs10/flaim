@@ -72,15 +72,23 @@ function parseFantasyPreferences(value: unknown): FanApiPreference[] {
     throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
   }
 
+  // The preferences array is not fantasy-specific, so an odd non-fantasy entry
+  // must not fail discovery for a user with valid leagues: anything that is not
+  // identifiably `type.code === 'fantasy'` is skipped, and strict validation
+  // applies only to fantasy entries. To avoid calling a garbage payload a valid
+  // empty result, a non-empty array needs at least one recognizable entry (a
+  // record with a string `type.code`); if none are, it is a malformed 502.
   const fantasyPreferences: FanApiPreference[] = [];
+  let recognizedPreferences = 0;
   for (const rawPreference of value.preferences) {
     if (
       !isRecord(rawPreference) ||
       !isRecord(rawPreference.type) ||
       typeof rawPreference.type.code !== 'string'
     ) {
-      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
+      continue;
     }
+    recognizedPreferences++;
     if (rawPreference.type.code !== 'fantasy') continue;
     if (typeof rawPreference.id !== 'string') {
       throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
@@ -121,6 +129,10 @@ function parseFantasyPreferences(value: unknown): FanApiPreference[] {
     }
 
     fantasyPreferences.push(rawPreference as unknown as FanApiPreference);
+  }
+
+  if (value.preferences.length > 0 && recognizedPreferences === 0) {
+    throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
   }
 
   return fantasyPreferences;

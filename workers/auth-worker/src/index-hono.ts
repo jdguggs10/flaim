@@ -1547,15 +1547,20 @@ api.post('/extension/discover', async (c) => {
       auth_type: 'clerk',
     });
 
+    // Same value settleDiscover writes as the cooldown, so the retry hint the
+    // popup shows matches when the next attempt is actually allowed.
+    const cooldownSeconds = cooldownSecondsForResult({
+      platform: 'espn',
+      status: 'error',
+      httpStatus,
+      error_description: errorMessage,
+    });
+    const isUpstreamBackoff = httpStatus === 429 || httpStatus === 504;
+
     if (transferredHistoryOwner) {
       await syncState.settle(userId, 'espn', transferredHistoryOwner, {
         status: 'error',
-        cooldownSeconds: cooldownSecondsForResult({
-          platform: 'espn',
-          status: 'error',
-          httpStatus,
-          error_description: errorMessage,
-        }),
+        cooldownSeconds,
         syncSource: 'extension',
         errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
         errorMessage,
@@ -1567,6 +1572,14 @@ api.post('/extension/discover', async (c) => {
       errorMessage,
       httpStatus,
     });
+
+    if (isUpstreamBackoff) {
+      return c.json({
+        error: 'discovery_failed',
+        error_description: errorMessage,
+        retry_after: cooldownSeconds,
+      }, httpStatus, { 'Retry-After': String(cooldownSeconds) });
+    }
 
     return c.json({
       error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',

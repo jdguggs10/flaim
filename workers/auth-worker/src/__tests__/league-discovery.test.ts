@@ -101,9 +101,65 @@ describe('discoverLeaguesV3', () => {
       .rejects.toBeInstanceOf(NoFantasyLeaguesFound);
   });
 
+  it('skips malformed non-fantasy entries and still discovers fantasy leagues', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          { id: 'pref-odd', type: 'team' },
+          null,
+          { id: 'pref-team', type: { code: 'team' }, metaData: 'unexpected' },
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Test Team' },
+                groups: [{ groupId: 12345, groupName: 'Test League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .resolves.toEqual([{
+        gameId: 'ffl',
+        leagueId: '12345',
+        leagueName: 'Test League',
+        seasonId: 2025,
+        teamId: 8,
+        teamName: 'Test Team',
+      }]);
+  });
+
+  it('treats only non-fantasy preferences as no leagues, even with an odd entry mixed in', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          { id: 'pref-team', type: { code: 'team' } },
+          { id: 'pref-odd' },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .rejects.toBeInstanceOf(NoFantasyLeaguesFound);
+  });
+
   it.each([
     ['missing preferences', { error: { message: 'upstream error' } }],
     ['non-array preferences', { preferences: { id: 'pref-1' } }],
+    ['only unrecognizable entries', { preferences: [null, 'junk', { id: 'pref-1' }, { type: { code: 7 } }] }],
     ['malformed fantasy entry', {
       preferences: [{
         id: 'pref-1',
