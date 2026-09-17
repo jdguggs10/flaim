@@ -22,7 +22,7 @@ interface FlaimEmailLayoutProps {
   eyebrow?: string;
   footerDisclosure?: React.ReactNode;
   footerDescription?: React.ReactNode;
-  footerSupport?: React.ReactNode;
+  footerSupport?: React.ReactNode | false;
   headerUrl?: string;
   lang?: string;
   preview: string;
@@ -107,7 +107,9 @@ export function FlaimEmailLayout({
             {footerDisclosure ? (
               <Text style={styles.footerText}>{footerDisclosure}</Text>
             ) : null}
-            <Text style={styles.footerText}>{supportLine}</Text>
+            {supportLine !== false ? (
+              <Text style={styles.footerText}>{supportLine}</Text>
+            ) : null}
           </Section>
         </Container>
       </Body>

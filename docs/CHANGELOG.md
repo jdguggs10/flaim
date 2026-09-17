@@ -24,6 +24,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 - **Hardened**: Plunk failures use the redacted structured email-operations log and a distinct Clerk retry marker. The welcome send remains independent, `user.updated` stays off the Plunk path, and no API key or production flag is added by the code change.
 - **Documented**: Current provider ownership is now explicit: Fastmail receives human mail, Clerk owns authentication, Resend retains transactional product email, and Plunk owns marketing contacts and Broadcasts. The public privacy disclosure and operator Broadcast workflow reflect that split while Resend remains a temporary rollback lane.
 
+### Repo-first Plunk Broadcast Preparation (FLA-289)
+
+- **Added**: Broadcast campaigns can now be defined as a typed local manifest paired with their React Email template. The local Plunk-preparation command renders provider-safe HTML and plain text, injects Plunk's per-recipient unsubscribe token only at export time, and writes a reviewed campaign metadata file. It has no Plunk credential, API, draft, schedule, proof, or send capability.
+- **Hardened**: Preparation fails closed if a Resend unsubscribe token survives, a visible Plunk unsubscribe link is absent from either HTML or plain text, a Flaim-owned domain link is non-HTTPS or loses the manifest's `ref`, or a declared Flaim CTA is removed. New Plunk source-template previews use the reserved fail-obvious `unsubscribe.invalid` URL, while archived Resend templates retain their historical rollback token.
+- **Added**: Every campaign artifact now exposes a typed release gate. The repo now contains the post-approval-only Flaim 3.0 ChatGPT launch draft, initially pending OpenAI app approval. It covers completed draft results, original-selection versus current pick ownership for traded Sleeper picks, and richer ESPN football matchup context while preserving Flaim's read-only promise. It cannot be proofed or sent until portal approval evidence clears its gate.
+
 ### Direct Transactional Welcome Mode (FLA-273)
 
 - **Added**: One mutually exclusive `FLAIM_WELCOME_DELIVERY_MODE` now selects the hosted Resend automation, a direct transactional Resend send, or disabled delivery. Leaving it unset preserves the legacy `RESEND_WELCOME_AUTOMATION_ENABLED` behavior, while invalid explicit values fail closed. Direct mode uses a stable `welcome/<clerk-user-id>` idempotency key and the existing structured failure/retry-marker path, so one signup cannot intentionally select both delivery lanes.

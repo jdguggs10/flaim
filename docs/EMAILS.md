@@ -62,16 +62,49 @@ This writes ignored preview HTML to `web/.email-out/`.
 
 ### Broadcast workflow
 
-Broadcasts are repo-authored and provider-sent. Follow this order:
+Broadcasts are authored and reviewed in this repo. Plunk is only the final
+delivery surface. The normal workflow has no command that can create, schedule,
+or send a campaign.
 
-1. Add or update the React Email template. `web/emails/brand.ts` is the shared source of truth for the product From and reply-to values.
-2. Run `corepack pnpm --dir web run email:dev` for local iteration.
-3. Run `corepack pnpm --dir web run email:export`. It writes the ignored HTML export and plain-text fallback to `web/.email-out/`.
-4. Create exactly one Plunk campaign draft from the reviewed export in the Plunk dashboard, which is the current campaign-creation surface. Convert the provider-specific unsubscribe slot to Plunk's `{{unsubscribeUrl}}`; never ship a Resend unsubscribe token in a Plunk campaign. Use `Gerry <updates@news.flaim.app>` with `gerry@news.flaim.app` as Reply-To.
-5. Confirm the intended Plunk audience or segment and its final recipient count. Ordinary product updates go to all subscribed contacts. One-off operational cohorts such as affected Yahoo users remain campaign-specific segments rather than permanent audience structure.
-6. Send a proof only to the internal test contacts. Verify Gmail, iCloud, and Fastmail rendering, the recipient-specific unsubscribe link, reply routing into Fastmail, Flaim `ref=` parameters, provider branding, and the raw bulk-sender headers before approving an audience send.
-7. Show the final subject, body, sender, reply-to, audience or segment, recipient count, proof result, and review state. Wait for immediate explicit approval before sending to the audience.
-8. Comment every real proof or audience send on its Linear issue with the campaign ID, audience, proof result, and final send state.
+1. Add or update the React Email template and its typed manifest under `web/emails/campaigns/`. A manifest declares the subject, preheader, sender, reply-to, campaign type, audience definition, required Flaim CTA paths, and the exact `ref` value. `web/emails/brand.ts` remains the shared source for the product visual system.
+2. Run `corepack pnpm --dir web run email:dev` for visual and copy iteration. New Plunk campaign templates use `https://unsubscribe.invalid/`, a reserved fail-obvious preview URL, rather than a live provider token. Archived Resend templates retain their historical Resend token for rollback and recordkeeping; the Plunk preparation command always overrides and validates the unsubscribe value.
+3. Run `corepack pnpm --dir web run email:export` to produce the normal ignored HTML and plain-text review files. Then prepare the selected Plunk export locally:
+
+   ```sh
+   corepack pnpm --dir web run email:plunk -- \
+     --manifest emails/campaigns/flaim-3-chatgpt-launch.ts
+   ```
+
+   This performs no provider call. It writes `plunk.html`, `plunk.txt`, and a
+   provider-safe `campaign.json` under `web/.email-out/<campaign-id>/`. During
+   that export, the React Email component receives Plunk's
+   `{{unsubscribeUrl}}` automatically. It fails closed if a Resend unsubscribe
+   token remains, the visible unsubscribe link is missing, a Flaim-owned link
+   lacks the manifest's `ref`, or a manifest-required Flaim CTA is absent.
+4. Do not create a Plunk draft or send a proof until the manifest's
+   `releaseGate` is cleared. Local preparation remains safe while the gate is
+   pending. The Flaim 3.0 launch manifest starts as `PENDING`; change it to
+   `CLEARED` only after recording the observed OpenAI app-directory portal
+   approval in `evidence`.
+   Its statement that OpenAI has approved v3.0 must not be sent or proofed
+   before that portal evidence exists.
+5. Once the release gate is met, create exactly one Plunk **MARKETING** campaign
+   draft in the dashboard from the reviewed local `plunk.html` and
+   `campaign.json`. Use `Gerry <updates@news.flaim.app>` with
+   `gerry@news.flaim.app` as Reply-To. Do not edit links or unsubscribe markup
+   in the dashboard. Ordinary product updates use all subscribed contacts;
+   one-off operational cohorts, such as affected Yahoo users, use a
+   campaign-specific segment rather than permanent audience structure.
+6. Confirm the intended Plunk audience or segment and its current recipient
+   count. Send proofs only to the internal test contacts. Verify Gmail, iCloud,
+   and Fastmail rendering, the recipient-specific unsubscribe link, reply
+   routing into Fastmail, Flaim `ref=` parameters, provider branding, and raw
+   bulk-sender headers before considering an audience send.
+7. Show the final subject, body, sender, reply-to, audience or segment,
+   recipient count, proof result, and review state. Wait for immediate explicit
+   approval before sending to the audience from the Plunk dashboard.
+8. Comment every real proof or audience send on its Linear issue with the
+   campaign ID, audience, proof result, and final send state.
 
 Do not send a real audience email while developing this workflow. The Plunk secret key is an operator-only credential and must not be stored in `.env.local` or deployed to Vercel. The server-side signup sync uses only `PLUNK_PUBLIC_API_KEY` and cannot create or send campaigns.
 
@@ -80,13 +113,19 @@ The prior Resend Segment, Topic, CLI-draft, and dashboard-send workflow is now a
 The first product templates are:
 
 - `web/emails/welcome.tsx`
+- `web/emails/broadcast-2026-09-v3-launch.tsx`
 - `web/emails/broadcast-2026-08-kickoff.tsx`
 - `web/emails/broadcast-2026-08-yahoo-access.tsx`
 - `web/emails/broadcast-2026-09-update.tsx`
 - `web/emails/broadcast-2026-09-yahoo-back.tsx`
 - `web/emails/espn-setup-link.tsx`
 
-Template URL samples exist in `PreviewProps` for local preview only. Production senders must pass app URLs, action URLs, and unsubscribe/preference URLs explicitly from the send call so preview values do not leak into staging or production messages by accident.
+Template URL samples exist in `PreviewProps` for local preview only. New Plunk
+campaign templates use the reserved `https://unsubscribe.invalid/` preview
+value; archived Resend templates keep their historical token. The local Plunk
+exporter always supplies and validates the Plunk provider token, so neither
+preview nor Resend values can leak into its prepared campaign. Transactional
+senders must still pass app URLs and action URLs explicitly from the send call.
 
 ### Legacy Resend Yahoo operational Segment
 
@@ -145,7 +184,7 @@ suppression checks, and any changed count requires renewed review.
 Every `flaim.app` link in an outbound email must carry a `ref` query param naming the campaign (`ref=email-<campaign>`, lowercase/digits/hyphens). This is what makes post-send activity attributable instead of timing-guessed.
 
 - **Code-sent email** (transactional templates, API-created broadcasts): build the URL with `withEmailRef(url, 'email-<campaign>')` from `web/emails/link-ref.ts` at the send call.
-- **Dashboard-composed Plunk Broadcasts**: the helper can't run there, so add `?ref=email-<campaign>` to each `flaim.app` link by hand before sending. Treat this as part of the pre-send checklist, alongside `{{unsubscribeUrl}}`.
+- **Plunk Broadcasts**: use the repo-prepared `plunk.html` rather than manually composing the campaign in the dashboard. The exporter verifies the manifest's `ref` on every Flaim-owned URL and refuses the output if a required CTA disappears.
 - Do not tag external links (Chrome Web Store, ChatGPT app listing); only Flaim-owned URLs read the param.
 
 Readout: `/leagues` reports a `leagues_page_view` setup signal (with the `ref` value and device class) whenever a signed-in visitor arrives via a tagged link, and includes `ref` on `espn_connect_ui_view`. Query these in the auth-worker's Workers Logs, filtered by `event` and faceted by `ref`.
