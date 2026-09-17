@@ -158,6 +158,13 @@ body {
   color: hsl(var(--muted-foreground));
 }
 
+.review-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+}
+
 .diag-value {
   text-align: right;
   color: hsl(var(--muted-foreground));

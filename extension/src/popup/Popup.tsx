@@ -1045,9 +1045,12 @@ export default function Popup() {
               Your Leagues
             </button>
             {showReviewInvitation && discoveryResult === 'confirmed' && (
-              <button className="button secondary full-width" onClick={openReview}>
-                <span aria-hidden="true">★</span> Rate Flaim
-              </button>
+              <>
+                <p className="review-note">Flaim is free. A quick rating really helps.</p>
+                <button className="button secondary full-width" onClick={openReview}>
+                  <span aria-hidden="true">★</span> Rate Flaim
+                </button>
+              </>
             )}
             {discoveryResult === 'none' && (
               <>
