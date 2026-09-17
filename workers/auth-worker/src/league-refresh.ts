@@ -193,51 +193,60 @@ async function refreshEspnLeagues(env: { SUPABASE_URL: string; SUPABASE_SERVICE_
       },
     };
   } catch (error) {
-    if (error instanceof NoFantasyLeaguesFound) {
-      const currentSeason: SeasonCounts = {
-        found: 0,
-        added: 0,
-        alreadySaved: 0,
-        refreshed: 0,
-      };
-      return {
-        platform: 'espn',
-        status: 'success',
-        httpStatus: 200,
-        details: {
-          discovered: [],
-          currentSeason,
-          pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
-          currentSeasonCount: currentSeason.found,
-          pastSeasonsCount: 0,
-        },
-      };
-    }
+    return espnDiscoveryErrorResult(error);
+  }
+}
 
-    const description = errorDescription(error, 'ESPN league refresh failed');
-    const isTypedDiscoveryFailure = error instanceof AutomaticLeagueDiscoveryFailed;
-    const isAuthError = error instanceof EspnAuthenticationFailed ||
-      (!isTypedDiscoveryFailure && (
-        description.includes('authentication') ||
-        description.includes('expired') ||
-        description.includes('invalid')
-      ));
-    const upstreamStatus = error instanceof AutomaticLeagueDiscoveryFailed
-      ? error.statusCode
-      : undefined;
-    const httpStatus = isAuthError
-      ? 401
-      : upstreamStatus === 429 || upstreamStatus === 504
-        ? upstreamStatus
-        : 500;
+/**
+ * Classify an ESPN discovery exception. A typed `NoFantasyLeaguesFound` is a
+ * valid empty result; typed upstream failures keep their 429/504 status so the
+ * caller applies the upstream backoff cooldown.
+ */
+function espnDiscoveryErrorResult(error: unknown): ProviderRefreshResult {
+  if (error instanceof NoFantasyLeaguesFound) {
+    const currentSeason: SeasonCounts = {
+      found: 0,
+      added: 0,
+      alreadySaved: 0,
+      refreshed: 0,
+    };
     return {
       platform: 'espn',
-      status: 'error',
-      httpStatus,
-      error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
-      error_description: description,
+      status: 'success',
+      httpStatus: 200,
+      details: {
+        discovered: [],
+        currentSeason,
+        pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+        currentSeasonCount: currentSeason.found,
+        pastSeasonsCount: 0,
+      },
     };
   }
+
+  const description = errorDescription(error, 'ESPN league refresh failed');
+  const isTypedDiscoveryFailure = error instanceof AutomaticLeagueDiscoveryFailed;
+  const isAuthError = error instanceof EspnAuthenticationFailed ||
+    (!isTypedDiscoveryFailure && (
+      description.includes('authentication') ||
+      description.includes('expired') ||
+      description.includes('invalid')
+    ));
+  const upstreamStatus = error instanceof AutomaticLeagueDiscoveryFailed
+    ? error.statusCode
+    : undefined;
+  const httpStatus = isAuthError
+    ? 401
+    : upstreamStatus === 429 || upstreamStatus === 504
+      ? upstreamStatus
+      : 500;
+  return {
+    platform: 'espn',
+    status: 'error',
+    httpStatus,
+    error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
+    error_description: description,
+  };
 }
 
 async function savedCurrentEspnDetails(storage: EspnSupabaseStorage, userId: string) {
@@ -381,6 +390,13 @@ async function refreshEspnLeaguesForWeb(
         errorCode: 'history_start_failed',
         errorMessage: errorDescription(error, 'ESPN history refresh failed'),
       });
+    } else if (
+      error instanceof AutomaticLeagueDiscoveryFailed ||
+      error instanceof EspnAuthenticationFailed
+    ) {
+      // Typed discovery outcomes (valid empty, upstream 429/504, auth) get the
+      // same classification as the synchronous path instead of a generic 500.
+      return { leaseTransferred: false, result: espnDiscoveryErrorResult(error) };
     }
     throw error;
   }

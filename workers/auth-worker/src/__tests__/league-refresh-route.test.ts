@@ -718,6 +718,66 @@ describe('refreshLeaguesForUser', () => {
     });
   });
 
+  const durableEnv = (userId: string) => ({
+    ...baseEnv,
+    ESPN_DURABLE_HISTORY_ENABLED: 'true',
+    ESPN_DURABLE_HISTORY_USERS: userId,
+    ESPN_HISTORY_REFRESH: { create: vi.fn() },
+  });
+
+  it('returns a valid empty ESPN result on the durable web path', async () => {
+    const userId = 'user_durable_empty';
+    vi.mocked(discoverAndSaveCurrentLeagues).mockRejectedValue(new NoFantasyLeaguesFound());
+
+    const result = await refreshLeaguesForUser(durableEnv(userId), userId, ['espn'], {});
+
+    expect(discoverAndSaveCurrentLeagues).toHaveBeenCalledOnce();
+    expect(result.success).toBe(true);
+    expect(result.results.espn).toEqual({
+      platform: 'espn',
+      status: 'success',
+      httpStatus: 200,
+      details: {
+        discovered: [],
+        currentSeason: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+        pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
+        currentSeasonCount: 0,
+        pastSeasonsCount: 0,
+      },
+    });
+    expect(mockHistoryStorage.createOrCoalesce).not.toHaveBeenCalled();
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      userId,
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'success', cooldownSeconds: 75, leagueCount: 0 }),
+    );
+  });
+
+  it.each([
+    ['rate limit', new AutomaticLeagueDiscoveryFailed('Fan API returned 429: Too Many Requests', 429), 429],
+    ['timeout', new AutomaticLeagueDiscoveryFailed('Fan API request timed out', 504), 504],
+  ])('keeps an ESPN %s status and long backoff on the durable web path', async (_name, failure, status) => {
+    const userId = `user_durable_${status}`;
+    vi.mocked(discoverAndSaveCurrentLeagues).mockRejectedValue(failure);
+
+    const result = await refreshLeaguesForUser(durableEnv(userId), userId, ['espn'], {});
+
+    expect(result.results.espn).toMatchObject({
+      status: 'error',
+      httpStatus: status,
+      error: 'discovery_failed',
+    });
+    expect(mockHistoryStorage.createOrCoalesce).not.toHaveBeenCalled();
+    expect(mockSyncState.settle).toHaveBeenCalledOnce();
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      userId,
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'error', errorCode: 'discovery_failed', cooldownSeconds: 300 }),
+    );
+  });
+
   it('keeps MCP ESPN refresh synchronous even when the durable web rollout is enabled', async () => {
     const userId = 'user_mcp_sync';
     mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
