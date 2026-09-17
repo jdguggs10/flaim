@@ -79,6 +79,8 @@ export function validatePlunkBroadcastText(text: string): void {
 export async function preparePlunkBroadcast(
   manifest: PlunkBroadcastManifest,
 ): Promise<PlunkBroadcastExport> {
+  // Dynamic imports are an operator boundary, so validate even when a normal
+  // manifest already called definePlunkBroadcast at module load time.
   definePlunkBroadcast(manifest);
 
   const html = await render(
@@ -132,7 +134,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function parseManifestPath(args: string[]): string {
+export function parseManifestPath(args: string[]): string {
   const normalizedArgs = args[0] === "--" ? args.slice(1) : args;
   const manifestIndex = normalizedArgs.indexOf("--manifest");
   const manifestPath = normalizedArgs[manifestIndex + 1];

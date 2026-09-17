@@ -9,6 +9,7 @@ import {
 } from "../../../emails/broadcast-manifest";
 import KickoffBroadcastEmail from "../../../emails/broadcast-2026-08-kickoff";
 import {
+  parseManifestPath,
   preparePlunkBroadcast,
   validatePlunkBroadcastHtml,
   validatePlunkBroadcastText,
@@ -35,6 +36,36 @@ const manifest = definePlunkBroadcast({
 });
 
 describe("Plunk broadcast preparation", () => {
+  it.each([
+    [{ ...manifest, id: "Bad id" }, "id must be lowercase"],
+    [{ ...manifest, ref: "campaign-ref" as `email-${string}` }, "ref must start with email-"],
+    [{ ...manifest, subject: "" }, "name, subject, and preview are required"],
+    [
+      { ...manifest, releaseGate: { status: "PENDING", requirement: "" } as const },
+      "must describe their release requirement",
+    ],
+    [
+      { ...manifest, releaseGate: { status: "CLEARED", evidence: "" } as const },
+      "must record release evidence",
+    ],
+    [{ ...manifest, expectedFlaimPaths: [] }, "at least one expected Flaim path"],
+    [{ ...manifest, expectedFlaimPaths: ["leagues"] }, "must start with /"],
+  ])("rejects an invalid campaign manifest", (candidate, expectedError) => {
+    expect(() => definePlunkBroadcast(candidate)).toThrow(expectedError);
+  });
+
+  it("keeps CLI manifests inside the campaign directory", () => {
+    expect(
+      parseManifestPath(["--manifest", "emails/campaigns/flaim-3-chatgpt-launch.ts"]),
+    ).toContain("/web/emails/campaigns/flaim-3-chatgpt-launch.ts");
+    expect(() =>
+      parseManifestPath(["--manifest", "emails/campaigns-evil/campaign.ts"]),
+    ).toThrow("must live under web/emails/campaigns");
+    expect(() =>
+      parseManifestPath(["--manifest", "emails/campaigns/../../package.json"]),
+    ).toThrow("must live under web/emails/campaigns");
+  });
+
   it("renders the provider unsubscribe link only at export time", async () => {
     const previewHtml = await render(React.createElement(KickoffBroadcastEmail));
     const prepared = await preparePlunkBroadcast(manifest);
