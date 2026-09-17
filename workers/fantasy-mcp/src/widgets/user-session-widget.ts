@@ -26,17 +26,17 @@
 /**
  * Versioning rule:
  *
- * A published widget URI's *resource metadata* is frozen. OpenAI snapshots the
+ * A published widget URI is a cache key for ChatGPT clients. Both the
  * read-result `_meta` (`ui.csp`, `openai/widgetDescription`, and
- * `openai/widgetCSP`) at review time, so those blocks must stay byte-identical
- * per URI in `../mcp/server.ts`.
+ * `openai/widgetCSP`) declared per URI in `../mcp/server.ts` and the body
+ * served at that URI must stay backward compatible with what clients already
+ * hold.
  *
  * The *body* served at a published URI may change, as long as the change stays
- * within the metadata that URI already declares. Backward-compatible content
- * updates at an already-published resource URI do not require resubmission;
- * cached client copies pick the new body up on their own. A new URI is only
- * needed when the body would require metadata the published URI does not
- * declare — for example a new redirect, connect, or resource domain.
+ * within the metadata that URI already declares; cached client copies pick the
+ * new body up on their own. A body that would need metadata its URI does not
+ * declare — for example a new redirect, connect, or resource domain — gets a
+ * new URI instead.
  *
  * That is why there are exactly two bodies for three URIs. v1 and v2 declare
  * only https://flaim.app as a redirect domain, so their body names the data
