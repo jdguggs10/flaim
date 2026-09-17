@@ -31,7 +31,12 @@ import {
 } from './sync-state';
 import { EspnSupabaseStorage } from './supabase-storage';
 import { discoverLeaguesV3 } from './v3/league-discovery';
-import { AutomaticLeagueDiscoveryFailed, EspnAuthenticationFailed, gameIdToSport } from './espn-types';
+import {
+  AutomaticLeagueDiscoveryFailed,
+  EspnAuthenticationFailed,
+  NoFantasyLeaguesFound,
+  gameIdToSport,
+} from './espn-types';
 import { fetchSleeperLeaguesReadOnly, type SleeperConnectEnv } from './sleeper-connect-handlers';
 import { fetchYahooLeaguesReadOnly, type YahooConnectEnv } from './yahoo-connect-handlers';
 
@@ -244,19 +249,21 @@ async function probeEspn(
     if (error instanceof EspnAuthenticationFailed) {
       return { status: 'error', errorCode: 'espn_auth_failed', httpStatus: 401, retryable: false };
     }
-    if (error instanceof AutomaticLeagueDiscoveryFailed && /No fantasy leagues found/i.test(error.message)) {
+    if (error instanceof NoFantasyLeaguesFound) {
       // Valid provider answer: the credentials work but ESPN reports no
       // fantasy leagues at all — nothing rolled over.
       return { status: 'ok', leagues: [] };
     }
-    // discoverLeaguesV3 folds the Fan API status into the error message; pull
-    // it back out so a 429 settles with the upstream backoff, not 1s.
-    const statusMatch = error instanceof Error ? /Fan API returned (\d{3})/.exec(error.message) : null;
+    // Preserve the Fan API status so a 429 settles with the upstream backoff,
+    // rather than the generic retry delay.
     const timedOut = error instanceof Error && /timed out|timeout/i.test(error.message);
+    const upstreamStatus = error instanceof AutomaticLeagueDiscoveryFailed
+      ? error.statusCode
+      : undefined;
     return {
       status: 'error',
       errorCode: timedOut ? 'espn_timeout' : 'discovery_failed',
-      ...(statusMatch ? { httpStatus: Number(statusMatch[1]) } : {}),
+      ...(upstreamStatus ? { httpStatus: upstreamStatus } : {}),
       retryable: true,
     };
   }

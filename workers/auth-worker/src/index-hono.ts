@@ -23,7 +23,13 @@
 
 import { Hono, Context } from 'hono';
 import { EspnSupabaseStorage } from './supabase-storage';
-import { EspnCredentials, EspnLeague, AutomaticLeagueDiscoveryFailed } from './espn-types';
+import {
+  EspnCredentials,
+  EspnLeague,
+  AutomaticLeagueDiscoveryFailed,
+  EspnAuthenticationFailed,
+  NoFantasyLeaguesFound,
+} from './espn-types';
 import {
   handleMetadataDiscovery,
   handleClientRegistration,
@@ -1484,8 +1490,8 @@ api.post('/extension/discover', async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof AutomaticLeagueDiscoveryFailed) {
-      console.log('No new leagues found from ESPN - checking saved leagues');
+    if (error instanceof NoFantasyLeaguesFound) {
+      console.log('ESPN returned a valid empty league list');
 
       const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
       const savedCount = currentSeasonLeagues.length;
@@ -1498,24 +1504,15 @@ api.post('/extension/discover', async (c) => {
         seasonYear: l.seasonYear || 0,
       }));
 
-      const discovered: DiscoveredLeague[] = currentSeasonWithDefault.map(l => ({
-        sport: l.sport,
-        leagueId: l.leagueId,
-        leagueName: l.leagueName,
-        teamId: l.teamId,
-        teamName: l.teamName,
-        seasonYear: l.seasonYear,
-      }));
-
       await settleDiscover('success', { leagueCount: savedCount });
 
       return c.json({
-        discovered,
+        discovered: [],
         currentSeasonLeagues: currentSeasonWithDefault,
-        currentSeason: { found: savedCount, added: 0, alreadySaved: savedCount, refreshed: 0 },
+        currentSeason: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
         pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
         added: 0,
-        skipped: savedCount,
+        skipped: 0,
         refreshed: 0,
         historical: 0,
         historicalRefreshed: 0,
@@ -1525,15 +1522,27 @@ api.post('/extension/discover', async (c) => {
     console.error('Discovery failed:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Discovery failed';
-    const isAuthError = errorMessage.includes('authentication') ||
-      errorMessage.includes('expired') ||
-      errorMessage.includes('invalid');
+    const isTypedDiscoveryFailure = error instanceof AutomaticLeagueDiscoveryFailed;
+    const isAuthError = error instanceof EspnAuthenticationFailed ||
+      (!isTypedDiscoveryFailure && (
+        errorMessage.includes('authentication') ||
+        errorMessage.includes('expired') ||
+        errorMessage.includes('invalid')
+      ));
+    const upstreamStatus = error instanceof AutomaticLeagueDiscoveryFailed
+      ? error.statusCode
+      : undefined;
+    const httpStatus = isAuthError
+      ? 401
+      : upstreamStatus === 429 || upstreamStatus === 504
+        ? upstreamStatus
+        : 500;
     logAuthWorkerFailure(c.req.raw, c.env, 'onboarding_failed', {
       component: 'espn-extension',
       stage: 'league_discovery',
       failure_kind: isAuthError ? 'auth' : 'upstream',
       error_code: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
-      http_status: isAuthError ? 401 : 500,
+      http_status: httpStatus,
       platform: 'espn',
       auth_type: 'clerk',
     });
@@ -1544,7 +1553,7 @@ api.post('/extension/discover', async (c) => {
         cooldownSeconds: cooldownSecondsForResult({
           platform: 'espn',
           status: 'error',
-          httpStatus: isAuthError ? 401 : 500,
+          httpStatus,
           error_description: errorMessage,
         }),
         syncSource: 'extension',
@@ -1556,13 +1565,13 @@ api.post('/extension/discover', async (c) => {
     await settleDiscover('error', {
       errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
       errorMessage,
-      httpStatus: isAuthError ? 401 : 500,
+      httpStatus,
     });
 
     return c.json({
       error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
       error_description: errorMessage,
-    }, isAuthError ? 401 : 500);
+    }, httpStatus);
   }
 });
 

@@ -37,6 +37,7 @@ interface SendWelcomeEmailParams {
 }
 
 interface SendEspnSetupLinkEmailParams {
+  docsUrl: string;
   extensionUrl: string;
   leaguesUrl: string;
   to: string;
@@ -122,6 +123,7 @@ export function sendWelcomeEmail({
 }
 
 export function sendEspnSetupLinkEmail({
+  docsUrl,
   extensionUrl,
   leaguesUrl,
   to,
@@ -129,7 +131,11 @@ export function sendEspnSetupLinkEmail({
 }: SendEspnSetupLinkEmailParams) {
   return sendProductEmail({
     react: (
-      <EspnSetupLinkEmail extensionUrl={extensionUrl} leaguesUrl={leaguesUrl} />
+      <EspnSetupLinkEmail
+        docsUrl={docsUrl}
+        extensionUrl={extensionUrl}
+        leaguesUrl={leaguesUrl}
+      />
     ),
     subject: "Your ESPN setup link for Flaim",
     template: "espn-setup-link",

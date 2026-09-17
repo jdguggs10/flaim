@@ -1,5 +1,9 @@
 import { EspnSupabaseStorage } from './supabase-storage';
-import { AutomaticLeagueDiscoveryFailed, EspnAuthenticationFailed } from './espn-types';
+import {
+  AutomaticLeagueDiscoveryFailed,
+  EspnAuthenticationFailed,
+  NoFantasyLeaguesFound,
+} from './espn-types';
 import {
   EspnHistoryJobStorage,
   durableHistoryEnabledFor,
@@ -189,20 +193,11 @@ async function refreshEspnLeagues(env: { SUPABASE_URL: string; SUPABASE_SERVICE_
       },
     };
   } catch (error) {
-    if (error instanceof AutomaticLeagueDiscoveryFailed) {
-      const savedLeagues = await storage.getCurrentSeasonLeagues(userId);
-      const discovered: DiscoveredLeague[] = savedLeagues.map((league) => ({
-        sport: league.sport,
-        leagueId: league.leagueId,
-        leagueName: league.leagueName || '',
-        teamId: league.teamId || '',
-        teamName: league.teamName || '',
-        seasonYear: league.seasonYear || 0,
-      }));
+    if (error instanceof NoFantasyLeaguesFound) {
       const currentSeason: SeasonCounts = {
-        found: savedLeagues.length,
+        found: 0,
         added: 0,
-        alreadySaved: savedLeagues.length,
+        alreadySaved: 0,
         refreshed: 0,
       };
       return {
@@ -210,7 +205,7 @@ async function refreshEspnLeagues(env: { SUPABASE_URL: string; SUPABASE_SERVICE_
         status: 'success',
         httpStatus: 200,
         details: {
-          discovered,
+          discovered: [],
           currentSeason,
           pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
           currentSeasonCount: currentSeason.found,
@@ -220,14 +215,25 @@ async function refreshEspnLeagues(env: { SUPABASE_URL: string; SUPABASE_SERVICE_
     }
 
     const description = errorDescription(error, 'ESPN league refresh failed');
+    const isTypedDiscoveryFailure = error instanceof AutomaticLeagueDiscoveryFailed;
     const isAuthError = error instanceof EspnAuthenticationFailed ||
-      description.includes('authentication') ||
-      description.includes('expired') ||
-      description.includes('invalid');
+      (!isTypedDiscoveryFailure && (
+        description.includes('authentication') ||
+        description.includes('expired') ||
+        description.includes('invalid')
+      ));
+    const upstreamStatus = error instanceof AutomaticLeagueDiscoveryFailed
+      ? error.statusCode
+      : undefined;
+    const httpStatus = isAuthError
+      ? 401
+      : upstreamStatus === 429 || upstreamStatus === 504
+        ? upstreamStatus
+        : 500;
     return {
       platform: 'espn',
       status: 'error',
-      httpStatus: isAuthError ? 401 : 500,
+      httpStatus,
       error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
       error_description: description,
     };

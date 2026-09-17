@@ -256,6 +256,32 @@ body {
   text-decoration: underline;
 }
 
+.link-button {
+  align-self: center;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 0;
+  text-decoration: underline;
+}
+
+.link-button:hover {
+  color: hsl(var(--foreground));
+}
+
+.diagnostic-links {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.footer-separator {
+  margin: 0 6px;
+}
+
 .footer {
   margin-top: 12px;
   padding-top: 12px;
@@ -384,6 +410,5 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 
 

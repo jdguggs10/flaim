@@ -12,6 +12,7 @@ import {
   EspnAuthenticationFailed,
   EspnCredentialsRequired,
   DiscoveredEspnLeague,
+  NoFantasyLeaguesFound,
   gameIdToSport
 } from '../espn-types';
 import { getLeagueInfo, getLeagueInfoSafe } from './get-league-info';
@@ -115,7 +116,10 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
     }
 
     if (!res.ok) {
-      throw new AutomaticLeagueDiscoveryFailed(`Fan API returned ${res.status}: ${res.statusText}`);
+      throw new AutomaticLeagueDiscoveryFailed(
+        `Fan API returned ${res.status}: ${res.statusText}`,
+        res.status
+      );
     }
 
     const json: FanApiResponse = await res.json();
@@ -128,7 +132,7 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
     console.log(`📦 Fan API returned ${fantasyPrefs.length} fantasy leagues`);
 
     if (fantasyPrefs.length === 0) {
-      throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
+      throw new NoFantasyLeaguesFound();
     }
 
     // Map preferences to DiscoveredEspnLeague format
@@ -161,7 +165,7 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
     }
 
     if (leagues.length === 0) {
-      throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
+      throw new NoFantasyLeaguesFound();
     }
 
     console.log(`✅ Discovered ${leagues.length} leagues total`);
@@ -169,16 +173,20 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
 
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
-      throw new AutomaticLeagueDiscoveryFailed('Fan API request timed out');
+      throw new AutomaticLeagueDiscoveryFailed('Fan API request timed out', 504);
     }
 
-    if (error instanceof EspnAuthenticationFailed || error instanceof AutomaticLeagueDiscoveryFailed) {
+    if (
+      error instanceof EspnAuthenticationFailed ||
+      error instanceof AutomaticLeagueDiscoveryFailed
+    ) {
       throw error;
     }
 
     console.error('⚠️ Error discovering leagues:', error);
     throw new AutomaticLeagueDiscoveryFailed(
-      error instanceof Error ? error.message : 'Unknown error during league discovery'
+      error instanceof Error ? error.message : 'Unknown error during league discovery',
+      502
     );
   }
 }

@@ -74,6 +74,7 @@ describe("product email sends", () => {
     });
 
     const request = {
+      docsUrl: "https://example.com/docs/espn",
       extensionUrl: "https://example.com/extension",
       leaguesUrl: "https://example.com/leagues",
       to: "gerry@example.com",
@@ -97,6 +98,7 @@ describe("product email sends", () => {
     mocks.emailsSend.mockResolvedValue({ data: null, error: new Error("gerry@example.com bounced") });
 
     const result = await sendEspnSetupLinkEmail({
+      docsUrl: "https://example.com/docs/espn",
       extensionUrl: "https://example.com/extension",
       leaguesUrl: "https://example.com/leagues",
       to: "gerry@example.com",

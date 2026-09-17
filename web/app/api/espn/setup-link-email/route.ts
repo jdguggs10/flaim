@@ -47,6 +47,7 @@ export async function POST() {
     }
 
     const result = await sendEspnSetupLinkEmail({
+      docsUrl: withEmailRef(`${emailBrand.url}/docs/espn`, 'email-espn-setup-link'),
       extensionUrl: CHROME_EXTENSION_URL,
       leaguesUrl: withEmailRef(`${emailBrand.url}/leagues`, 'email-espn-setup-link'),
       to: email,

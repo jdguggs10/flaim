@@ -89,7 +89,7 @@ import {
   yahooRenewToLeagueKey,
   type StoredLeagueSnapshotRow,
 } from '../reconciliation';
-import { AutomaticLeagueDiscoveryFailed } from '../espn-types';
+import { AutomaticLeagueDiscoveryFailed, NoFantasyLeaguesFound } from '../espn-types';
 import { getDefaultSeasonYear } from '../season-utils';
 import { discoverLeaguesV3 } from '../v3/league-discovery';
 import { fetchSleeperLeaguesReadOnly } from '../sleeper-connect-handlers';
@@ -464,7 +464,7 @@ describe('runReconciliation', () => {
     };
     mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{swid}', s2: 's2' });
     vi.mocked(discoverLeaguesV3).mockRejectedValue(
-      new AutomaticLeagueDiscoveryFailed('Fan API returned 429: Too Many Requests')
+      new AutomaticLeagueDiscoveryFailed('Fan API returned 429: Too Many Requests', 429)
     );
     vi.mocked(fetchSleeperLeaguesReadOnly).mockResolvedValue({
       status: 'error',
@@ -486,6 +486,29 @@ describe('runReconciliation', () => {
       'sleeper',
       expect.any(String),
       expect.objectContaining({ status: 'skipped', cooldownSeconds: 300 })
+    );
+  });
+
+  it('treats ESPN valid-empty discovery as a successful probe', async () => {
+    supabaseStub.state.rowsByTable = {
+      espn_leagues: [
+        { clerk_user_id: 'user_stale_1', sport: 'football', season_year: PRIOR, league_id: '123' },
+      ],
+      sleeper_leagues: [],
+    };
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{swid}', s2: 's2' });
+    vi.mocked(discoverLeaguesV3).mockRejectedValue(new NoFantasyLeaguesFound());
+
+    const summary = await runReconciliation(baseEnv, 'cron');
+
+    expect(summary.probes.probed).toBe(1);
+    expect(summary.probes.errors).toBe(0);
+    expect(summary.wouldInsertTotal).toBe(0);
+    expect(mockSyncState.settle).toHaveBeenCalledWith(
+      'user_stale_1',
+      'espn',
+      expect.any(String),
+      expect.objectContaining({ status: 'skipped', cooldownSeconds: 1 })
     );
   });
 

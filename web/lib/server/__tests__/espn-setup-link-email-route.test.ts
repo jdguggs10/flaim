@@ -60,6 +60,7 @@ describe('POST /api/espn/setup-link-email', () => {
     expect(await response.json()).toEqual({ ok: true });
     expect(mocks.sendEspnSetupLinkEmail).toHaveBeenCalledTimes(1);
     const params = mocks.sendEspnSetupLinkEmail.mock.calls[0][0] as {
+      docsUrl: string;
       to: string;
       leaguesUrl: string;
       extensionUrl: string;
@@ -69,6 +70,7 @@ describe('POST /api/espn/setup-link-email', () => {
     expect(params.to).toBe('fan@example.com');
     expect(params.userId).toBe('user_2');
     expect(params.leaguesUrl).toBe('https://flaim.app/leagues?ref=email-espn-setup-link');
+    expect(params.docsUrl).toBe('https://flaim.app/docs/espn?ref=email-espn-setup-link');
     expect(params.extensionUrl).toContain('chromewebstore.google.com');
     expect(params.extensionUrl).not.toContain('ref=');
     expect(params).not.toHaveProperty('idempotencyKey');

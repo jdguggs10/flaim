@@ -158,7 +158,7 @@ export default function PlatformsGuidePage() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Open ESPN Extension
+                  View in Chrome Web Store
                   <ExternalLink className="ml-2 h-4 w-4" aria-hidden="true" />
                 </a>
               </Button>
@@ -173,6 +173,12 @@ export default function PlatformsGuidePage() {
                   computer. Return to the extension whenever you need to sync a
                   different ESPN account or update your leagues.
                 </p>
+                <Link
+                  href="/docs/espn"
+                  className="px-4 pb-4 text-sm font-medium text-primary hover:underline"
+                >
+                  Get ESPN setup help
+                </Link>
               </details>
             </article>
 
