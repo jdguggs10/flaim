@@ -34,8 +34,8 @@ interface FanApiPreference {
       entryId: number;
       gameId: number;
       seasonId: number;
-      entryMetadata: {
-        teamName: string;
+      entryMetadata?: {
+        teamName?: string;
         teamAbbrev?: string;
       };
       groups: Array<{
@@ -45,14 +45,6 @@ interface FanApiPreference {
       }>;
     };
   };
-}
-
-/**
- * ESPN Fan API response structure
- */
-interface FanApiResponse {
-  id: string;
-  preferences?: FanApiPreference[];
 }
 
 // =============================================================================
@@ -70,6 +62,69 @@ const NUMERIC_TO_GAME_ID: Record<number, string> = {
   3: 'fba',  // Basketball
   4: 'fhl',  // Hockey
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseFantasyPreferences(value: unknown): FanApiPreference[] {
+  if (!isRecord(value) || !Array.isArray(value.preferences)) {
+    throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
+  }
+
+  const fantasyPreferences: FanApiPreference[] = [];
+  for (const rawPreference of value.preferences) {
+    if (
+      !isRecord(rawPreference) ||
+      !isRecord(rawPreference.type) ||
+      typeof rawPreference.type.code !== 'string'
+    ) {
+      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
+    }
+    if (rawPreference.type.code !== 'fantasy') continue;
+    if (typeof rawPreference.id !== 'string') {
+      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
+    }
+
+    const metadata = rawPreference.metaData;
+    const entry = isRecord(metadata) ? metadata.entry : null;
+    const groups = isRecord(entry) ? entry.groups : null;
+    if (
+      !isRecord(entry) ||
+      !Array.isArray(groups) ||
+      typeof entry.entryId !== 'number' ||
+      !Number.isFinite(entry.entryId) ||
+      typeof entry.gameId !== 'number' ||
+      !Number.isFinite(entry.gameId) ||
+      typeof entry.seasonId !== 'number' ||
+      !Number.isFinite(entry.seasonId)
+    ) {
+      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
+    }
+    if (groups.length === 0) continue;
+
+    const group = groups[0];
+    if (
+      !isRecord(group) ||
+      typeof group.groupId !== 'number' ||
+      !Number.isFinite(group.groupId) ||
+      typeof group.groupName !== 'string'
+    ) {
+      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
+    }
+    if (
+      entry.entryMetadata !== undefined &&
+      (!isRecord(entry.entryMetadata) ||
+        (entry.entryMetadata.teamName !== undefined && typeof entry.entryMetadata.teamName !== 'string'))
+    ) {
+      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
+    }
+
+    fantasyPreferences.push(rawPreference as unknown as FanApiPreference);
+  }
+
+  return fantasyPreferences;
+}
 
 /**
  * Discover all leagues for a user across all supported sports.
@@ -122,12 +177,7 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
       );
     }
 
-    const json: FanApiResponse = await res.json();
-
-    // Filter for fantasy leagues only (type.code === 'fantasy')
-    const fantasyPrefs = json.preferences?.filter(
-      (p) => p.type?.code === 'fantasy' && p.metaData?.entry?.groups?.length > 0
-    ) ?? [];
+    const fantasyPrefs = parseFantasyPreferences(await res.json());
 
     console.log(`📦 Fan API returned ${fantasyPrefs.length} fantasy leagues`);
 

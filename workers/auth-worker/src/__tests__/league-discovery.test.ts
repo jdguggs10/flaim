@@ -101,6 +101,69 @@ describe('discoverLeaguesV3', () => {
       .rejects.toBeInstanceOf(NoFantasyLeaguesFound);
   });
 
+  it.each([
+    ['missing preferences', { error: { message: 'upstream error' } }],
+    ['non-array preferences', { preferences: { id: 'pref-1' } }],
+    ['malformed fantasy entry', {
+      preferences: [{
+        id: 'pref-1',
+        type: { code: 'fantasy' },
+        metaData: {
+          entry: {
+            entryId: 8,
+            gameId: 1,
+            seasonId: 2025,
+            groups: 'not-an-array',
+          },
+        },
+      }],
+    }],
+  ])('classifies %s as a malformed 502 response', async (_scenario, payload) => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => payload,
+    } as Response);
+
+    const error = await discoverLeaguesV3(
+      '{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}',
+      's2token'
+    ).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+    expect(error).not.toBeInstanceOf(NoFantasyLeaguesFound);
+    expect((error as AutomaticLeagueDiscoveryFailed).statusCode).toBe(502);
+  });
+
+  it('treats a structurally valid unsupported fantasy sport as no supported leagues', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [{
+          id: 'pref-unsupported',
+          type: { code: 'fantasy' },
+          metaData: {
+            entry: {
+              entryId: 8,
+              gameId: 999,
+              seasonId: 2025,
+              entryMetadata: { teamName: 'Test Team' },
+              groups: [{ groupId: 12345, groupName: 'Unsupported League' }],
+            },
+          },
+        }],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3(
+      '{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}',
+      's2token'
+    )).rejects.toBeInstanceOf(NoFantasyLeaguesFound);
+  });
+
   it.each([401, 403])('classifies ESPN HTTP %i as an authentication failure', async (status) => {
     mockFetch.mockResolvedValueOnce({
       ok: false,

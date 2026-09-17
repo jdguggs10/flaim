@@ -46,12 +46,29 @@ npm install
 # Development build (includes localhost for local testing)
 npm run build:dev
 
+# Preview build (uses the preview mode settings below)
+npm run build:preview
+
 # Production build (strips localhost, ready for CWS)
 npm run build
 
 # Create zip for Chrome Web Store upload (manifest.json must be at archive root)
 cd dist && zip -r ../flaim-extension-v1.6.0.zip . && cd ..
 ```
+
+For a stable preview extension, create the gitignored
+`extension/.env.preview.local` before running `npm run build:preview`:
+
+```dotenv
+VITE_SITE_BASE=https://preview.flaim.app
+VITE_EXTENSION_DEV_KEY=<stable-public-preview-manifest-key>
+```
+
+Add the preview Clerk values used by the website to that local file as well.
+Reuse the same public manifest key for every preview build so Chrome keeps the
+same extension ID. Preview manifests include that key and add `(Preview)` to
+the extension name. Production builds ignore `VITE_EXTENSION_DEV_KEY` and keep
+the normal extension name.
 
 ### Load Unpacked Extension
 
@@ -64,6 +81,8 @@ cd dist && zip -r ../flaim-extension-v1.6.0.zip . && cd ..
 
 The extension uses `chrome.management.getSelf()` to detect install type:
 - **Unpacked** (development): Routes to `localhost:3000`
+- **Preview build**: `VITE_SITE_BASE` routes the unpacked extension to the
+  configured preview website
 - **Chrome Web Store** (production): Routes to `flaim.app`
 
 This is handled in `src/lib/api.ts`. The `vite.config.ts` also strips localhost from `host_permissions` in production builds.
