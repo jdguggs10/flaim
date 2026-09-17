@@ -1430,7 +1430,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
   describe('get_free_agents', () => {
     it.each(scenarios)('$label returns free agents with ownership data', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1475,7 +1477,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
           ],
         },
       };
-      fetchMock.mockResolvedValue(jsonResponse(response));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(response))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1486,8 +1490,12 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.freeAgents[0].percentOwned).toBe(0);
     });
 
+    // FLA-9: Yahoo caps the `players` collection at 25 entries per response
+    // regardless of the requested `;count=`, so a fake page here is 25 long
+    // (not the requested count) and pagination must advance by what came
+    // back, not by an assumed page size.
     it.each(scenarios)('$label paginates available players, requests ownership, and returns globally ownership-sorted results', async ({ sport, handlers }) => {
-      const firstPagePlayers = Array.from({ length: 100 }, (_unused, index) => ({
+      const firstPagePlayers = Array.from({ length: 25 }, (_unused, index) => ({
         player_key: `fa${index + 1}`,
         player_id: String(index + 1),
         full_name: `Player ${String(index + 1).padStart(3, '0')}`,
@@ -1511,7 +1519,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
         sport,
         league_id: '449.l.123',
         season_year: 2025,
-        count: 3,
+        count: 27,
         position: FREE_AGENT_POSITION_FILTER[sport],
       };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1524,18 +1532,149 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock.mock.calls[0]?.[0]).toContain(
-        `/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
+        `/league/449.l.123/players;status=A;count=25;sort=OR;start=0;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
       );
       expect(fetchMock.mock.calls[1]?.[0]).toContain(
-        `/league/449.l.123/players;status=A;count=100;sort=OR;start=100;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
+        `/league/449.l.123/players;status=A;count=25;sort=OR;start=25;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
       );
 
-      expect(data.count).toBe(3);
-      expect(data.freeAgents).toEqual([
+      // 25 + 4 = 29 collected, sliced to the requested 27.
+      expect(data.count).toBe(27);
+      expect(data.freeAgents.slice(0, 3)).toEqual([
         expect.objectContaining({ playerId: '201', name: 'Aaron Ace', percentOwned: 99 }),
         expect.objectContaining({ playerId: '202', name: 'Ben Bat', percentOwned: 99 }),
         expect.objectContaining({ playerId: '203', name: 'Carl Curve', percentOwned: 88.5 }),
       ]);
+    });
+
+    function buildFullPage(offset: number, size = 25) {
+      return Array.from({ length: size }, (_unused, index) => ({
+        player_key: `fa${offset + index + 1}`,
+        player_id: String(offset + index + 1),
+        full_name: `Player ${offset + index + 1}`,
+        team: 'BOS',
+        position: 'OF',
+        percent_owned: String(index % 5),
+      }));
+    }
+
+    it('issues three requests advancing start 0 -> 25 -> 50 and returns 60 entries when count=60 and Yahoo returns full 25-entry pages', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(0))))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(25))))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(50))));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 60 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-count-60');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { count: number; freeAgents: unknown[] };
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain('start=0');
+      expect(fetchMock.mock.calls[1]?.[0]).toContain('start=25');
+      expect(fetchMock.mock.calls[2]?.[0]).toContain('start=50');
+      expect(data.count).toBe(60);
+      expect(data.freeAgents).toHaveLength(60);
+    });
+
+    it.each([
+      { label: 'no count (defaults to 25)', count: undefined },
+      { label: 'count=25', count: 25 },
+      { label: 'count=10', count: 10 },
+    ])('issues exactly one upstream request for $label so the common path stays cheap', async ({ count }) => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(0))));
+
+      const params: ToolParams = {
+        sport: 'football',
+        league_id: '449.l.123',
+        season_year: 2025,
+        ...(count !== undefined ? { count } : {}),
+      };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-single-page');
+
+      expect(result.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    // FLA-9 regression guard: the bug was breaking out of the loop the
+    // moment a page came back shorter than requested. A page with 1-24
+    // entries must not be mistaken for the end of the collection.
+    it('does not stop on a page shorter than 25 as long as it is non-empty, and only stops on a truly empty page', async () => {
+      const shortFirstPage = buildFullPage(0, 10); // 10 entries: short, but not empty
+      const shortSecondPage = [
+        { player_key: 'fa900', player_id: '900', full_name: 'Late Arrival', team: 'SEA', position: 'OF', percent_owned: '77' },
+      ]; // 1 entry: also short, but not empty
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(shortFirstPage)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(shortSecondPage)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse([]))); // empty: this is what actually ends it
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 100 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-short-pages');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<{ playerId: string }> };
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain('start=0');
+      expect(fetchMock.mock.calls[1]?.[0]).toContain('start=10');
+      expect(fetchMock.mock.calls[2]?.[0]).toContain('start=11');
+      expect(data.freeAgents.some((p) => p.playerId === '900')).toBe(true);
+    });
+
+    it('stops after the page-count safety bound instead of looping forever when Yahoo always returns a short, non-empty page', async () => {
+      let callCount = 0;
+      fetchMock.mockImplementation(async () => {
+        callCount += 1;
+        return jsonResponse(buildFreeAgentsPageResponse([
+          {
+            player_key: `fa${callCount}`,
+            player_id: String(callCount),
+            full_name: `Player ${callCount}`,
+            team: 'BOS',
+            position: 'OF',
+            percent_owned: String(callCount % 5),
+          },
+        ]));
+      });
+
+      // count=100 (the declared max) would need 100 one-entry pages to ever
+      // satisfy `limit` on its own — every page is non-empty, so neither the
+      // empty-page nor the limit-reached condition can end this loop. Only
+      // the page-count safety bound can, and it must return what was
+      // collected rather than erroring or hanging.
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 100 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-safety-bound');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { count: number; freeAgents: unknown[] };
+      expect(fetchMock).toHaveBeenCalledTimes(20);
+      expect(data.freeAgents).toHaveLength(20);
+      expect(data.count).toBe(20);
+    });
+
+    it('sorts across page boundaries so a higher rate on a later page still surfaces first', async () => {
+      const page1 = buildFullPage(0).map((player) => ({ ...player, percent_owned: String(10 + (Number(player.player_id) % 5)) }));
+      const page2 = buildFullPage(25).map((player) => ({ ...player, percent_owned: String(10 + (Number(player.player_id) % 5)) }));
+      const page3 = [
+        { player_key: 'fc999', player_id: '999', full_name: 'Late Standout', team: 'SEA', position: 'OF', percent_owned: '95' },
+      ];
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page1)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page2)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page3)));
+
+      // 25 + 25 = 50 < 51, so page 3 must be fetched before `limit` is
+      // satisfied — this is what puts the page-3 standout in the same sort
+      // as pages 1-2.
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 51 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-sort-across-pages');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<{ playerId: string; percentOwned: number | null }> };
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(data.freeAgents[0]).toMatchObject({ playerId: '999', percentOwned: 95 });
     });
 
     // Regression: IDP (individual defensive player) leagues show defensive
@@ -1543,20 +1682,24 @@ describe('yahoo cross-sport handler characterization tests', () => {
     // had no entries for them, so getPositionFilter silently fell back to "no
     // filter" and the request came back with unfiltered (offensive) players.
     it('football forwards an IDP position filter instead of dropping it', async () => {
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, position: 'LB' };
       const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-idp');
 
       expect(result.success).toBe(true);
       expect(fetchMock.mock.calls[0]?.[0]).toContain(
-        '/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=LB;out=ownership,percent_owned'
+        '/league/449.l.123/players;status=A;count=25;sort=OR;start=0;position=LB;out=ownership,percent_owned'
       );
     });
 
     // FLA-284: same is_keeper passthrough as get_roster.
     it.each(scenarios)('$label includes normalized isKeeper when a free agent has is_keeper', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponseWithKeeper()));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponseWithKeeper()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1567,7 +1710,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
     });
 
     it.each(scenarios)('$label omits isKeeper when a free agent has no is_keeper field', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1583,7 +1728,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
         { player_key: 'fa302', player_id: '302', full_name: 'Mia Mid', team: 'NYY', position: 'OF' },
         { player_key: 'fa303', player_id: '303', full_name: 'Aaron Ace', team: 'LAD', position: 'OF' },
       ];
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse(players)));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(players)))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);

@@ -12,7 +12,17 @@ import {
   type YahooKeeperStatus,
 } from './utils';
 
-const YAHOO_PAGE_SIZE = 100;
+// Yahoo silently clamps the `players` collection to 25 entries per response
+// no matter what larger `;count=` is requested (FLA-9), so this is only a
+// request hint. The loop below advances `start` by what Yahoo actually
+// returns and never assumes this value is honored.
+const YAHOO_PLAYERS_PAGE_SIZE = 25;
+
+// Safety bound so a misbehaving upstream can't loop forever. Reaching
+// `limit` (max 100) needs 4 pages at the real 25/page cap; this gives 5x
+// slack for pages shorter than 25 without letting a broken upstream loop
+// forever. Tripping this returns whatever was collected instead of erroring.
+const MAX_FREE_AGENT_PAGES = 20;
 
 type YahooFreeAgent = {
   playerKey: string;
@@ -68,9 +78,10 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
       const allFreeAgents: YahooFreeAgent[] = [];
 
       let league: Record<string, unknown> = {};
+      let start = 0;
 
-      for (let start = 0; ; start += YAHOO_PAGE_SIZE) {
-        let queryParams = `;status=A;count=${YAHOO_PAGE_SIZE};sort=OR;start=${start}`;
+      for (let page = 0; page < MAX_FREE_AGENT_PAGES; page++) {
+        let queryParams = `;status=A;count=${YAHOO_PLAYERS_PAGE_SIZE};sort=OR;start=${start}`;
         if (posFilter) {
           queryParams += `;position=${posFilter}`;
         }
@@ -88,6 +99,12 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
         league = unwrapLeague(leagueArray);
         const playersObj = league.players as Record<string, unknown> | undefined;
         const playersArray = asArray(playersObj);
+
+        // An empty page is the only reliable end-of-collection signal — a
+        // short-but-non-empty page is not (that assumption caused FLA-9).
+        if (playersArray.length === 0) {
+          break;
+        }
 
         allFreeAgents.push(
           ...playersArray.map((playerWrapper: unknown) => {
@@ -110,7 +127,9 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
           })
         );
 
-        if (playersArray.length < YAHOO_PAGE_SIZE) {
+        start += playersArray.length;
+
+        if (allFreeAgents.length >= limit) {
           break;
         }
       }
