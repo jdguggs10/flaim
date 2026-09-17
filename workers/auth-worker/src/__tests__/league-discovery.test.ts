@@ -139,6 +139,63 @@ describe('discoverLeaguesV3', () => {
       }]);
   });
 
+  it('skips a malformed fantasy entry without hiding the valid leagues', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-broken',
+            type: { code: 'fantasy' },
+            metaData: { entry: { entryId: 3, gameId: 1, seasonId: 2025, groups: [{ groupId: 'x' }] } },
+          },
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Test Team' },
+                groups: [{ groupId: 12345, groupName: 'Test League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .resolves.toEqual([{
+        gameId: 'ffl',
+        leagueId: '12345',
+        leagueName: 'Test League',
+        seasonId: 2025,
+        teamId: 8,
+        teamName: 'Test Team',
+      }]);
+  });
+
+  it('reports a 502 when every fantasy entry is malformed', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          { id: 'pref-team', type: { code: 'team' } },
+          { id: 'pref-broken', type: { code: 'fantasy' }, metaData: { entry: 'unexpected' } },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .rejects.toMatchObject({ statusCode: 502 });
+  });
+
   it('treats only non-fantasy preferences as no leagues, even with an odd entry mixed in', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

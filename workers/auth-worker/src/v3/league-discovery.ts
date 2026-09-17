@@ -74,12 +74,14 @@ function parseFantasyPreferences(value: unknown): FanApiPreference[] {
 
   // The preferences array is not fantasy-specific, so an odd non-fantasy entry
   // must not fail discovery for a user with valid leagues: anything that is not
-  // identifiably `type.code === 'fantasy'` is skipped, and strict validation
-  // applies only to fantasy entries. To avoid calling a garbage payload a valid
-  // empty result, a non-empty array needs at least one recognizable entry (a
-  // record with a string `type.code`); if none are, it is a malformed 502.
+  // identifiably `type.code === 'fantasy'` is skipped. A malformed fantasy entry
+  // is also skipped (as the pre-typed parser did) so one odd league cannot hide
+  // the rest. A garbage payload still must not read as a valid empty result: a
+  // non-empty array with no recognizable entries (a record with a string
+  // `type.code`), or fantasy entries that are all malformed, is a 502.
   const fantasyPreferences: FanApiPreference[] = [];
   let recognizedPreferences = 0;
+  let malformedFantasyPreferences = 0;
   for (const rawPreference of value.preferences) {
     if (
       !isRecord(rawPreference) ||
@@ -90,14 +92,12 @@ function parseFantasyPreferences(value: unknown): FanApiPreference[] {
     }
     recognizedPreferences++;
     if (rawPreference.type.code !== 'fantasy') continue;
-    if (typeof rawPreference.id !== 'string') {
-      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
-    }
 
     const metadata = rawPreference.metaData;
     const entry = isRecord(metadata) ? metadata.entry : null;
     const groups = isRecord(entry) ? entry.groups : null;
     if (
+      typeof rawPreference.id !== 'string' ||
       !isRecord(entry) ||
       !Array.isArray(groups) ||
       typeof entry.entryId !== 'number' ||
@@ -107,7 +107,8 @@ function parseFantasyPreferences(value: unknown): FanApiPreference[] {
       typeof entry.seasonId !== 'number' ||
       !Number.isFinite(entry.seasonId)
     ) {
-      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
+      malformedFantasyPreferences++;
+      continue;
     }
     if (groups.length === 0) continue;
 
@@ -116,16 +117,13 @@ function parseFantasyPreferences(value: unknown): FanApiPreference[] {
       !isRecord(group) ||
       typeof group.groupId !== 'number' ||
       !Number.isFinite(group.groupId) ||
-      typeof group.groupName !== 'string'
+      typeof group.groupName !== 'string' ||
+      (entry.entryMetadata !== undefined &&
+        (!isRecord(entry.entryMetadata) ||
+          (entry.entryMetadata.teamName !== undefined && typeof entry.entryMetadata.teamName !== 'string')))
     ) {
-      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
-    }
-    if (
-      entry.entryMetadata !== undefined &&
-      (!isRecord(entry.entryMetadata) ||
-        (entry.entryMetadata.teamName !== undefined && typeof entry.entryMetadata.teamName !== 'string'))
-    ) {
-      throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
+      malformedFantasyPreferences++;
+      continue;
     }
 
     fantasyPreferences.push(rawPreference as unknown as FanApiPreference);
@@ -133,6 +131,9 @@ function parseFantasyPreferences(value: unknown): FanApiPreference[] {
 
   if (value.preferences.length > 0 && recognizedPreferences === 0) {
     throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
+  }
+  if (fantasyPreferences.length === 0 && malformedFantasyPreferences > 0) {
+    throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
   }
 
   return fantasyPreferences;
