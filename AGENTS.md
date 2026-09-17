@@ -75,13 +75,17 @@ Prefer `corepack pnpm ...` from the repo root unless a package README says other
 - Worker-to-worker calls must use `.workers.dev` URLs, not custom domains.
 - Be explicit about repo-local limits. If a task appears to depend on sibling repos, private workspace context, or broader Flaim decisions that are not present here, say so instead of guessing.
 
-## Release Lanes (Directory-Review Gates)
+## Release Lanes (OpenAI Continuous Review)
 
-Merging to `main` deploys to production, but OpenAI's app directory reviews a frozen snapshot of the MCP contract. While a review is in flight, do not merge a change that moves the published `tools/list` descriptor or a published widget URI's `_meta`: tool names or count, `description:` strings, annotations, server instructions, declared schemas in `workers/fantasy-mcp/src/mcp/tools.ts`, shipped skill text under `.agents/skills/`, or a plugin manifest. Declaring a schema field counts even when it is optional and the payload already returns it. Track gated PRs against the active review-freeze issue.
+This repo ships one way: continuous deploy to production on merge to `main`. OpenAI's plugin directory re-scans the live MCP server periodically and updates published tool definitions after automated checks, so tool-level metadata needs no reviewed version. Anthropic's connector directory reads the live server and pins nothing.
 
-Everything else — worker internals, new fields in passthrough payloads, web, docs, backward-compatible widget bodies — merges normally with a `docs/CHANGELOG.md` entry. When unsure, treat it as gated and say so in the PR.
+Two surfaces still require a new OpenAI version and human review: shipped skill text under `.agents/skills/`, and the portal listing fields kept in the private distribution packet. Treat adding a tool the same way until one has been observed passing a scan. These changes get their own Linear issue and bundle with the next reviewed version.
 
-Anthropic's directory reads the live server; only renaming the listing or moving the endpoint URL is a directory-side change.
+Everything else merges normally with `docs/CHANGELOG.md` updated in the same PR, including tool names, `description:` strings, annotations, declared schemas in `workers/fantasy-mcp/src/mcp/tools.ts`, tool and resource `_meta`, widget CSP, and server instructions. After a deploy that touches any of those, confirm on the OpenAI plugin portal that the scan passed with nothing held, and say so in the PR.
+
+Three constraints replace the old freeze. Keep input schemas backward compatible. Keep every published widget resource URI serving a compatible body. Keep descriptions and annotations true to real behavior, because a mismatch holds the update and leaves the old definition live. If a deploy breaks the live contract, roll back rather than wait for review.
+
+While a version is in OpenAI review, skill text and portal fields stay unchanged until the decision. Nothing else freezes.
 
 ## Verification
 
