@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import KickoffBroadcastEmail from "../../../emails/broadcast-2026-08-kickoff";
 import YahooAccessBroadcastEmail from "../../../emails/broadcast-2026-08-yahoo-access";
 import SeptemberUpdateBroadcastEmail from "../../../emails/broadcast-2026-09-update";
+import FlaimThreeLaunchBroadcastEmail from "../../../emails/broadcast-2026-09-v3-launch";
 import YahooBackBroadcastEmail from "../../../emails/broadcast-2026-09-yahoo-back";
 import { htmlToText } from "../../../scripts/export-email-text.mjs";
 
@@ -92,5 +93,27 @@ describe("email plain-text export", () => {
       'src="https://media1.tenor.com/m/GMQO9zwZ_QgAAAAd/slow-clap-gardner.gif"',
     );
     expect(text).toContain("Unsubscribe {{{RESEND_UNSUBSCRIBE_URL}}}");
+  });
+
+  it("renders the v3.0 launch copy without claiming a Yahoo draft change", async () => {
+    const html = await render(React.createElement(FlaimThreeLaunchBroadcastEmail));
+    const text = htmlToText(html);
+
+    expect(text).toContain("FLAIM 3.0 IS NOW LIVE IN CHATGPT");
+    expect(text).toContain("OpenAI has approved Flaim 3.0 for ChatGPT.");
+    expect(text).toContain("Completed draft results by round and team.");
+    expect(text).toContain("That is especially useful for Sleeper leagues with traded picks.");
+    expect(text).toContain("Deeper ESPN football matchup context.");
+    expect(text).toContain(
+      "it will never change your roster, lineup, waivers, or trades.",
+    );
+    expect(text).toContain(
+      "Open Flaim in ChatGPT https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
+    );
+    expect(text).toContain("Need help? Reply to this email.");
+    expect(text).not.toContain("Yahoo draft results");
+    expect(html).toContain(
+      'href="https://flaim.app/?ref=email-flaim-3-chatgpt-launch"',
+    );
   });
 });
