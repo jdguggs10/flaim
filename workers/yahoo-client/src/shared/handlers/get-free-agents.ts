@@ -76,8 +76,16 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
       const positionKey = position?.toUpperCase() || 'ALL';
       const posFilter = config.getPositionFilter(position);
       const allFreeAgents: YahooFreeAgent[] = [];
+      // Yahoo's start/count paging isn't guaranteed stable across requests —
+      // a player's availability can change between page fetches, so pages
+      // can overlap and the same player key can be appended twice.
+      const seenPlayerKeys = new Set<string>();
 
-      let league: Record<string, unknown> = {};
+      // Captured from the first page that provides it. A terminal empty
+      // page's response can omit league metadata entirely, and letting a
+      // later page overwrite these would lose the real values.
+      let leagueKey: unknown;
+      let leagueName: unknown;
       let start = 0;
 
       for (let page = 0; page < MAX_FREE_AGENT_PAGES; page++) {
@@ -96,8 +104,14 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
 
         const raw = await response.json();
         const leagueArray = getPath(raw, ['fantasy_content', 'league']);
-        league = unwrapLeague(leagueArray);
-        const playersObj = league.players as Record<string, unknown> | undefined;
+        const pageLeague = unwrapLeague(leagueArray);
+        if (leagueKey === undefined && pageLeague.league_key !== undefined) {
+          leagueKey = pageLeague.league_key;
+        }
+        if (leagueName === undefined && pageLeague.name !== undefined) {
+          leagueName = pageLeague.name;
+        }
+        const playersObj = pageLeague.players as Record<string, unknown> | undefined;
         const playersArray = asArray(playersObj);
 
         // An empty page is the only reliable end-of-collection signal — a
@@ -106,26 +120,37 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
           break;
         }
 
-        allFreeAgents.push(
-          ...playersArray.map((playerWrapper: unknown) => {
-            const playerData = getPath(playerWrapper, ['player']) as unknown[];
-            const playerMeta = extractPlayerMeta(playerData);
-            // See get-roster.ts for why isKeeper isn't gated on any
-            // historical/snapshot logic — free agents have no such concept.
-            const isKeeper = normalizeIsKeeper(playerMeta.is_keeper);
+        for (const playerWrapper of playersArray) {
+          const playerData = getPath(playerWrapper, ['player']) as unknown[];
+          const playerMeta = extractPlayerMeta(playerData);
+          // See get-roster.ts for why isKeeper isn't gated on any
+          // historical/snapshot logic — free agents have no such concept.
+          const isKeeper = normalizeIsKeeper(playerMeta.is_keeper);
 
-            return {
-              playerKey: playerMeta.player_key as string,
-              playerId: playerMeta.player_id as string,
-              name: (playerMeta.name as Record<string, unknown>)?.full as string,
-              team: playerMeta.editorial_team_abbr as string,
-              position: playerMeta.display_position as string,
-              percentOwned: extractPlayerPercentOwned(playerData),
-              status: playerMeta.status as string | undefined,
-              ...(isKeeper ? { isKeeper } : {}),
-            };
-          })
-        );
+          const playerKey = playerMeta.player_key as string;
+          const playerId = playerMeta.player_id as string;
+          // Dedupe before the limit check below, so limit counts unique
+          // players — otherwise an overlap-duplicated entry consumes a
+          // caller's limit slot and pushes out a unique player.
+          const dedupeKey = playerKey || playerId;
+          if (dedupeKey && seenPlayerKeys.has(dedupeKey)) {
+            continue;
+          }
+          if (dedupeKey) {
+            seenPlayerKeys.add(dedupeKey);
+          }
+
+          allFreeAgents.push({
+            playerKey,
+            playerId,
+            name: (playerMeta.name as Record<string, unknown>)?.full as string,
+            team: playerMeta.editorial_team_abbr as string,
+            position: playerMeta.display_position as string,
+            percentOwned: extractPlayerPercentOwned(playerData),
+            status: playerMeta.status as string | undefined,
+            ...(isKeeper ? { isKeeper } : {}),
+          });
+        }
 
         start += playersArray.length;
 
@@ -139,8 +164,8 @@ export function createGetFreeAgentsHandler(config: YahooHandlerContext): Handler
       return {
         success: true,
         data: {
-          leagueKey: league.league_key,
-          leagueName: league.name,
+          leagueKey,
+          leagueName,
           position: positionKey,
           count: freeAgents.length,
           freeAgents,

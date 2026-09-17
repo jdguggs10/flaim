@@ -1677,6 +1677,59 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.freeAgents[0]).toMatchObject({ playerId: '999', percentOwned: 95 });
     });
 
+    // Yahoo's start/count paging is not guaranteed stable across requests —
+    // if a player's availability changes between page fetches, pages can
+    // overlap and the same player is returned twice. Sorting/slicing alone
+    // doesn't dedupe, so the duplicate would otherwise consume a limit slot.
+    it('deduplicates a player repeated across overlapping pages and does not let it consume a limit slot', async () => {
+      const page1 = buildFullPage(0); // fa1..fa25, unique
+      const page2 = [
+        // Repeats page 1's 5th entry (player_key fa5, player_id 5).
+        { player_key: 'fa5', player_id: '5', full_name: 'Player 5', team: 'BOS', position: 'OF', percent_owned: '4' },
+        { player_key: 'fa100', player_id: '100', full_name: 'New Guy 100', team: 'SEA', position: 'OF', percent_owned: '50' },
+        { player_key: 'fa101', player_id: '101', full_name: 'New Guy 101', team: 'SEA', position: 'OF', percent_owned: '51' },
+        { player_key: 'fa102', player_id: '102', full_name: 'New Guy 102', team: 'SEA', position: 'OF', percent_owned: '52' },
+        { player_key: 'fa103', player_id: '103', full_name: 'New Guy 103', team: 'SEA', position: 'OF', percent_owned: '53' },
+        { player_key: 'fa104', player_id: '104', full_name: 'New Guy 104', team: 'SEA', position: 'OF', percent_owned: '54' },
+      ];
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page1)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page2)));
+
+      // 25 unique from page 1 + 5 new unique from page 2 (the 6th entry is a
+      // duplicate) = 30, which exactly satisfies count=30 after dedup.
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 30 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-dedupe');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { count: number; freeAgents: Array<{ playerId: string }> };
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(data.freeAgents.filter((p) => p.playerId === '5')).toHaveLength(1);
+      expect(data.count).toBe(30);
+      expect(new Set(data.freeAgents.map((p) => p.playerId)).size).toBe(30);
+    });
+
+    // A terminal empty page's response can omit league metadata entirely
+    // (`{ fantasy_content: { league: [{}, { players: { count: 0 } }] } }`);
+    // that must not erase the metadata a real earlier page already provided.
+    it('keeps league metadata from the first page even when the terminal empty page omits it', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValueOnce(
+          jsonResponse({ fantasy_content: { league: [{}, { players: { count: 0 } }] } })
+        );
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-empty-terminal-metadata');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { leagueKey: string; leagueName: string };
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(data.leagueKey).toBe('449.l.123');
+      expect(data.leagueName).toBe('Test League');
+    });
+
     // Regression: IDP (individual defensive player) leagues show defensive
     // positions like LB/DB on the roster, but FA_POSITION_FILTER previously
     // had no entries for them, so getPositionFilter silently fell back to "no
