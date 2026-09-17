@@ -89,7 +89,7 @@ export function unwrapTeam(teamArray: unknown): Record<string, unknown> {
 }
 
 /**
- * Parse Yahoo ownership.percent_owned safely.
+ * Parse a Yahoo percent-owned scalar safely.
  * Returns null for missing/non-finite values and preserves valid 0 values.
  */
 export function parseYahooPercentOwned(value: unknown): number | null {
@@ -99,6 +99,41 @@ export function parseYahooPercentOwned(value: unknown): number | null {
   if (typeof value === 'string') {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
+ * Read the rate out of Yahoo's `percent_owned` sub-resource body.
+ *
+ * Yahoo's primary wire form on the players collection is an array of
+ * single-key objects — `[{coverage_type:'week'},{week:'3'},{value:42},
+ * {delta:'1.5'}]` — so `value` has no fixed index and is found by key.
+ * Coverage is `week` for football and `date` for daily sports; only `value`
+ * is read, so the coverage period never needs interpreting. Wrapper libraries
+ * and some captures flatten the same payload to `{coverage_type, week, value,
+ * delta}`, and Yahoo's numeric-keyed container form is handled by `asArray`,
+ * so all three are accepted. `value` has been observed as a number and is
+ * parsed as a numeric string too, since sibling fields (`week`, `delta`) vary
+ * between the two encodings across real captures.
+ */
+export function extractYahooPercentOwnedValue(raw: unknown): number | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === 'number' || typeof raw === 'string') {
+    return parseYahooPercentOwned(raw);
+  }
+  if (typeof raw !== 'object') return null;
+
+  if (!Array.isArray(raw) && 'value' in (raw as Record<string, unknown>)) {
+    return parseYahooPercentOwned((raw as Record<string, unknown>).value);
+  }
+
+  const entries = Array.isArray(raw) ? raw : asArray(raw as Record<string, unknown>);
+  for (const entry of entries) {
+    if (entry && typeof entry === 'object' && !Array.isArray(entry) && 'value' in entry) {
+      const parsed = parseYahooPercentOwned((entry as Record<string, unknown>).value);
+      if (parsed !== null) return parsed;
+    }
   }
   return null;
 }

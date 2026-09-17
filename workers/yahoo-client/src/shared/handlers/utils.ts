@@ -1,6 +1,6 @@
 import type { ExecuteResponse } from '../../types';
 import { extractErrorCode } from '@flaim/worker-shared';
-import { asArray, parseYahooPercentOwned, toYahooBoolean, toYahooFiniteNumber } from '../normalizers';
+import { asArray, extractYahooPercentOwnedValue, toYahooBoolean, toYahooFiniteNumber } from '../normalizers';
 import { defaultMetadataForYahooCode, isYahooClientError } from '../errors';
 
 export function toExecuteErrorResponse(error: unknown): ExecuteResponse {
@@ -32,10 +32,23 @@ export function extractPlayerMeta(playerData: unknown[]): Record<string, unknown
   return playerMeta;
 }
 
+/**
+ * Player sub-resources requested on the league players collection, as the
+ * comma-separated value of Yahoo's `;out=` filter. `ownership` carries
+ * league-level owner/waiver state; `percent_owned` carries the platform-wide
+ * rostered rate.
+ */
+export const PLAYER_SUB_RESOURCES = 'ownership,percent_owned';
+
+/**
+ * Read a player's platform-wide rostered rate from the `percent_owned`
+ * sub-resource (requested via `;out=percent_owned`). This is a sibling of
+ * `ownership` in the player array, never nested inside it: `ownership` carries
+ * league-level owner/waiver state and has no rate field at all.
+ */
 export function extractPlayerPercentOwned(playerData: unknown[]): number | null {
-  const ownershipData = playerData?.[1] as Record<string, unknown> | undefined;
-  const ownership = ownershipData?.ownership as Record<string, unknown> | undefined;
-  return parseYahooPercentOwned(ownership?.percent_owned);
+  const container = findPlayerSubResource(playerData, 'percent_owned');
+  return extractYahooPercentOwnedValue(container?.percent_owned);
 }
 
 /**
