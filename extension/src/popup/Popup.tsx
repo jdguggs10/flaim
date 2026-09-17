@@ -892,7 +892,7 @@ export default function Popup() {
                 ESPN setup help
               </button>
               <button className="link-button" onClick={openReview}>
-                Leave an honest review
+                <span aria-hidden="true">★</span> Rate Flaim
               </button>
             </div>
           </div>
@@ -1008,7 +1008,13 @@ export default function Popup() {
 
         {state === 'setup_complete' && (
           <div className="content">
-            {currentEspnHistory && <div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
+            {discoveryResult === 'confirmed' && (
+              <div className="setup-step completed">
+                <span className="step-icon check">✓</span>
+                <span>Sync successful</span>
+              </div>
+            )}
+            {currentEspnHistory &&<div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
             {discoveryCounts.currentSeason.found === 0 ? (
               <div className="message warning">
                 No current-season ESPN leagues were found. Confirm this Chrome profile has the intended ESPN account and that the league opens in ESPN Fantasy, then try again.
@@ -1040,7 +1046,7 @@ export default function Popup() {
             </button>
             {showReviewInvitation && discoveryResult === 'confirmed' && (
               <button className="button secondary full-width" onClick={openReview}>
-                Leave an honest review
+                <span aria-hidden="true">★</span> Rate Flaim
               </button>
             )}
             {discoveryResult === 'none' && (
