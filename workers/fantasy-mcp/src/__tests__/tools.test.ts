@@ -168,7 +168,7 @@ describe('fantasy-mcp tools', () => {
     // structuredContent mirrors the text payload
     expect(result.structuredContent).toBeDefined();
     expect((result.structuredContent as Record<string, unknown>).totalLeaguesFound).toBe(0);
-    // Template linkage belongs to the frozen tool descriptor. Returning it
+    // Template linkage belongs to the stable tool descriptor. Returning it
     // here could override the descriptor used by a published client.
     expect(result._meta?.ui).toBeUndefined();
     expect(result._meta?.['openai/outputTemplate']).toBeUndefined();
@@ -208,7 +208,7 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
-    // Published URIs are stable cache keys with frozen resource metadata. The
+    // Published URIs are stable cache keys with stable resource metadata. The
     // descriptor points at v3, the only URI whose published widget CSP allows
     // the Yahoo Fantasy attribution link.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
