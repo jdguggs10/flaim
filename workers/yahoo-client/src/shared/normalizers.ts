@@ -88,17 +88,29 @@ export function unwrapTeam(teamArray: unknown): Record<string, unknown> {
   return result;
 }
 
+// A percent-owned string must be the whole value — an optional-whitespace,
+// non-negative decimal with an optional trailing '%' — never a numeric
+// prefix of a longer string (Number.parseFloat's old behavior accepted
+// "47oops" as 47, which this deliberately rejects).
+const PERCENT_OWNED_STRING_PATTERN = /^\s*\d+(\.\d+)?\s*%?\s*$/;
+
+function isValidPercentOwned(value: number): boolean {
+  return Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
 /**
  * Parse a Yahoo percent-owned scalar safely.
- * Returns null for missing/non-finite values and preserves valid 0 values.
+ * Returns null for missing, non-finite, out-of-range (outside 0-100), or
+ * partially-numeric string values, and preserves valid 0 values.
  */
 export function parseYahooPercentOwned(value: unknown): number | null {
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : null;
+    return isValidPercentOwned(value) ? value : null;
   }
   if (typeof value === 'string') {
+    if (!PERCENT_OWNED_STRING_PATTERN.test(value)) return null;
     const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : null;
+    return isValidPercentOwned(parsed) ? parsed : null;
   }
   return null;
 }

@@ -112,6 +112,23 @@ function hasRosteredRate(entry: Record<string, unknown>): boolean {
   return typeof entry.percentOwned === 'number' && Number.isFinite(entry.percentOwned);
 }
 
+/**
+ * Derive `capabilities` for a platform from the entries actually present.
+ * Exported so callers that reshape the entry array after normalization (the
+ * response-size truncation guard) can recompute `rosteredRate` against the
+ * kept entries instead of leaving it stale from the full, pre-truncation set.
+ */
+export function deriveFreeAgentCapabilities(
+  platform: Platform,
+  entries: Record<string, unknown>[]
+): FreeAgentCapabilities {
+  const config = PLATFORM_CONFIG[platform];
+  return {
+    ...config.capabilities,
+    ...(config.deriveRosteredRate ? { rosteredRate: entries.some(hasRosteredRate) } : {}),
+  };
+}
+
 function asIdString(value: unknown): string | undefined {
   if (typeof value === 'string' && value.length > 0) return value;
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -238,10 +255,7 @@ export function normalizeFreeAgentsResult(result: RouteResult, params: ToolParam
       position: (params.position || 'ALL').toUpperCase(),
       count: entries.length,
       ordering: config.ordering,
-      capabilities: {
-        ...config.capabilities,
-        ...(config.deriveRosteredRate ? { rosteredRate: entries.some(hasRosteredRate) } : {}),
-      },
+      capabilities: deriveFreeAgentCapabilities(platform, entries),
       ownershipScope: config.ownershipScope,
     };
     normalized[config.entryArrayKey] = entries;

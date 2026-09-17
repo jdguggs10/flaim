@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
-import { freeAgentEntryArrayKey, normalizeFreeAgentsResult } from './free-agent-normalizer';
+import { deriveFreeAgentCapabilities, freeAgentEntryArrayKey, normalizeFreeAgentsResult } from './free-agent-normalizer';
 import {
   ErrorCode,
   getDefaultSeasonYear,
@@ -1050,11 +1050,22 @@ function boundFreeAgentsResponse(result: RouteResult, params: ToolParams): McpTo
   const entries = record[entryArrayKey];
   if (!Array.isArray(entries) || entries.length === 0) return response;
 
-  const truncateTo = (keep: number): McpToolResponse =>
-    routeResultToMcp({
+  const truncateTo = (keep: number): McpToolResponse => {
+    const kept = entries.slice(0, keep) as Record<string, unknown>[];
+    return routeResultToMcp({
       ...result,
-      data: { ...record, [entryArrayKey]: entries.slice(0, keep), count: keep, truncated: true },
+      data: {
+        ...record,
+        [entryArrayKey]: kept,
+        count: keep,
+        truncated: true,
+        // Truncation can drop the only entries that carried a rate, so
+        // `capabilities` must reflect the kept entries, not the full set
+        // the pre-truncation normalizer saw.
+        capabilities: deriveFreeAgentCapabilities(params.platform, kept),
+      },
     });
+  };
 
   // Serialized size grows monotonically with entry count, so binary-search the
   // longest prefix that fits instead of re-serializing once per dropped entry.
