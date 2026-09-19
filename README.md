@@ -10,7 +10,7 @@ Analysis tools are read-only by design. No trades, no drops, no roster changes �
 
 ## How It Works
 
-The **Flaim skill** teaches your AI assistant how to behave like a fantasy analyst — which data to pull, how to interpret it, and how to turn it into useful advice. The **MCP tools** feed it your actual league data. Together, they give a general-purpose AI enough structure to answer like it knows your specific league.
+The **Flaim skill** is an analyst playbook: how to reason about a start/sit call, a waiver claim, a trade, a keeper, or a matchup preview, and what context to gather in what order. The **MCP tools** feed it your actual league data and carry their own mechanics (parameters, response fields, platform differences) in their descriptions. Together, they give a general-purpose AI enough structure to answer like it knows your specific league.
 
 ## Get Started
 
@@ -22,7 +22,7 @@ You are done. Ask questions such as "Who should I start this week?" or "What's o
 
 ## The Skill
 
-The Flaim skill teaches your AI assistant how to behave like a fantasy analyst — when to use which tools, how to interpret league data, and how to turn that context into useful advice.
+The Flaim skill is the judgment layer. It covers what Flaim is and cannot do, how to gather league context in order, and a playbook per decision type: start/sit, waivers and pickups, trades, keepers and dynasty, matchup previews, draft picks, season history, and multi-league comparisons. Tool mechanics stay in the tool descriptions and the server instructions, which every MCP client reads live, so the skill does not restate them.
 
 **Install for Claude Code (or any Agent Skills-compatible tool):**
 
