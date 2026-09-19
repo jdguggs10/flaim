@@ -137,7 +137,7 @@ These are intentionally short and easy to copy/paste.
    - “Show recent Yahoo transactions for league 423.l.193847 in 2025 (adds/drops/trades).”
 
 For Yahoo, avoid relying on explicit `week` filtering:
-- Yahoo ignores explicit `week` and always uses a recent 14-day timestamp window.
+- Yahoo ignores explicit `week` and uses a recent 14-day timestamp window for completed league transactions.
 - Yahoo `type=waiver` and `type=pending_trade` return pending items for the authenticated user's own team; other supported types use Yahoo's recent league transaction feed.
 
 ## Troubleshooting

@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### get_transactions Description Matches Real Row Fields (FLA-374)
+
+- **Fixed**: the `get_transactions` tool description claimed every normalized transaction includes a `date`. Since the pending-Yahoo fix, a Yahoo row that Yahoo has not stamped yet is returned without `date` and `timestamp` on `type=waiver` and `type=pending_trade` requests, and is left out and counted in `dropped_invalid_timestamp_count` on every other Yahoo request. The description now says so, states that ESPN and Sleeper rows always carry both fields, and notes that `week` is null on Yahoo rows and on Sleeper rows without one.
+- **Fixed**: the description said Yahoo always uses a 14-day timestamp window. The `type=waiver` and `type=pending_trade` views return the user's own pending items with no timestamp window, and the description now says that too.
+- **Unchanged**: tool name, annotations, input and output schemas, and behavior. Description text only, shipped under the continuous-review lane; portal scan confirmation is recorded in the PR.
+
 ### Yahoo H2H-Categories Matchup Detail (FLA-404)
 
 - **Fixed**: Yahoo `get_matchups` reported only `team_points.total` on head-to-head **categories** leagues (`scoring_type: "head"`), where that number is the count of categories won. The model received it as a point total, with no per-category values, no winners, and no league-type flag — while the shipped `analyze-matchup` skill already promised a category record.
