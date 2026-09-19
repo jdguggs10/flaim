@@ -5,6 +5,7 @@ import {
   type RefreshResultClassification,
   LEGACY_USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_HTML,
+  V3_USER_SESSION_WIDGET_HTML,
 } from '../../src/widgets/user-session-widget';
 
 interface FakeElement {
@@ -187,11 +188,25 @@ describe('user session widget script', () => {
     expect(USER_SESSION_WIDGET_HTML).not.toContain('classifyRefreshResult.toString');
   });
 
-  it('renders the same script in both bodies', () => {
-    const legacyScript = LEGACY_USER_SESSION_WIDGET_HTML.match(/<script>([\s\S]*?)<\/script>/)?.[1];
-    const currentScript = USER_SESSION_WIDGET_HTML.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  it('renders the same script in every body apart from the extra credit-link handlers', () => {
+    const scriptOf = (html: string) => html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+    const legacyScript = scriptOf(LEGACY_USER_SESSION_WIDGET_HTML);
+    const v3Script = scriptOf(V3_USER_SESSION_WIDGET_HTML);
+    const currentScript = scriptOf(USER_SESSION_WIDGET_HTML);
     expect(legacyScript).toBeTruthy();
-    expect(legacyScript).toBe(currentScript);
+    // The bodies with no extra provider links share one script byte for byte.
+    expect(legacyScript).toBe(v3Script);
+    // The current body adds one click handler per newly linkable provider and
+    // changes nothing else.
+    expect(currentScript).toBeTruthy();
+    expect(currentScript).not.toBe(legacyScript);
+    expect(currentScript).toContain("var espnLink = document.getElementById('espn-link');");
+    expect(currentScript).toContain("var sleeperLink = document.getElementById('sleeper-link');");
+    // Each added handler is one self-contained `var x = ...; if (x) { ... }`
+    // block; strip both and the remainder must be the shared script verbatim.
+    const addedHandlers =
+      /\n {2}\/\/ Present only on bodies whose published widget CSP allows the (?:ESPN|Sleeper)\n[\s\S]*?\n {2}\}/g;
+    expect((currentScript || '').replace(addedHandlers, '')).toBe(legacyScript);
   });
 
   it('renders a sport band per sport with the matching Tabler icon', () => {

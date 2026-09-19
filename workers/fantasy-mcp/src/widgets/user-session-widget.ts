@@ -38,14 +38,17 @@
  * declare — for example a new redirect, connect, or resource domain — gets a
  * new URI instead.
  *
- * That is why there are exactly two bodies for three URIs. v1 and v2 declare
- * only https://flaim.app as a redirect domain, so their body names the data
- * providers as plain text. v3 additionally declares https://sports.yahoo.com,
- * so its body links "Yahoo Fantasy" to the official Yahoo Fantasy site.
+ * That is why there are exactly three bodies for four URIs, one per set of
+ * link permissions. v1 and v2 declare only https://flaim.app as a redirect
+ * domain, so their body names the data providers as plain text. v3 additionally
+ * declares https://sports.yahoo.com, so its body links "Yahoo Fantasy" to the
+ * official Yahoo Fantasy site. v4 additionally declares https://www.espn.com
+ * and https://sleeper.com, so its body links all three provider credits.
  */
 export const LEGACY_USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
 export const V2_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
+export const V3_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
+export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v4.html';
 
 export type RefreshResultKind =
   | 'success'
@@ -160,15 +163,50 @@ export function classifyRefreshResult(payload: unknown): RefreshResultClassifica
 
 /**
  * Provider attribution: surfaces that display Yahoo Fantasy data credit
- * "Fantasy data provided by Yahoo Fantasy". The credit is linked only where
- * the URI's published widget CSP allows https://sports.yahoo.com as a redirect
- * domain. ESPN and Sleeper are named voluntarily so the three providers read
- * consistently; they stay plain text on every URI because no published widget
- * CSP allows their domains.
+ * "Fantasy data provided by Yahoo Fantasy". ESPN and Sleeper are named
+ * voluntarily so the three providers read consistently. Each credit is linked
+ * only where the URI's published widget CSP allows that provider's domain as a
+ * redirect domain, so the plain-text form stays the fallback for older URIs.
  */
 const YAHOO_ATTRIBUTION_PLAIN = 'Yahoo Fantasy';
 const YAHOO_ATTRIBUTION_LINKED =
   '<a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>';
+const ESPN_ATTRIBUTION_PLAIN = 'ESPN';
+const ESPN_ATTRIBUTION_LINKED =
+  '<a class="credit" href="https://www.espn.com/fantasy/" target="_blank" rel="noopener noreferrer" id="espn-link">ESPN</a>';
+const SLEEPER_ATTRIBUTION_PLAIN = 'Sleeper';
+const SLEEPER_ATTRIBUTION_LINKED =
+  '<a class="credit" href="https://sleeper.com/" target="_blank" rel="noopener noreferrer" id="sleeper-link">Sleeper</a>';
+
+/**
+ * Click handling for one provider credit link, emitted into the widget script.
+ * `openExternal` is the preferred path where the host exposes it; everywhere
+ * else the native anchor already works, so the default action is left alone.
+ */
+function creditLinkScript(providerLabel: string, varName: string, elementId: string): string {
+  return `  // Present only on bodies whose published widget CSP allows the ${providerLabel}
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var ${varName} = document.getElementById('${elementId}');
+  if (${varName}) {
+    ${varName}.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: ${varName}.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(${varName}.href); });
+      }
+      if (opened === false) openNewTab(${varName}.href);
+    });
+  }`;
+}
 
 /**
  * Inline SVG paths from Tabler Icons v3.41.1 (MIT), copyright Paweł Kuna.
@@ -206,14 +244,37 @@ export interface UserSessionWidgetOptions {
    * https://sports.yahoo.com as a redirect domain.
    */
   linkYahoo: boolean;
+  /**
+   * Link the ESPN credit to the official ESPN Fantasy site. Only enable this
+   * for a URI whose published widget CSP allows https://www.espn.com as a
+   * redirect domain.
+   */
+  linkEspn: boolean;
+  /**
+   * Link the Sleeper credit to the official Sleeper site. Only enable this for
+   * a URI whose published widget CSP allows https://sleeper.com as a redirect
+   * domain.
+   */
+  linkSleeper: boolean;
 }
 
 /**
- * Build the widget document. The two variants differ by exactly one substring:
- * the Yahoo Fantasy credit is either plain text or a link.
+ * Build the widget document. The variants differ only in the provider credits:
+ * each credit is a link where the URI's published widget CSP allows that
+ * provider's redirect domain, and plain text otherwise.
  */
 export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): string {
   const yahooCredit = options.linkYahoo ? YAHOO_ATTRIBUTION_LINKED : YAHOO_ATTRIBUTION_PLAIN;
+  const espnCredit = options.linkEspn ? ESPN_ATTRIBUTION_LINKED : ESPN_ATTRIBUTION_PLAIN;
+  const sleeperCredit = options.linkSleeper ? SLEEPER_ATTRIBUTION_LINKED : SLEEPER_ATTRIBUTION_PLAIN;
+  // The Yahoo handler is always emitted (its guard no-ops where the anchor is
+  // absent), so the bodies published before ESPN and Sleeper were linkable keep
+  // their exact script. The other two are emitted only where they can fire.
+  const creditLinkHandlers = [
+    creditLinkScript('Yahoo', 'yahooLink', 'yahoo-link'),
+    ...(options.linkEspn ? [creditLinkScript('ESPN', 'espnLink', 'espn-link')] : []),
+    ...(options.linkSleeper ? [creditLinkScript('Sleeper', 'sleeperLink', 'sleeper-link')] : []),
+  ].join('\n');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -566,7 +627,7 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
     <div class="loading">Loading&hellip;</div>
   </div>
   <footer class="footer">
-    <button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button> Fantasy data provided by ${yahooCredit}, ESPN, and Sleeper.
+    <button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button> Fantasy data provided by ${yahooCredit}, ${espnCredit}, and ${sleeperCredit}.
     <div class="status" id="refresh-status" role="status" aria-live="polite"></div>
   </footer>
 </div>
@@ -966,28 +1027,7 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   if (editLink) editLink.addEventListener('click', openLeagues);
   var refreshButton = document.getElementById('refresh-button');
   if (refreshButton) refreshButton.addEventListener('click', refreshLeagues);
-  // Present only on bodies whose published widget CSP allows the Yahoo
-  // redirect domain. The href is read from the anchor so no other body carries
-  // an external URL.
-  var yahooLink = document.getElementById('yahoo-link');
-  if (yahooLink) {
-    yahooLink.addEventListener('click', function(e) {
-      // Only intercept where the host exposes openExternal. Everywhere else
-      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
-      // anchor is the working path, so leave the default action alone.
-      // Deliberately no location.href fallback on this link: it would
-      // navigate the widget iframe away from the widget.
-      var host = null;
-      try { host = window.openai; } catch (_) {}
-      if (!host || typeof host.openExternal !== 'function') return;
-      if (e && e.preventDefault) e.preventDefault();
-      var opened = host.openExternal({ href: yahooLink.href });
-      if (opened && typeof opened.catch === 'function') {
-        opened.catch(function() { openNewTab(yahooLink.href); });
-      }
-      if (opened === false) openNewTab(yahooLink.href);
-    });
-  }
+${creditLinkHandlers}
 
   // Extract payload data from any wrapper format
   function unwrapPayload(obj) {
@@ -1127,11 +1167,30 @@ ${TABLER_LICENSE_HTML}
  * https://flaim.app as a redirect domain, so this body carries no other
  * external link.
  */
-export const LEGACY_USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({ linkYahoo: false });
+export const LEGACY_USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({
+  linkYahoo: false,
+  linkEspn: false,
+  linkSleeper: false,
+});
 
 /**
- * Body served at the v3 URI (the tool descriptor target) and at the
- * version-less HTTP fallback routes. v3's published widget CSP also allows
- * https://sports.yahoo.com, so the Yahoo Fantasy credit is a link here.
+ * Body served at the v3 URI. v3's published widget CSP also allows
+ * https://sports.yahoo.com, so the Yahoo Fantasy credit is a link here; ESPN
+ * and Sleeper stay plain text because v3 does not declare their domains.
  */
-export const USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({ linkYahoo: true });
+export const V3_USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({
+  linkYahoo: true,
+  linkEspn: false,
+  linkSleeper: false,
+});
+
+/**
+ * Body served at the v4 URI (the tool descriptor target) and at the
+ * version-less HTTP fallback routes. v4's published widget CSP allows all three
+ * provider domains, so every provider credit is a link here.
+ */
+export const USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({
+  linkYahoo: true,
+  linkEspn: true,
+  linkSleeper: true,
+});
