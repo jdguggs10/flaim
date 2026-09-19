@@ -97,6 +97,7 @@ Common examples:
 - web typecheck: `corepack pnpm --dir web exec tsc --noEmit`
 - UI token check: `corepack pnpm run ui:check`
 - affected worker tests/typecheck: run the package-local test and typecheck commands in the changed worker directory
+- tool description or declared schema text: check each changed claim against the provider code behind the tool, since tests and CI don't read wording
 
 Do not claim success if you did not run the relevant checks.
 
