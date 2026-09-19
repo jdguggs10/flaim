@@ -55,6 +55,20 @@ The `/settings` fetch runs **sequentially after** `/teams`, not concurrently wit
 
 The `/settings` fetch degrades independently and can never fail `get_league_info`: if it 404s/5xxs, times out, rejects outright, or returns an unexpected shape, the response still returns exactly what `/teams` alone would have (unchanged from before this fetch existed) plus a `warning: "LEAGUE_SETTINGS_UNAVAILABLE: ..."` string, matching this worker's existing `get_transactions` degrade-with-warning convention. It never throws out of the handler.
 
+### Category Scoring (`get_matchups`)
+
+**Status: coded and fixture-tested only, not live-verified (FLA-404).** Yahoo API access has been cut since 2026-07-27 (FLA-237) and no category-scoring league is reachable from the eval identity, so fixtures are shaped from public Yahoo captures rather than a live call.
+
+`get_matchups` emits `scoringType` (`points`/`categories`/`roto`/`unknown`, normalized from Yahoo's `scoring_type`) and `scoringTypeRaw` on every response. The gate for category behavior is `scoring_type` alone, **never** the presence of `team_stats` — a verified `headpoint` (ordinary points) capture carries `team_stats` too, and must not be mistaken for a categories league.
+
+On a categories league (Yahoo's `scoring_type: "head"` — counter-intuitively, `head` means H2H **categories**, not points), each side of a matchup additionally carries `categories: [{ statId, name, displayName, value, result, isDisplayOnly }]`, `categoryScore: { wins, losses, ties }`, and `categoriesWon` (the same number as `points`, honestly labeled). `points` itself is unchanged everywhere, on every league type: on a categories league it is a category count rather than a fantasy-points total, but nulling it out would be a silent behavior change on the one league type this worker cannot test before shipping — `scoringType` and `categoriesWon` tell the model how to read it instead.
+
+Category names come from a second, best-effort `GET /league/{key}/settings` fetch — the same shared helper `get_league_info` uses (`src/shared/handlers/league-settings.ts`) — run **sequentially after** the scoreboard request and **only** on categories leagues, for the same HTTP-999 throttling reason as the `get_league_info` settings fetch above. When it fails, categories fall back to being labeled by stat id only, `categoryNamesAvailable` is `false`, and a `MATCHUP_CATEGORY_NAMES_UNAVAILABLE` warning is attached.
+
+`categoryScore` and each category's `result` come only from Yahoo's undocumented `stat_winners` (a sibling of `matchup["0"]`, not nested inside it) — never computed by comparing category values, and never derived from `team_points.total`. When `stat_winners` is absent or empty, `categoryScore` is `null` and every `result` is `null`, never zero; a per-matchup `statWinnersAvailable` flag says which case applies. `stat_winners` is itself undocumented and absent from at least one known older capture, so this is the field most likely to force a re-design if production shows it missing on live leagues.
+
+A roto or unrecognized (`unknown`) scoring type that returns an empty scoreboard adds `matchupsUnavailableReason: "NOT_HEAD_TO_HEAD"` plus a warning, instead of a bare `matchups: []` with no explanation. If such a league unexpectedly returns matchups, they pass through unchanged and neither field is set.
+
 ## Architecture
 
 ```
