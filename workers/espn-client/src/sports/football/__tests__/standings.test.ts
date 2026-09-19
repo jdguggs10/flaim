@@ -96,6 +96,13 @@ describe('football get_standings handler — outcome fields', () => {
     expect(nonPlayoff?.championshipWon).toBe(false);
     expect(nonPlayoff?.playoffOutcome).toBe('missed_playoffs');
     expect(nonPlayoff?.madePlayoffs).toBe(false); // season complete + explicit rank + no playoffSeed
+
+    // The get_standings tool description promises ESPN omits these two keys
+    // rather than returning null, unlike Yahoo and Sleeper. Pin the absence.
+    for (const entry of standings) {
+      expect(entry).not.toHaveProperty('waiverPriority');
+      expect(entry).not.toHaveProperty('faabBalance');
+    }
   });
 
   it('returns season_complete but all outcome fields null when no rankFinal present', async () => {
