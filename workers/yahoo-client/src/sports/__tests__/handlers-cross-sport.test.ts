@@ -233,7 +233,7 @@ function buildMatchupsResponse(): unknown {
   return {
     fantasy_content: {
       league: [
-        { league_key: '449.l.123', name: 'Test League', current_week: 5 },
+        { league_key: '449.l.123', name: 'Test League', current_week: 5, scoring_type: 'headpoint' },
         {
           scoreboard: {
             '0': {
@@ -1409,13 +1409,24 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const result = await handlers.get_matchups({} as never, params, 'Bearer x', `cid-${sport}`);
 
       expect(result.success).toBe(true);
-      const data = result.data as { matchups: Array<Record<string, unknown>>; currentWeek: number };
+      const data = result.data as {
+        matchups: Array<Record<string, unknown>>;
+        currentWeek: number;
+        scoringType: string;
+        scoringTypeRaw: string;
+      };
       expect(data.currentWeek).toBe(5);
       expect(data.matchups).toHaveLength(1);
+      // FLA-404: a headpoint league is ordinary fantasy-points scoring, not
+      // categories — no category fields, even though this fixture (like a
+      // verified real headpoint capture) carries no team_stats either.
+      expect(data.scoringType).toBe('points');
+      expect(data.scoringTypeRaw).toBe('headpoint');
       const matchup = data.matchups[0] as { home: Record<string, unknown>; away: Record<string, unknown>; winner: string };
       expect(matchup.home).toMatchObject({ teamName: 'Team A', points: 120.5 });
       expect(matchup.away).toMatchObject({ teamName: 'Team B', points: 105.3 });
       expect(matchup.winner).toBe('home');
+      expect(matchup.home.categories).toBeUndefined();
     });
 
     it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {

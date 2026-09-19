@@ -4,6 +4,16 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo H2H-Categories Matchup Detail (FLA-404)
+
+- **Fixed**: Yahoo `get_matchups` reported only `team_points.total` on head-to-head **categories** leagues (`scoring_type: "head"`), where that number is the count of categories won. The model received it as a point total, with no per-category values, no winners, and no league-type flag — while the shipped `analyze-matchup` skill already promised a category record.
+- **Added**: responses carry `scoringType` (`points`/`categories`/`roto`/`unknown`) and `scoringTypeRaw`. On a categories league each side also carries `categories[{statId,name,displayName,value,result,isDisplayOnly}]`, `categoryScore{wins,losses,ties}`, and `categoriesWon`, mirroring the existing ESPN baseball category shape.
+- **Added**: a best-effort `/league/{key}/settings` fetch, sequential after the scoreboard and only on categories leagues, supplies category names; on failure categories keep their stat ids, `categoryNamesAvailable` is `false`, and a warning is attached. That settings path is now one shared helper, used by `get_league_info` too.
+- **Added**: `matchupsUnavailableReason: "NOT_HEAD_TO_HEAD"` plus a warning when a roto or unrecognized scoring type returns an empty scoreboard, instead of a bare `matchups: []`.
+- **Unchanged**: `points`, `projectedPoints`, and the live-points-derived `winner` are untouched on every league type. The gate is `scoring_type`, never the presence of `team_stats`, because a verified `headpoint` capture carries `team_stats` as well. `categoryScore` and per-category `result` come only from Yahoo's undocumented `stat_winners`; when it is absent they are `null`, never derived from the point total and never computed by comparing values.
+- **Unchanged descriptor**: no tool name, annotation, or declared schema moved; every new field rides the existing passthrough objects. The description now notes that only some category leagues (Yahoo, and ESPN baseball) return per-category rows and a `categoryScore`, that where they do the side total is a category count or `null` rather than fantasy points, and that a `null` categoryScore/value/result means the provider didn't report it rather than a real zero — ESPN basketball, ESPN hockey, and Sleeper are unaffected and continue to emit neither field.
+- **Not live-verified**: Yahoo API access is unavailable from the development environment (FLA-237) and no category-scoring league is reachable from the test identity, so fixtures are shaped from public Yahoo captures.
+
 ### ESPN Connector v1.6 Reliability and Setup Docs (FLA-403) - 2026-09-17
 
 - **Fixed**: ESPN discovery now distinguishes a valid empty league list from authentication, rate-limit, timeout, network, malformed-response, and upstream failures. The extension route, website refresh, and scheduled reconciliation share that typed distinction, so a failed ESPN request can no longer appear successful by substituting previously saved leagues. Existing saved rows remain available separately and are not deleted by an empty result.

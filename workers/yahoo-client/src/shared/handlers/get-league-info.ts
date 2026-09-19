@@ -3,7 +3,8 @@ import { getYahooCredentials } from '../auth';
 import { yahooFetch, handleYahooError, requireCredentials } from '../yahoo-api';
 import { asArray, getPath, toYahooBoolean, toYahooFiniteNumber, unwrapLeague, unwrapTeam } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
-import { extractLeagueSettings, extractManagerName, toExecuteErrorResponse } from './utils';
+import { extractManagerName, toExecuteErrorResponse } from './utils';
+import { fetchLeagueSettings } from './league-settings';
 
 const LEAGUE_SETTINGS_UNAVAILABLE_WARNING =
   'LEAGUE_SETTINGS_UNAVAILABLE: could not fetch league settings; draft/trade config fields omitted.';
@@ -58,48 +59,28 @@ export function createGetLeagueInfoHandler(config: YahooHandlerContext): Handler
         };
       });
 
-      // Everything settings-related is isolated in its own try/catch so a
-      // fetch failure, a malformed/unexpected settings payload, or anything
-      // else in this block can only omit these fields and add a warning —
-      // it can never throw out of the handler, and a /settings problem
-      // never affects the /teams-derived data above. Field shapes per the
-      // research brief (§3.2) and a real captured settings fixture; not
-      // live-verified while Yahoo API access is cut (FLA-237).
+      // The /settings fetch is best-effort and degrades independently (FLA-284):
+      // a fetch failure, a malformed/unexpected settings payload, or anything
+      // else fetchLeagueSettings can't handle only omits these fields and adds
+      // a warning — it never affects the /teams-derived data above. Field
+      // shapes per the research brief (§3.2) and a real captured settings
+      // fixture; not live-verified while Yahoo API access is cut (FLA-237).
+      // Extracted into a shared helper (FLA-404) since get_matchups now needs
+      // the same fetch for category stat names.
       const warnings: string[] = [];
       let settingsFields: Record<string, unknown> = {};
-      try {
-        const settingsResponse = await yahooFetch(`/league/${league_id}/settings`, { credentials }).catch((error: unknown) => {
-          console.warn(
-            `[yahoo-client] ${cid} get_league_info settings fetch failed: ${error instanceof Error ? error.message : String(error)}`
-          );
-          return null;
-        });
-
-        if (settingsResponse && settingsResponse.ok) {
-          const settingsRaw = await settingsResponse.json();
-          const settingsLeagueArray = getPath(settingsRaw, ['fantasy_content', 'league']);
-          const settingsMerged = unwrapLeague(settingsLeagueArray);
-          const settings = extractLeagueSettings(settingsMerged.settings);
-          if (settings) {
-            settingsFields = {
-              draftType: settings.draft_type,
-              isAuctionDraft: toYahooBoolean(settings.is_auction_draft),
-              canTradeDraftPicks: toYahooBoolean(settings.can_trade_draft_picks),
-              tradeEndDate: settings.trade_end_date,
-              tradeRatifyType: settings.trade_ratify_type,
-              tradeRejectTime: toYahooFiniteNumber(settings.trade_reject_time),
-              usesFaab: toYahooBoolean(settings.uses_faab),
-            };
-          } else {
-            warnings.push(LEAGUE_SETTINGS_UNAVAILABLE_WARNING);
-          }
-        } else {
-          warnings.push(LEAGUE_SETTINGS_UNAVAILABLE_WARNING);
-        }
-      } catch (settingsError) {
-        console.warn(
-          `[yahoo-client] ${cid} get_league_info settings processing failed: ${settingsError instanceof Error ? settingsError.message : String(settingsError)}`
-        );
+      const settings = await fetchLeagueSettings(credentials, league_id, cid, 'get_league_info');
+      if (settings) {
+        settingsFields = {
+          draftType: settings.draft_type,
+          isAuctionDraft: toYahooBoolean(settings.is_auction_draft),
+          canTradeDraftPicks: toYahooBoolean(settings.can_trade_draft_picks),
+          tradeEndDate: settings.trade_end_date,
+          tradeRatifyType: settings.trade_ratify_type,
+          tradeRejectTime: toYahooFiniteNumber(settings.trade_reject_time),
+          usesFaab: toYahooBoolean(settings.uses_faab),
+        };
+      } else {
         warnings.push(LEAGUE_SETTINGS_UNAVAILABLE_WARNING);
       }
 
