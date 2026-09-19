@@ -205,6 +205,116 @@ function buildStatCategoriesSettingsResponse(): unknown {
   };
 }
 
+// Same shape as buildCategoriesScoreboard, but team_points.total is an
+// empty string on the home side (Review batch fix #4/#9: parseFloat('')
+// is NaN, so categoriesWon must fall back to null, not NaN).
+function buildCategoriesScoreboardWithEmptyPoints(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.777', name: 'Category League', scoring_type: 'head', current_week: 5 },
+        {
+          scoreboard: {
+            '0': {
+              matchups: {
+                '0': {
+                  matchup: {
+                    '0': {
+                      teams: {
+                        '0': {
+                          team: [
+                            [{ team_key: HOME_TEAM_KEY, team_id: '1', name: 'Team A' }],
+                            { team_points: { total: '' }, team_stats: buildTeamStats('home') },
+                          ],
+                        },
+                        '1': {
+                          team: [
+                            [{ team_key: AWAY_TEAM_KEY, team_id: '2', name: 'Team B' }],
+                            { team_points: { total: '2' }, team_stats: buildTeamStats('away') },
+                          ],
+                        },
+                        count: 2,
+                      },
+                    },
+                    stat_winners: STAT_WINNERS,
+                  },
+                },
+                count: 1,
+              },
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
+// Same matchup shell as buildCategoriesScoreboard, but stat_winners entries
+// carry a stat_id with neither winner_team_key nor is_tied (Review batch
+// fix #2/#11: this must never synthesize a {wins:0, losses:0, ties:0}).
+function buildCategoriesScoreboardNoOutcomeStatWinners(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.777', name: 'Category League', scoring_type: 'head', current_week: 5 },
+        {
+          scoreboard: {
+            '0': {
+              matchups: {
+                '0': {
+                  matchup: {
+                    '0': {
+                      teams: {
+                        '0': {
+                          team: [
+                            [{ team_key: HOME_TEAM_KEY, team_id: '1', name: 'Team A' }],
+                            { team_points: { total: '7' }, team_stats: buildTeamStats('home') },
+                          ],
+                        },
+                        '1': {
+                          team: [
+                            [{ team_key: AWAY_TEAM_KEY, team_id: '2', name: 'Team B' }],
+                            { team_points: { total: '2' }, team_stats: buildTeamStats('away') },
+                          ],
+                        },
+                        count: 2,
+                      },
+                    },
+                    stat_winners: [
+                      { stat_winner: { stat_id: '1' } },
+                      { stat_winner: { stat_id: '2' } },
+                    ],
+                  },
+                },
+                count: 1,
+              },
+            },
+          },
+        },
+      ],
+    },
+  };
+}
+
+// Settings response that parses fine (a plain object at index 0 of the
+// nested-array shape) but carries no stat_categories at all (Review batch
+// fix #5/#10).
+function buildSettingsResponseWithoutStatCategories(): unknown {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: '449.l.777', name: 'Category League' },
+        {
+          settings: [
+            { draft_type: 'live' },
+            { min_games_played: '' },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 describe('yahoo get_matchups category scoring', () => {
   const getCredsMock = getYahooCredentials as MockedFunction<typeof getYahooCredentials>;
   const fetchMock = yahooFetch as MockedFunction<typeof yahooFetch>;
@@ -290,6 +400,7 @@ describe('yahoo get_matchups category scoring', () => {
     expect(away.categoryScore).toBeNull();
 
     const homeCategories = home.categories as Array<Record<string, unknown>>;
+    expect(homeCategories).toHaveLength(12);
     expect(homeCategories.every((c) => c.result === null)).toBe(true);
 
     // team_points.total is still preserved as points/categoriesWon — it is
@@ -483,5 +594,87 @@ describe('yahoo get_matchups category scoring', () => {
     const pointsHome = pointsMatchup.home as Record<string, unknown>;
     expect(pointsHome.points).toBe(243.9);
     expect(pointsHome.categoriesWon).toBeUndefined();
+  });
+
+  it('reports matchupsUnavailableReason NOT_HEAD_TO_HEAD for an unknown scoring type with an empty scoreboard', async () => {
+    const response = {
+      fantasy_content: {
+        league: [
+          { league_key: '449.l.444', name: 'One Win League Empty', scoring_type: 'headone', current_week: 5 },
+          { scoreboard: { '0': { matchups: { count: 0 } } } },
+        ],
+      },
+    };
+    fetchMock.mockResolvedValue(jsonResponse(response));
+
+    const params: ToolParams = { sport: 'baseball', league_id: '449.l.444', season_year: 2025 };
+    const result = await handler({} as never, params, 'Bearer x', 'cid-11');
+
+    const data = result.data as Record<string, unknown>;
+    expect(data.scoringType).toBe('unknown');
+    expect(data.matchups).toEqual([]);
+    expect(data.matchupsUnavailableReason).toBe('NOT_HEAD_TO_HEAD');
+    expect(data.warning).toContain('MATCHUPS_NOT_HEAD_TO_HEAD');
+    expect(data.warning).toContain('headone');
+  });
+
+  it('treats an empty team_points.total as points: 0 and categoriesWon: null rather than NaN', async () => {
+    fetchMock.mockImplementation(async (path: unknown) => {
+      const p = path as string;
+      return jsonResponse(p.includes('/settings') ? buildStatCategoriesSettingsResponse() : buildCategoriesScoreboardWithEmptyPoints());
+    });
+
+    const params: ToolParams = { sport: 'baseball', league_id: '449.l.777', season_year: 2025 };
+    const result = await handler({} as never, params, 'Bearer x', 'cid-12');
+
+    const data = result.data as Record<string, unknown>;
+    const matchup = (data.matchups as Array<Record<string, unknown>>)[0];
+    const home = matchup.home as Record<string, unknown>;
+    expect(home.points).toBe(0);
+    expect(home.categoriesWon).toBeNull();
+  });
+
+  it('treats a settings response with no stat_categories as categoryNamesAvailable false with a warning and null names', async () => {
+    fetchMock.mockImplementation(async (path: unknown) => {
+      const p = path as string;
+      return jsonResponse(p.includes('/settings') ? buildSettingsResponseWithoutStatCategories() : buildCategoriesScoreboard({ statWinners: true }));
+    });
+
+    const params: ToolParams = { sport: 'baseball', league_id: '449.l.777', season_year: 2025 };
+    const result = await handler({} as never, params, 'Bearer x', 'cid-13');
+
+    const data = result.data as Record<string, unknown>;
+    expect(data.categoryNamesAvailable).toBe(false);
+    expect(data.warning).toContain('MATCHUP_CATEGORY_NAMES_UNAVAILABLE');
+
+    const matchup = (data.matchups as Array<Record<string, unknown>>)[0];
+    const home = matchup.home as Record<string, unknown>;
+    const categories = home.categories as Array<Record<string, unknown>>;
+    expect(categories.length).toBeGreaterThan(0);
+    expect(categories.every((c) => c.name === null && c.displayName === null)).toBe(true);
+  });
+
+  it('treats stat_winners entries with neither winner_team_key nor is_tied as categoryScore null, not 0-0-0', async () => {
+    fetchMock.mockImplementation(async (path: unknown) => {
+      const p = path as string;
+      return jsonResponse(p.includes('/settings') ? buildStatCategoriesSettingsResponse() : buildCategoriesScoreboardNoOutcomeStatWinners());
+    });
+
+    const params: ToolParams = { sport: 'baseball', league_id: '449.l.777', season_year: 2025 };
+    const result = await handler({} as never, params, 'Bearer x', 'cid-14');
+
+    const data = result.data as Record<string, unknown>;
+    const matchup = (data.matchups as Array<Record<string, unknown>>)[0];
+    // stat_winners is non-empty (2 entries), so statWinnersAvailable is
+    // still true even though neither entry resolves to a win/tie/loss.
+    expect(matchup.statWinnersAvailable).toBe(true);
+
+    const home = matchup.home as Record<string, unknown>;
+    const away = matchup.away as Record<string, unknown>;
+    expect(home.categoryScore).toBeNull();
+    expect(away.categoryScore).toBeNull();
+
+    const homeCategories = home.categories as Array<Record<string, unknown>>;
+    expect(homeCategories.every((c) => c.result === null)).toBe(true);
   });
 });

@@ -33,6 +33,24 @@ interface YahooStatWinner {
 }
 
 /**
+ * The single source of truth for how a `stat_winner` entry resolves to a
+ * per-side outcome — used for both the per-category `result` field and the
+ * `categoryScore` tally, so the two can never disagree on precedence.
+ * Checked tie first (an entry can in principle carry both `is_tied` and a
+ * stale `winner_team_key`; Yahoo's own semantics say a tie has no winner),
+ * then a matching `winner_team_key` (win), then a non-matching one (loss);
+ * anything else — no entry, or an entry with neither — is `null`, never
+ * guessed at or defaulted to a loss.
+ */
+function resolveStatOutcome(winner: YahooStatWinner | undefined, teamKey: string): 'win' | 'tie' | 'loss' | null {
+  if (!winner) return null;
+  if (winner.isTied) return 'tie';
+  if (winner.winnerTeamKey === teamKey) return 'win';
+  if (winner.winnerTeamKey) return 'loss';
+  return null;
+}
+
+/**
  * `stat_winners` sits BESIDE `matchup["0"]` (a sibling key on the object
  * holding key `"0"`), not nested inside the `"0"` content that carries
  * `teams`. It is undocumented and absent from at least one known older
@@ -102,9 +120,14 @@ export function createGetMatchupsHandler(_config: YahooHandlerContext): HandlerF
       let categoryNamesAvailable = true;
       if (isCategoryLeague) {
         const settings = await fetchLeagueSettings(credentials, league_id, cid, 'get_matchups');
+        // A settings response that parsed fine but carries no
+        // stat_categories (or an empty one) is functionally the same as a
+        // failed fetch from the caller's perspective — no names to attach —
+        // so it gets the same categoryNamesAvailable/warning treatment.
         if (settings) {
           categoryNames = extractStatCategories(settings);
-        } else {
+        }
+        if (categoryNames.size === 0) {
           categoryNamesAvailable = false;
           warnings.push(MATCHUP_CATEGORY_NAMES_UNAVAILABLE_WARNING);
         }
@@ -149,52 +172,50 @@ export function createGetMatchupsHandler(_config: YahooHandlerContext): HandlerF
           const statsArray = asArray(getPath(teamStats, ['stats']) as Record<string, unknown> | undefined);
 
           // Never compare category VALUES to decide a result — only
-          // Yahoo's own stat_winners says who won a category.
+          // Yahoo's own stat_winners says who won a category. A stat entry
+          // with no stat_id is skipped entirely (flatMap) rather than
+          // emitted as a row with statId: ''.
           const categories = teamStats
-            ? statsArray.map((entry) => {
+            ? statsArray.flatMap((entry) => {
                 const stat = getPath(entry, ['stat']) as Record<string, unknown> | undefined;
-                const statId = stat && stat.stat_id !== undefined && stat.stat_id !== null ? String(stat.stat_id) : '';
+                if (!stat || stat.stat_id === undefined || stat.stat_id === null) return [];
+                const statId = String(stat.stat_id);
                 const meta = categoryNames.get(statId);
                 const winner = statWinners.get(statId);
 
-                let result: 'win' | 'tie' | 'loss' | null = null;
-                if (winner) {
-                  if (winner.winnerTeamKey === teamKey) result = 'win';
-                  else if (winner.isTied) result = 'tie';
-                  else if (winner.winnerTeamKey) result = 'loss';
-                }
-
-                return {
+                return [{
                   statId,
                   name: meta?.name ?? null,
                   displayName: meta?.displayName ?? null,
-                  value: stat?.value == null ? null : String(stat.value),
-                  result,
+                  value: stat.value == null ? null : String(stat.value),
+                  result: resolveStatOutcome(winner, teamKey),
                   isDisplayOnly: meta?.isDisplayOnly ?? false,
-                };
+                }];
               })
             : null;
 
           // Tallied ONLY over stat_winners, never from team_points.total and
-          // never computed by comparing values — null when stat_winners is
-          // absent or empty, not zeroes.
-          let categoryScore: { wins: number; losses: number; ties: number } | null = null;
-          if (statWinners.size > 0) {
-            let wins = 0;
-            let losses = 0;
-            let ties = 0;
-            for (const winner of statWinners.values()) {
-              if (winner.isTied) ties++;
-              else if (winner.winnerTeamKey === teamKey) wins++;
-              else if (winner.winnerTeamKey) losses++;
-            }
-            categoryScore = { wins, losses, ties };
+          // never computed by comparing values, and sharing resolveStatOutcome
+          // with the per-category result above so the two can't disagree.
+          // null when the tally is empty — either because stat_winners is
+          // absent/empty, or because every entry resolved to null (neither
+          // is_tied nor a recognized winner_team_key) — never {0,0,0}.
+          let wins = 0;
+          let losses = 0;
+          let ties = 0;
+          for (const winner of statWinners.values()) {
+            const outcome = resolveStatOutcome(winner, teamKey);
+            if (outcome === 'win') wins++;
+            else if (outcome === 'loss') losses++;
+            else if (outcome === 'tie') ties++;
           }
+          const categoryScore = wins + losses + ties > 0 ? { wins, losses, ties } : null;
 
-          const categoriesWon =
-            teamPoints?.total !== undefined && teamPoints?.total !== null
-              ? parseFloat(String(teamPoints.total))
-              : null;
+          // team_points.total may be an empty string or otherwise
+          // non-numeric — parseFloat('') is NaN, so this must check
+          // finiteness rather than only undefined/null.
+          const parsedCategoriesWon = parseFloat(String(teamPoints?.total));
+          const categoriesWon = Number.isFinite(parsedCategoriesWon) ? parsedCategoriesWon : null;
 
           return { ...base, categories, categoryScore, categoriesWon };
         };
