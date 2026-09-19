@@ -111,6 +111,91 @@ describe('fantasy-mcp tools', () => {
     expect(history).not.toContain('get_league_info');
   });
 
+  // FLA-374: draft, keeper, and matchup-detail mechanics live in the tool
+  // descriptions (the only surface every MCP client reads), not only in the
+  // shipped skill. Each claim below is checked against a provider handler.
+  it('states per-provider draft-ownership reach on get_draft', () => {
+    const description = getUnifiedTools().find((tool) => tool.name === 'get_draft')!.description;
+
+    expect(description).toContain(
+      'current ownership comes only from ownership.picks[].currentOwnerTeamId'
+    );
+    expect(description).toContain(
+      'ESPN and Yahoo expose confirmed draft results but no current pick-ownership ledger, so their responses carry no ownership block at all'
+    );
+    expect(description).toContain(
+      'only Sleeper can report current or future pick ownership, and an exact board placement only when Sleeper supplies enough draft-order evidence'
+    );
+    expect(description).toContain(
+      'An ownership.scope of changed_picks_only lists only picks known to have changed hands and is not a complete pick inventory'
+    );
+    expect(description).toContain(
+      'selectionInRound is the round slot rendered in a value such as 12.15, while draftColumn is the stable draft-board column'
+    );
+  });
+
+  it('inventories the platform-dependent keeper fields on the tools that return them', () => {
+    const tools = new Map(getUnifiedTools().map((tool) => [tool.name, tool]));
+
+    const leagueInfo = tools.get('get_league_info')!.description;
+    expect(leagueInfo).toContain(
+      'ESPN adds keeperSettings (keeperCount, keeperCountFuture, keeperOrderType, keeperDeadlineDate) and isKeeperLeague'
+    );
+    expect(leagueInfo).toContain(
+      'per-team keeperPlayerIds and futureKeeperPlayerIds as raw ESPN player IDs with no name resolution'
+    );
+    expect(leagueInfo).toContain(
+      'whose typeRaw is an undocumented Sleeper convention that must not be read on its own as a redraft, keeper, dynasty, or guillotine signal'
+    );
+    expect(leagueInfo).toContain(
+      'Yahoo adds draftType, isAuctionDraft, and canTradeDraftPicks, but exposes no keeper-cost rule'
+    );
+
+    const roster = tools.get('get_roster')!.description;
+    expect(roster).toContain(
+      'ESPN adds per-player keeperValue and keeperValueFuture plus one response-level keeperValueUnit of auction_dollars or draft_round'
+    );
+    expect(roster).toContain(
+      'a historical snapshot withholds keeperValueFuture and flags keeperValueFutureAvailable false'
+    );
+    expect(roster).toContain(
+      'non-empty only during Sleeper\'s pre-draft keeper-selection window'
+    );
+
+    // Yahoo's is_keeper.cost has never been observed populated, so no tool that
+    // surfaces isKeeper may imply a keeper cost is available.
+    for (const name of ['get_free_agents', 'get_players']) {
+      expect(tools.get(name)!.description).toContain(
+        'In a Yahoo keeper league, entries may add isKeeper as status, cost, and kept; Yahoo has never been observed populating cost, so no keeper cost is available'
+      );
+    }
+    expect(roster).toContain(
+      'Yahoo may add per-player isKeeper as status, cost, and kept; its cost has never been observed populated, so no keeper cost is available from Yahoo'
+    );
+  });
+
+  it('bounds get_matchups player detail to ESPN football from 2018 in its own metadata', () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_matchups')!;
+
+    expect(tool.description).toContain(
+      'this is currently ESPN football only and only for season_year 2018 or later'
+    );
+    expect(tool.description).toContain(
+      'Any other platform, sport, or earlier season returns MATCHUP_DETAIL_UNSUPPORTED'
+    );
+    expect(asZod(tool.inputSchema.detail).description).toContain('season_year 2018 or later only');
+  });
+
+  it('carries the per-sport season-year convention on every season_year parameter', () => {
+    for (const tool of getUnifiedTools()) {
+      const seasonYear = tool.inputSchema.season_year;
+      if (!seasonYear) continue;
+      expect(asZod(seasonYear).description).toContain(
+        'Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).'
+      );
+    }
+  });
+
   it('describes refresh_leagues as explicit, registry-only, and provider-write incapable', () => {
     const tool = getUnifiedTools().find((candidate) => candidate.name === 'refresh_leagues');
     expect(tool).toBeTruthy();
