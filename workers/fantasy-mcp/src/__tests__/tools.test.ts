@@ -12,6 +12,8 @@ import {
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_HTML,
+  V3_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import {
   INTERNAL_SERVICE_TOKEN_HEADER,
@@ -209,14 +211,16 @@ describe('fantasy-mcp tools', () => {
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     // Published URIs are stable cache keys with stable resource metadata. The
-    // descriptor points at v3, the only URI whose published widget CSP allows
-    // the Yahoo Fantasy attribution link.
+    // descriptor points at the newest URI, the only one whose published widget
+    // CSP allows all three provider attribution links.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
     expect(V2_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
-    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
+    expect(V3_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
+    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v4.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
+    expect(tool?.widgetUri).not.toBe(V3_USER_SESSION_WIDGET_URI);
   });
 
   it('keeps every downstream data tool and refresh free of widget attachments', () => {
@@ -224,24 +228,60 @@ describe('fantasy-mcp tools', () => {
       .toEqual(['get_user_session']);
   });
 
-  it('serves exactly one body per link permission, differing only by the Yahoo link', () => {
-    // The v1/v2 widget CSP allows only https://flaim.app as a redirect
-    // domain, so those URIs cannot carry the Yahoo Fantasy link. Everything
-    // else about the two bodies must be identical, or the two URIs would
-    // drift into separate widgets to maintain.
+  it('serves exactly one body per link permission, differing only by the provider credits', () => {
+    // A body carries a provider credit link only where that URI's published
+    // widget CSP allows the provider's redirect domain: v1/v2 allow only
+    // https://flaim.app, v3 adds Yahoo, v4 adds ESPN and Sleeper. Everything
+    // else about the bodies must be identical, or the URIs would drift into
+    // separate widgets to maintain.
     const yahooLink =
       '<a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>';
-    expect(USER_SESSION_WIDGET_HTML).toContain(yahooLink);
-    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(yahooLink);
+    const espnLink =
+      '<a class="credit" href="https://www.espn.com/fantasy/" target="_blank" rel="noopener noreferrer" id="espn-link">ESPN</a>';
+    const sleeperLink =
+      '<a class="credit" href="https://sleeper.com/" target="_blank" rel="noopener noreferrer" id="sleeper-link">Sleeper</a>';
+
+    // v1/v2: every credit is plain text.
     expect(LEGACY_USER_SESSION_WIDGET_HTML).toContain(
       'Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
     );
-    // ESPN and Sleeper stay plain text on every body: no published widget CSP
-    // allows their domains.
-    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
-      expect(body).not.toContain('espn.com');
-      expect(body).not.toContain('sleeper.com');
+    for (const link of [yahooLink, espnLink, sleeperLink]) {
+      expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(link);
     }
+
+    // v3: the Yahoo credit only.
+    expect(V3_USER_SESSION_WIDGET_HTML).toContain(yahooLink);
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain(espnLink);
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain(sleeperLink);
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain('espn.com');
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain('sleeper.com');
+
+    // v4: all three credits are links.
+    for (const link of [yahooLink, espnLink, sleeperLink]) {
+      expect(USER_SESSION_WIDGET_HTML).toContain(link);
+    }
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      `Fantasy data provided by ${yahooLink}, ${espnLink}, and ${sleeperLink}.`
+    );
+    // Each linked credit gets openExternal click handling on the body that
+    // carries it. The Yahoo handler is emitted on every body (its guard no-ops
+    // where the anchor is absent) so the pre-v4 bodies keep their exact script.
+    const bodies = [
+      LEGACY_USER_SESSION_WIDGET_HTML,
+      V3_USER_SESSION_WIDGET_HTML,
+      USER_SESSION_WIDGET_HTML,
+    ];
+    for (const body of bodies) {
+      expect(body).toContain("document.getElementById('yahoo-link')");
+      expect(body).toContain('host.openExternal({ href: yahooLink.href })');
+    }
+    for (const id of ['espn-link', 'sleeper-link']) {
+      expect(USER_SESSION_WIDGET_HTML).toContain(`document.getElementById('${id}')`);
+      expect(V3_USER_SESSION_WIDGET_HTML).not.toContain(`document.getElementById('${id}')`);
+      expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(`document.getElementById('${id}')`);
+    }
+    expect(USER_SESSION_WIDGET_HTML).toContain('host.openExternal({ href: espnLink.href })');
+    expect(USER_SESSION_WIDGET_HTML).toContain('host.openExternal({ href: sleeperLink.href })');
   });
 
   it('keeps every URL in each body inside that URI\'s published redirect domains', () => {
@@ -263,15 +303,26 @@ describe('fantasy-mcp tools', () => {
       "' + LEAGUES_URL + '",
       'https://flaim.app/leagues?from=widget',
     ]);
-    expect(referencesIn(USER_SESSION_WIDGET_HTML)).toEqual([
+    expect(referencesIn(V3_USER_SESSION_WIDGET_HTML)).toEqual([
       "' + LEAGUES_URL + '",
       'https://flaim.app/leagues?from=widget',
       'https://sports.yahoo.com/fantasy/',
     ]);
+    expect(referencesIn(USER_SESSION_WIDGET_HTML)).toEqual([
+      "' + LEAGUES_URL + '",
+      'https://flaim.app/leagues?from=widget',
+      'https://sleeper.com/',
+      'https://sports.yahoo.com/fantasy/',
+      'https://www.espn.com/fantasy/',
+    ]);
   });
 
-  it('keeps both bodies self-contained: no external scripts, fonts, images, or styles', () => {
-    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
+  it('keeps every body self-contained: no external scripts, fonts, images, or styles', () => {
+    for (const body of [
+      LEGACY_USER_SESSION_WIDGET_HTML,
+      V3_USER_SESSION_WIDGET_HTML,
+      USER_SESSION_WIDGET_HTML,
+    ]) {
       expect(body).not.toMatch(/<script[^>]+src=/i);
       expect(body).not.toMatch(/<link\b/i);
       expect(body).not.toMatch(/<img\b/i);

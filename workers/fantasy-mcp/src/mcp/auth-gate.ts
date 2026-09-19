@@ -2,14 +2,16 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 
 // Every published widget URI must stay anonymously readable forever:
 // ChatGPT fetches widget templates without auth (FLA-217), and clients
-// cached on the v1/v2 keys keep reading them after the descriptor moves on.
+// cached on an older key keep reading it after the descriptor moves on.
 const PUBLIC_STATIC_WIDGET_URIS = new Set([
   LEGACY_USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_URI,
 ]);
 
@@ -49,7 +51,7 @@ export async function isPublicMcpHandshakeRequest(request: Request): Promise<boo
 /**
  * The widget template is public static HTML. ChatGPT may fetch it without the
  * user's OAuth header after authenticated tool discovery. Keep this exception
- * exact: list only this server's two static widgets, and read only their pinned
+ * exact: list only this server's static widgets, and read only their pinned
  * URIs. User-data tools remain behind the normal auth gate.
  */
 export async function isPublicStaticWidgetResourceRequest(request: Request): Promise<boolean> {
