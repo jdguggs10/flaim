@@ -407,7 +407,9 @@ describe('fantasy-mcp gateway integration', () => {
     expect(userSessionTool?._meta?.['openai/outputTemplate']).toBe(USER_SESSION_WIDGET_URI);
     // The descriptor targets the v3 cache key: published clients cached on the
     // v1/v2 URIs must never be repointed at mutated bytes, and the current
-    // descriptor must carry the attributed body. Literal pin on purpose.
+    // descriptor must carry the attributed body. Literal pin on purpose — a
+    // drift detector, so moving it has to be deliberate and backward
+    // compatible, then confirmed on the OpenAI portal scan.
     expect(userSessionTool?._meta?.ui?.resourceUri).toBe('ui://widget/user-session-v3.html');
     expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(userSessionTool?._meta?.ui?.resourceUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
@@ -445,6 +447,9 @@ describe('fantasy-mcp gateway integration', () => {
     ]);
     // Completeness first: a clear count diff beats a per-tool toEqual(undefined)
     // failure when a tool is added or removed without updating expectations.
+    // This is a drift detector, not a freeze: changing a tool is fine when it
+    // is deliberate and confirmed on the OpenAI portal scan. Adding a tool still
+    // rides a reviewed version (see AGENTS.md Release Lanes).
     expect(expectedAnnotations.size).toBe(tools?.length);
     for (const tool of tools || []) {
       expect(tool._meta?.securitySchemes?.[0]?.type).toBe('oauth2');
@@ -604,10 +609,10 @@ describe('fantasy-mcp gateway integration', () => {
           : 'Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
       );
       if (widget.frozenLegacyMeta) {
-        // Frozen published contracts (v1: original submission; v2: v2.1
-        // submission): the read-result _meta must stay byte-identical to the
-        // snapshots OpenAI scanned — strict-equal on the whole object so no
-        // key can be added or removed unnoticed.
+        // v1/v2 are published cache keys, so their read-result _meta must
+        // stay backward compatible with what clients already hold. Strict-equal
+        // on the whole object as a drift detector: adding or removing a key
+        // here has to be deliberate and confirmed on the OpenAI portal scan.
         expect(content?._meta).toEqual({
           ui: {
             csp: {
@@ -625,16 +630,16 @@ describe('fantasy-mcp gateway integration', () => {
             redirect_domains: ['https://flaim.app'],
           },
         });
-        // The v1/v2 body carries no link the frozen v1/v2 CSP does not
+        // The v1/v2 body carries no link the published v1/v2 CSP does not
         // allow: every URL in it points at flaim.app.
         expect(content?.text).not.toContain('sports.yahoo.com');
         expect(
           Array.from(new Set((content?.text?.match(/https?:\/\/[^"'\s<>)]+/g) || []).map((url) => new URL(url).origin)))
         ).toEqual(['https://flaim.app']);
       } else {
-        // v3 is published too, so its read-result _meta is frozen on the same
-        // terms — strict-equal on the whole object, written out literally so
-        // an added or removed key cannot pass unnoticed.
+        // v3 is published too, so it carries the same compatibility duty —
+        // strict-equal on the whole object, written out literally so an added
+        // or removed key cannot pass unnoticed and unconfirmed.
         expect(content?._meta).toEqual({
           ui: {
             csp: {
@@ -807,7 +812,8 @@ describe('fantasy-mcp gateway integration', () => {
     // deliberately serve the v3 body: live fetches must carry the linked
     // provider attribution the Yahoo agreement requires on rendering
     // surfaces. The flaim-only body is reachable only through the v1/v2
-    // resource URIs, whose frozen CSP cannot allow the Yahoo link.
+    // resource URIs, whose published CSP (a cache key for older clients)
+    // does not allow the Yahoo link.
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
 
@@ -1613,9 +1619,9 @@ describe('fantasy-mcp gateway integration', () => {
 
 // FLA-217: ChatGPT validates that RFC 9728 `resource` matches the server URL it
 // is connecting to, so the preview lane (workers.dev origin) must describe
-// itself. Meanwhile OpenAI scanned the production metadata surface, so every
-// api.flaim.app response body is pinned byte-for-byte below — fields, ordering,
-// and values must not drift.
+// itself. Every api.flaim.app response body is pinned byte-for-byte below as a
+// drift detector: fields, ordering, and values only move deliberately, stay
+// backward compatible, and get confirmed on the OpenAI portal scan.
 // FLA-281: `authorization_servers` is lane-aware too (keyed off ENVIRONMENT,
 // not requestOrigin — see authorizationServerOrigin() in index.ts), since
 // prod and preview auth-worker instances keep isolated token stores.
@@ -1668,7 +1674,7 @@ describe('origin-derived OAuth protected-resource metadata (FLA-217)', () => {
     clientInfo: { name: 'auth-required-probe', version: '1.0.0' },
   };
 
-  it('keeps every api.flaim.app metadata body byte-identical to the scanned production surface', async () => {
+  it('keeps every api.flaim.app metadata body byte-identical to the published production surface', async () => {
     const authFetch = vi.fn();
     const env = buildEnv(authFetch);
 

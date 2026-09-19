@@ -1,0 +1,241 @@
+import { FIELD_LIMITS, normalizeFirstTouchAcquisition } from "@/lib/acquisition";
+import { getSupabaseConfig, hasSupabaseConfig } from "@/lib/server/public-chat-cache";
+
+/**
+ * Write side of the permanent signup log.
+ *
+ * The mapper below reads the **snake_case** shape only — the shape Clerk
+ * delivers on a webhook (`id`, `created_at`, `unsafe_metadata`) and the shape
+ * the raw Clerk REST API returns. The Clerk Backend SDK returns camelCase for
+ * the same fields (`createdAt`, `unsafeMetadata`); passing a Backend SDK user
+ * through `mapClerkUserToSignup` would silently read `undefined`. Do not reach
+ * for `clerkClient()` here without adding an explicit camelCase mapper.
+ */
+
+/** The validated, bounded first-touch object stored in `signup_log.first_touch`. */
+export interface StoredFirstTouch {
+  schemaVersion: 1;
+  landingPath: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  utmTerm?: string;
+  utmContent?: string;
+  referrerHost?: string;
+  ref?: string;
+}
+
+export interface SignupLogInput {
+  clerkUserId: string;
+  /** ISO-8601 instant, from Clerk's own `created_at`, never the observation time. */
+  createdAt: string;
+  firstTouch: StoredFirstTouch | null;
+}
+
+export type SupabaseKeyClass = "sb_secret" | "jwt" | "unrecognised";
+
+/** Thrown when a webhook payload cannot be mapped to a signup row. */
+export class SignupPayloadError extends Error {
+  readonly reason: string;
+
+  constructor(reason: string, message: string) {
+    super(message);
+    this.name = "SignupPayloadError";
+    this.reason = reason;
+  }
+}
+
+/** Thrown when the signup log write itself fails. */
+export class SignupLogWriteError extends Error {
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "SignupLogWriteError";
+    this.status = status;
+  }
+}
+
+// Clerk timestamps below this instant are not real signups for this product.
+const MIN_CREATED_AT_MS = Date.UTC(2020, 0, 1);
+const MAX_CREATED_AT_SKEW_MS = 24 * 60 * 60 * 1000;
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function boundedString(value: unknown, max: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[\\|`[\]<>*~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+  return cleaned || undefined;
+}
+
+// A referrer host is a bare hostname: `buildFirstTouchAcquisition` only ever
+// stores `URL.hostname`, lower-cased. Anything carrying a slash, a colon, or
+// whitespace was not produced by that path.
+const HOSTNAME_PATTERN = /^[^\s/:]+$/;
+
+/**
+ * Validates and bounds the client-supplied first-touch object. `raw` is the
+ * whole `unsafe_metadata` bag; first touch lives under its `flaimAcquisition`
+ * key (written by `acquisitionUnsafeMetadata` in `lib/acquisition.ts`).
+ *
+ * `unsafe_metadata` is client-editable, so nothing here may be trusted. The
+ * shape check is delegated to `normalizeFirstTouchAcquisition`, the same
+ * validator the browser writer runs, so the two cannot drift: wrong schema
+ * version, missing/unparseable `capturedAt`, a landing path that is not
+ * site-relative or that carries a query or fragment, and any over-limit field
+ * all reject the whole object. On top of that this mapper strips markup and
+ * collapses whitespace in every stored dimension, requires `referrerHost` to
+ * look like a bare hostname, and drops `capturedAt`, which the signup row does
+ * not store.
+ *
+ * Keep in sync with `normalizeFirstTouch` in
+ * `web/scripts/backfill-signup-log.mjs`, which inlines the same rules because
+ * scripts are `.mjs` and cannot import TypeScript.
+ */
+export function normalizeFirstTouch(raw: unknown): StoredFirstTouch | null {
+  const outer = record(raw);
+  const acquisition = normalizeFirstTouchAcquisition(outer?.flaimAcquisition);
+  if (!acquisition) return null;
+
+  const stored: StoredFirstTouch = {
+    schemaVersion: 1,
+    landingPath: acquisition.landingPath,
+  };
+
+  for (const [field, max] of Object.entries(FIELD_LIMITS)) {
+    if (field === "landingPath") continue;
+    const cleaned = boundedString(
+      acquisition[field as keyof typeof FIELD_LIMITS],
+      max
+    );
+    if (cleaned === undefined) continue;
+    if (field === "referrerHost") {
+      const host = cleaned.toLowerCase();
+      if (!HOSTNAME_PATTERN.test(host)) continue;
+      stored.referrerHost = host;
+      continue;
+    }
+    stored[field as Exclude<keyof typeof FIELD_LIMITS, "landingPath" | "referrerHost">] =
+      cleaned;
+  }
+
+  return stored;
+}
+
+/**
+ * Maps a snake_case Clerk user payload to the signup row. Throws
+ * `SignupPayloadError` rather than writing a row that would poison a day
+ * bucket forever.
+ */
+export function mapClerkUserToSignup(data: unknown): SignupLogInput {
+  const user = record(data);
+
+  const clerkUserId = typeof user?.id === "string" ? user.id.trim() : "";
+  if (!clerkUserId) {
+    throw new SignupPayloadError("missing_user_id", "Clerk payload has no user id");
+  }
+
+  const createdAt = user?.created_at;
+  if (typeof createdAt !== "number" || !Number.isInteger(createdAt)) {
+    throw new SignupPayloadError(
+      "invalid_created_at",
+      "Clerk payload created_at is not an integer millisecond epoch"
+    );
+  }
+
+  const maxCreatedAtMs = Date.now() + MAX_CREATED_AT_SKEW_MS;
+  if (createdAt < MIN_CREATED_AT_MS || createdAt > maxCreatedAtMs) {
+    throw new SignupPayloadError(
+      "created_at_out_of_range",
+      "Clerk payload created_at is outside the accepted range"
+    );
+  }
+
+  return {
+    clerkUserId,
+    createdAt: new Date(createdAt).toISOString(),
+    firstTouch: normalizeFirstTouch(user?.unsafe_metadata),
+  };
+}
+
+/**
+ * Classifies a Supabase service key by shape alone. Never returns, logs, or
+ * otherwise exposes any part of the value.
+ *
+ * Keep in sync with `web/scripts/probe-supabase-key-class.mjs`, which inlines
+ * the same rules because scripts are `.mjs` and cannot import TypeScript.
+ */
+export function classifySupabaseKey(key: string): SupabaseKeyClass {
+  const value = typeof key === "string" ? key.trim() : "";
+  if (!value) return "unrecognised";
+  if (value.startsWith("sb_secret_")) return "sb_secret";
+  if (/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(value)) return "jwt";
+  return "unrecognised";
+}
+
+/**
+ * A new-style secret key goes in `apikey` only; presenting it as a Bearer JWT
+ * invites a JWT-parse rejection. A legacy JWT service key goes in both headers,
+ * matching the live PostgREST paths in `public-chat-cache.ts`.
+ */
+export function buildSupabaseRpcHeaders(serviceKey: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    apikey: serviceKey,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+
+  if (classifySupabaseKey(serviceKey) !== "sb_secret") {
+    headers.Authorization = `Bearer ${serviceKey}`;
+  }
+
+  return headers;
+}
+
+/**
+ * Writes one signup to the permanent log. Awaited by the webhook route before
+ * anything else happens, so a failure here returns 500 and lets Svix retry
+ * rather than being silently dropped in best-effort `after()` work.
+ */
+export async function recordSignup(
+  input: SignupLogInput,
+  options: { source: "webhook" }
+): Promise<void> {
+  if (!hasSupabaseConfig()) {
+    throw new SignupLogWriteError(
+      "Signup log is not configured (SUPABASE_URL or SUPABASE_SERVICE_KEY missing)"
+    );
+  }
+
+  const { supabaseUrl, supabaseServiceKey } = getSupabaseConfig();
+
+  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/record_signup`, {
+    method: "POST",
+    headers: buildSupabaseRpcHeaders(supabaseServiceKey),
+    body: JSON.stringify({
+      p_clerk_user_id: input.clerkUserId,
+      p_created_at: input.createdAt,
+      p_first_touch: input.firstTouch,
+      p_source: options.source,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    // The status is the diagnostic. The body is never included: a PostgREST
+    // error can echo request detail, and this request carries the service key.
+    throw new SignupLogWriteError(
+      `Failed to record signup (${response.status})`,
+      response.status
+    );
+  }
+}

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import { basketballHandlers } from '../handlers';
-import type { ToolParams } from '../../../types';
+import type { Env, ToolParams } from '../../../types';
+import { clearSleeperPlayersInMemoryCacheForTesting } from '../../../shared/sleeper-players-cache';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -203,5 +204,218 @@ describe('basketball handlers', () => {
     expect(result.success).toBe(false);
     expect(result.code).toBe('SLEEPER_RATE_LIMIT');
     expect(result.error).toContain('SLEEPER_RATE_LIMIT');
+  });
+});
+
+describe('basketball get_players handler', () => {
+  const kvGet = vi.fn();
+  const env = { SLEEPER_PLAYERS_CACHE: { get: kvGet, put: vi.fn() } } as unknown as Env;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    kvGet.mockReset();
+    kvGet.mockResolvedValue(null); // always a cache miss, forcing a /players/nba fetch
+    clearSleeperPlayersInMemoryCacheForTesting();
+  });
+
+  function routeByUrl(handlers: Record<string, (input: RequestInfo | URL) => Promise<Response> | Response>) {
+    mockFetch.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      for (const [suffix, handler] of Object.entries(handlers)) {
+        if (url.includes(suffix)) return handler(input);
+      }
+      throw new Error(`Unexpected fetch in test: ${url}`);
+    });
+  }
+
+  it('resolves availability for a rostered player and a free agent in the same league', async () => {
+    routeByUrl({
+      '/players/nba': () =>
+        jsonResponse({
+          '301': { player_id: '301', full_name: 'Test Rostered Hooper', position: 'PG', team: 'BOS', active: true },
+          '402': { player_id: '402', full_name: 'Test Free Hooper', position: 'SG', team: 'LAL', active: true },
+        }),
+      '/rosters': () =>
+        jsonResponse([
+          { roster_id: 9, owner_id: 'owner_9', players: ['301'], starters: [], reserve: null, taxi: null, settings: {} },
+        ]),
+      '/users': () =>
+        jsonResponse([
+          { user_id: 'owner_9', display_name: 'Gerry', avatar: null, metadata: { team_name: 'The Flaimers' } },
+        ]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
+    });
+
+    const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
+    const result = await basketballHandlers.get_players(env, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const players = (result.data as { players: Array<Record<string, unknown>> }).players;
+
+    const rostered = players.find((p) => p.id === '301');
+    expect(rostered).toMatchObject({
+      league_status: 'ROSTERED',
+      league_team_id: '9',
+      league_team_name: 'The Flaimers',
+      league_owner_name: 'Gerry',
+      market_percent_owned: null,
+      ownership_scope: 'unavailable',
+    });
+
+    const free = players.find((p) => p.id === '402');
+    expect(free).toMatchObject({
+      league_status: 'FREE_AGENT',
+      league_team_id: null,
+      league_team_name: null,
+      league_owner_name: null,
+      market_percent_owned: null,
+      ownership_scope: 'unavailable',
+    });
+  });
+
+  it('combines a position filter with league availability resolution', async () => {
+    routeByUrl({
+      '/players/nba': () =>
+        jsonResponse({
+          '301': { player_id: '301', full_name: 'Test Rostered Guard', position: 'PG', team: 'BOS', active: true },
+          '402': { player_id: '402', full_name: 'Test Rostered Center', position: 'C', team: 'LAL', active: true },
+          '503': { player_id: '503', full_name: 'Test Free Guard', position: 'PG', team: 'MIA', active: true },
+        }),
+      '/rosters': () =>
+        jsonResponse([
+          { roster_id: 9, owner_id: 'owner_9', players: ['301', '402'], starters: [], reserve: null, taxi: null, settings: {} },
+        ]),
+      '/users': () =>
+        jsonResponse([
+          { user_id: 'owner_9', display_name: 'Gerry', avatar: null, metadata: { team_name: 'The Flaimers' } },
+        ]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
+    });
+
+    const params: ToolParams = {
+      sport: 'basketball',
+      league_id: 'league_nba_1',
+      season_year: 2025,
+      query: 'test',
+      position: 'PG',
+    };
+    const result = await basketballHandlers.get_players(env, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const players = (result.data as { players: Array<Record<string, unknown>> }).players;
+
+    // Position filter excludes the Center even though it's rostered in this league.
+    expect(players.find((p) => p.id === '402')).toBeUndefined();
+
+    const rosteredGuard = players.find((p) => p.id === '301');
+    expect(rosteredGuard).toMatchObject({ league_status: 'ROSTERED', league_team_id: '9' });
+
+    const freeGuard = players.find((p) => p.id === '503');
+    expect(freeGuard).toMatchObject({ league_status: 'FREE_AGENT', league_team_id: null });
+  });
+
+  it('degrades to unresolved ownership (still returns identity results) when the rosters fetch errors', async () => {
+    routeByUrl({
+      '/players/nba': () =>
+        jsonResponse({
+          '301': { player_id: '301', full_name: 'Test Rostered Hooper', position: 'PG', team: 'BOS', active: true },
+        }),
+      '/rosters': () => new Response(null, { status: 503 }),
+      '/users': () => jsonResponse([]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
+    });
+
+    const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
+    const result = await basketballHandlers.get_players(env, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as Record<string, unknown>;
+    expect(data.warnings).toEqual(['SLEEPER_OWNERSHIP_UNAVAILABLE: League ownership could not be resolved for this search; league_status is unavailable for these results.']);
+    const players = data.players as Array<Record<string, unknown>>;
+    const rostered = players.find((p) => p.id === '301');
+    expect(rostered).toMatchObject({
+      id: '301',
+      name: 'Test Rostered Hooper',
+      position: 'PG',
+      team: 'BOS',
+      league_status: null,
+      league_team_id: null,
+      league_team_name: null,
+      league_owner_name: null,
+    });
+  });
+
+  it('degrades to unresolved ownership (still returns identity results) when the users fetch errors', async () => {
+    routeByUrl({
+      '/players/nba': () =>
+        jsonResponse({
+          '301': { player_id: '301', full_name: 'Test Rostered Hooper', position: 'PG', team: 'BOS', active: true },
+        }),
+      '/rosters': () =>
+        jsonResponse([
+          { roster_id: 9, owner_id: 'owner_9', players: ['301'], starters: [], reserve: null, taxi: null, settings: {} },
+        ]),
+      '/users': () => new Response(null, { status: 503 }),
+      '/league/league_nba_1': () => jsonResponse({ status: 'in_season' }),
+    });
+
+    const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
+    const result = await basketballHandlers.get_players(env, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as Record<string, unknown>;
+    expect(data.warnings).toEqual(['SLEEPER_OWNERSHIP_UNAVAILABLE: League ownership could not be resolved for this search; league_status is unavailable for these results.']);
+    const players = data.players as Array<Record<string, unknown>>;
+    const rostered = players.find((p) => p.id === '301');
+    expect(rostered).toMatchObject({
+      id: '301',
+      name: 'Test Rostered Hooper',
+      position: 'PG',
+      team: 'BOS',
+      league_status: null,
+      league_team_id: null,
+      league_team_name: null,
+      league_owner_name: null,
+    });
+  });
+
+  it('fails closed (no players payload leaked) when the league is actively drafting, since in-progress picks are not yet reflected on rosters', async () => {
+    routeByUrl({
+      '/players/nba': () =>
+        jsonResponse({
+          '301': { player_id: '301', full_name: 'Test Rostered Hooper', position: 'PG', team: 'BOS', active: true },
+        }),
+      '/rosters': () =>
+        jsonResponse([
+          { roster_id: 9, owner_id: 'owner_9', players: [], starters: [], reserve: null, taxi: null, settings: {} },
+        ]),
+      '/users': () =>
+        jsonResponse([
+          { user_id: 'owner_9', display_name: 'Gerry', avatar: null },
+        ]),
+      '/league/league_nba_1': () => jsonResponse({ status: 'drafting' }),
+    });
+
+    const params: ToolParams = { sport: 'basketball', league_id: 'league_nba_1', season_year: 2025, query: 'test' };
+    const result = await basketballHandlers.get_players(env, params);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.code).toBe('SLEEPER_DRAFT_IN_PROGRESS');
+    expect('players' in ((result.data as Record<string, unknown>) ?? {})).toBe(false);
+  });
+
+  it('returns MISSING_PARAM when league_id is omitted', async () => {
+    const params = { sport: 'basketball', season_year: 2025, query: 'test' } as unknown as ToolParams;
+    const result = await basketballHandlers.get_players(env, params);
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.code).toBe('MISSING_PARAM');
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

@@ -29,6 +29,16 @@ describe("backfill-resend-contacts script helpers", () => {
     });
   });
 
+  it("refuses contact writes after direct welcome cutover", () => {
+    expect(() => parseArgs(["--apply"], {
+      FLAIM_WELCOME_DELIVERY_MODE: "direct",
+    })).toThrow("Resend contact backfill is disabled");
+
+    expect(parseArgs([], {
+      FLAIM_WELCOME_DELIVERY_MODE: "direct",
+    })).toMatchObject({ apply: false });
+  });
+
   it("parses the flagged-only recovery mode without enabling writes", () => {
     expect(parseArgs(["--flagged-only"])).toMatchObject({
       apply: false,

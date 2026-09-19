@@ -12,6 +12,7 @@ export interface NormalizedTransaction {
   team_ids?: string[];
   players_added?: TransactionPlayer[];
   players_dropped?: TransactionPlayer[];
+  trade_sides?: Array<{ team_id: string; acquired: TransactionPlayer[]; gave_up: TransactionPlayer[] }>;
   faab_bid?: number | null;
   waiver_priority?: number | null;
   draft_picks?: unknown[] | null;
@@ -64,7 +65,10 @@ function parseFaabBid(value: unknown): number | null {
 function mapStatus(value: unknown): 'complete' | 'failed' | 'pending' | 'unknown' {
   if (value === 'successful' || value === 'complete') return 'complete';
   if (value === 'failed') return 'failed';
-  if (value === 'pending') return 'pending';
+  // Yahoo uses 'proposed' for a newly offered trade and 'accepted' once the
+  // other team agrees but league/commissioner approval is still outstanding;
+  // both are still pending from the caller's perspective.
+  if (value === 'pending' || value === 'proposed' || value === 'accepted') return 'pending';
   return 'unknown';
 }
 
@@ -93,6 +97,46 @@ function optionalId(value: unknown): string | undefined {
   if (typeof value === 'string' && value.length > 0) return value;
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return undefined;
+}
+
+type TradeMovement = {
+  player: TransactionPlayer;
+  sourceTeamKey: string;
+  destinationTeamKey: string;
+};
+
+// Order sides trader-first, tradee-second (matching Yahoo's own framing of who
+// proposed the deal), then any other team keys in first-appearance order.
+function buildYahooTradeSides(
+  movements: TradeMovement[],
+  traderTeamKey: unknown,
+  tradeeTeamKey: unknown,
+): NonNullable<NormalizedTransaction['trade_sides']> {
+  const orderedTeamIds: string[] = [];
+  const seen = new Set<string>();
+  const addTeam = (key: unknown) => {
+    const id = optionalId(key);
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      orderedTeamIds.push(id);
+    }
+  };
+  addTeam(traderTeamKey);
+  addTeam(tradeeTeamKey);
+  for (const movement of movements) {
+    addTeam(movement.sourceTeamKey);
+    addTeam(movement.destinationTeamKey);
+  }
+
+  return orderedTeamIds.map((teamId) => ({
+    team_id: teamId,
+    acquired: movements
+      .filter((movement) => movement.destinationTeamKey === teamId)
+      .map((movement) => movement.player),
+    gave_up: movements
+      .filter((movement) => movement.sourceTeamKey === teamId)
+      .map((movement) => movement.player),
+  }));
 }
 
 function buildTransactionPlayer(pmeta: Record<string, unknown>): TransactionPlayer | null {
@@ -136,6 +180,9 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
 
     const playersAdded: TransactionPlayer[] = [];
     const playersDropped: TransactionPlayer[] = [];
+    const isTradeRow = rawType === 'trade' || rawType === 'pending_trade';
+    let tradePlayerCount = 0;
+    const tradeMovements: TradeMovement[] = [];
     const teamIds = new Set(
       [meta.trader_team_key, meta.tradee_team_key]
         .filter((v) => typeof v === 'string')
@@ -174,6 +221,16 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       if (player) {
         if (t === 'add') playersAdded.push(player);
         if (t === 'drop') playersDropped.push(player);
+        // Trade players don't carry an add/drop direction -- Yahoo marks them
+        // with type 'trade' (completed) or 'pending_trade' (offered/accepted)
+        // and instead gives each player a source/destination team key, which
+        // is what buildYahooTradeSides needs to assign acquired vs. gave_up.
+        if (isTradeRow && (t === 'trade' || t === 'pending_trade')) {
+          tradePlayerCount += 1;
+          if (sourceTeamKey && destinationTeamKey) {
+            tradeMovements.push({ player, sourceTeamKey, destinationTeamKey });
+          }
+        }
       }
     }
 
@@ -190,6 +247,13 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       ? 'drop'
       : rawType;
 
+    // All-or-nothing, same as ESPN: only emit trade_sides when every player on
+    // this row resolved a source and destination team key. A partial result
+    // would mean a half-directional trade, which is worse than omitting it.
+    const tradeSides = isTradeRow && tradePlayerCount > 0 && tradeMovements.length === tradePlayerCount
+      ? buildYahooTradeSides(tradeMovements, meta.trader_team_key, meta.tradee_team_key)
+      : undefined;
+
     out.push({
       transaction_id: String(meta.transaction_key ?? meta.transaction_id ?? `${type}-${timestamp}`),
       type,
@@ -200,6 +264,7 @@ export function normalizeYahooTransactions(raw: unknown): NormalizedTransaction[
       team_ids: teamIds.size > 0 ? Array.from(teamIds) : undefined,
       players_added: playersAdded,
       players_dropped: playersDropped,
+      trade_sides: tradeSides,
       faab_bid: faabBid,
       waiver_priority: waiverPriority,
       draft_picks: Array.isArray(meta.picks) ? meta.picks : null,

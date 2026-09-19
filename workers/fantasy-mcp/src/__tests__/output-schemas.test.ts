@@ -441,7 +441,56 @@ describe('get_matchups output schema', () => {
       leagueName: 'Car Ramrod',
       currentWeek: '5',
       matchupWeek: 5,
-      matchups: [{ week: '5', teams: [] }],
+      scoringType: 'points',
+      scoringTypeRaw: 'headpoint',
+      matchups: [{
+        matchupId: 1,
+        week: '5',
+        home: { teamKey: '449.l.123.t.1', teamId: '1', teamName: 'Team A', points: 120.5 },
+        away: { teamKey: '449.l.123.t.2', teamId: '2', teamName: 'Team B', points: 105.3 },
+        winner: 'home',
+      }],
+    }));
+  });
+
+  it('accepts the Yahoo H2H-categories envelope with category rows and a null categoryScore', () => {
+    expectValid('get_matchups', routed({
+      leagueKey: '449.l.777',
+      leagueName: 'Category League',
+      currentWeek: 5,
+      matchupWeek: 5,
+      scoringType: 'categories',
+      scoringTypeRaw: 'head',
+      categoryNamesAvailable: false,
+      warning: 'MATCHUP_CATEGORY_NAMES_UNAVAILABLE: could not fetch league stat categories; categories are labeled by stat id only.',
+      matchups: [{
+        matchupId: 1,
+        week: 5,
+        statWinnersAvailable: false,
+        home: {
+          teamKey: '449.l.777.t.1',
+          teamId: '1',
+          teamName: 'Team A',
+          points: 7,
+          categories: [
+            { statId: '1', name: null, displayName: null, value: '45', result: null, isDisplayOnly: false },
+          ],
+          categoryScore: null,
+          categoriesWon: 7,
+        },
+        away: {
+          teamKey: '449.l.777.t.2',
+          teamId: '2',
+          teamName: 'Team B',
+          points: 2,
+          categories: [
+            { statId: '1', name: null, displayName: null, value: '38', result: null, isDisplayOnly: false },
+          ],
+          categoryScore: null,
+          categoriesWon: 2,
+        },
+        winner: 'home',
+      }],
     }));
   });
 
@@ -566,6 +615,33 @@ describe('get_roster output schema', () => {
       ownerName: 'Gerry',
       snapshot: { type: 'date', date: '2026-07-10' },
       players: [{ playerId: '201', name: 'Aaron Judge', position: 'OF' }],
+    }));
+  });
+
+  it('accepts the Yahoo football roster with weekly per-player points and pointsCoverage', () => {
+    expectValid('get_roster', routed({
+      teamKey: '449.l.123.t.1',
+      teamName: 'Yahoo Team',
+      ownerName: 'Gerry',
+      snapshot: { type: 'week', week: 1 },
+      pointsCoverage: { type: 'week', week: 1 },
+      limitations: { playerProTeamAvailable: false },
+      players: [
+        { playerId: 'p101', name: 'Synthetic Quarterback', position: 'QB', selectedPosition: 'QB', points: 12.5 },
+        { playerId: 'p102', name: 'Synthetic Running Back', position: 'RB', selectedPosition: 'RB', points: 0 },
+        { playerId: 'p103', name: 'Synthetic Wide Receiver', position: 'WR', selectedPosition: 'BN' },
+      ],
+    }));
+  });
+
+  it('accepts the Yahoo football roster with no usable weekly points (playerPointsAvailable false)', () => {
+    expectValid('get_roster', routed({
+      teamKey: '449.l.123.t.1',
+      teamName: 'Yahoo Team',
+      ownerName: 'Gerry',
+      snapshot: { type: 'current' },
+      limitations: { playerPointsAvailable: false },
+      players: [{ playerId: 'p101', name: 'Synthetic Quarterback', team: 'BUF', position: 'QB', selectedPosition: 'QB', status: 'healthy' }],
     }));
   });
 

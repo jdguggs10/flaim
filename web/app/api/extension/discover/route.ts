@@ -52,9 +52,14 @@ export async function POST(request: NextRequest) {
       const err = await workerRes.json().catch(() => ({ error: 'Unknown error' })) as {
         error?: string;
         error_description?: string;
+        retry_after?: unknown;
       };
       return NextResponse.json(
-        { error: err.error || 'Failed to discover leagues', error_description: err.error_description },
+        {
+          error: err.error || 'Failed to discover leagues',
+          error_description: err.error_description,
+          ...(typeof err.retry_after === 'number' ? { retry_after: err.retry_after } : {}),
+        },
         { status: workerRes.status }
       );
     }

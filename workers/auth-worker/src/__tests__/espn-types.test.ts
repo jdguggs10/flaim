@@ -9,6 +9,7 @@ import {
   EspnAuthenticationFailed,
   EspnApiError,
   AutomaticLeagueDiscoveryFailed,
+  NoFantasyLeaguesFound,
   MaxLeaguesExceeded,
   DuplicateLeagueError,
   ESPN_GAME_IDS,
@@ -139,6 +140,13 @@ describe('espn-types', () => {
       const error = new AutomaticLeagueDiscoveryFailed('No leagues found', 404);
       expect(error.name).toBe('AutomaticLeagueDiscoveryFailed');
       expect(error.statusCode).toBe(404);
+    });
+
+    it('NoFantasyLeaguesFound remains a typed discovery result', () => {
+      const error = new NoFantasyLeaguesFound();
+      expect(error.name).toBe('NoFantasyLeaguesFound');
+      expect(error).toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+      expect(error.statusCode).toBeUndefined();
     });
 
     it('MaxLeaguesExceeded shows correct limit', () => {

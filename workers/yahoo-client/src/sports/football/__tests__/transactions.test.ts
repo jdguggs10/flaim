@@ -340,4 +340,49 @@ describe('yahoo football get_transactions handler', () => {
     expect(data.limitations).toBeUndefined();
     nowSpy.mockRestore();
   });
+
+  it('passes trade_sides through untouched on pending trade rows', async () => {
+    getCredsMock.mockResolvedValue({ accessToken: 'token' });
+    resolveTeamKeyMock.mockResolvedValue('449.l.123.t.1');
+    buildPendingPathMock.mockReturnValue('/league/449.l.123/transactions;types=pending_trade;team_key=449.l.123.t.1;count=25');
+    fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
+    const tradeSides = [
+      {
+        team_id: '449.l.123.t.1',
+        acquired: [{ id: '1003', name: 'Synthetic Infielder Three', position: '3B', team: 'SD' }],
+        gave_up: [{ id: '1001', name: 'Synthetic Pitcher One', position: 'SP', team: 'ATL' }],
+      },
+      {
+        team_id: '449.l.123.t.5',
+        acquired: [{ id: '1001', name: 'Synthetic Pitcher One', position: 'SP', team: 'ATL' }],
+        gave_up: [{ id: '1003', name: 'Synthetic Infielder Three', position: '3B', team: 'SD' }],
+      },
+    ];
+    normalizeMock.mockReturnValue([
+      {
+        transaction_id: 'pending-trade-1',
+        type: 'pending_trade',
+        status: 'pending',
+        timestamp: 0,
+        week: null,
+        players_added: [],
+        players_dropped: [],
+        trade_sides: tradeSides,
+      },
+    ] as never);
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: '449.l.123',
+      season_year: 2025,
+      type: 'pending_trade',
+    };
+
+    const result = await footballHandlers.get_transactions({} as never, params, 'Bearer x', 'cid-trade-sides');
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as { transactions: Array<Record<string, unknown>> };
+    expect(data.transactions[0]?.trade_sides).toEqual(tradeSides);
+  });
 });

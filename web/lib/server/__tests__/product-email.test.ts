@@ -37,13 +37,13 @@ describe("product email sends", () => {
       idempotencyKey: "order-receipt/order_123",
       leaguesUrl: "https://example.com/leagues",
       to: "gerry@example.com",
-      unsubscribeUrl: "https://example.com/unsubscribe",
       userId: "user_123",
     });
 
     expect(result).toEqual({ id: "email_123", ok: true });
     const [message] = mocks.emailsSend.mock.calls[0];
     expect(message.react.props).not.toHaveProperty("firstName");
+    expect(message.react.props).not.toHaveProperty("unsubscribeUrl");
     expect(mocks.emailsSend).toHaveBeenCalledWith(
       expect.objectContaining({
         subject: "Welcome to Flaim",
@@ -74,6 +74,7 @@ describe("product email sends", () => {
     });
 
     const request = {
+      docsUrl: "https://example.com/docs/espn",
       extensionUrl: "https://example.com/extension",
       leaguesUrl: "https://example.com/leagues",
       to: "gerry@example.com",
@@ -97,6 +98,7 @@ describe("product email sends", () => {
     mocks.emailsSend.mockResolvedValue({ data: null, error: new Error("gerry@example.com bounced") });
 
     const result = await sendEspnSetupLinkEmail({
+      docsUrl: "https://example.com/docs/espn",
       extensionUrl: "https://example.com/extension",
       leaguesUrl: "https://example.com/leagues",
       to: "gerry@example.com",

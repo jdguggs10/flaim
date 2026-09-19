@@ -9,7 +9,8 @@ const MAX_LIMIT = 500;
 const EMAIL_RETRY_METADATA_KEY = "flaim_email_ops";
 const WELCOME_AUTOMATION_EVENT_NAME = "flaim.user_created";
 
-export function parseArgs(argv) {
+/** @param {string[]} argv @param {Record<string, string | undefined>} env */
+export function parseArgs(argv, env = process.env) {
   const args = {
     apply: false,
     delayMs: 0,
@@ -96,6 +97,12 @@ export function parseArgs(argv) {
 
   if (args.forceResend && (!args.flaggedOnly || !args.apply)) {
     throw new Error("--force-resend requires --flagged-only --apply");
+  }
+
+  if (args.apply && env.FLAIM_WELCOME_DELIVERY_MODE?.trim().toLowerCase() === "direct") {
+    throw new Error(
+      "Resend contact backfill is disabled when FLAIM_WELCOME_DELIVERY_MODE=direct",
+    );
   }
 
   return args;

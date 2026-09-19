@@ -118,6 +118,38 @@ begin
       end if;
   end;
 
+  -- The reader must stop with recovery time remaining, rather than waiting
+  -- until the same 90-day boundary at which source events can disappear.
+  update analytics.history_rollup_state
+  set initial_history_start_et_day = v_today_et - 59,
+      last_closed_et_day = v_today_et - 59,
+      updated_at = now()
+  where id;
+
+  perform analytics.dashboard_payload_history(false);
+
+  update analytics.history_rollup_state
+  set initial_history_start_et_day = v_today_et - 63,
+      last_closed_et_day = v_today_et - 63,
+      updated_at = now()
+  where id;
+
+  begin
+    perform analytics.dashboard_payload_history(false);
+    raise exception 'history payload accepted a marker more than 60 days stale';
+  exception
+    when sqlstate '55000' then
+      if sqlerrm <> 'analytics history rollup is more than 60 days stale; repair it before the 90-day raw window closes' then
+        raise;
+      end if;
+  end;
+
+  update analytics.history_rollup_state
+  set initial_history_start_et_day = null,
+      last_closed_et_day = null,
+      updated_at = now()
+  where id;
+
   -- Fixed dates outside the retention window cannot be handed to the close
   -- function, so assert the timezone arithmetic directly. These are the same
   -- date-boundary rules the close function must use, including DST and New

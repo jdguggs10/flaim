@@ -12,7 +12,12 @@ import {
   discoverAndSaveCurrentLeagues,
   discoverAndSaveLeagues,
 } from '../v3/league-discovery';
-import { EspnCredentialsRequired, AutomaticLeagueDiscoveryFailed } from '../espn-types';
+import {
+  EspnAuthenticationFailed,
+  EspnCredentialsRequired,
+  AutomaticLeagueDiscoveryFailed,
+  NoFantasyLeaguesFound,
+} from '../espn-types';
 import { getLeagueInfo, getLeagueInfoSafe } from '../v3/get-league-info';
 import { getLeagueTeams } from '../v3/get-league-teams';
 
@@ -84,7 +89,7 @@ describe('discoverLeaguesV3', () => {
     );
   });
 
-  it('throws AutomaticLeagueDiscoveryFailed when no fantasy leagues found', async () => {
+  it('classifies a valid empty response separately from discovery failures', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -93,7 +98,247 @@ describe('discoverLeaguesV3', () => {
     } as Response);
 
     await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
-      .rejects.toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+      .rejects.toBeInstanceOf(NoFantasyLeaguesFound);
+  });
+
+  it('skips malformed non-fantasy entries and still discovers fantasy leagues', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          { id: 'pref-odd', type: 'team' },
+          null,
+          { id: 'pref-team', type: { code: 'team' }, metaData: 'unexpected' },
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Test Team' },
+                groups: [{ groupId: 12345, groupName: 'Test League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .resolves.toEqual([{
+        gameId: 'ffl',
+        leagueId: '12345',
+        leagueName: 'Test League',
+        seasonId: 2025,
+        teamId: 8,
+        teamName: 'Test Team',
+      }]);
+  });
+
+  it('skips a malformed fantasy entry without hiding the valid leagues', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          {
+            id: 'pref-broken',
+            type: { code: 'fantasy' },
+            metaData: { entry: { entryId: 3, gameId: 1, seasonId: 2025, groups: [{ groupId: 'x' }] } },
+          },
+          {
+            id: 'pref-1',
+            type: { code: 'fantasy' },
+            metaData: {
+              entry: {
+                entryId: 8,
+                gameId: 1,
+                seasonId: 2025,
+                entryMetadata: { teamName: 'Test Team' },
+                groups: [{ groupId: 12345, groupName: 'Test League' }],
+              },
+            },
+          },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .resolves.toEqual([{
+        gameId: 'ffl',
+        leagueId: '12345',
+        leagueName: 'Test League',
+        seasonId: 2025,
+        teamId: 8,
+        teamName: 'Test Team',
+      }]);
+  });
+
+  it('reports a 502 when every fantasy entry is malformed', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          { id: 'pref-team', type: { code: 'team' } },
+          { id: 'pref-broken', type: { code: 'fantasy' }, metaData: { entry: 'unexpected' } },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .rejects.toMatchObject({ statusCode: 502 });
+  });
+
+  it('treats only non-fantasy preferences as no leagues, even with an odd entry mixed in', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [
+          { id: 'pref-team', type: { code: 'team' } },
+          { id: 'pref-odd' },
+        ],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .rejects.toBeInstanceOf(NoFantasyLeaguesFound);
+  });
+
+  it.each([
+    ['missing preferences', { error: { message: 'upstream error' } }],
+    ['non-array preferences', { preferences: { id: 'pref-1' } }],
+    ['only unrecognizable entries', { preferences: [null, 'junk', { id: 'pref-1' }, { type: { code: 7 } }] }],
+    ['malformed fantasy entry', {
+      preferences: [{
+        id: 'pref-1',
+        type: { code: 'fantasy' },
+        metaData: {
+          entry: {
+            entryId: 8,
+            gameId: 1,
+            seasonId: 2025,
+            groups: 'not-an-array',
+          },
+        },
+      }],
+    }],
+  ])('classifies %s as a malformed 502 response', async (_scenario, payload) => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => payload,
+    } as Response);
+
+    const error = await discoverLeaguesV3(
+      '{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}',
+      's2token'
+    ).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+    expect(error).not.toBeInstanceOf(NoFantasyLeaguesFound);
+    expect((error as AutomaticLeagueDiscoveryFailed).statusCode).toBe(502);
+  });
+
+  it('treats a structurally valid unsupported fantasy sport as no supported leagues', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [{
+          id: 'pref-unsupported',
+          type: { code: 'fantasy' },
+          metaData: {
+            entry: {
+              entryId: 8,
+              gameId: 999,
+              seasonId: 2025,
+              entryMetadata: { teamName: 'Test Team' },
+              groups: [{ groupId: 12345, groupName: 'Unsupported League' }],
+            },
+          },
+        }],
+      }),
+    } as Response);
+
+    await expect(discoverLeaguesV3(
+      '{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}',
+      's2token'
+    )).rejects.toBeInstanceOf(NoFantasyLeaguesFound);
+  });
+
+  it.each([401, 403])('classifies ESPN HTTP %i as an authentication failure', async (status) => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status,
+      statusText: 'Forbidden',
+    } as Response);
+
+    await expect(discoverLeaguesV3('{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}', 's2token'))
+      .rejects.toBeInstanceOf(EspnAuthenticationFailed);
+  });
+
+  it.each([429, 500])('preserves ESPN HTTP %i on discovery failures', async (status) => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status,
+      statusText: status === 429 ? 'Too Many Requests' : 'Internal Server Error',
+    } as Response);
+
+    const error = await discoverLeaguesV3(
+      '{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}',
+      's2token'
+    ).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+    expect(error).not.toBeInstanceOf(NoFantasyLeaguesFound);
+    expect((error as AutomaticLeagueDiscoveryFailed).statusCode).toBe(status);
+  });
+
+  it('classifies a Fan API timeout as a 504 discovery failure', async () => {
+    const timeout = new Error('The operation timed out');
+    timeout.name = 'TimeoutError';
+    mockFetch.mockRejectedValueOnce(timeout);
+
+    const error = await discoverLeaguesV3(
+      '{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}',
+      's2token'
+    ).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+    expect((error as AutomaticLeagueDiscoveryFailed).statusCode).toBe(504);
+  });
+
+  it.each([
+    ['network failure', new TypeError('fetch failed')],
+    ['malformed JSON', new SyntaxError('Unexpected token')],
+  ])('classifies %s as a 502 discovery failure', async (scenario, failure) => {
+    if (scenario === 'malformed JSON') {
+      mockFetch.mockResolvedValueOnce(new Response('not-json', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    } else {
+      mockFetch.mockRejectedValueOnce(failure);
+    }
+
+    const error = await discoverLeaguesV3(
+      '{BFA3386F-9501-4F4A-88C7-C56D6BB86C11}',
+      's2token'
+    ).catch((reason: unknown) => reason);
+
+    expect(error).toBeInstanceOf(AutomaticLeagueDiscoveryFailed);
+    expect((error as AutomaticLeagueDiscoveryFailed).statusCode).toBe(502);
   });
 });
 

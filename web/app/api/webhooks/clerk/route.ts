@@ -6,13 +6,24 @@ import {
   markEmailRetry,
 } from "@/lib/server/email-retry-marker";
 import {
+  getClerkUserProductEmail,
   syncClerkUserToResendContact,
   type ClerkUserEmailSyncPayload,
 } from "@/lib/server/resend-contact-sync";
 import {
-  isWelcomeAutomationEnabled,
   sendWelcomeAutomationEvent,
 } from "@/lib/server/resend-welcome-automation";
+import { sendWelcomeEmail } from "@/lib/server/product-email";
+import {
+  isPlunkMarketingSyncEnabled,
+  syncClerkUserToPlunkContact,
+} from "@/lib/server/plunk-contact-sync";
+import {
+  mapClerkUserToSignup,
+  recordSignup,
+  type SignupLogInput,
+} from "@/lib/server/signup-log";
+import { getWelcomeDeliveryConfig } from "@/lib/server/welcome-delivery-mode";
 
 const CONTACT_SYNC_EVENTS = new Set(["user.updated"]);
 const WELCOME_EVENTS = new Set(["user.created"]);
@@ -25,6 +36,90 @@ function isClerkUserEmailSyncPayload(data: unknown): data is ClerkUserEmailSyncP
     "id" in data &&
     typeof data.id === "string"
   );
+}
+
+async function sendDirectWelcome(user: ClerkUserEmailSyncPayload) {
+  const email = getClerkUserProductEmail(user);
+  if (!email.ok) return { ...email, retryable: false };
+
+  const result = await sendWelcomeEmail({
+    idempotencyKey: `welcome/${user.id}`,
+    to: email.email,
+    userId: user.id,
+  });
+
+  return { ...result, retryable: result.skipped === true };
+}
+
+function queuePlunkMarketingContactSync(user: ClerkUserEmailSyncPayload) {
+  if (!isPlunkMarketingSyncEnabled()) return;
+
+  after(async () => {
+    try {
+      const result = await syncClerkUserToPlunkContact(user, { enabled: true });
+      if (!result.ok) {
+        if (!result.skipped) {
+          logEmailOps("email.contact_sync_failed", {
+            error: result.error,
+            provider: "plunk",
+            reason: "plunk_marketing_contact_sync_failed",
+            source: "clerk.user.created",
+            userId: user.id,
+          });
+        }
+
+        if (result.retryable) {
+          const marker = await markEmailRetry(user.id, "plunkContactSync", {
+            metadata: user.private_metadata,
+          });
+          if (!marker.ok) {
+            logEmailOps("email.contact_sync_failed", {
+              error: marker.error,
+              provider: "clerk",
+              reason: "plunk_retry_marker_write_failed",
+              source: "clerk.user.created",
+              userId: user.id,
+            });
+          }
+        }
+        return;
+      }
+
+      const marker = await clearEmailRetry(user.id, "plunkContactSync", {
+        metadata: user.private_metadata,
+      });
+      if (!marker.ok) {
+        logEmailOps("email.contact_sync_failed", {
+          error: marker.error,
+          provider: "clerk",
+          reason: "plunk_retry_marker_clear_failed",
+          source: "clerk.user.created",
+          userId: user.id,
+        });
+      }
+    } catch (error) {
+      logEmailOps("email.contact_sync_failed", {
+        error,
+        provider: "plunk",
+        reason: "plunk_marketing_contact_sync_after_failed",
+        source: "clerk.user.created",
+        userId: user.id,
+      });
+
+      const marker = await markEmailRetry(user.id, "plunkContactSync", {
+        metadata: user.private_metadata,
+      });
+      if (!marker.ok) {
+        logEmailOps("email.contact_sync_failed", {
+          error: marker.error,
+          provider: "clerk",
+          reason: "plunk_retry_marker_write_failed",
+          source: "clerk.user.created",
+          userId: user.id,
+        });
+      }
+    }
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -52,31 +147,111 @@ export async function POST(request: NextRequest) {
 
   const user = event.data;
 
+  // The permanent signup log is written before anything else, for both
+  // user.created and user.updated, and above the welcome-flag early return —
+  // otherwise a flag about email would quietly become a flag about analytics.
+  // It is awaited rather than scheduled in `after()` because `after()` work is
+  // best-effort and cancelled on timeout, and this capture may not be.
+  let signup: SignupLogInput;
+  try {
+    signup = mapClerkUserToSignup(event.data);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "signup_log.payload_invalid",
+        reason: error instanceof Error ? error.message : "unknown_error",
+        source: `clerk.${event.type}`,
+        userId: user.id,
+      })
+    );
+    return NextResponse.json({ error: "Unexpected webhook payload" }, { status: 500 });
+  }
+
+  try {
+    await recordSignup(signup, { source: "webhook" });
+  } catch (error) {
+    // Return 500 before the welcome is queued: Svix retries the delivery, and
+    // because nothing was scheduled the retry cannot double-send a welcome.
+    console.error(
+      JSON.stringify({
+        event: "signup_log.write_failed",
+        reason: error instanceof Error ? error.message : "unknown_error",
+        source: `clerk.${event.type}`,
+        userId: user.id,
+      })
+    );
+    return NextResponse.json({ error: "Signup log write failed" }, { status: 500 });
+  }
+
   if (WELCOME_EVENTS.has(event.type)) {
-    if (!isWelcomeAutomationEnabled()) {
+    // Marketing contact ownership is independent of welcome delivery. It has
+    // its own feature gate and never blocks Clerk's verified webhook response.
+    queuePlunkMarketingContactSync(user);
+
+    const delivery = getWelcomeDeliveryConfig();
+    if (delivery.mode === "disabled") {
       logEmailOps("email.welcome_event_skipped", {
         provider: "resend",
-        reason: "welcome_automation_disabled",
+        reason: delivery.invalidValue
+          ? "welcome_delivery_mode_invalid"
+          : "welcome_delivery_disabled",
         source: "clerk.user.created",
         userId: user.id,
       });
       return NextResponse.json({
         received: true,
-        welcome: { skipped: true, error: "Resend welcome automation is disabled" },
+        welcome: {
+          skipped: true,
+          error: delivery.invalidValue
+            ? "Welcome delivery mode is invalid"
+            : "Welcome delivery is disabled",
+        },
       });
     }
 
     after(async () => {
       try {
-        // Resend Automations identify contacts by email and create missing contacts
-        // before adding the segment and sending the welcome email. The feature flag
-        // was checked before queueing; keep the async call aligned with that decision.
-        const welcome = await sendWelcomeAutomationEvent(user, { enabled: true });
+        // Capture the selected mode before queueing so one webhook can never emit
+        // the hosted event and direct send together.
+        const welcome = delivery.mode === "automation"
+          ? await sendWelcomeAutomationEvent(user, { enabled: true })
+          : await sendDirectWelcome(user);
+
+        if (welcome.skipped) {
+          logEmailOps("email.welcome_event_skipped", {
+            error: welcome.error,
+            provider: "resend",
+            reason: delivery.mode === "automation"
+              ? "welcome_automation_skipped"
+              : "welcome_direct_send_skipped",
+            source: "clerk.user.created",
+            userId: user.id,
+          });
+
+          if ("retryable" in welcome && welcome.retryable) {
+            const marker = await markEmailRetry(user.id, "welcomeEvent", {
+              metadata: user.private_metadata,
+            });
+            if (!marker.ok) {
+              logEmailOps("email.welcome_event_failed", {
+                error: marker.error,
+                provider: "clerk",
+                reason: "retry_marker_write_failed",
+                source: "clerk.user.created",
+                userId: user.id,
+              });
+            }
+          }
+          return;
+        }
+
         if (!welcome.ok && !welcome.skipped) {
           logEmailOps("email.welcome_event_failed", {
             error: welcome.error,
             provider: "resend",
-            reason: "welcome_event_send_failed",
+            reason: delivery.mode === "automation"
+              ? "welcome_event_send_failed"
+              : "welcome_direct_send_failed",
             source: "clerk.user.created",
             userId: user.id,
           });
@@ -116,7 +291,9 @@ export async function POST(request: NextRequest) {
         logEmailOps("email.welcome_event_failed", {
           error,
           provider: "resend",
-          reason: "welcome_event_after_failed",
+          reason: delivery.mode === "automation"
+            ? "welcome_event_after_failed"
+            : "welcome_direct_after_failed",
           source: "clerk.user.created",
           userId: user.id,
         });

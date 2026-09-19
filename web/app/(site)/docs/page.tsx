@@ -114,6 +114,12 @@ export default function GuidePage() {
               <Link href="/leagues#leagues">Manage Your Leagues</Link>
             </Button>
             <Button asChild variant="ghost">
+              <Link href="/docs/espn">
+                ESPN Chrome extension setup
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </Button>
+            <Button asChild variant="ghost">
               <Link href="/docs/sports">
                 Sports and league coverage
                 <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />

@@ -15,6 +15,16 @@ const AUTOMATION_NAME = "Flaim Welcome Email";
 const EVENT_SCHEMA_VERSION = "2026-08-25-no-given-name";
 const RESEND_PROPAGATION_DELAY_MS = 300;
 const MAX_TEMPLATE_LIST_PAGES = 20;
+
+/** @param {Record<string, string | undefined>} env */
+export function assertHostedWelcomeAutomationMode(env = process.env) {
+  if (env.FLAIM_WELCOME_DELIVERY_MODE?.trim().toLowerCase() === "direct") {
+    throw new Error(
+      "Hosted welcome automation setup is disabled when FLAIM_WELCOME_DELIVERY_MODE=direct",
+    );
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -192,6 +202,8 @@ async function ensureAutomation(resend, templateId, contactSegmentId) {
 }
 
 async function main() {
+  assertHostedWelcomeAutomationMode();
+
   const apiKey = process.env.RESEND_EVENTS_API_KEY ?? process.env.RESEND_CONTACTS_API_KEY;
   const contactSegmentId = process.env.RESEND_CONTACT_SEGMENT_ID?.trim();
 

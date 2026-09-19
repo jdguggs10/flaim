@@ -10,7 +10,7 @@ interface WelcomeEmailProps {
   chatGptAppUrl?: string;
   claudeConnectorUrl?: string;
   leaguesUrl?: string;
-  /** Must be a real unsubscribe or notification-preferences URL before connecting to a live sender. */
+  /** Hosted marketing automations pass a recipient-specific unsubscribe URL. */
   unsubscribeUrl?: string;
 }
 
@@ -123,17 +123,20 @@ export default function WelcomeEmail({
   chatGptAppUrl = emailLinks.chatGptAppUrl,
   claudeConnectorUrl = emailLinks.claudeConnectorUrl,
   leaguesUrl = emailLinks.leaguesUrl,
-  unsubscribeUrl = "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20updates",
+  unsubscribeUrl,
 }: WelcomeEmailProps) {
   return (
     <FlaimEmailLayout
       eyebrow="WELCOME"
       footerDisclosure={
-        <>
-          You are receiving this because you created a Flaim account.{" "}
-          <FlaimFooterLink href={unsubscribeUrl}>Unsubscribe</FlaimFooterLink>
-          .
-        </>
+        unsubscribeUrl ? (
+          <>
+            You are receiving this because you created a Flaim account.{" "}
+            <FlaimFooterLink href={unsubscribeUrl}>Unsubscribe</FlaimFooterLink>.
+          </>
+        ) : (
+          <>You are receiving this because you created a Flaim account.</>
+        )
       }
       preview="Connect a league to start using Flaim with your AI assistant."
       title="Connect your first league"
@@ -170,6 +173,4 @@ WelcomeEmail.PreviewProps = {
   chatGptAppUrl: emailLinks.chatGptAppUrl,
   claudeConnectorUrl: emailLinks.claudeConnectorUrl,
   leaguesUrl: emailLinks.leaguesUrl,
-  unsubscribeUrl:
-    "mailto:support@flaim.app?subject=Unsubscribe%20from%20Flaim%20product%20updates",
 } satisfies WelcomeEmailProps;

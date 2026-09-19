@@ -5,6 +5,25 @@ import { asArray, getPath, unwrapLeague, unwrapTeam } from '../normalizers';
 import { ErrorCode } from '@flaim/worker-shared';
 import { toExecuteErrorResponse } from './utils';
 
+function parseNullableNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
+ * For Yahoo's 1-based ordinals (playoff seed, waiver priority). Yahoo sends 0,
+ * '', or a non-numeric placeholder when the ordinal doesn't apply, and a 0 would
+ * otherwise read as ranking ahead of first.
+ */
+function parsePositiveOrdinal(value: unknown): number | null {
+  const parsed = parseNullableNumber(value);
+  return parsed != null && Number.isInteger(parsed) && parsed >= 1 ? parsed : null;
+}
+
 export function createGetStandingsHandler(_config: YahooHandlerContext): HandlerFn {
   return async (env, params, authHeader, correlationId) => {
     const { league_id } = params;
@@ -56,15 +75,7 @@ export function createGetStandingsHandler(_config: YahooHandlerContext): Handler
         const teamStandings = team.team_standings as Record<string, unknown> | undefined;
         const outcomeTotals = teamStandings?.outcome_totals as Record<string, unknown> | undefined;
 
-        const rawPlayoffSeed = teamStandings?.playoff_seed;
-        const parsedPlayoffSeed =
-          typeof rawPlayoffSeed === 'number'
-            ? rawPlayoffSeed
-            : typeof rawPlayoffSeed === 'string' && rawPlayoffSeed.trim() !== ''
-              ? Number(rawPlayoffSeed)
-              : NaN;
-        const playoffSeed =
-          Number.isInteger(parsedPlayoffSeed) && parsedPlayoffSeed >= 1 ? parsedPlayoffSeed : null;
+        const playoffSeed = parsePositiveOrdinal(teamStandings?.playoff_seed);
 
         return {
           rank: teamStandings?.rank,
@@ -77,6 +88,9 @@ export function createGetStandingsHandler(_config: YahooHandlerContext): Handler
           percentage: outcomeTotals?.percentage,
           pointsFor: teamStandings?.points_for,
           pointsAgainst: teamStandings?.points_against,
+          waiverPriority: parsePositiveOrdinal(team.waiver_priority),
+          // Unlike waiver priority, 0 is a real FAAB balance — a team that spent out.
+          faabBalance: parseNullableNumber(team.faab_balance),
           playoffSeed,
           madePlayoffs: playoffSeed != null ? true : null,
           // Yahoo's API doesn't expose reliable postseason final rankings.

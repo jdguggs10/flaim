@@ -24,6 +24,26 @@ afterEach(() => {
 });
 
 describe('POST /api/extension/discover', () => {
+  it('preserves safe retry guidance from the worker', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: 'refresh_cooldown',
+      error_description: 'Try again later.',
+      retry_after: 55,
+    }), {
+      status: 429,
+      headers: { 'content-type': 'application/json' },
+    })));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(429);
+    await expect(response.json()).resolves.toEqual({
+      error: 'refresh_cooldown',
+      error_description: 'Try again later.',
+      retry_after: 55,
+    });
+  });
+
   it('preserves the additive ESPN history status for the popup', async () => {
     const history = {
       jobId: 'job_123',

@@ -9,11 +9,13 @@ import {
 } from "./components/FlaimEmailLayout";
 
 interface EspnSetupLinkEmailProps {
+  docsUrl: string;
   extensionUrl: string;
   leaguesUrl: string;
 }
 
 export default function EspnSetupLinkEmail({
+  docsUrl,
   extensionUrl,
   leaguesUrl,
 }: EspnSetupLinkEmailProps) {
@@ -43,11 +45,16 @@ export default function EspnSetupLinkEmail({
         . Yahoo and Sleeper don&apos;t need any of this. They connect right
         from your phone.
       </FlaimMutedText>
+      <FlaimMutedText>
+        Need a hand? Read the{" "}
+        <FlaimFooterLink href={docsUrl}>ESPN setup steps</FlaimFooterLink>.
+      </FlaimMutedText>
     </FlaimEmailLayout>
   );
 }
 
 EspnSetupLinkEmail.PreviewProps = {
+  docsUrl: "https://flaim.app/docs/espn",
   extensionUrl:
     "https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn",
   leaguesUrl: "https://flaim.app/leagues",

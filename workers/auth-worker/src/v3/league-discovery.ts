@@ -12,6 +12,7 @@ import {
   EspnAuthenticationFailed,
   EspnCredentialsRequired,
   DiscoveredEspnLeague,
+  NoFantasyLeaguesFound,
   gameIdToSport
 } from '../espn-types';
 import { getLeagueInfo, getLeagueInfoSafe } from './get-league-info';
@@ -33,8 +34,8 @@ interface FanApiPreference {
       entryId: number;
       gameId: number;
       seasonId: number;
-      entryMetadata: {
-        teamName: string;
+      entryMetadata?: {
+        teamName?: string;
         teamAbbrev?: string;
       };
       groups: Array<{
@@ -44,14 +45,6 @@ interface FanApiPreference {
       }>;
     };
   };
-}
-
-/**
- * ESPN Fan API response structure
- */
-interface FanApiResponse {
-  id: string;
-  preferences?: FanApiPreference[];
 }
 
 // =============================================================================
@@ -69,6 +62,82 @@ const NUMERIC_TO_GAME_ID: Record<number, string> = {
   3: 'fba',  // Basketball
   4: 'fhl',  // Hockey
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseFantasyPreferences(value: unknown): FanApiPreference[] {
+  if (!isRecord(value) || !Array.isArray(value.preferences)) {
+    throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
+  }
+
+  // The preferences array is not fantasy-specific, so an odd non-fantasy entry
+  // must not fail discovery for a user with valid leagues: anything that is not
+  // identifiably `type.code === 'fantasy'` is skipped. A malformed fantasy entry
+  // is also skipped (as the pre-typed parser did) so one odd league cannot hide
+  // the rest. A garbage payload still must not read as a valid empty result: a
+  // non-empty array with no recognizable entries (a record with a string
+  // `type.code`), or fantasy entries that are all malformed, is a 502.
+  const fantasyPreferences: FanApiPreference[] = [];
+  let recognizedPreferences = 0;
+  let malformedFantasyPreferences = 0;
+  for (const rawPreference of value.preferences) {
+    if (
+      !isRecord(rawPreference) ||
+      !isRecord(rawPreference.type) ||
+      typeof rawPreference.type.code !== 'string'
+    ) {
+      continue;
+    }
+    recognizedPreferences++;
+    if (rawPreference.type.code !== 'fantasy') continue;
+
+    const metadata = rawPreference.metaData;
+    const entry = isRecord(metadata) ? metadata.entry : null;
+    const groups = isRecord(entry) ? entry.groups : null;
+    if (
+      typeof rawPreference.id !== 'string' ||
+      !isRecord(entry) ||
+      !Array.isArray(groups) ||
+      typeof entry.entryId !== 'number' ||
+      !Number.isFinite(entry.entryId) ||
+      typeof entry.gameId !== 'number' ||
+      !Number.isFinite(entry.gameId) ||
+      typeof entry.seasonId !== 'number' ||
+      !Number.isFinite(entry.seasonId)
+    ) {
+      malformedFantasyPreferences++;
+      continue;
+    }
+    if (groups.length === 0) continue;
+
+    const group = groups[0];
+    if (
+      !isRecord(group) ||
+      typeof group.groupId !== 'number' ||
+      !Number.isFinite(group.groupId) ||
+      typeof group.groupName !== 'string' ||
+      (entry.entryMetadata !== undefined &&
+        (!isRecord(entry.entryMetadata) ||
+          (entry.entryMetadata.teamName !== undefined && typeof entry.entryMetadata.teamName !== 'string')))
+    ) {
+      malformedFantasyPreferences++;
+      continue;
+    }
+
+    fantasyPreferences.push(rawPreference as unknown as FanApiPreference);
+  }
+
+  if (value.preferences.length > 0 && recognizedPreferences === 0) {
+    throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed preferences', 502);
+  }
+  if (fantasyPreferences.length === 0 && malformedFantasyPreferences > 0) {
+    throw new AutomaticLeagueDiscoveryFailed('Fan API returned malformed fantasy preferences', 502);
+  }
+
+  return fantasyPreferences;
+}
 
 /**
  * Discover all leagues for a user across all supported sports.
@@ -115,20 +184,18 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
     }
 
     if (!res.ok) {
-      throw new AutomaticLeagueDiscoveryFailed(`Fan API returned ${res.status}: ${res.statusText}`);
+      throw new AutomaticLeagueDiscoveryFailed(
+        `Fan API returned ${res.status}: ${res.statusText}`,
+        res.status
+      );
     }
 
-    const json: FanApiResponse = await res.json();
-
-    // Filter for fantasy leagues only (type.code === 'fantasy')
-    const fantasyPrefs = json.preferences?.filter(
-      (p) => p.type?.code === 'fantasy' && p.metaData?.entry?.groups?.length > 0
-    ) ?? [];
+    const fantasyPrefs = parseFantasyPreferences(await res.json());
 
     console.log(`📦 Fan API returned ${fantasyPrefs.length} fantasy leagues`);
 
     if (fantasyPrefs.length === 0) {
-      throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
+      throw new NoFantasyLeaguesFound();
     }
 
     // Map preferences to DiscoveredEspnLeague format
@@ -161,7 +228,7 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
     }
 
     if (leagues.length === 0) {
-      throw new AutomaticLeagueDiscoveryFailed('No fantasy leagues found for the supplied credentials');
+      throw new NoFantasyLeaguesFound();
     }
 
     console.log(`✅ Discovered ${leagues.length} leagues total`);
@@ -169,16 +236,20 @@ export async function discoverLeaguesV3(swid: string, s2: string, signal?: Abort
 
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
-      throw new AutomaticLeagueDiscoveryFailed('Fan API request timed out');
+      throw new AutomaticLeagueDiscoveryFailed('Fan API request timed out', 504);
     }
 
-    if (error instanceof EspnAuthenticationFailed || error instanceof AutomaticLeagueDiscoveryFailed) {
+    if (
+      error instanceof EspnAuthenticationFailed ||
+      error instanceof AutomaticLeagueDiscoveryFailed
+    ) {
       throw error;
     }
 
     console.error('⚠️ Error discovering leagues:', error);
     throw new AutomaticLeagueDiscoveryFailed(
-      error instanceof Error ? error.message : 'Unknown error during league discovery'
+      error instanceof Error ? error.message : 'Unknown error during league discovery',
+      502
     );
   }
 }

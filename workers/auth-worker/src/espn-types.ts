@@ -226,6 +226,17 @@ export class AutomaticLeagueDiscoveryFailed extends Error {
   }
 }
 
+/**
+ * ESPN accepted the supplied credentials but returned no supported fantasy
+ * leagues. This is a valid empty result, not an upstream discovery failure.
+ */
+export class NoFantasyLeaguesFound extends AutomaticLeagueDiscoveryFailed {
+  constructor(message: string = 'No fantasy leagues found for the supplied credentials') {
+    super(message);
+    this.name = 'NoFantasyLeaguesFound';
+  }
+}
+
 export class EspnCredentialsRequired extends Error {
   constructor(message: string = 'ESPN credentials required for league discovery') {
     super(message);

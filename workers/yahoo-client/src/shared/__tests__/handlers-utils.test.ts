@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { extractLeagueSettings, normalizeIsKeeper, toExecuteErrorResponse } from '../handlers/utils';
+import {
+  extractLeagueSettings,
+  extractPlayerPercentOwned,
+  normalizeIsKeeper,
+  toExecuteErrorResponse,
+} from '../handlers/utils';
 import { YahooClientError } from '../errors';
 
 describe('shared handler utilities', () => {
@@ -184,5 +189,64 @@ describe('extractLeagueSettings (FLA-284)', () => {
   it('returns undefined for scalar/unexpected shapes rather than guessing', () => {
     expect(extractLeagueSettings('unexpected')).toBeUndefined();
     expect(extractLeagueSettings(42)).toBeUndefined();
+  });
+});
+
+describe('extractPlayerPercentOwned (FLA-9)', () => {
+  const meta = [
+    { player_key: '449.p.1' },
+    { player_id: '1' },
+    { name: { full: 'Test Player' } },
+  ];
+
+  it('reads value from Yahoo’s array-of-single-key-objects form', () => {
+    const player = [
+      meta,
+      { ownership: { ownership_type: 'freeagents' } },
+      { percent_owned: [{ coverage_type: 'week' }, { week: '3' }, { value: 42 }, { delta: '1.5' }] },
+    ];
+    expect(extractPlayerPercentOwned(player)).toBe(42);
+  });
+
+  it('accepts a numeric string value and a date-coverage entry', () => {
+    const player = [
+      meta,
+      { percent_owned: [{ coverage_type: 'date' }, { date: '2026-09-16' }, { value: '88.5' }] },
+    ];
+    expect(extractPlayerPercentOwned(player)).toBe(88.5);
+  });
+
+  it('finds percent_owned at any sub-resource position', () => {
+    const player = [
+      meta,
+      { selected_position: [{ position: 'OF' }] },
+      { ownership: { ownership_type: 'team' } },
+      { percent_owned: [{ value: 7 }] },
+    ];
+    expect(extractPlayerPercentOwned(player)).toBe(7);
+  });
+
+  it('accepts the flattened object and numeric-keyed container forms', () => {
+    expect(extractPlayerPercentOwned([meta, { percent_owned: { coverage_type: 'week', week: 25, value: 98, delta: -1 } }])).toBe(98);
+    expect(extractPlayerPercentOwned([meta, { percent_owned: { '0': { coverage_type: 'week' }, '1': { value: 12 }, count: 2 } }])).toBe(12);
+  });
+
+  it('preserves a genuine 0 rate', () => {
+    expect(extractPlayerPercentOwned([meta, { percent_owned: [{ value: 0 }] }])).toBe(0);
+    expect(extractPlayerPercentOwned([meta, { percent_owned: [{ value: '0' }] }])).toBe(0);
+  });
+
+  it('returns null when the sub-resource is absent or non-numeric', () => {
+    expect(extractPlayerPercentOwned([meta])).toBeNull();
+    expect(extractPlayerPercentOwned([meta, { ownership: { ownership_type: 'freeagents' } }])).toBeNull();
+    expect(extractPlayerPercentOwned([meta, { percent_owned: [{ coverage_type: 'week' }, { week: '3' }] }])).toBeNull();
+    expect(extractPlayerPercentOwned([meta, { percent_owned: [{ value: 'n/a' }] }])).toBeNull();
+    expect(extractPlayerPercentOwned([meta, { percent_owned: null }])).toBeNull();
+  });
+
+  it('never reads a rate nested under ownership', () => {
+    // Yahoo's ownership sub-resource has no rate field; a stray nested value
+    // must not be mistaken for the platform-wide rate.
+    expect(extractPlayerPercentOwned([meta, { ownership: { percent_owned: '47' } }])).toBeNull();
   });
 });
