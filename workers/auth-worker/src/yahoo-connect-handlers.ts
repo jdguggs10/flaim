@@ -4065,7 +4065,9 @@ type DirectUserTeamsMembershipParseResult =
         | 'invalid_user_entity'
         | 'invalid_user_resources'
         | 'invalid_teams_collection'
-        | 'invalid_team_entry';
+        | 'invalid_team_wrapper'
+        | 'invalid_team_entity_shape'
+        | 'invalid_team_key';
     };
 
 const YAHOO_CANONICAL_TEAM_KEY_PATTERN = /^\d+\.l\.\d+\.t\.\d+$/;
@@ -4099,15 +4101,17 @@ function readDirectUserTeamsMembershipEvidence(
   let requestedLeagueMatchCount = 0;
   for (let teamIndex = 0; teamIndex < Number(teams.count); teamIndex += 1) {
     const teamWrapper = teams[String(teamIndex)];
-    if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) {
-      return { status: 'invalid_team_entry' };
+    if (!isYahooRecord(teamWrapper)) return { status: 'invalid_team_wrapper' };
+    const team = teamWrapper.team;
+    if (!isYahooRecord(team) && !Array.isArray(team)) {
+      return { status: 'invalid_team_entity_shape' };
     }
-    const teamKeys = readDirectYahooStrings(teamWrapper.team, 'team_key');
+    const teamKeys = readDirectYahooStrings(team, 'team_key');
     if (
       teamKeys.length !== 1
       || !YAHOO_CANONICAL_TEAM_KEY_PATTERN.test(teamKeys[0])
     ) {
-      return { status: 'invalid_team_entry' };
+      return { status: 'invalid_team_key' };
     }
     if (teamKeys[0].startsWith(`${leagueKey}.t.`)) requestedLeagueMatchCount += 1;
   }
