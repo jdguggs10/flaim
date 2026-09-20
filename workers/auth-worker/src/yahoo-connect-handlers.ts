@@ -3824,21 +3824,6 @@ function readDirectYahooStrings(value: unknown, field: string): string[] {
   return values;
 }
 
-function collectYahooFields(parsed: unknown, field: string): unknown[] {
-  const values: unknown[] = [];
-  const visit = (entry: unknown): void => {
-    if (Array.isArray(entry)) {
-      for (const item of entry) visit(item);
-      return;
-    }
-    if (!isYahooRecord(entry)) return;
-    if (field in entry) values.push(entry[field]);
-    for (const value of Object.values(entry)) visit(value);
-  };
-  visit(parsed);
-  return values;
-}
-
 function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set<string> | null {
   const guids = new Set<string>();
   for (let teamIndex = 0; teamIndex < Number(collection.count); teamIndex += 1) {
@@ -3903,7 +3888,7 @@ function readYahooTeamKeys(collection: Record<string, unknown>): Set<string> | n
     const teamWrapper = collection[String(index)];
     if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
     const keys = readDirectYahooStrings(teamWrapper.team, 'team_key');
-    if (keys.length !== 1) return null;
+    if (keys.length !== 1 || keys[0].trim() !== keys[0] || keys[0].length === 0) return null;
     teamKeys.add(keys[0]);
   }
   return teamKeys;
