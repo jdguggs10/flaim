@@ -271,7 +271,22 @@ describe('recoverYahooLeagueForSupport', () => {
     });
 
     await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
-      stage: 'failed', reason: 'manager_identity_unproven',
+      stage: 'failed', reason: 'manager_identity_no_match',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('reports when the fresh login identity misses but the stored connected identity matches one manager team', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(teamsPayload({ ownership: undefined }));
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload('different-fresh-login-guid'));
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'fresh_login_no_match_stored_identity_matches',
     });
     expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
   });

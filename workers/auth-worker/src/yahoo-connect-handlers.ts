@@ -4163,16 +4163,6 @@ export async function verifyYahooLeagueMembership(
   const scopedLoggedInGuids = scoped.result && 'loggedInGuids' in scoped.result
     ? scoped.result.loggedInGuids
     : new Set<string>();
-  console.log(JSON.stringify({
-    event: 'yahoo_support_membership_shape',
-    direct_parse: direct.result?.status ?? 'response_unusable',
-    direct_manager_parse: !directEvidence
-      ? 'unavailable'
-      : directEvidence.managerGuids === null ? 'incomplete' : 'complete',
-    scoped_parse: scoped.result?.status ?? 'response_unusable',
-    correlation_id: correlationId ?? null,
-  }));
-
   let managerGuidComparison: YahooMembershipEvidence['managerGuidComparison'] = 'unavailable';
   const directManagerGuids = directEvidence?.managerGuids;
   if (directManagerGuids && directManagerGuids.size > 0) {
@@ -4184,6 +4174,17 @@ export async function verifyYahooLeagueMembership(
       managerGuidComparison = 'matches_stored_yahoo_guid';
     }
   }
+
+  console.log(JSON.stringify({
+    event: 'yahoo_support_membership_shape',
+    direct_parse: direct.result?.status ?? 'response_unusable',
+    direct_manager_parse: !directEvidence
+      ? 'unavailable'
+      : directEvidence.managerGuids === null ? 'incomplete' : 'complete',
+    scoped_parse: scoped.result?.status ?? 'response_unusable',
+    manager_guid_comparison: managerGuidComparison,
+    correlation_id: correlationId ?? null,
+  }));
 
   return {
     stage: 'completed',
@@ -4233,7 +4234,10 @@ export type YahooSupportRecoveryFailureReason =
   | 'ownership_marker_ambiguous'
   | 'ownership_marker_negative'
   | 'login_identity_unavailable'
-  | 'manager_identity_unproven'
+  | 'manager_identity_incomplete'
+  | 'manager_identity_no_match'
+  | 'manager_identity_ambiguous'
+  | 'fresh_login_no_match_stored_identity_matches'
   | 'recurring_root_unresolved'
   | 'visibility_preread_failed'
   | 'deadline_exceeded'
@@ -4427,13 +4431,21 @@ function parseYahooRecoveryLoggedInGuid(data: unknown): string | null {
   return nonBlankYahooString(guids[0]);
 }
 
+type YahooGuidOwnedTeamSelection =
+  | { status: 'selected'; team: YahooRecoveryTeam }
+  | { status: 'incomplete' }
+  | { status: 'no_match' }
+  | { status: 'ambiguous' };
+
 function selectGuidOwnedYahooTeam(
   teams: readonly YahooRecoveryTeam[],
   loggedInGuid: string
-): YahooRecoveryTeam | null {
-  if (teams.some((team) => team.managerGuids === null)) return null;
+): YahooGuidOwnedTeamSelection {
+  if (teams.some((team) => team.managerGuids === null)) return { status: 'incomplete' };
   const owned = teams.filter((team) => team.managerGuids?.has(loggedInGuid));
-  return owned.length === 1 ? owned[0] : null;
+  if (owned.length === 0) return { status: 'no_match' };
+  if (owned.length > 1) return { status: 'ambiguous' };
+  return { status: 'selected', team: owned[0] };
 }
 
 /** Reads one JSON Yahoo resource but intentionally exposes no HTTP/body detail. */
@@ -4567,8 +4579,25 @@ export async function recoverYahooLeagueForSupport(
     );
     const loggedInGuid = loginData ? parseYahooRecoveryLoggedInGuid(loginData) : null;
     if (!loggedInGuid) return { stage: 'failed', reason: 'login_identity_unavailable' };
-    ownedTeam = selectGuidOwnedYahooTeam(teams, loggedInGuid);
-    if (!ownedTeam) return { stage: 'failed', reason: 'manager_identity_unproven' };
+    const selection = selectGuidOwnedYahooTeam(teams, loggedInGuid);
+    if (selection.status === 'incomplete') {
+      return { stage: 'failed', reason: 'manager_identity_incomplete' };
+    }
+    if (selection.status === 'ambiguous') {
+      return { stage: 'failed', reason: 'manager_identity_ambiguous' };
+    }
+    if (selection.status === 'no_match') {
+      const storedSelection = credentials.yahooGuid
+        ? selectGuidOwnedYahooTeam(teams, credentials.yahooGuid)
+        : null;
+      return {
+        stage: 'failed',
+        reason: storedSelection?.status === 'selected'
+          ? 'fresh_login_no_match_stored_identity_matches'
+          : 'manager_identity_no_match',
+      };
+    }
+    ownedTeam = selection.team;
   }
 
   const recurringLeagueId = await resolveYahooRecoveryRecurringRoot(metadata, tokenResult.accessToken, deadline);
