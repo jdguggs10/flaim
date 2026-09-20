@@ -3844,16 +3844,19 @@ function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set
   for (let teamIndex = 0; teamIndex < Number(collection.count); teamIndex += 1) {
     const teamWrapper = collection[String(teamIndex)];
     if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
-    const managerCollections = teamWrapper.team.flatMap((entry) =>
-      isYahooRecord(entry) && 'managers' in entry ? [entry.managers] : []
-    );
+    const managerCollections = collectDirectYahooFields(teamWrapper.team, 'managers');
     if (managerCollections.length !== 1) return null;
     const managers = readYahooCountedCollection(managerCollections[0]);
     if (!managers || Number(managers.count) < 1) return null;
     for (let managerIndex = 0; managerIndex < Number(managers.count); managerIndex += 1) {
       const managerWrapper = managers[String(managerIndex)];
-      if (!isYahooRecord(managerWrapper) || !Array.isArray(managerWrapper.manager)) return null;
-      const managerGuids = readDirectYahooStrings(managerWrapper.manager, 'guid');
+      if (!isYahooRecord(managerWrapper)) return null;
+      const manager = managerWrapper.manager;
+      // Yahoo uses both a one-record object and an array of entity fragments
+      // for `manager` across its team resources. Accept either representation,
+      // then keep the same exact-one-canonical-GUID completeness requirement.
+      if (!isYahooRecord(manager) && !Array.isArray(manager)) return null;
+      const managerGuids = readDirectYahooStrings(manager, 'guid');
       if (managerGuids.length !== 1 || managerGuids[0].trim() !== managerGuids[0] || managerGuids[0].length === 0) {
         return null;
       }
@@ -3861,6 +3864,24 @@ function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set
     }
   }
   return guids;
+}
+
+/**
+ * Yahoo team metadata can be either a flat entity array or an array whose first
+ * item is the metadata array. Descend through arrays only, never object-valued
+ * fields, so unrelated nested resources cannot be mistaken for direct evidence.
+ */
+function collectDirectYahooFields(value: unknown, field: string): unknown[] {
+  const values: unknown[] = [];
+  const visit = (entry: unknown): void => {
+    if (Array.isArray(entry)) {
+      for (const item of entry) visit(item);
+      return;
+    }
+    if (isYahooRecord(entry) && field in entry) values.push(entry[field]);
+  };
+  visit(value);
+  return values;
 }
 
 function readYahooTeamKeys(collection: Record<string, unknown>): Set<string> | null {
