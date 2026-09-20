@@ -415,6 +415,7 @@ describe('diagnoseYahooDiscovery', () => {
       ['a non-200 status', () => json({ error: { description: 'nope' } }, 500)],
       ['a non-JSON body', () => new Response('<!DOCTYPE html><html>oops</html>', { status: 200 })],
       ['JSON without a fantasy_content envelope', () => json({ error: { description: 'nope' } }, 200)],
+      ['a fantasy_content envelope without users', () => json({ fantasy_content: {} }, 200)],
       ['an empty body', () => new Response('', { status: 200 })],
     ])('makes no fallback call for %s', async (_label, discovery) => {
       routeFetch({ discovery });
@@ -710,7 +711,7 @@ describe('runYahooSupportDiagnose', () => {
         ])
       );
 
-      expect(interpretation.category).toBe('historical_only');
+      expect(interpretation.category).toBe('current_football_not_observed');
       expect(interpretation.nextAction).toMatch(/Yahoo identity/i);
     });
 
@@ -733,7 +734,7 @@ describe('runYahooSupportDiagnose', () => {
         ])
       );
 
-      expect(interpretation.category).toBe('historical_only');
+      expect(interpretation.category).toBe('current_football_not_observed');
     });
 
     it('classifies a genuinely empty account when the fallback is empty too', async () => {
@@ -809,6 +810,10 @@ describe('runYahooSupportDiagnose', () => {
               unsupportedGameCodes: ['pickem', 'nflp'],
             }),
           }),
+          completedCall({
+            label: 'football_current_season',
+            stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }),
+          }),
         ])
       );
 
@@ -827,11 +832,39 @@ describe('runYahooSupportDiagnose', () => {
               indexed: { users: 1, games: 1, leagues: 2 },
             }),
           }),
+          completedCall({
+            label: 'football_current_season',
+            stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }),
+          }),
         ])
       );
 
       expect(interpretation.category).toBe('declared_count_zero_with_entries');
       expect(interpretation.summary).toContain('2');
+    });
+
+    it('prioritizes recoverable current football over an unrelated broad parser drop', async () => {
+      const interpretation = await categoryOf(
+        completed([
+          completedCall({
+            stats: statsWith({
+              accepted: 0,
+              declared: { users: 1, games: 1, leagues: 1 },
+              skipped: { ...createYahooParseStats().skipped, unsupportedSportCode: 1 },
+              unsupportedGameCodes: ['cfb'],
+            }),
+          }),
+          completedCall({
+            label: 'football_current_season',
+            parsedLeagueCount: 1,
+            hasCurrentSeasonFootball: true,
+            stats: statsWith({ accepted: 1, declared: { users: 1, games: 1, leagues: 1 } }),
+          }),
+        ])
+      );
+
+      expect(interpretation.category).toBe('filter_excludes_account');
+      expect(interpretation.nextAction).toContain('refresh --confirm');
     });
 
     it.each<[string, Partial<YahooDiagnosticCall>]>([

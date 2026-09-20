@@ -456,7 +456,7 @@ export interface DiagnoseInterpretation {
     | 'credential_renewal_rejected'
     | 'data_reachable'
     | 'filter_excludes_account'
-    | 'historical_only'
+    | 'current_football_not_observed'
     | 'genuinely_empty_account'
     | 'fallback_inconclusive'
     | 'parser_dropped_all'
@@ -605,37 +605,9 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
     };
   }
 
-  // Preserve the parser-specific diagnoses before interpreting the absence of
-  // current football. These shapes identify a local parsing defect regardless
-  // of whether the narrow availability probe succeeds.
-  if (
-    stats.accepted === 0
-    && stats.declared.leagues > 0
-    && stats.skipped.unsupportedSportCode > 0
-  ) {
-    const codes = stats.unsupportedGameCodes.length > 0
-      ? stats.unsupportedGameCodes.join(', ')
-      : 'none recorded';
-    return {
-      category: 'parser_dropped_all',
-      summary: `Yahoo reported ${stats.declared.leagues} league(s), but Flaim accepted none and encountered sport codes it does not map (${codes}).`,
-      nextAction: 'File a parser bug to map the listed Yahoo game codes, then re-run diagnose to confirm.',
-    };
-  }
-
-  if (stats.declared.leagues === 0 && stats.indexed.leagues > 0) {
-    return {
-      category: 'declared_count_zero_with_entries',
-      summary: `Yahoo declared a league count of zero while the payload actually carried ${stats.indexed.leagues} league entr${stats.indexed.leagues === 1 ? 'y' : 'ies'}, so the count-driven walk swallowed a populated level.`,
-      nextAction:
-        "File a parser bug: the leagues walk must count the entries present rather than trust Yahoo's count field.",
-    };
-  }
-
-  // A successful broad response can contain only historical leagues. That is
-  // useful evidence, but it is not proof the current football league is
-  // reachable. diagnoseYahooDiscovery makes the bounded current-NFL fallback
-  // for every such response, including non-empty historical results.
+  // A successful broad response can omit current football even when it
+  // contains historical leagues or leagues from other sports. The narrow
+  // fallback answers only whether current football is available.
   const fallback = diagnosis.calls[1];
 
   // The fallback exists to answer one question: can Yahoo return the active
@@ -674,13 +646,40 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
     };
   }
 
+  // Preserve parser-specific diagnoses after a successful current-football
+  // fallback has had the chance to prove that production discovery can recover
+  // the active league despite an unrelated broad-response anomaly.
+  if (
+    stats.accepted === 0
+    && stats.declared.leagues > 0
+    && stats.skipped.unsupportedSportCode > 0
+  ) {
+    const codes = stats.unsupportedGameCodes.length > 0
+      ? stats.unsupportedGameCodes.join(', ')
+      : 'none recorded';
+    return {
+      category: 'parser_dropped_all',
+      summary: `Yahoo reported ${stats.declared.leagues} league(s), but Flaim accepted none and encountered sport codes it does not map (${codes}).`,
+      nextAction: 'File a parser bug to map the listed Yahoo game codes, then re-run diagnose to confirm.',
+    };
+  }
+
+  if (stats.declared.leagues === 0 && stats.indexed.leagues > 0) {
+    return {
+      category: 'declared_count_zero_with_entries',
+      summary: `Yahoo declared a league count of zero while the payload actually carried ${stats.indexed.leagues} league entr${stats.indexed.leagues === 1 ? 'y' : 'ies'}, so the count-driven walk swallowed a populated level.`,
+      nextAction:
+        "File a parser bug: the leagues walk must count the entries present rather than trust Yahoo's count field.",
+    };
+  }
+
   if (stats.accepted > 0) {
     return {
-      category: 'historical_only',
+      category: 'current_football_not_observed',
       summary:
-        'Yahoo broad discovery returned only historical leagues, and the current-season football fallback returned no current football league. Historical data is reachable, but active football data is not.',
+        'Yahoo broad discovery returned parseable leagues, but neither the broad response nor the current-season football fallback returned current football.',
       nextAction:
-        'Confirm the Yahoo identity and whether the customer has an active NFL league. Do not describe historical-only data as a healthy current-season connection.',
+        'If this case concerns NFL, confirm the Yahoo identity and whether the current-season league has been created or renewed. Do not refresh based on unrelated or older rows alone.',
     };
   }
 

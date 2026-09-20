@@ -3025,6 +3025,9 @@ describe('yahoo-connect-handlers', () => {
 
       expect(response.status).toBe(200);
       expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch.mock.calls[1][1]).toEqual(expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }));
       expect(mockStorage.upsertYahooLeague).toHaveBeenCalledTimes(1);
       expect((await response.json() as { leagues: Array<{ leagueKey: string }> }).leagues)
         .toEqual([expect.objectContaining({ leagueKey: '449.l.same' })]);

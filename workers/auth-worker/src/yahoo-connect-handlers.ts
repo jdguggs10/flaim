@@ -2269,7 +2269,6 @@ async function fetchYahooCurrentFootballFallback(
       });
       return [];
     }
-    logYahooDiscoveryDropIfAny(userId, stats, source);
     return leagues;
   } catch (error) {
     logYahooCurrentFootballFallbackFailure(userId, source, 'fetch_error', {
@@ -2692,7 +2691,9 @@ export async function handleYahooDiscover(
     const fallbackLeagues = discoveryStats.envelope === 'valid'
       && !discoveryStats.threw
       && !hasCurrentSeasonFootball(broadLeagues)
-      ? await fetchYahooCurrentFootballFallback(accessToken, userId, 'discovery')
+      ? await fetchYahooCurrentFootballFallback(accessToken, userId, 'discovery', {
+          signal: AbortSignal.timeout(10000),
+        })
       : [];
     const leagues = mergeYahooLeaguesByKey(broadLeagues, fallbackLeagues);
 
@@ -3602,6 +3603,7 @@ export async function diagnoseYahooDiscovery(
     && primary.bodyIsJson
     && primary.bodyLooksLikeEnvelope
     && primary.stats !== null
+    && primary.stats.envelope === 'valid'
     && !primary.stats.threw
     && primary.hasCurrentSeasonFootball === false;
 

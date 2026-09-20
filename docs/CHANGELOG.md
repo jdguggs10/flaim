@@ -7,7 +7,7 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 ### Yahoo Current-Season Football Discovery (FLA-405)
 
 - **Fixed**: Yahoo league discovery keeps its broad all-history request as the primary source, but when that valid parsed response lacks the current NFL season it makes one bounded current-NFL fallback request. Successful fallback leagues are merged by `leagueKey` before recurring-root resolution and persistence, so historical/sibling-sport data remains intact and a duplicate is never written twice. A fallback failure is non-fatal, has no retry, and logs only a redacted bounded outcome. The read-only reconciliation discovery follows the same rule.
-- **Improved**: Yahoo support diagnose now makes that same second request whenever primary discovery lacks current football, including accounts whose primary response contains historical leagues. It distinguishes reachable current football, a broad-filter omission, historical-only data, and an inconclusive fallback instead of treating historical rows alone as a healthy current-season connection. The two-request ceiling remains unchanged.
+- **Improved**: Yahoo support diagnose now makes that same second request whenever primary discovery lacks current football, including accounts whose primary response contains historical or other-sport leagues. It distinguishes reachable current football, a broad-filter omission, current football not observed, and an inconclusive fallback instead of treating unrelated rows alone as a healthy current-season connection. The two-request ceiling remains unchanged.
 
 ### Yahoo and Sleeper Waiver Priority / FAAB Balance — Declared Schema and Tool Description (FLA-380, FLA-401)
 
