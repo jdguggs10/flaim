@@ -20,8 +20,8 @@ import { YahooStorage } from '../yahoo-storage';
 const USER_ID = 'user_3Ie4m68lUbzxyv22NsMU';
 const LEAGUE_KEY = '470.l.1234567';
 const TEAM_KEY = `${LEAGUE_KEY}.t.3`;
-const SYMBOLIC_GAME_TEAM_KEY = 'nfl.l.1000.t.1';
-const SYMBOLIC_LEAGUE_TEAM_KEY = '123.l.auto.t.456';
+const NEAR_PREFIX_LEAGUE_TEAM_KEY = '470.l.12345678.t.1';
+const UNRELATED_MALFORMED_TEAM_KEY = 'unrelated-team-key-sentinel';
 const NON_STRING_TEAM_KEY_SENTINEL = 'non-string-team-key-sentinel';
 const STORED_GUID = 'stored-yahoo-guid';
 const ACCESS_TOKEN = 'sentinel-access-token';
@@ -198,15 +198,14 @@ describe('verifyYahooLeagueMembership', () => {
   });
 
   it.each([
-    ['zero', directUserTeamsPayload([])],
-    ['zero', directUserTeamsPayload(['470.l.12345678.t.1'])],
-    ['one', directUserTeamsPayload([TEAM_KEY])],
-    ['one', directUserTeamsPayload([SYMBOLIC_GAME_TEAM_KEY, TEAM_KEY])],
-    ['one', directUserTeamsPayload([SYMBOLIC_LEAGUE_TEAM_KEY, TEAM_KEY])],
-    ['one', directUserTeamsPayload([TEAM_KEY], 'nested-fragments')],
-    ['one', directUserTeamsPayload([TEAM_KEY], 'object')],
-    ['multiple', directUserTeamsPayload([TEAM_KEY, `${LEAGUE_KEY}.t.8`])],
-  ] as const)('logs the direct login-scoped requested-league shape as %s only', async (expected, directUserPayload) => {
+    ['no teams', 'zero', directUserTeamsPayload([])],
+    ['near-prefix league', 'zero', directUserTeamsPayload([NEAR_PREFIX_LEAGUE_TEAM_KEY])],
+    ['arbitrary malformed unrelated key', 'zero', directUserTeamsPayload([UNRELATED_MALFORMED_TEAM_KEY])],
+    ['exact target', 'one', directUserTeamsPayload([TEAM_KEY])],
+    ['nested exact target', 'one', directUserTeamsPayload([TEAM_KEY], 'nested-fragments')],
+    ['object exact target', 'one', directUserTeamsPayload([TEAM_KEY], 'object')],
+    ['multiple exact targets', 'multiple', directUserTeamsPayload([TEAM_KEY, `${LEAGUE_KEY}.t.8`])],
+  ] as const)('logs %s direct login-scoped requested-league shape as %s only', async (_label, expected, directUserPayload) => {
     fetchSpy.mockImplementation(async (input: unknown) => {
       const url = String(input);
       if (url.includes('/users;use_login=1/teams')) return json(directUserPayload);
@@ -229,14 +228,15 @@ describe('verifyYahooLeagueMembership', () => {
     for (const forbidden of [
       LEAGUE_KEY,
       TEAM_KEY,
-      SYMBOLIC_GAME_TEAM_KEY,
-      SYMBOLIC_LEAGUE_TEAM_KEY,
+      NEAR_PREFIX_LEAGUE_TEAM_KEY,
+      UNRELATED_MALFORMED_TEAM_KEY,
       ACCESS_TOKEN,
       REFRESH_TOKEN,
       LEAGUE_NAME,
       TEAM_NAME,
     ]) {
       expect(log).not.toContain(forbidden);
+      expect(JSON.stringify(result)).not.toContain(forbidden);
     }
   });
 
@@ -298,10 +298,10 @@ describe('verifyYahooLeagueMembership', () => {
         },
       },
     }, 'non_string_direct_team_key'],
-    ['team key with trailing whitespace', directUserTeamsPayload([`${TEAM_KEY} `]), 'noncanonical_direct_team_key'],
-    ['uppercase symbolic game key', directUserTeamsPayload(['NFL.l.1000.t.1']), 'noncanonical_direct_team_key'],
-    ['symbolic team id', directUserTeamsPayload(['470.l.1234567.t.alpha']), 'noncanonical_direct_team_key'],
-    ['digit-leading mixed game key', directUserTeamsPayload(['1abc.l.1000.t.1']), 'noncanonical_direct_team_key'],
+    ['leading decoration containing target prefix', directUserTeamsPayload([`x${TEAM_KEY}`]), 'malformed_target_team_key'],
+    ['empty target team id', directUserTeamsPayload([`${LEAGUE_KEY}.t.`]), 'malformed_target_team_key'],
+    ['target id with trailing whitespace', directUserTeamsPayload([`${TEAM_KEY} `]), 'malformed_target_team_key'],
+    ['target id with trailing newline', directUserTeamsPayload([`${TEAM_KEY}\n`]), 'malformed_target_team_key'],
     ['invalid team wrapper', {
       fantasy_content: {
         users: {
