@@ -100,10 +100,12 @@ import { runEspnHistoryBackfill } from './espn-history-backfill';
 import {
   parseYahooSupportLeagueRequest,
   parseYahooSupportLeagueMembershipRequest,
+  parseYahooSupportLeagueRecoveryRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
+  runYahooSupportRecoverLeague,
   runYahooSupportRefresh,
   runYahooSupportVerifyLeagueMembership,
   type YahooSupportEnv,
@@ -205,7 +207,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
 }
 
 /**
- * Bounds diagnose/refresh/probe-league/verify-league-membership to 15 calls/60s per action, deliberately
+ * Bounds diagnose/refresh/probe-league/verify-league-membership/recover-league to 15 calls/60s per action, deliberately
  * keyed on the action alone rather than `${action}:${userId}` — a per-target
  * key would let repeated calls across rotating target ids evade the limit
  * entirely, which defeats the point for a route whose target id is
@@ -213,7 +215,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
  */
 async function enforceSupportRateLimit(
   c: Context<{ Bindings: Env }>,
-  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership'
+  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership' | 'recover-league'
 ) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
   if (success) return null;
@@ -1110,8 +1112,9 @@ api.post('/internal/usage-event', async (c) => {
 // Inspect is strictly read-only. Diagnose reaches Yahoo — capped at two
 // discovery calls, plus one credential-renewal call outside that budget when
 // the token needs it — but never persists league or sync-state data. Refresh
-// is the only one that writes, and it writes only through the ordinary
-// refreshLeaguesForUser path. diagnose/refresh (not inspect) are also
+// writes only through the ordinary refreshLeaguesForUser path. Recover-league
+// writes one exact ownership-proven current Yahoo row and must never call
+// discovery or touch sync state. diagnose/refresh/recover (not inspect) are also
 // rate-limited per action, independent of which account is targeted.
 // =============================================================================
 
@@ -1180,6 +1183,25 @@ api.post('/internal/support/yahoo/verify-league-membership', async (c) => {
   }
 
   const report = await runYahooSupportVerifyLeagueMembership(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+// Explicit, one-key repair for an account whose Yahoo user-scoped discovery
+// result is incomplete. The core function validates all persisted metadata and
+// ownership itself; this route provides only the same two gates and fixed body.
+api.post('/internal/support/yahoo/recover-league', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'recover-league');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportLeagueRecoveryRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportRecoverLeague(c.env as YahooSupportEnv, validation.request);
   return c.json(report, report.outcome === 'failed' ? 500 : 200);
 });
 
@@ -2961,6 +2983,7 @@ api.notFound((c) => {
       '/internal/support/yahoo/diagnose': 'POST - Operator support diagnosis of Yahoo league discovery (two service secrets)',
       '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
       '/internal/support/yahoo/verify-league-membership': 'POST - Operator support verification of Yahoo ownership for one full league key (two service secrets)',
+      '/internal/support/yahoo/recover-league': 'POST - Operator recovery of one ownership-proven Yahoo league (two service secrets)',
       '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
       '/internal/user/preferences': 'GET - Get user preferences for internal workers',

@@ -12,6 +12,7 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     parseYahooSupportRequest: vi.fn(actual.parseYahooSupportRequest),
     parseYahooSupportLeagueRequest: vi.fn(actual.parseYahooSupportLeagueRequest),
     parseYahooSupportLeagueMembershipRequest: vi.fn(actual.parseYahooSupportLeagueMembershipRequest),
+    parseYahooSupportLeagueRecoveryRequest: vi.fn(actual.parseYahooSupportLeagueRecoveryRequest),
     // Business logic is stubbed here: these tests own routing, auth and
     // status mapping. The snapshot itself is covered by
     // yahoo-support-inspect.test.ts, the diagnosis by
@@ -21,6 +22,7 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     runYahooSupportInspect: vi.fn(),
     runYahooSupportDiagnose: vi.fn(),
     runYahooSupportProbeLeague: vi.fn(),
+    runYahooSupportRecoverLeague: vi.fn(),
     runYahooSupportRefresh: vi.fn(),
     runYahooSupportVerifyLeagueMembership: vi.fn(),
   };
@@ -39,10 +41,12 @@ import { validateOAuthToken } from '../oauth-handlers';
 import {
   parseYahooSupportLeagueRequest,
   parseYahooSupportLeagueMembershipRequest,
+  parseYahooSupportLeagueRecoveryRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
+  runYahooSupportRecoverLeague,
   runYahooSupportRefresh,
   runYahooSupportVerifyLeagueMembership,
   type YahooSupportDiagnoseReport,
@@ -50,16 +54,18 @@ import {
   type YahooSupportProbeLeagueReport,
   type YahooSupportRefreshReport,
   type YahooSupportLeagueMembershipReport,
+  type YahooSupportLeagueRecoveryReport,
 } from '../yahoo-support-diagnostics';
 
 const INSPECT_PATH = '/auth/internal/support/yahoo/inspect';
 const DIAGNOSE_PATH = '/auth/internal/support/yahoo/diagnose';
 const PROBE_LEAGUE_PATH = '/auth/internal/support/yahoo/probe-league';
 const VERIFY_LEAGUE_MEMBERSHIP_PATH = '/auth/internal/support/yahoo/verify-league-membership';
+const RECOVER_LEAGUE_PATH = '/auth/internal/support/yahoo/recover-league';
 const REFRESH_PATH = '/auth/internal/support/yahoo/refresh';
 
-// All five actions are implemented; no stub route remains.
-const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, VERIFY_LEAGUE_MEMBERSHIP_PATH, REFRESH_PATH] as const;
+// All six actions are implemented; no stub route remains.
+const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, VERIFY_LEAGUE_MEMBERSHIP_PATH, RECOVER_LEAGUE_PATH, REFRESH_PATH] as const;
 
 /**
  * probe-league is the one route with its own body shape and its own parser, so
@@ -69,6 +75,7 @@ const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, VERIFY_LE
 function parserFor(path: string) {
   if (path === PROBE_LEAGUE_PATH) return parseYahooSupportLeagueRequest;
   if (path === VERIFY_LEAGUE_MEMBERSHIP_PATH) return parseYahooSupportLeagueMembershipRequest;
+  if (path === RECOVER_LEAGUE_PATH) return parseYahooSupportLeagueRecoveryRequest;
   return parseYahooSupportRequest;
 }
 
@@ -135,6 +142,14 @@ const VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT: YahooSupportLeagueMembershipReport = {
   },
 };
 
+const RECOVER_LEAGUE_OK_REPORT: YahooSupportLeagueRecoveryReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  result: { status: 'persisted_visible' },
+};
+
 const REFRESH_OK_REPORT: YahooSupportRefreshReport = {
   outcome: 'ok',
   userMasked: 'user_3Ie...',
@@ -159,7 +174,7 @@ const TARGET_LEAGUE_KEY = '470.l.1234567';
 /** The smallest valid body for each route. Only probe-league takes a second field. */
 function validBodyFor(path: string): string {
   if (path === PROBE_LEAGUE_PATH) return JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_ID });
-  if (path === VERIFY_LEAGUE_MEMBERSHIP_PATH) return JSON.stringify({ userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY });
+  if (path === VERIFY_LEAGUE_MEMBERSHIP_PATH || path === RECOVER_LEAGUE_PATH) return JSON.stringify({ userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY });
   return JSON.stringify({ userId: TARGET_USER_ID });
 }
 
@@ -255,6 +270,7 @@ beforeEach(() => {
   vi.mocked(runYahooSupportInspect).mockResolvedValue(INSPECT_OK_REPORT);
   vi.mocked(runYahooSupportDiagnose).mockResolvedValue(DIAGNOSE_OK_REPORT);
   vi.mocked(runYahooSupportProbeLeague).mockResolvedValue(PROBE_LEAGUE_OK_REPORT);
+  vi.mocked(runYahooSupportRecoverLeague).mockResolvedValue(RECOVER_LEAGUE_OK_REPORT);
   vi.mocked(runYahooSupportRefresh).mockResolvedValue(REFRESH_OK_REPORT);
   vi.mocked(runYahooSupportVerifyLeagueMembership).mockResolvedValue(VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT);
   // Clerk JWKS lookup — the only network call these tests can trigger.
@@ -721,6 +737,57 @@ describe(`POST ${VERIFY_LEAGUE_MEMBERSHIP_PATH} (implemented)`, () => {
 
     expect(res.status).toBe(429);
     expect(runYahooSupportVerifyLeagueMembership).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${RECOVER_LEAGUE_PATH} (implemented)`, () => {
+  it('runs the one-league recovery and returns only its closed report', async () => {
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(RECOVER_LEAGUE_OK_REPORT);
+    expect(runYahooSupportRecoverLeague).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY },
+    );
+    expect(runYahooSupportRefresh).not.toHaveBeenCalled();
+  });
+
+  it('maps a fail-closed recovery result to 500 without inventing detail', async () => {
+    const failed = { outcome: 'failed', userMasked: 'user_3Ie...', error: 'league_recovery_failed' } as const;
+    vi.mocked(runYahooSupportRecoverLeague).mockResolvedValue(failed);
+
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual(failed);
+  });
+
+  it.each([
+    ['a bare numeric id', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '1234567' })],
+    ['a nonnumeric game key', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: 'nfl.l.1234567' })],
+    ['a path traversal', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '../470.l.1234567' })],
+    ['a suffix', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '470.l.1234567.t.1' })],
+    ['a wrong field name', JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_KEY })],
+  ])('rejects %s without running the recovery', async (_label, body) => {
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(400);
+    expect(runYahooSupportRecoverLeague).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits under its own action key before the recovery can write', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: {
+        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:recover-league' })),
+      },
+    };
+
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(runYahooSupportRecoverLeague).not.toHaveBeenCalled();
   });
 });
 

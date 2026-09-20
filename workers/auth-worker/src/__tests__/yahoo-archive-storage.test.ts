@@ -112,6 +112,28 @@ describe('YahooStorage archive surface', () => {
       await expect(storage.getYahooLeagues('u', 'exclude-archived')).rejects.toThrow('Failed to get archived map');
     });
 
+    it('uses only a closed error code when a support visibility readback fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const providerError = {
+        code: '42501',
+        message: 'permission denied for league 470.l.1234567',
+        details: 'customer team Sentinel Team',
+      };
+      const eq = vi.fn().mockResolvedValue({ data: null, error: providerError });
+      mockFrom.mockReturnValue({ select: vi.fn().mockReturnValue({ eq }) });
+
+      await expect(
+        storage.getYahooLeaguesForSupportReadback('u', 'exclude-archived')
+      ).rejects.toThrow('Failed to get Yahoo leagues');
+
+      const logged = errorSpy.mock.calls.map((call) => call.join(' ')).join('\n');
+      expect(logged).toContain('code=42501');
+      expect(logged).not.toContain('470.l.1234567');
+      expect(logged).not.toContain('Sentinel Team');
+      expect(logged).not.toContain('permission denied');
+      errorSpy.mockRestore();
+    });
+
     // archived_leagues read with explicit modes: pass [sport, id, mode] tuples.
     function mockArchiveReadModes(rows: [string, string, 'historical' | 'hidden'][]) {
       const eqPlatform = vi.fn().mockResolvedValue({
@@ -250,6 +272,24 @@ describe('YahooStorage archive surface', () => {
       });
       expect(upsert).toHaveBeenCalledOnce();
       expect(upsert.mock.calls[0][0]).not.toHaveProperty('recurring_league_id');
+    });
+
+    it('strict recovery upsert fails rather than falling back when recurring_league_id is unavailable', async () => {
+      const single = vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: '42703', message: 'column yahoo_leagues.recurring_league_id does not exist' },
+      });
+      const select = vi.fn().mockReturnValue({ single });
+      const upsert = vi.fn().mockReturnValue({ select });
+      mockFrom.mockReturnValue({ upsert });
+
+      await expect(storage.upsertYahooLeagueWithRecurringId({
+        clerkUserId: 'u', sport: 'football', seasonYear: 2026,
+        leagueKey: '470.l.10', leagueName: 'Recovery', recurringLeagueId: '300.l.10',
+      })).rejects.toThrow('Failed to upsert Yahoo league with recurring root');
+
+      expect(upsert).toHaveBeenCalledOnce();
+      expect(upsert.mock.calls[0][0]).toHaveProperty('recurring_league_id', '300.l.10');
     });
 
     it('does not treat unrelated errors as a missing column', async () => {
