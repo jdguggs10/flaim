@@ -3950,6 +3950,7 @@ type UserScopedMembershipParseResult =
     }
   | {
       status:
+        | 'invalid_user_resources'
         | 'invalid_games_collection'
         | 'invalid_game_entity'
         | 'invalid_teams_collection'
@@ -3989,7 +3990,7 @@ function readUserScopedMembershipEvidence(
     }
     loggedInGuids.add(userGuids[0]);
     const userResources = userWrapper.user[1];
-    if (!isYahooRecord(userResources)) return { status: 'invalid_user_entity' };
+    if (!isYahooRecord(userResources)) return { status: 'invalid_user_resources', loggedInGuids };
     const games = readYahooCountedCollection(userResources.games);
     if (!games) return { status: 'invalid_games_collection', loggedInGuids };
 

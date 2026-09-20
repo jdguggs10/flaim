@@ -384,6 +384,41 @@ describe('verifyYahooLeagueMembership', () => {
     }
   });
 
+  it('preserves a logged-in GUID mismatch when Yahoo returns malformed user resources', async () => {
+    const loggedInGuid = 'logged-in-yahoo-guid';
+    fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
+      ? json({
+          fantasy_content: {
+            users: {
+              count: 1,
+              0: { user: [{ guid: loggedInGuid }, null] },
+            },
+          },
+        })
+      : json(directTeamsPayload(0, STORED_GUID)));
+
+    const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+    expect(verification).toMatchObject({
+      stage: 'completed',
+      evidence: {
+        requestedLeagueInUserScopedTeams: null,
+        directIsOwnedByCurrentLogin: false,
+        managerGuidComparison: 'does_not_match_authenticated_yahoo_guid',
+      },
+    });
+
+    const serialized = JSON.stringify(verification);
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(log).toContain('"scoped_parse":"invalid_user_resources"');
+    for (const forbidden of [
+      LEAGUE_KEY, TEAM_KEY, STORED_GUID, loggedInGuid,
+      ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME,
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+      expect(log).not.toContain(forbidden);
+    }
+  });
+
   it('keeps a GUID non-match inconclusive when direct manager metadata is incomplete', async () => {
     storage.getYahooCredentials.mockResolvedValue({
       clerkUserId: USER_ID,
