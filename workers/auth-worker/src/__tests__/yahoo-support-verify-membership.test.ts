@@ -398,6 +398,7 @@ describe('verifyYahooLeagueMembership', () => {
     const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
     expect(log).toContain('"scoped_parse":"invalid_teams_collection"');
     expect(log).toContain('"direct_manager_parse":"complete"');
+    expect(log).toContain('"manager_guid_comparison":"does_not_match_authenticated_yahoo_guid"');
     for (const forbidden of [
       LEAGUE_KEY, TEAM_KEY, STORED_GUID, loggedInGuid,
       ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME,
