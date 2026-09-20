@@ -1218,7 +1218,7 @@ function interpretLeagueMembership(
       summary:
         'Yahoo’s direct team metadata confirms the logged-in identity owns the league, but the user-scoped collection did not establish that team as present.',
       nextAction:
-        'Treat this as a Yahoo collection-query inconsistency until a repeat says otherwise; do not overwrite stored leagues or ask the customer to reconnect yet.',
+        'Use the approved guarded exact-key recovery path for this confirmed league. Do not run a broad discovery refresh or prompt for reconnect.',
     };
   }
 
