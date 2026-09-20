@@ -94,6 +94,29 @@ function userScopedPayload(includeTeam = true, loggedInGuid = STORED_GUID) {
   };
 }
 
+function directUserTeamsPayload(teamKeys: string[] = [TEAM_KEY]) {
+  return {
+    fantasy_content: {
+      users: {
+        count: 1,
+        0: {
+          user: [
+            {},
+            {
+              teams: {
+                count: teamKeys.length,
+                ...Object.fromEntries(teamKeys.map((teamKey, index) => [
+                  String(index), { team: [{ team_key: teamKey }] },
+                ])),
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   storage = {
@@ -111,6 +134,7 @@ beforeEach(() => {
     const url = String(input);
     if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(directTeamsPayload());
     if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload());
+    if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
     throw new Error('unexpected Yahoo request');
   });
   vi.stubGlobal('fetch', fetchSpy);
@@ -124,16 +148,21 @@ afterEach(() => {
 });
 
 describe('verifyYahooLeagueMembership', () => {
-  it('makes only the two fixed Yahoo GETs and returns redacted confirmed evidence', async () => {
+  it('makes exactly the three fixed Yahoo GETs and returns redacted confirmed evidence', async () => {
     const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, 'correlation-id');
 
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(fetchSpy.mock.calls.map(([url]) => String(url))).toEqual([
       `https://fantasysports.yahooapis.com/fantasy/v2/league/${LEAGUE_KEY}/teams?format=json`,
       'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=470/teams?format=json',
+      'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/teams?format=json',
     ]);
     expect(result).toMatchObject({
       stage: 'completed',
+      calls: [
+        { label: 'league_teams' },
+        { label: 'user_game_teams' },
+      ],
       evidence: {
         requestedLeagueInUserScopedTeams: true,
         directIsOwnedByCurrentLogin: true,
@@ -148,10 +177,97 @@ describe('verifyYahooLeagueMembership', () => {
     expect(log).toContain('"event":"yahoo_support_membership_shape"');
     expect(log).toContain('"direct_parse":"parsed"');
     expect(log).toContain('"scoped_parse":"parsed"');
+    expect(log).toContain('"direct_user_teams_parse":"parsed"');
+    expect(log).toContain('"direct_user_teams_requested_league_team_keys":"one"');
     expect(log).toContain('"correlation_id":"correlation-id"');
     for (const forbidden of [LEAGUE_KEY, TEAM_KEY, STORED_GUID, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
       expect(log).not.toContain(forbidden);
     }
+  });
+
+  it.each([
+    ['zero', directUserTeamsPayload([])],
+    ['zero', directUserTeamsPayload(['470.l.12345678.t.1'])],
+    ['one', directUserTeamsPayload([TEAM_KEY])],
+    ['multiple', directUserTeamsPayload([TEAM_KEY, `${LEAGUE_KEY}.t.8`])],
+  ] as const)('logs the direct login-scoped requested-league shape as %s only', async (expected, directUserPayload) => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/users;use_login=1/teams')) return json(directUserPayload);
+      if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload());
+      return json(directTeamsPayload());
+    });
+
+    const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: {
+        requestedLeagueInUserScopedTeams: true,
+        directIsOwnedByCurrentLogin: true,
+      },
+    });
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(log).toContain('"direct_user_teams_parse":"parsed"');
+    expect(log).toContain(`"direct_user_teams_requested_league_team_keys":"${expected}"`);
+    for (const forbidden of [LEAGUE_KEY, TEAM_KEY, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
+      expect(log).not.toContain(forbidden);
+    }
+  });
+
+  it.each([
+    ['zero logged-in users', {
+      fantasy_content: { users: { count: 0 } },
+    }, 'invalid_logged_in_user_count'],
+    ['multiple logged-in users', {
+      fantasy_content: {
+        users: {
+          count: 2,
+          0: { user: [{}, { teams: { count: 0 } }] },
+          1: { user: [{}, { teams: { count: 0 } }] },
+        },
+      },
+    }, 'invalid_logged_in_user_count'],
+    ['nested user resources', {
+      fantasy_content: {
+        users: { count: 1, 0: { user: [{}, [{ teams: { count: 0 } }]] } },
+      },
+    }, 'invalid_user_resources'],
+    ['incomplete teams count', {
+      fantasy_content: {
+        users: { count: 1, 0: { user: [{}, { teams: { count: 2, 0: { team: [{ team_key: TEAM_KEY }] } } }] } },
+      },
+    }, 'invalid_teams_collection'],
+    ['noncanonical team key', directUserTeamsPayload([`${TEAM_KEY} `]), 'invalid_team_entry'],
+  ] as const)('keeps malformed direct login-scoped %s unavailable', async (_label, directUserPayload, parseStatus) => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/users;use_login=1/teams')) return json(directUserPayload);
+      if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload());
+      return json(directTeamsPayload());
+    });
+
+    await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(log).toContain(`"direct_user_teams_parse":"${parseStatus}"`);
+    expect(log).toContain('"direct_user_teams_requested_league_team_keys":"unavailable"');
+    expect(log).not.toContain(TEAM_KEY);
+  });
+
+  it('keeps a non-200 direct login-scoped response unavailable', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/users;use_login=1/teams')) return json({ fantasy_content: {} }, 503);
+      if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload());
+      return json(directTeamsPayload());
+    });
+
+    await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(log).toContain('"direct_user_teams_parse":"response_unusable"');
+    expect(log).toContain('"direct_user_teams_requested_league_team_keys":"unavailable"');
   });
 
   it('reports a collection omission without mistaking a direct public league read for proof by itself', async () => {

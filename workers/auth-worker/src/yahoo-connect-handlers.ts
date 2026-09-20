@@ -3785,9 +3785,17 @@ export type YahooSupportLeagueMembershipVerification =
       evidence: YahooMembershipEvidence;
     };
 
-function toYahooMembershipDiagnosticCall(call: YahooDiagnosticCall): YahooMembershipDiagnosticCall {
+type YahooMembershipInternalLabel = YahooMembershipDiagnosticCall['label'] | 'direct_user_teams';
+type YahooMembershipInternalCall<Label extends YahooMembershipInternalLabel = YahooMembershipInternalLabel> =
+  Omit<YahooDiagnosticCall, 'label'> & {
+    label: Label;
+  };
+
+function toYahooMembershipDiagnosticCall(
+  call: YahooMembershipInternalCall<YahooMembershipDiagnosticCall['label']>
+): YahooMembershipDiagnosticCall {
   return {
-    label: call.label === 'league_teams' ? 'league_teams' : 'user_game_teams',
+    label: call.label,
     httpStatus: call.httpStatus,
     ok: call.ok,
     bodyIsJson: call.bodyIsJson,
@@ -4044,7 +4052,75 @@ function readUserScopedMembershipEvidence(
   };
 }
 
-function usableYahooMembershipResponse(call: YahooDiagnosticCall): boolean {
+type DirectUserTeamsMembershipParseResult =
+  | {
+      status: 'parsed';
+      requestedLeagueTeamKeyMatches: 'zero' | 'one' | 'multiple';
+    }
+  | {
+      status:
+        | 'missing_fantasy_content'
+        | 'invalid_users_collection'
+        | 'invalid_logged_in_user_count'
+        | 'invalid_user_entity'
+        | 'invalid_user_resources'
+        | 'invalid_teams_collection'
+        | 'invalid_team_entry';
+    };
+
+const YAHOO_CANONICAL_TEAM_KEY_PATTERN = /^\d+\.l\.\d+\.t\.\d+$/;
+
+/**
+ * This direct login-scoped resource is diagnostic-only. It deliberately does
+ * not read a GUID, name, or any other user/team metadata: its only output is
+ * the closed shape of the requested league's canonical team-key entries.
+ */
+function readDirectUserTeamsMembershipEvidence(
+  parsed: unknown,
+  leagueKey: string
+): DirectUserTeamsMembershipParseResult {
+  const fantasyContent = isYahooRecord(parsed) && isYahooRecord(parsed.fantasy_content)
+    ? parsed.fantasy_content
+    : null;
+  if (!fantasyContent) return { status: 'missing_fantasy_content' };
+  const users = readYahooCountedCollection(fantasyContent.users);
+  if (!users) return { status: 'invalid_users_collection' };
+  if (Number(users.count) !== 1) return { status: 'invalid_logged_in_user_count' };
+
+  const userWrapper = users['0'];
+  if (!isYahooRecord(userWrapper) || !Array.isArray(userWrapper.user) || userWrapper.user.length < 2) {
+    return { status: 'invalid_user_entity' };
+  }
+  const userResources = userWrapper.user[1];
+  if (!isYahooRecord(userResources)) return { status: 'invalid_user_resources' };
+  const teams = readYahooCountedCollection(userResources.teams);
+  if (!teams) return { status: 'invalid_teams_collection' };
+
+  let requestedLeagueMatchCount = 0;
+  for (let teamIndex = 0; teamIndex < Number(teams.count); teamIndex += 1) {
+    const teamWrapper = teams[String(teamIndex)];
+    if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) {
+      return { status: 'invalid_team_entry' };
+    }
+    const teamKeys = readDirectYahooStrings(teamWrapper.team, 'team_key');
+    if (
+      teamKeys.length !== 1
+      || !YAHOO_CANONICAL_TEAM_KEY_PATTERN.test(teamKeys[0])
+    ) {
+      return { status: 'invalid_team_entry' };
+    }
+    if (teamKeys[0].startsWith(`${leagueKey}.t.`)) requestedLeagueMatchCount += 1;
+  }
+
+  return {
+    status: 'parsed',
+    requestedLeagueTeamKeyMatches: requestedLeagueMatchCount === 0
+      ? 'zero'
+      : requestedLeagueMatchCount === 1 ? 'one' : 'multiple',
+  };
+}
+
+function usableYahooMembershipResponse(call: YahooMembershipInternalCall): boolean {
   return call.httpStatus === 200 && call.ok && call.bodyIsJson && call.bodyLooksLikeEnvelope;
 }
 
@@ -4052,14 +4128,14 @@ function usableYahooMembershipResponse(call: YahooDiagnosticCall): boolean {
  * Reads and reduces exactly one Yahoo response. The parsed response is scoped
  * to this function: only the supplied reducer's derived booleans leave it.
  */
-async function runYahooMembershipCall<T>(
-  label: YahooMembershipDiagnosticCall['label'],
+async function runYahooMembershipCall<T, Label extends YahooMembershipInternalLabel>(
+  label: Label,
   url: string,
   accessToken: string,
   reduce: (parsed: unknown) => T
-): Promise<{ call: YahooDiagnosticCall; result: T | null }> {
+): Promise<{ call: YahooMembershipInternalCall<Label>; result: T | null }> {
   const startedAt = Date.now();
-  const call: YahooDiagnosticCall = {
+  const call: YahooMembershipInternalCall<Label> = {
     label,
     url,
     httpStatus: null,
@@ -4116,9 +4192,10 @@ async function runYahooMembershipCall<T>(
 
 /**
  * Verify whether the currently authorized Yahoo identity belongs to one exact
- * league. It makes exactly two bounded resource GETs after normal guarded
- * credential acquisition: a direct league teams query and the user-scoped
- * teams collection for that league's game. It writes no Flaim league or sync
+ * league. It makes exactly three bounded resource GETs after normal guarded
+ * credential acquisition: a direct league teams query, the user-scoped teams
+ * collection for that league's game, and a direct login-scoped team collection
+ * used only for closed structural telemetry. It writes no Flaim league or sync
  * state; ordinary token renewal remains the sole possible credential write.
  */
 export async function verifyYahooLeagueMembership(
@@ -4157,6 +4234,12 @@ export async function verifyYahooLeagueMembership(
     tokenResult.accessToken,
     (parsed) => readUserScopedMembershipEvidence(parsed, leagueKey)
   );
+  const directUserTeams = await runYahooMembershipCall(
+    'direct_user_teams',
+    `${YAHOO_FANTASY_API_URL}/users;use_login=1/teams?format=json`,
+    tokenResult.accessToken,
+    (parsed) => readDirectUserTeamsMembershipEvidence(parsed, leagueKey)
+  );
 
   const directEvidence = direct.result?.status === 'parsed' ? direct.result : null;
   const scopedEvidence = scoped.result?.status === 'parsed' ? scoped.result : null;
@@ -4182,6 +4265,10 @@ export async function verifyYahooLeagueMembership(
       ? 'unavailable'
       : directEvidence.managerGuids === null ? 'incomplete' : 'complete',
     scoped_parse: scoped.result?.status ?? 'response_unusable',
+    direct_user_teams_parse: directUserTeams.result?.status ?? 'response_unusable',
+    direct_user_teams_requested_league_team_keys: directUserTeams.result?.status === 'parsed'
+      ? directUserTeams.result.requestedLeagueTeamKeyMatches
+      : 'unavailable',
     manager_guid_comparison: managerGuidComparison,
     correlation_id: correlationId ?? null,
   }));
