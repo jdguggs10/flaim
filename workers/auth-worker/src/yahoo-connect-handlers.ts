@@ -3823,16 +3823,9 @@ function readYahooFlag(value: unknown): boolean | null {
  * collecting GUIDs belonging to its nested teams and managers.
  */
 function readDirectYahooStrings(value: unknown, field: string): string[] {
-  const values: string[] = [];
-  const visit = (entry: unknown): void => {
-    if (Array.isArray(entry)) {
-      for (const item of entry) visit(item);
-      return;
-    }
-    if (isYahooRecord(entry) && typeof entry[field] === 'string') values.push(entry[field]);
-  };
-  visit(value);
-  return values;
+  return collectDirectYahooFields(value, field).filter(
+    (fieldValue): fieldValue is string => typeof fieldValue === 'string'
+  );
 }
 
 function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set<string> | null {
@@ -4067,10 +4060,18 @@ type DirectUserTeamsMembershipParseResult =
         | 'invalid_teams_collection'
         | 'invalid_team_wrapper'
         | 'invalid_team_entity_shape'
-        | 'invalid_team_key';
+        | 'missing_direct_team_key'
+        | 'multiple_direct_team_keys'
+        | 'non_string_direct_team_key'
+        | 'noncanonical_direct_team_key';
     };
 
-const YAHOO_CANONICAL_TEAM_KEY_PATTERN = /^\d+\.l\.\d+\.t\.\d+$/;
+// The direct logged-in-user resource can include non-target teams from Yahoo
+// games/leagues with symbolic keys (for example, `nfl.l.1000.t.1` or
+// `123.l.auto.t.456`). This diagnostic accepts only that constrained Yahoo
+// key grammar; the requested target league key remains separately numeric and
+// strictly validated before this parser runs.
+const YAHOO_CANONICAL_TEAM_KEY_PATTERN = /^(?:\d+|[a-z][a-z0-9_-]*)\.l\.(?:\d+|[a-z][a-z0-9_-]*)\.t\.\d+$/;
 
 /**
  * This direct login-scoped resource is diagnostic-only. It deliberately does
@@ -4106,14 +4107,15 @@ function readDirectUserTeamsMembershipEvidence(
     if (!isYahooRecord(team) && !Array.isArray(team)) {
       return { status: 'invalid_team_entity_shape' };
     }
-    const teamKeys = readDirectYahooStrings(team, 'team_key');
-    if (
-      teamKeys.length !== 1
-      || !YAHOO_CANONICAL_TEAM_KEY_PATTERN.test(teamKeys[0])
-    ) {
-      return { status: 'invalid_team_key' };
+    const teamKeyValues = collectDirectYahooFields(team, 'team_key');
+    if (teamKeyValues.length === 0) return { status: 'missing_direct_team_key' };
+    if (teamKeyValues.length > 1) return { status: 'multiple_direct_team_keys' };
+    const [teamKey] = teamKeyValues;
+    if (typeof teamKey !== 'string') return { status: 'non_string_direct_team_key' };
+    if (!YAHOO_CANONICAL_TEAM_KEY_PATTERN.test(teamKey)) {
+      return { status: 'noncanonical_direct_team_key' };
     }
-    if (teamKeys[0].startsWith(`${leagueKey}.t.`)) requestedLeagueMatchCount += 1;
+    if (teamKey.startsWith(`${leagueKey}.t.`)) requestedLeagueMatchCount += 1;
   }
 
   return {

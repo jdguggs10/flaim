@@ -20,6 +20,9 @@ import { YahooStorage } from '../yahoo-storage';
 const USER_ID = 'user_3Ie4m68lUbzxyv22NsMU';
 const LEAGUE_KEY = '470.l.1234567';
 const TEAM_KEY = `${LEAGUE_KEY}.t.3`;
+const SYMBOLIC_GAME_TEAM_KEY = 'nfl.l.1000.t.1';
+const SYMBOLIC_LEAGUE_TEAM_KEY = '123.l.auto.t.456';
+const NON_STRING_TEAM_KEY_SENTINEL = 'non-string-team-key-sentinel';
 const STORED_GUID = 'stored-yahoo-guid';
 const ACCESS_TOKEN = 'sentinel-access-token';
 const REFRESH_TOKEN = 'sentinel-refresh-token';
@@ -198,6 +201,8 @@ describe('verifyYahooLeagueMembership', () => {
     ['zero', directUserTeamsPayload([])],
     ['zero', directUserTeamsPayload(['470.l.12345678.t.1'])],
     ['one', directUserTeamsPayload([TEAM_KEY])],
+    ['one', directUserTeamsPayload([SYMBOLIC_GAME_TEAM_KEY, TEAM_KEY])],
+    ['one', directUserTeamsPayload([SYMBOLIC_LEAGUE_TEAM_KEY, TEAM_KEY])],
     ['one', directUserTeamsPayload([TEAM_KEY], 'nested-fragments')],
     ['one', directUserTeamsPayload([TEAM_KEY], 'object')],
     ['multiple', directUserTeamsPayload([TEAM_KEY, `${LEAGUE_KEY}.t.8`])],
@@ -221,7 +226,16 @@ describe('verifyYahooLeagueMembership', () => {
     const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
     expect(log).toContain('"direct_user_teams_parse":"parsed"');
     expect(log).toContain(`"direct_user_teams_requested_league_team_keys":"${expected}"`);
-    for (const forbidden of [LEAGUE_KEY, TEAM_KEY, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
+    for (const forbidden of [
+      LEAGUE_KEY,
+      TEAM_KEY,
+      SYMBOLIC_GAME_TEAM_KEY,
+      SYMBOLIC_LEAGUE_TEAM_KEY,
+      ACCESS_TOKEN,
+      REFRESH_TOKEN,
+      LEAGUE_NAME,
+      TEAM_NAME,
+    ]) {
       expect(log).not.toContain(forbidden);
     }
   });
@@ -249,8 +263,12 @@ describe('verifyYahooLeagueMembership', () => {
         users: { count: 1, 0: { user: [{}, { teams: { count: 2, 0: { team: [{ team_key: TEAM_KEY }] } } }] } },
       },
     }, 'invalid_teams_collection'],
-    ['noncanonical team key', directUserTeamsPayload([`${TEAM_KEY} `]), 'invalid_team_key'],
-    ['duplicate team key fields', {
+    ['missing direct team key', {
+      fantasy_content: {
+        users: { count: 1, 0: { user: [{}, { teams: { count: 1, 0: { team: [{}] } } }] } },
+      },
+    }, 'missing_direct_team_key'],
+    ['multiple direct team key fields', {
       fantasy_content: {
         users: {
           count: 1,
@@ -264,7 +282,26 @@ describe('verifyYahooLeagueMembership', () => {
           },
         },
       },
-    }, 'invalid_team_key'],
+    }, 'multiple_direct_team_keys'],
+    ['non-string direct team key', {
+      fantasy_content: {
+        users: {
+          count: 1,
+          0: {
+            user: [{}, {
+              teams: {
+                count: 1,
+                0: { team: [{ team_key: { value: NON_STRING_TEAM_KEY_SENTINEL } }] },
+              },
+            }],
+          },
+        },
+      },
+    }, 'non_string_direct_team_key'],
+    ['team key with trailing whitespace', directUserTeamsPayload([`${TEAM_KEY} `]), 'noncanonical_direct_team_key'],
+    ['uppercase symbolic game key', directUserTeamsPayload(['NFL.l.1000.t.1']), 'noncanonical_direct_team_key'],
+    ['symbolic team id', directUserTeamsPayload(['470.l.1234567.t.alpha']), 'noncanonical_direct_team_key'],
+    ['digit-leading mixed game key', directUserTeamsPayload(['1abc.l.1000.t.1']), 'noncanonical_direct_team_key'],
     ['invalid team wrapper', {
       fantasy_content: {
         users: {
@@ -290,12 +327,15 @@ describe('verifyYahooLeagueMembership', () => {
       return json(directTeamsPayload());
     });
 
-    await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+    const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
 
     const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
     expect(log).toContain(`"direct_user_teams_parse":"${parseStatus}"`);
     expect(log).toContain('"direct_user_teams_requested_league_team_keys":"unavailable"');
-    expect(log).not.toContain(TEAM_KEY);
+    for (const forbidden of [TEAM_KEY, NON_STRING_TEAM_KEY_SENTINEL]) {
+      expect(log).not.toContain(forbidden);
+      expect(JSON.stringify(result)).not.toContain(forbidden);
+    }
   });
 
   it('keeps a non-200 direct login-scoped response unavailable', async () => {
