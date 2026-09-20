@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Current-Season Football Discovery (FLA-405)
+
+- **Fixed**: Yahoo league discovery keeps its broad all-history request as the primary source, but when that valid parsed response lacks the current NFL season it makes one bounded current-NFL fallback request. Successful fallback leagues are merged by `leagueKey` before recurring-root resolution and persistence, so historical/sibling-sport data remains intact and a duplicate is never written twice. A fallback failure is non-fatal, has no retry, and logs only a redacted bounded outcome. The read-only reconciliation discovery follows the same rule.
+- **Improved**: Yahoo support diagnose now makes that same second request whenever primary discovery lacks current football, including accounts whose primary response contains historical or other-sport leagues. It distinguishes reachable current football, a broad-filter omission, current football not observed, and an inconclusive fallback instead of treating unrelated rows alone as a healthy current-season connection. The two-request ceiling remains unchanged.
+
 ### Yahoo and Sleeper Waiver Priority / FAAB Balance — Declared Schema and Tool Description (FLA-380, FLA-401)
 
 - **Changed**: `get_standings` now declares `waiverPriority` and `faabBalance` in `standingsEntrySchema` and documents them in the tool description, including that the two are not mutually exclusive, that both are returned on Yahoo and Sleeper and absent (not `null`) on ESPN, that null can also mean the platform did not report a usable value rather than proving the league lacks FAAB or priority, that Sleeper's `faabBalance` already reflects FAAB traded between teams (so it can exceed the starting budget), and that `waiverPriority` is the team's live priority — distinct from `get_transactions`' `waiver_priority`, which is the priority a past claim used. The data itself shipped separately (Yahoo #287, Sleeper #294) as a passthrough-payload change with no contract impact; this entry is documentation only.

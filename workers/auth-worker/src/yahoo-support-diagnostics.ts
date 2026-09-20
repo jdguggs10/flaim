@@ -456,6 +456,7 @@ export interface DiagnoseInterpretation {
     | 'credential_renewal_rejected'
     | 'data_reachable'
     | 'filter_excludes_account'
+    | 'current_football_not_observed'
     | 'genuinely_empty_account'
     | 'fallback_inconclusive'
     | 'parser_dropped_all'
@@ -583,7 +584,14 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
   const stats = primary.stats;
   // `!stats` cannot occur alongside a 200-with-envelope from the probe itself;
   // it is here so a malformed diagnosis can never be read as a parse result.
-  if (!primary.ok || !primary.bodyIsJson || !primary.bodyLooksLikeEnvelope || !stats || stats.threw) {
+  if (
+    !primary.ok
+    || !primary.bodyIsJson
+    || !primary.bodyLooksLikeEnvelope
+    || !stats
+    || stats.envelope !== 'valid'
+    || stats.threw
+  ) {
     const status = primary.httpStatus === null ? 'no response' : `HTTP ${primary.httpStatus}`;
     const detail = stats?.threw
       ? `the parser threw ${stats.thrownErrorName ?? 'an error'}`
@@ -596,70 +604,70 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
     };
   }
 
-  if (stats.accepted > 0) {
+  if (primary.hasCurrentSeasonFootball) {
     return {
       category: 'data_reachable',
-      summary: `Yahoo returned ${stats.accepted} parseable league(s) for this account, so discovery works end to end and only the saved rows are missing.`,
+      summary: `Yahoo returned the current football season for this account, so discovery works end to end and only the saved rows are missing.`,
       nextAction: 'Run refresh --confirm for this account, then verify the saved league row count increased.',
     };
   }
 
-  if (stats.declared.games === 0) {
-    const fallback = diagnosis.calls[1];
+  // A successful broad response can omit current football even when it
+  // contains historical leagues or leagues from other sports. The narrow
+  // fallback answers only whether current football is available.
+  const fallback = diagnosis.calls[1];
 
-    // The fallback exists to answer one question: does this account genuinely
-    // have no data? It can only answer that if it itself came back as a valid,
-    // parseable envelope. A fallback that errored, timed out, or came back
-    // malformed answered nothing — reporting "genuinely empty" on that basis
-    // would tell an operator (and possibly a customer) the account has no data
-    // when the truth is the second probe simply failed to find out.
-    const fallbackAnswered =
-      fallback !== undefined
-      && fallback.ok
-      && fallback.bodyIsJson
-      && fallback.bodyLooksLikeEnvelope
-      && fallback.stats !== null
-      && !fallback.stats.threw;
+  // The fallback exists to answer one question: can Yahoo return the active
+  // football season? It can only answer that if it itself came back as a valid,
+  // parseable envelope. A fallback that errored, timed out, or came back
+  // malformed answered nothing — reporting stale data as reachable on that
+  // basis would tell an operator (and possibly a customer) the wrong thing.
+  const fallbackAnswered =
+    fallback !== undefined
+    && fallback.ok
+    && fallback.bodyIsJson
+    && fallback.bodyLooksLikeEnvelope
+    && fallback.stats !== null
+    && fallback.stats.envelope === 'valid'
+    && !fallback.stats.threw;
 
-    if (!fallbackAnswered) {
-      const status = fallback === undefined
-        ? 'no fallback call was recorded'
-        : fallback.httpStatus === null
-          ? 'no response'
-          : `HTTP ${fallback.httpStatus}, body category ${fallback.errorSnippetCategory}`;
-      return {
-        category: 'fallback_inconclusive',
-        summary: `Yahoo reports no full-type games for this account, but the confirming current-season fallback probe did not itself succeed (${status}), so whether this account genuinely has no data is unresolved.`,
-        nextAction:
-          'Re-run diagnose once. If it keeps failing, investigate the fallback request itself before telling the customer anything — do not report this account as empty on inconclusive evidence.',
-      };
-    }
-
-    if (fallback.stats!.accepted > 0) {
-      return {
-        category: 'filter_excludes_account',
-        summary: `Yahoo reports no full-type games for this account, yet the unfiltered current-season football query returns ${fallback.stats!.accepted} league(s) — the game_types=full discovery filter is excluding this account's real data.`,
-        nextAction:
-          'File a new bug against the discovery filter and attach this diagnosis. Do not run refresh: it takes the same filtered path and would save nothing.',
-      };
-    }
-
+  if (!fallbackAnswered) {
+    const status = fallback === undefined
+      ? 'no fallback call was recorded'
+      : fallback.httpStatus === null
+        ? 'no response'
+        : `HTTP ${fallback.httpStatus}, body category ${fallback.errorSnippetCategory}`;
     return {
-      category: 'genuinely_empty_account',
-      summary:
-        'Yahoo returns no games and no leagues for this account under both the filtered discovery query and the narrower current-season fallback.',
+      category: 'fallback_inconclusive',
+      summary: `Yahoo's broad discovery lacks current-season football, but the confirming current-season fallback probe did not itself succeed (${status}), so current-league availability is unresolved.`,
       nextAction:
-        'Confirm with the customer which Yahoo identity holds their leagues; on this evidence it is not a Flaim-side defect.',
+        'Re-run diagnose once. If it keeps failing, investigate the fallback request itself before telling the customer anything — do not report this account as empty or current data as reachable on inconclusive evidence.',
     };
   }
 
-  if (stats.declared.leagues > 0 && stats.skipped.unsupportedSportCode > 0) {
+  if (fallback.hasCurrentSeasonFootball) {
+    return {
+      category: 'filter_excludes_account',
+      summary: 'Yahoo broad discovery lacks current-season football, yet the narrower current-season football query returns it. The fallback-aware discovery path can recover the active data.',
+      nextAction:
+        'Run refresh --confirm for this account, then verify the current-season league was saved.',
+    };
+  }
+
+  // Preserve parser-specific diagnoses after a successful current-football
+  // fallback has had the chance to prove that production discovery can recover
+  // the active league despite an unrelated broad-response anomaly.
+  if (
+    stats.accepted === 0
+    && stats.declared.leagues > 0
+    && stats.skipped.unsupportedSportCode > 0
+  ) {
     const codes = stats.unsupportedGameCodes.length > 0
       ? stats.unsupportedGameCodes.join(', ')
       : 'none recorded';
     return {
       category: 'parser_dropped_all',
-      summary: `Yahoo reported ${stats.declared.leagues} league(s), but every game used a sport code Flaim does not map (${codes}), so the parser dropped all of them.`,
+      summary: `Yahoo reported ${stats.declared.leagues} league(s), but Flaim accepted none and encountered sport codes it does not map (${codes}).`,
       nextAction: 'File a parser bug to map the listed Yahoo game codes, then re-run diagnose to confirm.',
     };
   }
@@ -670,6 +678,26 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
       summary: `Yahoo declared a league count of zero while the payload actually carried ${stats.indexed.leagues} league entr${stats.indexed.leagues === 1 ? 'y' : 'ies'}, so the count-driven walk swallowed a populated level.`,
       nextAction:
         "File a parser bug: the leagues walk must count the entries present rather than trust Yahoo's count field.",
+    };
+  }
+
+  if (stats.accepted > 0) {
+    return {
+      category: 'current_football_not_observed',
+      summary:
+        'Yahoo broad discovery returned parseable leagues, but neither the broad response nor the current-season football fallback returned current football.',
+      nextAction:
+        'If this case concerns NFL, confirm the Yahoo identity and whether the current-season league has been created or renewed. Do not refresh based on unrelated or older rows alone.',
+    };
+  }
+
+  if (stats.declared.games === 0) {
+    return {
+      category: 'genuinely_empty_account',
+      summary:
+        'Yahoo returns no games and no leagues for this account under both the filtered discovery query and the narrower current-season fallback.',
+      nextAction:
+        'Confirm with the customer which Yahoo identity holds their leagues; on this evidence it is not a Flaim-side defect.',
     };
   }
 
