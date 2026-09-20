@@ -40,14 +40,18 @@ import {
 import {
   diagnoseYahooDiscovery,
   probeYahooLeague,
+  verifyYahooLeagueMembership,
   readYahooCredentialHealthReport,
   MAX_YAHOO_DIAGNOSTIC_REQUESTS,
+  YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN,
   YAHOO_SUPPORT_LEAGUE_ID_PATTERN,
   type YahooConnectEnv,
   type YahooCredentialHealthReport,
   type YahooCredentialRefreshFailure,
   type YahooDiagnosticCall,
+  type YahooMembershipDiagnosticCall,
   type YahooSupportDiagnosis,
+  type YahooSupportLeagueMembershipVerification,
   type YahooSupportLeagueProbe,
 } from './yahoo-connect-handlers';
 
@@ -62,6 +66,7 @@ export const CLERK_USER_ID_PATTERN = /^user_[A-Za-z0-9]{20,64}$/;
 // charset is enforced in yahoo-connect-handlers.ts (where the URL is built),
 // and callers should be able to read it off the public support surface.
 export { YAHOO_SUPPORT_LEAGUE_ID_PATTERN };
+export { YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN };
 
 // Duplicated locally rather than imported from any of the ~13 other modules
 // that already carry their own private copy — that duplication is this
@@ -92,6 +97,12 @@ export interface YahooSupportLeagueRequest {
   leagueId: string;
 }
 
+/** The membership verifier only accepts a complete numeric Yahoo league key. */
+export interface YahooSupportLeagueMembershipRequest {
+  userId: string;
+  leagueKey: string;
+}
+
 type ValidationError = {
   error: { status: 400 | 413; body: { error: string; error_description: string } };
 };
@@ -100,6 +111,10 @@ export type YahooSupportValidation = { request: YahooSupportRequest } | Validati
 
 export type YahooSupportLeagueValidation =
   | { request: YahooSupportLeagueRequest }
+  | ValidationError;
+
+export type YahooSupportLeagueMembershipValidation =
+  | { request: YahooSupportLeagueMembershipRequest }
   | ValidationError;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -150,6 +165,7 @@ async function readSupportRequestBody(
 
 const INSPECT_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId']);
 const LEAGUE_PROBE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueId']);
+const LEAGUE_MEMBERSHIP_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueKey']);
 
 export async function parseYahooSupportRequest(request: Request): Promise<YahooSupportValidation> {
   const parsed = await readSupportRequestBody(request, INSPECT_ALLOWED_KEYS);
@@ -191,6 +207,33 @@ export async function parseYahooSupportLeagueRequest(
   }
 
   return { request: { userId: body.userId, leagueId: body.leagueId } };
+}
+
+/**
+ * Parse the exact league-key contract needed by `verify-league-membership`.
+ * This is intentionally distinct from probe-league's permissive identifier:
+ * membership verification derives the game key and must not guess a prefix.
+ */
+export async function parseYahooSupportLeagueMembershipRequest(
+  request: Request
+): Promise<YahooSupportLeagueMembershipValidation> {
+  const parsed = await readSupportRequestBody(request, LEAGUE_MEMBERSHIP_ALLOWED_KEYS);
+  if ('error' in parsed) return parsed;
+
+  const { body } = parsed;
+  if (typeof body.userId !== 'string' || !CLERK_USER_ID_PATTERN.test(body.userId)) {
+    return invalidRequest('invalid_user_id', 'userId must be a valid user ID');
+  }
+  if (
+    typeof body.leagueKey !== 'string'
+    || !YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(body.leagueKey)
+  ) {
+    return invalidRequest(
+      'invalid_league_key',
+      'leagueKey must be a 1-64 character full numeric Yahoo league key such as 470.l.1234567'
+    );
+  }
+  return { request: { userId: body.userId, leagueKey: body.leagueKey } };
 }
 
 // =============================================================================
@@ -525,7 +568,7 @@ function interpretNotConnected(): SharedCredentialInterpretation {
 
 function interpretCredentialRefreshFailure(
   failure: YahooCredentialRefreshFailure,
-  command: 'diagnose' | 'probe-league'
+  command: 'diagnose' | 'probe-league' | 'verify-league-membership'
 ): SharedCredentialInterpretation {
   if (failure.appFingerprintMismatch) {
     return {
@@ -980,6 +1023,224 @@ export async function runYahooSupportProbeLeague(
     })
   );
 
+  return report;
+}
+
+// =============================================================================
+// VERIFY-LEAGUE-MEMBERSHIP — ownership proof for a reported full league key
+// =============================================================================
+
+export interface LeagueMembershipInterpretation {
+  category:
+    | SharedCredentialCategory
+    | 'membership_confirmed_collection_present'
+    | 'membership_confirmed_collection_omitted'
+    | 'membership_not_confirmed'
+    | 'throttled'
+    | 'malformed_payload'
+    | 'inconclusive';
+  summary: string;
+  nextAction: string;
+}
+
+export type YahooMembershipCollection =
+  | 'contains_requested_team'
+  | 'omits_requested_team'
+  | 'unavailable';
+
+export type YahooSupportLeagueMembershipReport =
+  | {
+      outcome: 'ok';
+      userMasked: string;
+      checkedAt: string;
+      correlationId: string;
+      collection: YahooMembershipCollection;
+      calls: [YahooMembershipDiagnosticCall, YahooMembershipDiagnosticCall] | null;
+      interpretation: LeagueMembershipInterpretation;
+    }
+  | { outcome: 'failed'; userMasked: string; error: 'membership_verification_failed' };
+
+export type YahooSupportLeagueMembershipDependencies = {
+  now?: () => number;
+  verify?: typeof verifyYahooLeagueMembership;
+};
+
+function isUsableMembershipCall(call: YahooMembershipDiagnosticCall): boolean {
+  return call.httpStatus === 200 && call.ok && call.bodyIsJson && call.bodyLooksLikeEnvelope;
+}
+
+function membershipCallFailureInterpretation(
+  calls: [YahooMembershipDiagnosticCall, YahooMembershipDiagnosticCall],
+  directConfirms: boolean,
+  directRejects: boolean
+): LeagueMembershipInterpretation {
+  const unresolvedSubject = directConfirms
+    ? 'Yahoo directly confirmed ownership, but the user-scoped collection remains unresolved'
+    : 'Ownership remains unresolved';
+  if (calls.some((call) => call.httpStatus !== null && YAHOO_THROTTLE_STATUSES.has(call.httpStatus))) {
+    return {
+      category: 'throttled',
+      summary: `Yahoo throttled one of the membership checks. ${unresolvedSubject}.`,
+      nextAction: 'Back off, then re-run verify-league-membership once. Never loop.',
+    };
+  }
+  if (calls.some((call) => !isUsableMembershipCall(call))) {
+    return {
+      category: 'malformed_payload',
+      summary: `Yahoo did not return a usable fantasy response for one of the membership checks. ${unresolvedSubject}.`,
+      nextAction:
+        'Re-run verify-league-membership once. If it reproduces, investigate the status and body category only — never the provider body.',
+    };
+  }
+  if (directConfirms) {
+    return {
+      category: 'inconclusive',
+      summary:
+        'Yahoo’s direct team metadata confirmed ownership, but the user-scoped response was not structurally complete enough to determine whether its collection contains the league.',
+      nextAction:
+        'Preserve the affirmative direct evidence, but do not call this a confirmed collection omission. Escalate the safe report with the existing Yahoo discovery issue.',
+    };
+  }
+  if (directRejects) {
+    return {
+      category: 'inconclusive',
+      summary:
+        'Yahoo’s direct team metadata did not mark a team as owned, but the user-scoped response was not structurally complete enough to confirm non-membership.',
+      nextAction:
+        'Re-run verify-league-membership once. If the user-scoped response remains incomplete, escalate the safe report and do not infer non-membership.',
+    };
+  }
+  return {
+    category: 'inconclusive',
+    summary: 'Yahoo returned usable membership responses but omitted every ownership signal this diagnostic can safely compare.',
+    nextAction:
+      'Escalate the safe report with the existing Yahoo discovery issue. Do not ask the customer to reconnect or infer a collection omission from inconclusive evidence.',
+  };
+}
+
+/**
+ * Interpret a deliberately small, redacted membership observation. A
+ * user-scoped team match is decisive even when the direct public-league call
+ * failed. Direct ownership/GUID evidence is likewise decisive: it describes
+ * the authenticated identity, unlike a public league fetch alone. Only when
+ * neither source gives a verdict do provider-shape failures control the result.
+ */
+function interpretLeagueMembership(
+  verification: YahooSupportLeagueMembershipVerification
+): LeagueMembershipInterpretation {
+  if (verification.stage === 'not_connected') return interpretNotConnected();
+  if (verification.stage === 'credential_refresh_failed') {
+    return interpretCredentialRefreshFailure(verification, 'verify-league-membership');
+  }
+
+  const { evidence, calls } = verification;
+  if (evidence.requestedLeagueInUserScopedTeams === true) {
+    return {
+      category: 'membership_confirmed_collection_present',
+      summary:
+        'Yahoo’s logged-in user collection contains a team from the reported league, confirming this OAuth identity belongs to it.',
+      nextAction: 'Investigate the discovery filter or parser path; asking the customer to reconnect would not address this evidence.',
+    };
+  }
+
+  const directConfirms =
+    evidence.directIsOwnedByCurrentLogin === true
+    || evidence.managerGuidComparison === 'matches_stored_yahoo_guid'
+    || evidence.managerGuidComparison === 'matches_logged_in_yahoo_guid';
+  const directRejects =
+    evidence.directIsOwnedByCurrentLogin === false;
+  // “Omitted” is a conclusion about a usable collection response only. If
+  // that response failed, direct ownership may still be known internally, but
+  // the interpretation must keep the provider failure rather than call the
+  // collection omitted.
+  if (evidence.requestedLeagueInUserScopedTeams === false && directConfirms) {
+    return {
+      category: 'membership_confirmed_collection_omitted',
+      summary:
+        'Yahoo’s direct team metadata confirms the logged-in identity owns the league, but the user-scoped collection did not establish that team as present.',
+      nextAction:
+        'Treat this as a Yahoo collection-query inconsistency until a repeat says otherwise; do not overwrite stored leagues or ask the customer to reconnect yet.',
+    };
+  }
+
+  if (evidence.requestedLeagueInUserScopedTeams === false && directRejects) {
+    return {
+      category: 'membership_not_confirmed',
+      summary:
+        'Yahoo’s direct team metadata does not identify the authorized Yahoo identity as an owner of the reported league.',
+      nextAction:
+        'Ask the customer to reconnect Yahoo while signed into the identity that owns the league, then re-run this verification.',
+    };
+  }
+
+  return membershipCallFailureInterpretation(calls, directConfirms, directRejects);
+}
+
+function membershipCollectionFor(verification: YahooSupportLeagueMembershipVerification): YahooMembershipCollection {
+  if (verification.stage !== 'completed') return 'unavailable';
+  if (verification.evidence.requestedLeagueInUserScopedTeams === true) return 'contains_requested_team';
+  if (verification.evidence.requestedLeagueInUserScopedTeams === false) return 'omits_requested_team';
+  return 'unavailable';
+}
+
+/**
+ * Verify one account’s membership in one fully-qualified Yahoo league, without
+ * writing league rows or sync state. Any thrown provider/driver error becomes a
+ * fixed failure shape; raw provider payloads, keys, team names, and GUIDs never
+ * leave the underlying verifier.
+ */
+export async function runYahooSupportVerifyLeagueMembership(
+  env: YahooSupportEnv,
+  request: YahooSupportLeagueMembershipRequest,
+  dependencies: YahooSupportLeagueMembershipDependencies = {}
+): Promise<YahooSupportLeagueMembershipReport> {
+  const now = dependencies.now ?? Date.now;
+  const verify = dependencies.verify ?? verifyYahooLeagueMembership;
+  const userMasked = maskUserId(request.userId);
+  const correlationId = crypto.randomUUID();
+  const checkedAt = new Date(now()).toISOString();
+  let report: YahooSupportLeagueMembershipReport;
+  let stage: YahooSupportLeagueMembershipVerification['stage'] | null = null;
+  let category: LeagueMembershipInterpretation['category'] | null = null;
+
+  try {
+    const verification = await verify(
+      env as YahooConnectEnv,
+      request.userId,
+      request.leagueKey,
+      correlationId
+    );
+    stage = verification.stage;
+    const interpretation = interpretLeagueMembership(verification);
+    category = interpretation.category;
+    report = {
+      outcome: 'ok',
+      userMasked,
+      checkedAt,
+      correlationId,
+      collection: membershipCollectionFor(verification),
+      calls: verification.stage === 'completed' ? verification.calls : null,
+      interpretation,
+    };
+  } catch (error) {
+    console.error(
+      '[yahoo-support] League membership verification failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+    report = { outcome: 'failed', userMasked, error: 'membership_verification_failed' };
+  }
+
+  console.log(
+    JSON.stringify({
+      event: 'yahoo_support_verify_league_membership',
+      service: 'auth-worker',
+      user_id: userMasked,
+      outcome: report.outcome,
+      stage,
+      category,
+      correlation_id: correlationId,
+    })
+  );
   return report;
 }
 

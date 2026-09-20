@@ -11,6 +11,7 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     // two auth gates have passed.
     parseYahooSupportRequest: vi.fn(actual.parseYahooSupportRequest),
     parseYahooSupportLeagueRequest: vi.fn(actual.parseYahooSupportLeagueRequest),
+    parseYahooSupportLeagueMembershipRequest: vi.fn(actual.parseYahooSupportLeagueMembershipRequest),
     // Business logic is stubbed here: these tests own routing, auth and
     // status mapping. The snapshot itself is covered by
     // yahoo-support-inspect.test.ts, the diagnosis by
@@ -21,6 +22,7 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     runYahooSupportDiagnose: vi.fn(),
     runYahooSupportProbeLeague: vi.fn(),
     runYahooSupportRefresh: vi.fn(),
+    runYahooSupportVerifyLeagueMembership: vi.fn(),
   };
 });
 
@@ -36,24 +38,28 @@ import app from '../index-hono';
 import { validateOAuthToken } from '../oauth-handlers';
 import {
   parseYahooSupportLeagueRequest,
+  parseYahooSupportLeagueMembershipRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
   runYahooSupportRefresh,
+  runYahooSupportVerifyLeagueMembership,
   type YahooSupportDiagnoseReport,
   type YahooSupportInspectReport,
   type YahooSupportProbeLeagueReport,
   type YahooSupportRefreshReport,
+  type YahooSupportLeagueMembershipReport,
 } from '../yahoo-support-diagnostics';
 
 const INSPECT_PATH = '/auth/internal/support/yahoo/inspect';
 const DIAGNOSE_PATH = '/auth/internal/support/yahoo/diagnose';
 const PROBE_LEAGUE_PATH = '/auth/internal/support/yahoo/probe-league';
+const VERIFY_LEAGUE_MEMBERSHIP_PATH = '/auth/internal/support/yahoo/verify-league-membership';
 const REFRESH_PATH = '/auth/internal/support/yahoo/refresh';
 
-// All four actions are implemented; no stub route remains.
-const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, REFRESH_PATH] as const;
+// All five actions are implemented; no stub route remains.
+const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, VERIFY_LEAGUE_MEMBERSHIP_PATH, REFRESH_PATH] as const;
 
 /**
  * probe-league is the one route with its own body shape and its own parser, so
@@ -61,7 +67,9 @@ const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, REFRESH_P
  * asserting on rather than assuming one.
  */
 function parserFor(path: string) {
-  return path === PROBE_LEAGUE_PATH ? parseYahooSupportLeagueRequest : parseYahooSupportRequest;
+  if (path === PROBE_LEAGUE_PATH) return parseYahooSupportLeagueRequest;
+  if (path === VERIFY_LEAGUE_MEMBERSHIP_PATH) return parseYahooSupportLeagueMembershipRequest;
+  return parseYahooSupportRequest;
 }
 
 const INSPECT_OK_REPORT: YahooSupportInspectReport = {
@@ -110,6 +118,23 @@ const PROBE_LEAGUE_OK_REPORT: YahooSupportProbeLeagueReport = {
   },
 };
 
+const VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT: YahooSupportLeagueMembershipReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  collection: 'contains_requested_team',
+  calls: [
+    { label: 'league_teams', httpStatus: 200, ok: true, bodyIsJson: true, bodyLooksLikeEnvelope: true, errorSnippetCategory: 'none', durationMs: 12 },
+    { label: 'user_game_teams', httpStatus: 200, ok: true, bodyIsJson: true, bodyLooksLikeEnvelope: true, errorSnippetCategory: 'none', durationMs: 13 },
+  ],
+  interpretation: {
+    category: 'membership_confirmed_collection_present',
+    summary: 'Yahoo confirms membership.',
+    nextAction: 'Investigate discovery.',
+  },
+};
+
 const REFRESH_OK_REPORT: YahooSupportRefreshReport = {
   outcome: 'ok',
   userMasked: 'user_3Ie...',
@@ -129,12 +154,13 @@ const DEMO_API_KEY = 'flaim_demo_support_routes_test';
 const DEMO_USER_ID = 'user_demo_support';
 const TARGET_USER_ID = 'user_3Ie4m68lUbzxyv22NsMU';
 const TARGET_LEAGUE_ID = '153104';
+const TARGET_LEAGUE_KEY = '470.l.1234567';
 
 /** The smallest valid body for each route. Only probe-league takes a second field. */
 function validBodyFor(path: string): string {
-  return path === PROBE_LEAGUE_PATH
-    ? JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_ID })
-    : JSON.stringify({ userId: TARGET_USER_ID });
+  if (path === PROBE_LEAGUE_PATH) return JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_ID });
+  if (path === VERIFY_LEAGUE_MEMBERSHIP_PATH) return JSON.stringify({ userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY });
+  return JSON.stringify({ userId: TARGET_USER_ID });
 }
 
 const baseEnv = {
@@ -230,6 +256,7 @@ beforeEach(() => {
   vi.mocked(runYahooSupportDiagnose).mockResolvedValue(DIAGNOSE_OK_REPORT);
   vi.mocked(runYahooSupportProbeLeague).mockResolvedValue(PROBE_LEAGUE_OK_REPORT);
   vi.mocked(runYahooSupportRefresh).mockResolvedValue(REFRESH_OK_REPORT);
+  vi.mocked(runYahooSupportVerifyLeagueMembership).mockResolvedValue(VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT);
   // Clerk JWKS lookup — the only network call these tests can trigger.
   vi.stubGlobal('fetch', vi.fn(async () => new Response(
     JSON.stringify({ keys: [publicJwk] }),
@@ -642,6 +669,58 @@ describe(`POST ${PROBE_LEAGUE_PATH} (implemented)`, () => {
 
     expect(res.status).toBe(403);
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${VERIFY_LEAGUE_MEMBERSHIP_PATH} (implemented)`, () => {
+  it('runs the membership verifier and returns its redacted report verbatim', async () => {
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT);
+    expect(runYahooSupportVerifyLeagueMembership).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY },
+    );
+    expect(runYahooSupportProbeLeague).not.toHaveBeenCalled();
+    expect(runYahooSupportRefresh).not.toHaveBeenCalled();
+  });
+
+  it('maps a failed verification to 500 without inventing an error body', async () => {
+    const failed = { outcome: 'failed', userMasked: 'user_3Ie...', error: 'membership_verification_failed' } as const;
+    vi.mocked(runYahooSupportVerifyLeagueMembership).mockResolvedValue(failed);
+
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual(failed);
+  });
+
+  it.each([
+    ['a bare numeric id', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '1234567' })],
+    ['a nonnumeric game key', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: 'nfl.l.1234567' })],
+    ['a path traversal', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '../470.l.1234567' })],
+    ['a suffix', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '470.l.1234567.t.1' })],
+    ['a wrong field name', JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_KEY })],
+  ])('rejects %s without running the verifier', async (_label, body) => {
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(400);
+    expect(runYahooSupportVerifyLeagueMembership).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits independently under the verifier action key', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: {
+        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:verify-league-membership' })),
+      },
+    };
+
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(runYahooSupportVerifyLeagueMembership).not.toHaveBeenCalled();
   });
 });
 

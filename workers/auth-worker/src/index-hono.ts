@@ -99,11 +99,13 @@ import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } fro
 import { runEspnHistoryBackfill } from './espn-history-backfill';
 import {
   parseYahooSupportLeagueRequest,
+  parseYahooSupportLeagueMembershipRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
   runYahooSupportRefresh,
+  runYahooSupportVerifyLeagueMembership,
   type YahooSupportEnv,
 } from './yahoo-support-diagnostics';
 import { handleClerkAccountDeletionWebhook, type ClerkWebhookEnv } from './clerk-webhook';
@@ -203,7 +205,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
 }
 
 /**
- * Bounds diagnose/refresh/probe-league to 15 calls/60s per action, deliberately
+ * Bounds diagnose/refresh/probe-league/verify-league-membership to 15 calls/60s per action, deliberately
  * keyed on the action alone rather than `${action}:${userId}` — a per-target
  * key would let repeated calls across rotating target ids evade the limit
  * entirely, which defeats the point for a route whose target id is
@@ -211,7 +213,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
  */
 async function enforceSupportRateLimit(
   c: Context<{ Bindings: Env }>,
-  action: 'diagnose' | 'refresh' | 'probe-league'
+  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership'
 ) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
   if (success) return null;
@@ -1159,6 +1161,25 @@ api.post('/internal/support/yahoo/probe-league', async (c) => {
   }
 
   const report = await runYahooSupportProbeLeague(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+// A strict full-key, read-only sibling of probe-league. The direct league
+// response can be public, so this also asks Yahoo's user-scoped game teams
+// collection whether the authorized identity owns the reported league.
+api.post('/internal/support/yahoo/verify-league-membership', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'verify-league-membership');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportLeagueMembershipRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportVerifyLeagueMembership(c.env as YahooSupportEnv, validation.request);
   return c.json(report, report.outcome === 'failed' ? 500 : 200);
 });
 
@@ -2939,6 +2960,7 @@ api.notFound((c) => {
       '/internal/support/yahoo/inspect': 'POST - Operator support snapshot for one Yahoo account (two service secrets)',
       '/internal/support/yahoo/diagnose': 'POST - Operator support diagnosis of Yahoo league discovery (two service secrets)',
       '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
+      '/internal/support/yahoo/verify-league-membership': 'POST - Operator support verification of Yahoo ownership for one full league key (two service secrets)',
       '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
       '/internal/user/preferences': 'GET - Get user preferences for internal workers',

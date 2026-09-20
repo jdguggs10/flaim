@@ -3314,7 +3314,7 @@ export function parseYahooLeaguesResponse(data: unknown, stats?: YahooParseStats
 // =============================================================================
 
 export interface YahooDiagnosticCall {
-  label: 'full_games' | 'football_current_season' | 'league_teams';
+  label: 'full_games' | 'football_current_season' | 'league_teams' | 'user_game_teams';
   url: string;
   httpStatus: number | null;
   ok: boolean;
@@ -3648,6 +3648,14 @@ export async function diagnoseYahooDiscovery(
  */
 export const YAHOO_SUPPORT_LEAGUE_ID_PATTERN = /^(?=.*[A-Za-z0-9])[A-Za-z0-9._-]{1,64}$/;
 
+/**
+ * The membership verifier intentionally accepts only a complete Yahoo league
+ * key. Unlike `probeYahooLeague`, it derives a game key from this value and
+ * compares team keys against it, so accepting a bare id would make the two
+ * resource requests describe different leagues.
+ */
+export const YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN = /^(?=.{1,64}$)\d+\.l\.\d+$/;
+
 export type YahooSupportLeagueProbe =
   | { stage: 'not_connected' }
   | YahooCredentialRefreshFailure
@@ -3730,5 +3738,349 @@ export async function probeYahooLeague(
     stage: 'completed',
     call,
     ...(errorDescription !== undefined ? { errorDescription } : {}),
+  };
+}
+
+// =============================================================================
+// SUPPORT LEAGUE MEMBERSHIP VERIFIER
+//
+// A direct `/league/{key}/teams` request can succeed for a public league even
+// when the OAuth identity does not belong to it. This intentionally separate
+// diagnostic compares that public-resource result with Yahoo's user-scoped
+// game collection. It never changes discovery, probing, persistence, or sync
+// state.
+// =============================================================================
+
+export interface YahooMembershipDiagnosticCall {
+  label: 'league_teams' | 'user_game_teams';
+  httpStatus: number | null;
+  ok: boolean;
+  bodyIsJson: boolean;
+  bodyLooksLikeEnvelope: boolean;
+  errorSnippetCategory: YahooDiagnosticCall['errorSnippetCategory'];
+  durationMs: number;
+}
+
+export interface YahooMembershipEvidence {
+  /** Null means the user-scoped response was not usable. */
+  requestedLeagueInUserScopedTeams: boolean | null;
+  /** Null means Yahoo omitted the ownership metadata from the direct response. */
+  directIsOwnedByCurrentLogin: boolean | null;
+  managerGuidComparison:
+    | 'matches_stored_yahoo_guid'
+    | 'matches_logged_in_yahoo_guid'
+    | 'unavailable';
+}
+
+export type YahooSupportLeagueMembershipVerification =
+  | { stage: 'not_connected' }
+  | YahooCredentialRefreshFailure
+  | {
+      stage: 'completed';
+      calls: [YahooMembershipDiagnosticCall, YahooMembershipDiagnosticCall];
+      evidence: YahooMembershipEvidence;
+    };
+
+function toYahooMembershipDiagnosticCall(call: YahooDiagnosticCall): YahooMembershipDiagnosticCall {
+  return {
+    label: call.label === 'league_teams' ? 'league_teams' : 'user_game_teams',
+    httpStatus: call.httpStatus,
+    ok: call.ok,
+    bodyIsJson: call.bodyIsJson,
+    bodyLooksLikeEnvelope: call.bodyLooksLikeEnvelope,
+    errorSnippetCategory: call.errorSnippetCategory,
+    durationMs: call.durationMs,
+  };
+}
+
+function isYahooRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readYahooFlag(value: unknown): boolean | null {
+  if (value === true || value === 1 || value === '1') return true;
+  if (value === false || value === 0 || value === '0') return false;
+  return null;
+}
+
+/**
+ * Yahoo serializes an entity as an array of one-property records, for example
+ * `team: [{ team_key: ... }, { name: ... }]`. This reads only a field directly
+ * on those records; it deliberately does not descend through object-valued
+ * fields, which prevents the enclosing `user` entity from accidentally
+ * collecting GUIDs belonging to its nested teams and managers.
+ */
+function readDirectYahooStrings(value: unknown, field: string): string[] {
+  const values: string[] = [];
+  const visit = (entry: unknown): void => {
+    if (Array.isArray(entry)) {
+      for (const item of entry) visit(item);
+      return;
+    }
+    if (isYahooRecord(entry) && typeof entry[field] === 'string') values.push(entry[field]);
+  };
+  visit(value);
+  return values;
+}
+
+function collectYahooFields(parsed: unknown, field: string): unknown[] {
+  const values: unknown[] = [];
+  const visit = (entry: unknown): void => {
+    if (Array.isArray(entry)) {
+      for (const item of entry) visit(item);
+      return;
+    }
+    if (!isYahooRecord(entry)) return;
+    if (field in entry) values.push(entry[field]);
+    for (const value of Object.values(entry)) visit(value);
+  };
+  visit(parsed);
+  return values;
+}
+
+function collectYahooManagerGuids(parsed: unknown): Set<string> {
+  const guids = new Set<string>();
+  for (const entityValue of collectYahooFields(parsed, 'manager')) {
+    for (const guid of readDirectYahooStrings(entityValue, 'guid')) guids.add(guid);
+  }
+  return guids;
+}
+
+function readYahooTeamKeys(collection: Record<string, unknown>): Set<string> | null {
+  const teamKeys = new Set<string>();
+  for (let index = 0; index < Number(collection.count); index += 1) {
+    const teamWrapper = collection[String(index)];
+    if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
+    const keys = readDirectYahooStrings(teamWrapper.team, 'team_key');
+    if (keys.length !== 1) return null;
+    teamKeys.add(keys[0]);
+  }
+  return teamKeys;
+}
+
+function readDirectOwnership(parsed: unknown): boolean | null {
+  let sawFalse = false;
+  for (const value of collectYahooFields(parsed, 'is_owned_by_current_login')) {
+    const flag = readYahooFlag(value);
+    if (flag === true) return true;
+    if (flag === false) sawFalse = true;
+  }
+  return sawFalse ? false : null;
+}
+
+/**
+ * Validate Yahoo's counted-object collection before treating an empty walk as
+ * evidence. A truthy `fantasy_content` wrapper alone is not enough: Yahoo has
+ * returned partial 200 responses with a missing nested collection, and those
+ * must remain unavailable rather than becoming a false negative.
+ */
+function readYahooCountedCollection(value: unknown): Record<string, unknown> | null {
+  if (!isYahooRecord(value)) return null;
+  const count = Number(value.count);
+  if (!Number.isInteger(count) || count < 0 || countIndexedEntries(value) !== count) return null;
+  for (let index = 0; index < count; index += 1) {
+    if (!(String(index) in value)) return null;
+  }
+  return value;
+}
+
+function readDirectMembershipEvidence(parsed: unknown): {
+  directIsOwnedByCurrentLogin: boolean | null;
+  managerGuids: Set<string>;
+} | null {
+  const fantasyContent = isYahooRecord(parsed) && isYahooRecord(parsed.fantasy_content)
+    ? parsed.fantasy_content
+    : null;
+  const league = fantasyContent?.league;
+  if (!Array.isArray(league) || league.length < 2 || !isYahooRecord(league[1])) return null;
+  const teams = readYahooCountedCollection(league[1].teams);
+  if (!teams) return null;
+  if (!readYahooTeamKeys(teams)) return null;
+  return {
+    directIsOwnedByCurrentLogin: readDirectOwnership(teams),
+    managerGuids: collectYahooManagerGuids(teams),
+  };
+}
+
+function readUserScopedMembershipEvidence(
+  parsed: unknown,
+  leagueKey: string
+): { requestedLeagueInUserScopedTeams: boolean; loggedInGuids: Set<string> } | null {
+  const fantasyContent = isYahooRecord(parsed) && isYahooRecord(parsed.fantasy_content)
+    ? parsed.fantasy_content
+    : null;
+  const users = readYahooCountedCollection(fantasyContent?.users);
+  // `use_login=1` must still identify the logged-in user even when the
+  // requested game collection is empty. A missing user is an incomplete
+  // response, not proof that the user owns no team in the league.
+  if (!users || Number(users.count) < 1) return null;
+
+  const loggedInGuids = new Set<string>();
+  const teamKeys = new Set<string>();
+  for (let userIndex = 0; userIndex < Number(users.count); userIndex += 1) {
+    const userWrapper = users[String(userIndex)];
+    if (!isYahooRecord(userWrapper) || !Array.isArray(userWrapper.user) || userWrapper.user.length < 2) {
+      return null;
+    }
+    for (const guid of readDirectYahooStrings(userWrapper.user[0], 'guid')) loggedInGuids.add(guid);
+    const userResources = userWrapper.user[1];
+    if (!isYahooRecord(userResources)) return null;
+    const games = readYahooCountedCollection(userResources.games);
+    if (!games) return null;
+
+    for (let gameIndex = 0; gameIndex < Number(games.count); gameIndex += 1) {
+      const gameWrapper = games[String(gameIndex)];
+      if (!isYahooRecord(gameWrapper) || !Array.isArray(gameWrapper.game) || gameWrapper.game.length < 2) {
+        return null;
+      }
+      const gameResources = gameWrapper.game[1];
+      if (!isYahooRecord(gameResources)) return null;
+      const teams = readYahooCountedCollection(gameResources.teams);
+      if (!teams) return null;
+      const gameTeamKeys = readYahooTeamKeys(teams);
+      if (!gameTeamKeys) return null;
+      for (const teamKey of gameTeamKeys) teamKeys.add(teamKey);
+    }
+  }
+
+  return {
+    requestedLeagueInUserScopedTeams: [...teamKeys].some(
+      (teamKey) => teamKey.startsWith(`${leagueKey}.t.`)
+    ),
+    loggedInGuids,
+  };
+}
+
+function usableYahooMembershipResponse(call: YahooDiagnosticCall): boolean {
+  return call.httpStatus === 200 && call.ok && call.bodyIsJson && call.bodyLooksLikeEnvelope;
+}
+
+/**
+ * Reads and reduces exactly one Yahoo response. The parsed response is scoped
+ * to this function: only the supplied reducer's derived booleans leave it.
+ */
+async function runYahooMembershipCall<T>(
+  label: YahooMembershipDiagnosticCall['label'],
+  url: string,
+  accessToken: string,
+  reduce: (parsed: unknown) => T
+): Promise<{ call: YahooDiagnosticCall; result: T | null }> {
+  const startedAt = Date.now();
+  const call: YahooDiagnosticCall = {
+    label,
+    url,
+    httpStatus: null,
+    ok: false,
+    bodyIsJson: false,
+    bodyLooksLikeEnvelope: false,
+    errorSnippetCategory: 'unparseable',
+    stats: null,
+    parsedLeagueCount: null,
+    hasCurrentSeasonFootball: null,
+    durationMs: 0,
+  };
+
+  let result: T | null = null;
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(YAHOO_DIAGNOSTIC_TIMEOUT_MS),
+    });
+    call.httpStatus = response.status;
+    call.ok = response.ok;
+    const rawBody = await response.text();
+    const trimmed = rawBody.trim();
+    let parsed: unknown;
+    let parseThrew = false;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      parseThrew = true;
+    }
+    call.bodyIsJson = !parseThrew;
+    call.bodyLooksLikeEnvelope = !parseThrew && looksLikeYahooEnvelope(parsed);
+    if (trimmed.length === 0) {
+      call.errorSnippetCategory = 'empty';
+    } else if (trimmed.startsWith('<')) {
+      call.errorSnippetCategory = 'html';
+    } else if (parseThrew) {
+      call.errorSnippetCategory = 'unparseable';
+    } else if (!call.bodyLooksLikeEnvelope && looksLikeYahooErrorJson(parsed)) {
+      call.errorSnippetCategory = 'yahoo_error_json';
+    } else {
+      call.errorSnippetCategory = 'none';
+    }
+    if (usableYahooMembershipResponse(call)) result = reduce(parsed);
+  } catch (error) {
+    console.error(
+      `[yahoo-connect] Support membership call ${label} failed:`,
+      error instanceof Error ? error.name : 'unknown error'
+    );
+  }
+  call.durationMs = Date.now() - startedAt;
+  return { call, result };
+}
+
+/**
+ * Verify whether the currently authorized Yahoo identity belongs to one exact
+ * league. It makes exactly two bounded resource GETs after normal guarded
+ * credential acquisition: a direct league teams query and the user-scoped
+ * teams collection for that league's game. It writes no Flaim league or sync
+ * state; ordinary token renewal remains the sole possible credential write.
+ */
+export async function verifyYahooLeagueMembership(
+  env: YahooConnectEnv,
+  userId: string,
+  leagueKey: string,
+  correlationId?: string
+): Promise<YahooSupportLeagueMembershipVerification> {
+  if (!YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(leagueKey)) {
+    throw new Error('verifyYahooLeagueMembership received an invalid full league key');
+  }
+  const gameKey = leagueKey.slice(0, leagueKey.indexOf('.l.'));
+  const storage = YahooStorage.fromEnvironment(env);
+  const credentials = await storage.getYahooCredentials(userId);
+  if (!credentials) return { stage: 'not_connected' };
+
+  const tokenResult = await getValidYahooAccessToken(
+    storage,
+    userId,
+    env,
+    credentials,
+    correlationId,
+    'support'
+  );
+  if ('error' in tokenResult) return toCredentialRefreshFailure(tokenResult);
+
+  const direct = await runYahooMembershipCall(
+    'league_teams',
+    `${YAHOO_FANTASY_API_URL}/league/${leagueKey}/teams?format=json`,
+    tokenResult.accessToken,
+    readDirectMembershipEvidence
+  );
+  const scoped = await runYahooMembershipCall(
+    'user_game_teams',
+    `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/teams?format=json`,
+    tokenResult.accessToken,
+    (parsed) => readUserScopedMembershipEvidence(parsed, leagueKey)
+  );
+
+  let managerGuidComparison: YahooMembershipEvidence['managerGuidComparison'] = 'unavailable';
+  if (direct.result && direct.result.managerGuids.size > 0) {
+    if (credentials.yahooGuid && direct.result.managerGuids.has(credentials.yahooGuid)) {
+      managerGuidComparison = 'matches_stored_yahoo_guid';
+    } else if ([...(scoped.result?.loggedInGuids ?? [])].some((guid) => direct.result!.managerGuids.has(guid))) {
+      managerGuidComparison = 'matches_logged_in_yahoo_guid';
+    }
+  }
+
+  return {
+    stage: 'completed',
+    calls: [toYahooMembershipDiagnosticCall(direct.call), toYahooMembershipDiagnosticCall(scoped.call)],
+    evidence: {
+      requestedLeagueInUserScopedTeams: scoped.result?.requestedLeagueInUserScopedTeams ?? null,
+      directIsOwnedByCurrentLogin: direct.result?.directIsOwnedByCurrentLogin ?? null,
+      managerGuidComparison,
+    },
   };
 }
