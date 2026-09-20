@@ -4233,6 +4233,9 @@ export type YahooSupportRecoveryFailureReason =
   | 'ownership_marker_invalid'
   | 'ownership_marker_ambiguous'
   | 'ownership_marker_negative'
+  | 'manager_current_login_marker_invalid'
+  | 'manager_current_login_marker_ambiguous'
+  | 'manager_current_login_marker_conflict'
   | 'login_identity_unavailable'
   | 'manager_identity_incomplete'
   | 'manager_identity_no_match'
@@ -4269,6 +4272,8 @@ interface YahooRecoveryTeam {
   teamName: string;
   directOwnership: boolean | null;
   directOwnershipInvalid: boolean;
+  managerCurrentLoginGuid: string | null;
+  managerCurrentLoginInvalid: boolean;
   managerGuids: Set<string> | null;
 }
 
@@ -4375,6 +4380,38 @@ function readYahooRecoveryTeamManagerGuids(team: unknown): Set<string> | null {
   return guids.size > 0 ? guids : null;
 }
 
+function readYahooRecoveryTeamCurrentLogin(
+  team: unknown
+): { guid: string | null; invalid: boolean } {
+  const managerCollections = collectDirectYahooFields(team, 'managers');
+  if (managerCollections.length !== 1) return { guid: null, invalid: false };
+  const managerWrappers = readYahooManagerWrappers(managerCollections[0]);
+  if (!managerWrappers) return { guid: null, invalid: false };
+
+  let currentLoginGuid: string | null = null;
+  for (const managerWrapper of managerWrappers) {
+    const manager = managerWrapper.manager;
+    if (!isYahooRecord(manager) && !Array.isArray(manager)) {
+      return { guid: null, invalid: false };
+    }
+    const values = collectDirectYahooFields(manager, 'is_current_login');
+    if (values.length === 0) continue;
+    if (values.length !== 1) return { guid: null, invalid: true };
+    const flag = readYahooFlag(values[0]);
+    if (flag === null) return { guid: null, invalid: true };
+    if (!flag) continue;
+
+    const guids = readDirectYahooStrings(manager, 'guid');
+    if (guids.length !== 1) return { guid: null, invalid: true };
+    const guid = nonBlankYahooString(guids[0]);
+    if (!guid || guid !== guids[0] || currentLoginGuid !== null) {
+      return { guid: null, invalid: true };
+    }
+    currentLoginGuid = guid;
+  }
+  return { guid: currentLoginGuid, invalid: false };
+}
+
 function parseYahooRecoveryTeams(data: unknown, leagueKey: string): YahooRecoveryTeam[] | null {
   const fantasyContent = isYahooRecord(data) && isYahooRecord(data.fantasy_content)
     ? data.fantasy_content
@@ -4406,12 +4443,15 @@ function parseYahooRecoveryTeams(data: unknown, leagueKey: string): YahooRecover
 
     const ownershipValues = collectDirectYahooFields(team, 'is_owned_by_current_login');
     const directOwnership = ownershipValues.length === 1 ? readYahooFlag(ownershipValues[0]) : null;
+    const managerCurrentLogin = readYahooRecoveryTeamCurrentLogin(team);
     result.push({
       teamId,
       teamKey,
       teamName,
       directOwnership,
       directOwnershipInvalid: ownershipValues.length > 0 && directOwnership === null,
+      managerCurrentLoginGuid: managerCurrentLogin.guid,
+      managerCurrentLoginInvalid: managerCurrentLogin.invalid,
       managerGuids: readYahooRecoveryTeamManagerGuids(team),
     });
   }
@@ -4583,9 +4623,6 @@ export async function recoverYahooLeagueForSupport(
     if (selection.status === 'incomplete') {
       return { stage: 'failed', reason: 'manager_identity_incomplete' };
     }
-    if (selection.status === 'ambiguous') {
-      return { stage: 'failed', reason: 'manager_identity_ambiguous' };
-    }
     if (selection.status === 'no_match') {
       const storedSelection = credentials.yahooGuid
         ? selectGuidOwnedYahooTeam(teams, credentials.yahooGuid)
@@ -4597,7 +4634,28 @@ export async function recoverYahooLeagueForSupport(
           : 'manager_identity_no_match',
       };
     }
-    ownedTeam = selection.team;
+    if (selection.status === 'ambiguous') {
+      if (teams.some((team) => team.managerCurrentLoginInvalid)) {
+        return { stage: 'failed', reason: 'manager_current_login_marker_invalid' };
+      }
+      const currentLoginTeams = teams.filter((team) => team.managerCurrentLoginGuid !== null);
+      if (currentLoginTeams.length > 1) {
+        return { stage: 'failed', reason: 'manager_current_login_marker_ambiguous' };
+      }
+      if (currentLoginTeams.length === 0) {
+        return { stage: 'failed', reason: 'manager_identity_ambiguous' };
+      }
+      const markedTeam = currentLoginTeams[0];
+      if (
+        markedTeam.directOwnership === false
+        || markedTeam.managerCurrentLoginGuid !== loggedInGuid
+      ) {
+        return { stage: 'failed', reason: 'manager_current_login_marker_conflict' };
+      }
+      ownedTeam = markedTeam;
+    } else {
+      ownedTeam = selection.team;
+    }
   }
 
   const recurringLeagueId = await resolveYahooRecoveryRecurringRoot(metadata, tokenResult.accessToken, deadline);
