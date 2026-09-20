@@ -678,4 +678,28 @@ describe('verify-league-membership support contract', () => {
       interpretation: { category: 'malformed_payload' },
     });
   });
+
+  it('keeps a direct ownership confirmation when manager GUID evidence conflicts', async () => {
+    const completed: YahooSupportLeagueMembershipVerification = {
+      stage: 'completed',
+      calls: [
+        { label: 'league_teams', httpStatus: 200, ok: true, bodyIsJson: true, bodyLooksLikeEnvelope: true, errorSnippetCategory: 'none', durationMs: 1 },
+        { label: 'user_game_teams', httpStatus: 200, ok: true, bodyIsJson: true, bodyLooksLikeEnvelope: true, errorSnippetCategory: 'none', durationMs: 1 },
+      ],
+      evidence: {
+        requestedLeagueInUserScopedTeams: false,
+        directIsOwnedByCurrentLogin: true,
+        managerGuidComparison: 'does_not_match_authenticated_yahoo_guid',
+      },
+    };
+    const report = await runYahooSupportVerifyLeagueMembership(
+      env as unknown as YahooSupportEnv,
+      { userId: USER_ID, leagueKey: LEAGUE_KEY },
+      { verify: vi.fn().mockResolvedValue(completed) },
+    );
+    expect(report).toMatchObject({
+      collection: 'omits_requested_team',
+      interpretation: { category: 'membership_confirmed_collection_omitted' },
+    });
+  });
 });
