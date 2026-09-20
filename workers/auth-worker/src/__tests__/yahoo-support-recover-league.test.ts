@@ -244,6 +244,38 @@ describe('recoverYahooLeagueForSupport', () => {
     expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledTimes(1);
   });
 
+  it('reports when the fresh login identity is unavailable', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(teamsPayload({ ownership: undefined }));
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json({ fantasy_content: { users: { count: 0 } } });
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'login_identity_unavailable',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('reports when the fresh login identity does not identify exactly one manager team', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(teamsPayload({ ownership: undefined, managerGuid: 'different-manager-guid' }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'manager_identity_unproven',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
   it('accepts exactly one explicit direct-owner marker when Yahoo omits the marker on other teams', async () => {
     storage.getYahooLeaguesForSupportReadback
       .mockResolvedValueOnce([])
@@ -274,7 +306,7 @@ describe('recoverYahooLeagueForSupport', () => {
     });
 
     await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
-      stage: 'failed', reason: 'ownership_unavailable_or_unproven',
+      stage: 'failed', reason: 'ownership_marker_ambiguous',
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
@@ -289,7 +321,7 @@ describe('recoverYahooLeagueForSupport', () => {
     });
 
     await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
-      stage: 'failed', reason: 'ownership_unavailable_or_unproven',
+      stage: 'failed', reason: 'ownership_marker_invalid',
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
@@ -298,7 +330,7 @@ describe('recoverYahooLeagueForSupport', () => {
   it('fails closed without a write when metadata does not echo the exact key, the sport/season/name are invalid, or ownership is ambiguous', async () => {
     const cases: Array<{
       name: string;
-      reason: 'metadata_unavailable_or_invalid' | 'teams_unavailable_or_invalid' | 'ownership_unavailable_or_unproven';
+      reason: 'metadata_unavailable_or_invalid' | 'teams_unavailable_or_invalid' | 'ownership_marker_ambiguous';
       metadata?: ReturnType<typeof metadataPayload>;
       teams?: ReturnType<typeof teamsPayload>;
     }> = [
@@ -308,7 +340,7 @@ describe('recoverYahooLeagueForSupport', () => {
       { name: 'blank league name', reason: 'metadata_unavailable_or_invalid', metadata: metadataPayload({ name: '  ' }) },
       { name: 'invalid team key', reason: 'teams_unavailable_or_invalid', teams: teamsPayload({ ownership: 1, teamKey: '470.l.9999999.t.3' }) },
       { name: 'blank team name', reason: 'teams_unavailable_or_invalid', teams: teamsPayload({ ownership: 1, teamName: ' ' }) },
-      { name: 'two directly owned teams', reason: 'ownership_unavailable_or_unproven', teams: teamsPayload({ ownership: 1, secondOwned: true }) },
+      { name: 'two directly owned teams', reason: 'ownership_marker_ambiguous', teams: teamsPayload({ ownership: 1, secondOwned: true }) },
     ];
 
     for (const scenario of cases) {
@@ -343,7 +375,7 @@ describe('recoverYahooLeagueForSupport', () => {
     });
 
     await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
-      stage: 'failed', reason: 'ownership_unavailable_or_unproven',
+      stage: 'failed', reason: 'ownership_marker_negative',
     });
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
