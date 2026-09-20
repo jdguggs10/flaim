@@ -61,6 +61,7 @@ import {
   type YahooSupportDiagnosis,
   type YahooSupportLeagueMembershipVerification,
   type YahooSupportLeagueProbe,
+  type YahooSupportRecoveryFailureReason,
   type YahooSupportRecoveryVisibility,
 } from './yahoo-connect-handlers';
 
@@ -1341,6 +1342,7 @@ export async function runYahooSupportRecoverLeague(
   let report: YahooSupportLeagueRecoveryReport;
   let stage: 'recovered' | 'failed' | null = null;
   let status: YahooSupportRecoveryVisibility | null = null;
+  let failureReason: YahooSupportRecoveryFailureReason | null = null;
 
   try {
     const recovery = await recover(
@@ -1351,6 +1353,7 @@ export async function runYahooSupportRecoverLeague(
     );
     stage = recovery.stage;
     if (recovery.stage !== 'recovered') {
+      failureReason = recovery.reason;
       report = { outcome: 'failed', userMasked, error: 'league_recovery_failed' };
     } else {
       status = recovery.status;
@@ -1378,6 +1381,7 @@ export async function runYahooSupportRecoverLeague(
       outcome: report.outcome,
       stage,
       status,
+      failure_reason: failureReason,
       correlation_id: correlationId,
     })
   );

@@ -4224,9 +4224,23 @@ export interface YahooSupportRecoveryDependencies {
   now?: () => number;
 }
 
+export type YahooSupportRecoveryFailureReason =
+  | 'credentials_unavailable'
+  | 'token_unavailable'
+  | 'metadata_unavailable_or_invalid'
+  | 'teams_unavailable_or_invalid'
+  | 'ownership_unavailable_or_unproven'
+  | 'recurring_root_unresolved'
+  | 'visibility_preread_failed'
+  | 'deadline_exceeded'
+  | 'persistence_failed';
+
 type YahooSupportRecoveryResult =
   | { stage: 'recovered'; status: YahooSupportRecoveryVisibility }
-  | { stage: 'failed' };
+  | {
+      stage: 'failed';
+      reason: YahooSupportRecoveryFailureReason;
+    };
 
 interface YahooRecoveryLeagueMeta {
   leagueKey: string;
@@ -4246,6 +4260,7 @@ interface YahooRecoveryTeam {
   teamKey: string;
   teamName: string;
   directOwnership: boolean | null;
+  directOwnershipInvalid: boolean;
   managerGuids: Set<string> | null;
 }
 
@@ -4388,16 +4403,11 @@ function parseYahooRecoveryTeams(data: unknown, leagueKey: string): YahooRecover
       teamKey,
       teamName,
       directOwnership,
+      directOwnershipInvalid: ownershipValues.length > 0 && directOwnership === null,
       managerGuids: readYahooRecoveryTeamManagerGuids(team),
     });
   }
   return result;
-}
-
-function selectDirectlyOwnedYahooTeam(teams: readonly YahooRecoveryTeam[]): YahooRecoveryTeam | null {
-  if (teams.some((team) => team.directOwnership === null)) return null;
-  const owned = teams.filter((team) => team.directOwnership === true);
-  return owned.length === 1 ? owned[0] : null;
 }
 
 function parseYahooRecoveryLoggedInGuid(data: unknown): string | null {
@@ -4504,7 +4514,7 @@ export async function recoverYahooLeagueForSupport(
     now,
   };
   const credentials = await storage.getYahooCredentials(userId);
-  if (!credentials) return { stage: 'failed' };
+  if (!credentials) return { stage: 'failed', reason: 'credentials_unavailable' };
 
   const tokenResult = await getValidYahooAccessToken(
     storage,
@@ -4514,7 +4524,7 @@ export async function recoverYahooLeagueForSupport(
     correlationId,
     'support'
   );
-  if ('error' in tokenResult) return { stage: 'failed' };
+  if ('error' in tokenResult) return { stage: 'failed', reason: 'token_unavailable' };
 
   const metadataData = await fetchYahooRecoveryJson(
     `${YAHOO_FANTASY_API_URL}/league/${leagueKey}?format=json`,
@@ -4522,7 +4532,7 @@ export async function recoverYahooLeagueForSupport(
     deadline
   );
   const metadata = metadataData ? parseYahooRecoveryLeagueMeta(metadataData, leagueKey) : null;
-  if (!metadata) return { stage: 'failed' };
+  if (!metadata) return { stage: 'failed', reason: 'metadata_unavailable_or_invalid' };
 
   const teamsData = await fetchYahooRecoveryJson(
     `${YAHOO_FANTASY_API_URL}/league/${leagueKey}/teams?format=json`,
@@ -4530,11 +4540,21 @@ export async function recoverYahooLeagueForSupport(
     deadline
   );
   const teams = teamsData ? parseYahooRecoveryTeams(teamsData, leagueKey) : null;
-  if (!teams) return { stage: 'failed' };
+  if (!teams) return { stage: 'failed', reason: 'teams_unavailable_or_invalid' };
 
+  if (teams.some((team) => team.directOwnershipInvalid)) {
+    return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+  }
+
+  const directlyOwnedTeams = teams.filter((team) => team.directOwnership === true);
+  if (directlyOwnedTeams.length > 1) {
+    return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+  }
   const directOwnershipComplete = teams.every((team) => team.directOwnership !== null);
-  let ownedTeam = selectDirectlyOwnedYahooTeam(teams);
-  if (directOwnershipComplete && !ownedTeam) return { stage: 'failed' };
+  let ownedTeam = directlyOwnedTeams.length === 1 ? directlyOwnedTeams[0] : null;
+  if (directOwnershipComplete && !ownedTeam) {
+    return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+  }
   if (!ownedTeam) {
     const loginData = await fetchYahooRecoveryJson(
       `${YAHOO_FANTASY_API_URL}/users;use_login=1?format=json`,
@@ -4542,13 +4562,13 @@ export async function recoverYahooLeagueForSupport(
       deadline
     );
     const loggedInGuid = loginData ? parseYahooRecoveryLoggedInGuid(loginData) : null;
-    if (!loggedInGuid) return { stage: 'failed' };
+    if (!loggedInGuid) return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
     ownedTeam = selectGuidOwnedYahooTeam(teams, loggedInGuid);
-    if (!ownedTeam) return { stage: 'failed' };
+    if (!ownedTeam) return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
   }
 
   const recurringLeagueId = await resolveYahooRecoveryRecurringRoot(metadata, tokenResult.accessToken, deadline);
-  if (!recurringLeagueId) return { stage: 'failed' };
+  if (!recurringLeagueId) return { stage: 'failed', reason: 'recurring_root_unresolved' };
 
   // The pre-read is intentionally archive-filtered. It gives the caller a
   // truthful idempotency status while never exposing suppressed records.
@@ -4556,13 +4576,13 @@ export async function recoverYahooLeagueForSupport(
   try {
     visibleBefore = await storage.getYahooLeaguesForSupportReadback(userId, 'exclude-archived');
   } catch {
-    return { stage: 'failed' };
+    return { stage: 'failed', reason: 'visibility_preread_failed' };
   }
   const alreadyVisible = visibleBefore.some((league) => league.leagueKey === leagueKey);
 
   // A final wall-clock guard prevents an unbounded provider/root walk from
   // committing a late write after the operator client has abandoned the call.
-  if (yahooRecoveryDeadlineExpired(deadline)) return { stage: 'failed' };
+  if (yahooRecoveryDeadlineExpired(deadline)) return { stage: 'failed', reason: 'deadline_exceeded' };
 
   try {
     await storage.upsertYahooLeagueWithRecurringId({
@@ -4577,7 +4597,7 @@ export async function recoverYahooLeagueForSupport(
       recurringLeagueId,
     });
   } catch {
-    return { stage: 'failed' };
+    return { stage: 'failed', reason: 'persistence_failed' };
   }
 
   try {
