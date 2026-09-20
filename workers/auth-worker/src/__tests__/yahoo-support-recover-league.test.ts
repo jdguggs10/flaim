@@ -62,12 +62,27 @@ function metadataPayload(options: { leagueKey?: string; renew?: string; gameCode
   };
 }
 
-function teamsPayload(options: { ownership?: 0 | 1 | undefined; managerGuid?: string; teamKey?: string; teamName?: string; secondOwned?: boolean } = {}) {
+function teamsPayload(options: {
+  ownership?: 0 | 1 | undefined;
+  managerGuid?: string;
+  teamKey?: string;
+  teamName?: string;
+  secondOwned?: boolean;
+} = {}) {
   const firstTeam = [
     { team_key: options.teamKey ?? TEAM_KEY },
     { name: options.teamName ?? TEAM_NAME },
     ...(options.ownership === undefined ? [] : [{ is_owned_by_current_login: options.ownership }]),
-    { managers: { count: 1, 0: { manager: [{ guid: options.managerGuid ?? YAHOO_GUID }] } } },
+    {
+      managers: {
+        count: 1,
+        0: {
+          manager: [
+            { guid: options.managerGuid ?? YAHOO_GUID },
+          ],
+        },
+      },
+    },
   ];
   return {
     fantasy_content: {
@@ -87,6 +102,90 @@ function teamsPayload(options: { ownership?: 0 | 1 | undefined; managerGuid?: st
                 ],
               },
             } : {}),
+          },
+        },
+      ],
+    },
+  };
+}
+
+function twoTeamManagerPayload(options: {
+  firstManagerGuid?: string;
+  firstCurrentLogin?: unknown;
+  firstCurrentLoginDuplicate?: boolean;
+  firstDirectOwnership?: 0 | 1;
+  firstNestedCurrentLogin?: boolean;
+  firstOtherMarkedManagerGuid?: string;
+  secondCurrentLogin?: unknown;
+  secondManagersComplete?: boolean;
+} = {}) {
+  const firstCurrentLogin = Object.hasOwn(options, 'firstCurrentLogin')
+    ? options.firstCurrentLogin
+    : 1;
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: LEAGUE_KEY },
+        {
+          teams: {
+            count: 2,
+            0: {
+              team: [
+                { team_key: TEAM_KEY },
+                { name: TEAM_NAME },
+                ...(options.firstDirectOwnership === undefined
+                  ? []
+                  : [{ is_owned_by_current_login: options.firstDirectOwnership }]),
+                {
+                  managers: {
+                    count: options.firstOtherMarkedManagerGuid === undefined ? 1 : 2,
+                    0: {
+                      manager: [
+                        { guid: options.firstManagerGuid ?? YAHOO_GUID },
+                        ...(firstCurrentLogin === undefined
+                          ? []
+                          : [{ is_current_login: firstCurrentLogin }]),
+                        ...(options.firstCurrentLoginDuplicate
+                          ? [{ is_current_login: firstCurrentLogin }]
+                          : []),
+                        ...(options.firstNestedCurrentLogin
+                          ? [{ profile: { is_current_login: 1 } }]
+                          : []),
+                      ],
+                    },
+                    ...(options.firstOtherMarkedManagerGuid === undefined
+                      ? {}
+                      : {
+                          1: {
+                            manager: [
+                              { guid: options.firstOtherMarkedManagerGuid },
+                              { is_current_login: 1 },
+                            ],
+                          },
+                        }),
+                  },
+                },
+              ],
+            },
+            1: {
+              team: [
+                { team_key: `${LEAGUE_KEY}.t.4` },
+                { name: 'Second Sentinel Team' },
+                ...(options.secondManagersComplete === false ? [] : [{
+                  managers: {
+                    count: 1,
+                    0: {
+                      manager: [
+                        { guid: YAHOO_GUID },
+                        ...(options.secondCurrentLogin === undefined
+                          ? []
+                          : [{ is_current_login: options.secondCurrentLogin }]),
+                      ],
+                    },
+                  },
+                }]),
+              ],
+            },
           },
         },
       ],
@@ -242,6 +341,214 @@ describe('recoverYahooLeagueForSupport', () => {
       'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1?format=json'
     );
     expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses exactly one manager current-login marker when one GUID appears on multiple teams', async () => {
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([visibleLeague()]);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload());
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'recovered', status: 'persisted_visible',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: '3', teamKey: TEAM_KEY })
+    );
+  });
+
+  it('uses a unique current-login marker on a later GUID-matching team', async () => {
+    const secondTeam = {
+      ...visibleLeague(),
+      teamId: '4',
+      teamKey: `${LEAGUE_KEY}.t.4`,
+      teamName: 'Second Sentinel Team',
+    };
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([secondTeam]);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstCurrentLogin: undefined, secondCurrentLogin: 1 }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'recovered', status: 'persisted_visible',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: '4', teamKey: `${LEAGUE_KEY}.t.4` })
+    );
+  });
+
+  it('ignores a current-login marker nested inside a manager subresource', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({
+          firstCurrentLogin: undefined,
+          firstNestedCurrentLogin: true,
+        }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'manager_identity_ambiguous',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when one manager has duplicate current-login markers', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstCurrentLoginDuplicate: true }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'manager_current_login_marker_invalid',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('does not trust a unique current-login marker when another team manager collection is incomplete', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ secondManagersComplete: false }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'manager_identity_incomplete',
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('rejects a current-login tie-break marker that conflicts with explicit team-level ownership', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstDirectOwnership: 0 }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'manager_current_login_marker_conflict',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('rejects a tie-break marker carried by a different co-manager than the fresh login GUID', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({
+          firstCurrentLogin: undefined,
+          firstOtherMarkedManagerGuid: 'different-manager-guid',
+        }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'manager_current_login_marker_conflict',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('keeps a unique fresh-GUID match authoritative over a conflicting current-login marker', async () => {
+    const secondTeam = {
+      ...visibleLeague(),
+      teamId: '4',
+      teamKey: `${LEAGUE_KEY}.t.4`,
+      teamName: 'Second Sentinel Team',
+    };
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([secondTeam]);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstManagerGuid: 'different-guid' }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'recovered', status: 'persisted_visible',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledWith(
+      expect.objectContaining({ teamId: '4', teamKey: `${LEAGUE_KEY}.t.4` })
+    );
+  });
+
+  it('fails closed on invalid or multiple manager current-login markers', async () => {
+    const cases = [
+      {
+        reason: 'manager_current_login_marker_invalid',
+        teams: twoTeamManagerPayload({ firstCurrentLogin: 2 }),
+      },
+      {
+        reason: 'manager_current_login_marker_ambiguous',
+        teams: twoTeamManagerPayload({ secondCurrentLogin: 1 }),
+      },
+    ] as const;
+
+    for (const scenario of cases) {
+      fetchSpy.mockImplementation(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(scenario.teams);
+        if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+        if (url.includes('/users;use_login=1')) return json(loginPayload());
+        throw new Error('unexpected Yahoo request');
+      });
+
+      await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+        stage: 'failed', reason: scenario.reason,
+      });
+      expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+      vi.clearAllMocks();
+      storage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: USER_ID, accessToken: ACCESS_TOKEN, refreshToken: REFRESH_TOKEN,
+        expiresAt: new Date(Date.now() + 60_000), needsRefresh: false,
+      });
+      storage.getYahooLeaguesForSupportReadback.mockResolvedValue([]);
+      storage.upsertYahooLeagueWithRecurringId.mockResolvedValue('stored-row');
+    }
   });
 
   it('reports when the fresh login identity is unavailable', async () => {
