@@ -4229,7 +4229,11 @@ export type YahooSupportRecoveryFailureReason =
   | 'token_unavailable'
   | 'metadata_unavailable_or_invalid'
   | 'teams_unavailable_or_invalid'
-  | 'ownership_unavailable_or_unproven'
+  | 'ownership_marker_invalid'
+  | 'ownership_marker_ambiguous'
+  | 'ownership_marker_negative'
+  | 'login_identity_unavailable'
+  | 'manager_identity_unproven'
   | 'recurring_root_unresolved'
   | 'visibility_preread_failed'
   | 'deadline_exceeded'
@@ -4543,17 +4547,17 @@ export async function recoverYahooLeagueForSupport(
   if (!teams) return { stage: 'failed', reason: 'teams_unavailable_or_invalid' };
 
   if (teams.some((team) => team.directOwnershipInvalid)) {
-    return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+    return { stage: 'failed', reason: 'ownership_marker_invalid' };
   }
 
   const directlyOwnedTeams = teams.filter((team) => team.directOwnership === true);
   if (directlyOwnedTeams.length > 1) {
-    return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+    return { stage: 'failed', reason: 'ownership_marker_ambiguous' };
   }
   const directOwnershipComplete = teams.every((team) => team.directOwnership !== null);
   let ownedTeam = directlyOwnedTeams.length === 1 ? directlyOwnedTeams[0] : null;
   if (directOwnershipComplete && !ownedTeam) {
-    return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+    return { stage: 'failed', reason: 'ownership_marker_negative' };
   }
   if (!ownedTeam) {
     const loginData = await fetchYahooRecoveryJson(
@@ -4562,9 +4566,9 @@ export async function recoverYahooLeagueForSupport(
       deadline
     );
     const loggedInGuid = loginData ? parseYahooRecoveryLoggedInGuid(loginData) : null;
-    if (!loggedInGuid) return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+    if (!loggedInGuid) return { stage: 'failed', reason: 'login_identity_unavailable' };
     ownedTeam = selectGuidOwnedYahooTeam(teams, loggedInGuid);
-    if (!ownedTeam) return { stage: 'failed', reason: 'ownership_unavailable_or_unproven' };
+    if (!ownedTeam) return { stage: 'failed', reason: 'manager_identity_unproven' };
   }
 
   const recurringLeagueId = await resolveYahooRecoveryRecurringRoot(metadata, tokenResult.accessToken, deadline);
