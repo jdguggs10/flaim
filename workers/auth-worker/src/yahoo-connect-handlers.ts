@@ -2136,6 +2136,16 @@ const YAHOO_FANTASY_API_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 const YAHOO_LEAGUE_DISCOVERY_URL =
   `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_types=full/leagues;out=teams?format=json`;
 
+/**
+ * The narrow current-NFL query used only when Yahoo's broad all-history
+ * discovery does not include the current football season. Keep the broad
+ * request primary: it is still the only request that discovers every supported
+ * sport and historical season.
+ */
+function yahooFootballCurrentSeasonUrl(): string {
+  return `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_codes=nfl;seasons=${getDefaultSeasonYear('football')}/leagues;out=teams?format=json`;
+}
+
 // Cap the renew-chain walk so a malformed/looping pointer set can't fetch
 // unbounded league metas. Yahoo Fantasy Sports has run since ~2001 (~25 NFL
 // seasons), so a real renew chain — one league renewed every year since launch —
@@ -2165,6 +2175,108 @@ export interface DiscoveredYahooLeague {
   // `{game_key}_{league_id}` form (empty string at the oldest league). Seeds the
   // chain walk's first hop. May be absent in some responses.
   renew?: string;
+}
+
+function hasCurrentSeasonFootball(leagues: readonly DiscoveredYahooLeague[]): boolean {
+  const currentFootballSeason = getDefaultSeasonYear('football');
+  return leagues.some(
+    (league) => league.sport === 'football' && league.seasonYear === currentFootballSeason
+  );
+}
+
+/**
+ * Keep the primary discovery record when Yahoo returns a league in both
+ * collection shapes. Besides avoiding duplicate persistence, this preserves
+ * the broader response as the source of truth for a duplicate league.
+ */
+export function mergeYahooLeaguesByKey(
+  primary: readonly DiscoveredYahooLeague[],
+  fallback: readonly DiscoveredYahooLeague[]
+): DiscoveredYahooLeague[] {
+  const byLeagueKey = new Map<string, DiscoveredYahooLeague>();
+  for (const league of [...primary, ...fallback]) {
+    if (!byLeagueKey.has(league.leagueKey)) byLeagueKey.set(league.leagueKey, league);
+  }
+  return [...byLeagueKey.values()];
+}
+
+type YahooCurrentFootballFallbackSource = 'discovery' | 'reconciliation';
+
+/**
+ * The fallback is an availability repair, never a replacement for the broad
+ * result. Its failure must leave a successful broad discovery usable, and its
+ * log deliberately contains only a masked account marker plus bounded outcome
+ * metadata -- never a provider body, league, team, or token.
+ */
+function logYahooCurrentFootballFallbackFailure(
+  userId: string,
+  source: YahooCurrentFootballFallbackSource,
+  outcome: 'http_error' | 'parse_error' | 'fetch_error',
+  details: { httpStatus?: number; errorName?: string } = {}
+): void {
+  console.warn(
+    JSON.stringify({
+      event: 'yahoo_current_football_fallback_failed',
+      service: 'auth-worker',
+      source,
+      user_id: maskUserId(userId),
+      outcome,
+      ...(typeof details.httpStatus === 'number' ? { http_status: details.httpStatus } : {}),
+      ...(details.errorName ? { error_name: details.errorName } : {}),
+    })
+  );
+}
+
+/**
+ * One non-retrying current-season NFL request. Only callers that already have
+ * a valid, parsed broad result with no current football invoke it. An upstream
+ * error or malformed fallback is intentionally indistinguishable to callers
+ * from a successful empty fallback: both preserve the broad result.
+ */
+async function fetchYahooCurrentFootballFallback(
+  accessToken: string,
+  userId: string,
+  source: YahooCurrentFootballFallbackSource,
+  requestInit: Pick<RequestInit, 'signal'> = {}
+): Promise<DiscoveredYahooLeague[]> {
+  try {
+    const response = await fetch(yahooFootballCurrentSeasonUrl(), {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      ...requestInit,
+    });
+    if (!response.ok) {
+      logYahooCurrentFootballFallbackFailure(userId, source, 'http_error', {
+        httpStatus: response.status,
+      });
+      return [];
+    }
+
+    let rawData: unknown;
+    try {
+      rawData = await response.json();
+    } catch (error) {
+      logYahooCurrentFootballFallbackFailure(userId, source, 'parse_error', {
+        errorName: error instanceof Error ? error.name : 'unknown',
+      });
+      return [];
+    }
+
+    const stats = createYahooParseStats();
+    const leagues = parseYahooLeaguesResponse(rawData, stats);
+    if (stats.threw || stats.envelope !== 'valid') {
+      logYahooCurrentFootballFallbackFailure(userId, source, 'parse_error', {
+        errorName: stats.thrownErrorName ?? stats.envelope,
+      });
+      return [];
+    }
+    logYahooDiscoveryDropIfAny(userId, stats, source);
+    return leagues;
+  } catch (error) {
+    logYahooCurrentFootballFallbackFailure(userId, source, 'fetch_error', {
+      errorName: error instanceof Error ? error.name : 'unknown',
+    });
+    return [];
+  }
 }
 
 /**
@@ -2570,8 +2682,19 @@ export async function handleYahooDiscover(
 
     const rawData = await apiResponse.json();
     const discoveryStats = createYahooParseStats();
-    const leagues = parseYahooLeaguesResponse(rawData, discoveryStats);
+    const broadLeagues = parseYahooLeaguesResponse(rawData, discoveryStats);
     logYahooDiscoveryDropIfAny(userId, discoveryStats, 'discovery');
+
+    // Yahoo's broad history collection is primary, but some accounts receive a
+    // valid response that omits the active NFL game. Make exactly one narrower
+    // request in that case. A failed fallback is deliberately non-fatal: the
+    // broad response remains a successful discovery result.
+    const fallbackLeagues = discoveryStats.envelope === 'valid'
+      && !discoveryStats.threw
+      && !hasCurrentSeasonFootball(broadLeagues)
+      ? await fetchYahooCurrentFootballFallback(accessToken, userId, 'discovery')
+      : [];
+    const leagues = mergeYahooLeaguesByKey(broadLeagues, fallbackLeagues);
 
     console.log(`[yahoo-connect] Discovered ${leagues.length} leagues for user ${maskUserId(userId)}`);
 
@@ -2721,8 +2844,16 @@ export async function fetchYahooLeaguesReadOnly(
 
     const rawData = await apiResponse.json();
     const reconciliationStats = createYahooParseStats();
-    const leagues = parseYahooLeaguesResponse(rawData, reconciliationStats);
+    const broadLeagues = parseYahooLeaguesResponse(rawData, reconciliationStats);
     logYahooDiscoveryDropIfAny(userId, reconciliationStats, 'reconciliation');
+    const fallbackLeagues = reconciliationStats.envelope === 'valid'
+      && !reconciliationStats.threw
+      && !hasCurrentSeasonFootball(broadLeagues)
+      ? await fetchYahooCurrentFootballFallback(accessToken, userId, 'reconciliation', {
+          signal: AbortSignal.timeout(10000),
+        })
+      : [];
+    const leagues = mergeYahooLeaguesByKey(broadLeagues, fallbackLeagues);
     return { status: 'ok', leagues };
   } catch (error) {
     // `.message` was precisely the half that quotes Yahoo's raw response body on a
@@ -3193,6 +3324,8 @@ export interface YahooDiagnosticCall {
   errorSnippetCategory: 'none' | 'yahoo_error_json' | 'html' | 'empty' | 'unparseable';
   stats: YahooParseStats | null;
   parsedLeagueCount: number | null;
+  /** Whether this response itself includes the canonical current NFL season. */
+  hasCurrentSeasonFootball: boolean | null;
   durationMs: number;
 }
 
@@ -3243,15 +3376,6 @@ function toCredentialRefreshFailure(
 }
 
 const YAHOO_DIAGNOSTIC_TIMEOUT_MS = 10000;
-
-/**
- * The narrower fallback query: one sport, one season, no `game_types` filter.
- * A function only because the season year moves with the calendar; it takes no
- * caller input, so the diagnostic still has exactly two fixed URLs.
- */
-function yahooFootballCurrentSeasonUrl(): string {
-  return `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_codes=nfl;seasons=${getDefaultSeasonYear('football')}/leagues;out=teams?format=json`;
-}
 
 /** The parser's own first gate: a truthy `fantasy_content` on a JSON object. */
 function looksLikeYahooEnvelope(parsed: unknown): boolean {
@@ -3332,6 +3456,7 @@ async function runYahooDiagnosticCall(
     errorSnippetCategory: 'unparseable',
     stats: null,
     parsedLeagueCount: null,
+    hasCurrentSeasonFootball: null,
     durationMs: 0,
   };
 
@@ -3393,6 +3518,7 @@ async function runYahooDiagnosticCall(
       const parsedLeagues = parseYahooLeaguesResponse(parsed, stats);
       call.stats = stats;
       call.parsedLeagueCount = parsedLeagues.length;
+      call.hasCurrentSeasonFootball = !stats.threw && hasCurrentSeasonFootball(parsedLeagues);
     }
   } catch (error) {
     // Transport failure or timeout — there is no body to classify. Name only:
@@ -3467,15 +3593,17 @@ export async function diagnoseYahooDiscovery(
   calls.push(primary);
 
   // The fallback resolves exactly one ambiguity and no other: Yahoo answered
-  // 200 with a well-formed envelope, and still nothing parsed out of it. Then
-  // and only then is it worth asking the same account a narrower question, to
-  // separate "genuinely empty" from "the game_types=full filter excludes this
-  // account". Any other shape is already a conclusive answer.
+  // 200 with a well-formed parsed envelope, but it lacks current-season NFL.
+  // Historical leagues alone do not prove the active football league is
+  // discoverable, so ask the same account one narrower question. Any other
+  // response shape is already a conclusive answer.
   const resolvesAmbiguity =
     primary.httpStatus === 200
     && primary.bodyIsJson
     && primary.bodyLooksLikeEnvelope
-    && primary.stats?.accepted === 0;
+    && primary.stats !== null
+    && !primary.stats.threw
+    && primary.hasCurrentSeasonFootball === false;
 
   if (resolvesAmbiguity && calls.length < MAX_YAHOO_DIAGNOSTIC_REQUESTS) {
     calls.push(

@@ -60,11 +60,13 @@ import {
   type YahooSupportEnv,
 } from '../yahoo-support-diagnostics';
 import { REFRESH_COOLDOWN_OWNER_PREFIX, YahooStorage } from '../yahoo-storage';
+import { getDefaultSeasonYear } from '../season-utils';
 
 const USER_ID = 'user_3Ie4m68lUbzxyv22NsMU';
 const MASKED_USER_ID = 'user_3Ie...';
 const NOW_MS = Date.parse('2026-09-09T15:00:00.000Z');
 const CHECKED_AT = '2026-09-09T15:00:00.000Z';
+const CURRENT_FOOTBALL_SEASON = getDefaultSeasonYear('football');
 
 const DISCOVERY_URL =
   'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_types=full/leagues;out=teams?format=json';
@@ -101,12 +103,12 @@ function discoveryPayload(games: unknown): unknown {
 }
 
 /** One NFL game holding one real, fully-identified league. */
-function payloadWithOneLeague(): unknown {
+function payloadWithOneLeague(season = String(CURRENT_FOOTBALL_SEASON)): unknown {
   return discoveryPayload({
     count: 1,
     0: {
       game: [
-        { code: 'nfl', season: '2026', game_type: 'full' },
+        { code: 'nfl', season, game_type: 'full' },
         {
           leagues: {
             count: 1,
@@ -383,6 +385,20 @@ describe('diagnoseYahooDiscovery', () => {
       expect(calls[1]).not.toContain('game_types=full');
     });
 
+    it('makes exactly two when broad discovery finds only historical football', async () => {
+      routeFetch({
+        discovery: () => json(payloadWithOneLeague('2025')),
+        fallback: () => json(payloadWithOneLeague()),
+      });
+
+      const diagnosis = await diagnoseYahooDiscovery(env, USER_ID, 'corr-1');
+
+      expect(diagnosis).toMatchObject({ stage: 'completed', requestCount: 2 });
+      const calls = (diagnosis as Extract<YahooSupportDiagnosis, { stage: 'completed' }>).calls;
+      expect(calls[0]).toMatchObject({ parsedLeagueCount: 1, hasCurrentSeasonFootball: false });
+      expect(calls[1]).toMatchObject({ parsedLeagueCount: 1, hasCurrentSeasonFootball: true });
+    });
+
     it('never exceeds the shared budget, even when the fallback is also empty', async () => {
       routeFetch({
         discovery: () => json(payloadWithNoGames()),
@@ -457,6 +473,7 @@ describe('diagnoseYahooDiscovery', () => {
         bodyIsJson: true,
         bodyLooksLikeEnvelope: true,
         parsedLeagueCount: 1,
+        hasCurrentSeasonFootball: true,
       });
       expect(call.stats).toMatchObject({ envelope: 'valid', accepted: 1 });
       expect(typeof call.durationMs).toBe('number');
@@ -532,6 +549,7 @@ function completedCall(overrides: Partial<YahooDiagnosticCall> = {}): YahooDiagn
     errorSnippetCategory: 'none',
     stats: statsWith(),
     parsedLeagueCount: 0,
+    hasCurrentSeasonFootball: false,
     durationMs: 42,
     ...overrides,
   };
@@ -648,7 +666,11 @@ describe('runYahooSupportDiagnose', () => {
 
     it('classifies reachable data and points at refresh', async () => {
       const interpretation = await categoryOf(
-        completed([completedCall({ parsedLeagueCount: 4, stats: statsWith({ accepted: 4, declared: { users: 1, games: 2, leagues: 4 } }) })])
+        completed([completedCall({
+          parsedLeagueCount: 4,
+          hasCurrentSeasonFootball: true,
+          stats: statsWith({ accepted: 4, declared: { users: 1, games: 2, leagues: 4 } }),
+        })])
       );
 
       expect(interpretation.category).toBe('data_reachable');
@@ -661,16 +683,57 @@ describe('runYahooSupportDiagnose', () => {
           completedCall({ stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }) }),
           completedCall({
             label: 'football_current_season',
-            url: 'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_codes=nfl;seasons=2026/leagues;out=teams?format=json',
+            url: `https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_codes=nfl;seasons=${CURRENT_FOOTBALL_SEASON}/leagues;out=teams?format=json`,
             parsedLeagueCount: 2,
+            hasCurrentSeasonFootball: true,
             stats: statsWith({ accepted: 2, declared: { users: 1, games: 1, leagues: 2 } }),
           }),
         ])
       );
 
       expect(interpretation.category).toBe('filter_excludes_account');
-      expect(interpretation.summary).toContain('game_types=full');
-      expect(interpretation.nextAction).toMatch(/file a new bug/i);
+      expect(interpretation.summary).toContain('fallback-aware');
+      expect(interpretation.nextAction).toContain('refresh --confirm');
+    });
+
+    it('classifies broad historical data plus an empty current-season fallback distinctly', async () => {
+      const interpretation = await categoryOf(
+        completed([
+          completedCall({
+            parsedLeagueCount: 3,
+            stats: statsWith({ accepted: 3, declared: { users: 1, games: 3, leagues: 3 } }),
+          }),
+          completedCall({
+            label: 'football_current_season',
+            stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }),
+          }),
+        ])
+      );
+
+      expect(interpretation.category).toBe('historical_only');
+      expect(interpretation.nextAction).toMatch(/Yahoo identity/i);
+    });
+
+    it('does not misclassify accepted historical data with a partial unsupported-sport drop', async () => {
+      const interpretation = await categoryOf(
+        completed([
+          completedCall({
+            parsedLeagueCount: 3,
+            stats: statsWith({
+              accepted: 3,
+              declared: { users: 1, games: 4, leagues: 4 },
+              skipped: { ...createYahooParseStats().skipped, unsupportedSportCode: 1 },
+              unsupportedGameCodes: ['cfb'],
+            }),
+          }),
+          completedCall({
+            label: 'football_current_season',
+            stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }),
+          }),
+        ])
+      );
+
+      expect(interpretation.category).toBe('historical_only');
     });
 
     it('classifies a genuinely empty account when the fallback is empty too', async () => {
@@ -797,6 +860,10 @@ describe('runYahooSupportDiagnose', () => {
         completed([
           completedCall({
             stats: statsWith({ accepted: 0, declared: { users: 1, games: 1, leagues: 0 }, indexed: { users: 1, games: 1, leagues: 0 } }),
+          }),
+          completedCall({
+            label: 'football_current_season',
+            stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }),
           }),
         ])
       );

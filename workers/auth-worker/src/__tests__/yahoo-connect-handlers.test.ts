@@ -8,9 +8,11 @@ import {
   handleYahooDisconnect,
   handleYahooDiscover,
   handleYahooStatus,
+  mergeYahooLeaguesByKey,
   type YahooConnectEnv,
 } from '../yahoo-connect-handlers';
 import { YahooStorage } from '../yahoo-storage';
+import { getDefaultSeasonYear } from '../season-utils';
 
 // Mock YahooStorage
 vi.mock('../yahoo-storage', async () => {
@@ -34,6 +36,52 @@ const env: YahooConnectEnv = {
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
 };
+const CURRENT_FOOTBALL_SEASON = getDefaultSeasonYear('football');
+
+describe('mergeYahooLeaguesByKey', () => {
+  it('deduplicates by league key and preserves the broad record', () => {
+    const broad = {
+      leagueKey: '461.l.same',
+      leagueName: 'Broad Name',
+      sport: 'football' as const,
+      seasonYear: CURRENT_FOOTBALL_SEASON,
+      teamId: '1',
+      teamKey: '461.l.same.t.1',
+      teamName: 'Broad Team',
+    };
+    const fallback = { ...broad, leagueName: 'Fallback Name' };
+
+    expect(mergeYahooLeaguesByKey([broad], [fallback])).toEqual([broad]);
+  });
+});
+
+function yahooDiscoveryPayload(
+  leagues: Array<{ season: number; leagueKey: string; name: string }>
+): unknown {
+  return {
+    fantasy_content: {
+      users: {
+        count: 1,
+        0: {
+          user: [
+            { guid: 'test-guid' },
+            {
+              games: {
+                count: leagues.length,
+                ...Object.fromEntries(leagues.map((league, index) => [index, {
+                  game: [
+                    { code: 'nfl', season: String(league.season), game_type: 'full' },
+                    { leagues: { count: 1, 0: { league: [{ league_key: league.leagueKey, name: league.name, renew: '' }] } } },
+                  ],
+                }])),
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+}
 
 function yahooRefreshDiagnostics(spy: { mock: { calls: unknown[][] } }): Array<Record<string, unknown>> {
   return spy.mock.calls
@@ -2875,7 +2923,9 @@ describe('yahoo-connect-handlers', () => {
 
       mockFetch.mockResolvedValue(
         new Response(
-          JSON.stringify({ fantasy_content: { users: { count: 0 } } }),
+          JSON.stringify(yahooDiscoveryPayload([
+            { season: CURRENT_FOOTBALL_SEASON, leagueKey: '461.l.current', name: 'Current Football' },
+          ])),
           { status: 200 }
         )
       );
@@ -2892,7 +2942,104 @@ describe('yahoo-connect-handlers', () => {
       const yahooApiRequest = mockFetch.mock.calls[0][1] as RequestInit;
       expect(yahooApiRequest.body).toBeUndefined();
       const body = (await response.json()) as Record<string, unknown>;
-      expect(body).toMatchObject({ success: true, count: 0, leagues: [] });
+      expect(body).toMatchObject({ success: true, count: 1 });
+    });
+
+    it('merges one current-NFL fallback with historical broad results before persistence', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123', accessToken: 'fresh-token', refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), needsRefresh: false,
+      });
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify(yahooDiscoveryPayload([
+          { season: 2025, leagueKey: '449.l.historical', name: 'Historical Football' },
+        ])), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(yahooDiscoveryPayload([
+          { season: CURRENT_FOOTBALL_SEASON, leagueKey: '461.l.current', name: 'Current Football' },
+        ])), { status: 200 }));
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(String(mockFetch.mock.calls[1][0])).toContain('game_codes=nfl');
+      expect(mockStorage.upsertYahooLeague.mock.calls.map(([league]) => league.leagueKey))
+        .toEqual(['449.l.historical', '461.l.current']);
+    });
+
+    it('persists current football when the broad result is empty', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123', accessToken: 'fresh-token', refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), needsRefresh: false,
+      });
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify({
+          fantasy_content: { users: { count: 0 } },
+        }), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(yahooDiscoveryPayload([
+          { season: CURRENT_FOOTBALL_SEASON, leagueKey: '461.l.current', name: 'Current Football' },
+        ])), { status: 200 }));
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockStorage.upsertYahooLeague.mock.calls.map(([league]) => league.leagueKey))
+        .toEqual(['461.l.current']);
+    });
+
+    it('does not let the fallback turn a malformed broad envelope into discovery success data', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123', accessToken: 'fresh-token', refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), needsRefresh: false,
+      });
+      mockFetch.mockResolvedValue(new Response(JSON.stringify({ error: { description: 'bad shape' } }), {
+        status: 200,
+      }));
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockStorage.upsertYahooLeague).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['HTTP 429', () => new Response('rate limited', { status: 429 })],
+      ['HTTP 503', () => new Response('unavailable', { status: 503 })],
+      ['malformed JSON', () => new Response('{', { status: 200 })],
+      ['timeout', () => { throw new DOMException('timed out', 'TimeoutError'); }],
+    ])('preserves broad data when the one fallback request fails with %s', async (_label, fallback) => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123', accessToken: 'fresh-token', refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), needsRefresh: false,
+      });
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify(yahooDiscoveryPayload([
+          { season: 2025, leagueKey: '449.l.same', name: 'Broad League' },
+        ])), { status: 200 }))
+        .mockImplementationOnce(async () => fallback());
+
+      const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
+
+      expect(response.status).toBe(200);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockStorage.upsertYahooLeague).toHaveBeenCalledTimes(1);
+      expect((await response.json() as { leagues: Array<{ leagueKey: string }> }).leagues)
+        .toEqual([expect.objectContaining({ leagueKey: '449.l.same' })]);
+      const warning = warnSpy.mock.calls
+        .map(([line]) => String(line))
+        .find((line) => line.includes('yahoo_current_football_fallback_failed'));
+      expect(warning).toBeDefined();
+      expect(JSON.parse(warning!)).toMatchObject({
+        event: 'yahoo_current_football_fallback_failed',
+        service: 'auth-worker',
+        source: 'discovery',
+        user_id: '***',
+      });
+      expect(warning).not.toContain('449.l.same');
+      expect(warning).not.toContain('Broad League');
     });
 
     it('loser waits and proceeds with fresh token after winner finishes', async () => {
@@ -2920,18 +3067,19 @@ describe('yahoo-connect-handlers', () => {
       mockStorage.acquireRefreshLease.mockResolvedValue(false);
 
       // Mock Yahoo API discovery response
-      mockFetch.mockResolvedValue(
+      mockFetch.mockImplementation(async () => (
         new Response(
           JSON.stringify({ fantasy_content: { users: { count: 0 } } }),
           { status: 200 }
         )
-      );
+      ));
 
       const response = await handleYahooDiscover(env, 'user_123', corsHeaders);
 
       expect(response.status).toBe(200);
-      // Discovery succeeded with the fresh token; Yahoo API fetch was called once (for discovery)
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Discovery succeeded with the fresh token. The empty broad result also
+      // triggers the single bounded current-football fallback.
+      expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockStorage.getYahooCredentials).toHaveBeenCalledTimes(2);
       const body = (await response.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
@@ -3302,7 +3450,7 @@ describe('yahoo-connect-handlers', () => {
                         count: 2,
                         0: {
                           game: [
-                            { code: 'nfl', season: '2026', game_type: 'full' },
+                            { code: 'nfl', season: String(CURRENT_FOOTBALL_SEASON), game_type: 'full' },
                             {
                               leagues: {
                                 count: 1,
@@ -3378,7 +3526,7 @@ describe('yahoo-connect-handlers', () => {
         teamName: league.teamName,
       }))).toEqual([
         {
-          sport: 'football', seasonYear: 2026, leagueKey: '461.l.123',
+          sport: 'football', seasonYear: CURRENT_FOOTBALL_SEASON, leagueKey: '461.l.123',
           teamId: '3', teamKey: '461.l.123.t.3', teamName: 'Football Team',
         },
         {
@@ -3442,7 +3590,7 @@ describe('yahoo-connect-handlers', () => {
       expect(logged).not.toContain('Private Dynasty');
     });
 
-    it('uses the same full-game discovery filter and preserves an empty result', async () => {
+    it('uses the full-game primary query plus one bounded fallback and preserves an empty result', async () => {
       mockStorage.getYahooCredentials.mockResolvedValue({
         clerkUserId: 'user_123',
         accessToken: 'fresh-token',
@@ -3450,20 +3598,64 @@ describe('yahoo-connect-handlers', () => {
         expiresAt: new Date(Date.now() + 60 * 60 * 1000),
         needsRefresh: false,
       });
-      mockFetch.mockResolvedValue(
+      mockFetch.mockImplementation(async () => (
         new Response(
           JSON.stringify({ fantasy_content: { users: { count: 0 } } }),
           { status: 200 }
         )
-      );
+      ));
 
       const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
 
       expect(result).toEqual({ status: 'ok', leagues: [] });
-      expect(mockFetch).toHaveBeenCalledOnce();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(mockFetch.mock.calls[0][0]).toBe(
         'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_types=full/leagues;out=teams?format=json'
       );
+      expect(String(mockFetch.mock.calls[1][0])).toContain('game_codes=nfl');
+      expect(String(mockFetch.mock.calls[1][0])).not.toContain('game_types=full');
+    });
+
+    it('merges historical broad results with current football in the read-only path', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      mockFetch
+        .mockResolvedValueOnce(new Response(JSON.stringify(yahooDiscoveryPayload([
+          { season: 2025, leagueKey: '449.l.historical', name: 'Historical Football' },
+        ])), { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(yahooDiscoveryPayload([
+          { season: CURRENT_FOOTBALL_SEASON, leagueKey: '461.l.current', name: 'Current Football' },
+        ])), { status: 200 }));
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result.status).toBe('ok');
+      expect(result.status === 'ok' ? result.leagues.map((league) => league.leagueKey) : [])
+        .toEqual(['449.l.historical', '461.l.current']);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not invoke the fallback for a malformed broad envelope in the read-only path', async () => {
+      mockStorage.getYahooCredentials.mockResolvedValue({
+        clerkUserId: 'user_123',
+        accessToken: 'fresh-token',
+        refreshToken: 'refresh-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        needsRefresh: false,
+      });
+      mockFetch.mockResolvedValue(new Response(JSON.stringify({ error: { description: 'bad shape' } }), {
+        status: 200,
+      }));
+
+      const result = await fetchYahooLeaguesReadOnly(env, 'user_123');
+
+      expect(result).toEqual({ status: 'ok', leagues: [] });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('classifies a timed-out leagues fetch as yahoo_timeout after a successful token refresh (FLA-188)', async () => {

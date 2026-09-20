@@ -536,6 +536,7 @@ function probeCall(overrides: Partial<YahooDiagnosticCall> = {}): YahooDiagnosti
     errorSnippetCategory: 'none',
     stats: null,
     parsedLeagueCount: null,
+    hasCurrentSeasonFootball: null,
     durationMs: 42,
     ...overrides,
   };
