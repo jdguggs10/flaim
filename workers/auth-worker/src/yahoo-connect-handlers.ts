@@ -3824,36 +3824,22 @@ function readDirectYahooStrings(value: unknown, field: string): string[] {
   return values;
 }
 
-function collectYahooFields(parsed: unknown, field: string): unknown[] {
-  const values: unknown[] = [];
-  const visit = (entry: unknown): void => {
-    if (Array.isArray(entry)) {
-      for (const item of entry) visit(item);
-      return;
-    }
-    if (!isYahooRecord(entry)) return;
-    if (field in entry) values.push(entry[field]);
-    for (const value of Object.values(entry)) visit(value);
-  };
-  visit(parsed);
-  return values;
-}
-
 function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set<string> | null {
   const guids = new Set<string>();
   for (let teamIndex = 0; teamIndex < Number(collection.count); teamIndex += 1) {
     const teamWrapper = collection[String(teamIndex)];
     if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
-    const managerCollections = teamWrapper.team.flatMap((entry) =>
-      isYahooRecord(entry) && 'managers' in entry ? [entry.managers] : []
-    );
+    const managerCollections = collectDirectYahooFields(teamWrapper.team, 'managers');
     if (managerCollections.length !== 1) return null;
-    const managers = readYahooCountedCollection(managerCollections[0]);
-    if (!managers || Number(managers.count) < 1) return null;
-    for (let managerIndex = 0; managerIndex < Number(managers.count); managerIndex += 1) {
-      const managerWrapper = managers[String(managerIndex)];
-      if (!isYahooRecord(managerWrapper) || !Array.isArray(managerWrapper.manager)) return null;
-      const managerGuids = readDirectYahooStrings(managerWrapper.manager, 'guid');
+    const managerWrappers = readYahooManagerWrappers(managerCollections[0]);
+    if (!managerWrappers) return null;
+    for (const managerWrapper of managerWrappers) {
+      const manager = managerWrapper.manager;
+      // Yahoo uses both a one-record object and an array of entity fragments
+      // for `manager` across its team resources. Accept either representation,
+      // then keep the same exact-one-canonical-GUID completeness requirement.
+      if (!isYahooRecord(manager) && !Array.isArray(manager)) return null;
+      const managerGuids = readDirectYahooStrings(manager, 'guid');
       if (managerGuids.length !== 1 || managerGuids[0].trim() !== managerGuids[0] || managerGuids[0].length === 0) {
         return null;
       }
@@ -3863,24 +3849,61 @@ function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set
   return guids;
 }
 
+function readYahooManagerWrappers(value: unknown): Record<string, unknown>[] | null {
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(isYahooRecord) ? value : null;
+  }
+  const collection = readYahooCountedCollection(value);
+  if (!collection || Number(collection.count) < 1) return null;
+  const wrappers: Record<string, unknown>[] = [];
+  for (let index = 0; index < Number(collection.count); index += 1) {
+    const wrapper = collection[String(index)];
+    if (!isYahooRecord(wrapper)) return null;
+    wrappers.push(wrapper);
+  }
+  return wrappers;
+}
+
+/**
+ * Yahoo team metadata can be either a flat entity array or an array whose first
+ * item is the metadata array. Descend through arrays only, never object-valued
+ * fields, so unrelated nested resources cannot be mistaken for direct evidence.
+ */
+function collectDirectYahooFields(value: unknown, field: string): unknown[] {
+  const values: unknown[] = [];
+  const visit = (entry: unknown): void => {
+    if (Array.isArray(entry)) {
+      for (const item of entry) visit(item);
+      return;
+    }
+    if (isYahooRecord(entry) && field in entry) values.push(entry[field]);
+  };
+  visit(value);
+  return values;
+}
+
 function readYahooTeamKeys(collection: Record<string, unknown>): Set<string> | null {
   const teamKeys = new Set<string>();
   for (let index = 0; index < Number(collection.count); index += 1) {
     const teamWrapper = collection[String(index)];
     if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
     const keys = readDirectYahooStrings(teamWrapper.team, 'team_key');
-    if (keys.length !== 1) return null;
+    if (keys.length !== 1 || keys[0].trim() !== keys[0] || keys[0].length === 0) return null;
     teamKeys.add(keys[0]);
   }
   return teamKeys;
 }
 
-function readDirectOwnership(parsed: unknown): boolean | null {
+function readDirectOwnership(collection: Record<string, unknown>): boolean | null {
   let sawFalse = false;
-  for (const value of collectYahooFields(parsed, 'is_owned_by_current_login')) {
-    const flag = readYahooFlag(value);
-    if (flag === true) return true;
-    if (flag === false) sawFalse = true;
+  for (let index = 0; index < Number(collection.count); index += 1) {
+    const teamWrapper = collection[String(index)];
+    if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
+    for (const value of collectDirectYahooFields(teamWrapper.team, 'is_owned_by_current_login')) {
+      const flag = readYahooFlag(value);
+      if (flag === true) return true;
+      if (flag === false) sawFalse = true;
+    }
   }
   return sawFalse ? false : null;
 }
