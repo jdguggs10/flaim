@@ -19,9 +19,16 @@
  * an operator-supplied league identifier substituted verbatim, to reproduce a
  * get_league_info-style failure on demand.
  *
- * `runYahooSupportRefresh` is the only action that persists, and it owns none
- * of that persistence: it calls `refreshLeaguesForUser` with a scheduled sync's
- * own arguments and reports the saved state either side of it.
+ * `runYahooSupportRefresh` persists only through the ordinary refresh path: it
+ * calls `refreshLeaguesForUser` with a scheduled sync's own arguments and
+ * reports the saved state either side of it. The separate one-key recovery
+ * writer below is intentionally not a refresh.
+ *
+ * `runYahooSupportRecoverLeague` is a separate, deliberately narrower write
+ * primitive for one exact current league that Yahoo's account collection has
+ * omitted. It never invokes discovery or sync state; the provider-derived
+ * values are validated inside yahoo-connect-handlers and never leave that
+ * module. Its only public result is a closed persistence/visibility status.
  *
  * Redaction is enforced at the query, not the response: every read names its
  * columns explicitly, so a customer league key, league name, team name, or a
@@ -40,6 +47,7 @@ import {
 import {
   diagnoseYahooDiscovery,
   probeYahooLeague,
+  recoverYahooLeagueForSupport,
   verifyYahooLeagueMembership,
   readYahooCredentialHealthReport,
   MAX_YAHOO_DIAGNOSTIC_REQUESTS,
@@ -53,6 +61,7 @@ import {
   type YahooSupportDiagnosis,
   type YahooSupportLeagueMembershipVerification,
   type YahooSupportLeagueProbe,
+  type YahooSupportRecoveryVisibility,
 } from './yahoo-connect-handlers';
 
 // Re-exported so existing callers/tests importing the budget constant from
@@ -103,6 +112,12 @@ export interface YahooSupportLeagueMembershipRequest {
   leagueKey: string;
 }
 
+/** Recovery uses the same exact-key contract as ownership verification. */
+export interface YahooSupportLeagueRecoveryRequest {
+  userId: string;
+  leagueKey: string;
+}
+
 type ValidationError = {
   error: { status: 400 | 413; body: { error: string; error_description: string } };
 };
@@ -115,6 +130,10 @@ export type YahooSupportLeagueValidation =
 
 export type YahooSupportLeagueMembershipValidation =
   | { request: YahooSupportLeagueMembershipRequest }
+  | ValidationError;
+
+export type YahooSupportLeagueRecoveryValidation =
+  | { request: YahooSupportLeagueRecoveryRequest }
   | ValidationError;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -217,6 +236,32 @@ export async function parseYahooSupportLeagueRequest(
 export async function parseYahooSupportLeagueMembershipRequest(
   request: Request
 ): Promise<YahooSupportLeagueMembershipValidation> {
+  const parsed = await readSupportRequestBody(request, LEAGUE_MEMBERSHIP_ALLOWED_KEYS);
+  if ('error' in parsed) return parsed;
+
+  const { body } = parsed;
+  if (typeof body.userId !== 'string' || !CLERK_USER_ID_PATTERN.test(body.userId)) {
+    return invalidRequest('invalid_user_id', 'userId must be a valid user ID');
+  }
+  if (
+    typeof body.leagueKey !== 'string'
+    || !YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(body.leagueKey)
+  ) {
+    return invalidRequest(
+      'invalid_league_key',
+      'leagueKey must be a 1-64 character full numeric Yahoo league key such as 470.l.1234567'
+    );
+  }
+  return { request: { userId: body.userId, leagueKey: body.leagueKey } };
+}
+
+/**
+ * A named parser keeps the recovery route's exact-key contract independently
+ * testable. Do not reuse the permissive probe-league parser here.
+ */
+export async function parseYahooSupportLeagueRecoveryRequest(
+  request: Request
+): Promise<YahooSupportLeagueRecoveryValidation> {
   const parsed = await readSupportRequestBody(request, LEAGUE_MEMBERSHIP_ALLOWED_KEYS);
   if ('error' in parsed) return parsed;
 
@@ -1173,7 +1218,7 @@ function interpretLeagueMembership(
       summary:
         'Yahoo’s direct team metadata confirms the logged-in identity owns the league, but the user-scoped collection did not establish that team as present.',
       nextAction:
-        'Treat this as a Yahoo collection-query inconsistency until a repeat says otherwise; do not overwrite stored leagues or ask the customer to reconnect yet.',
+        'Use the approved guarded exact-key recovery path for this confirmed league. Do not run a broad discovery refresh or prompt for reconnect.',
     };
   }
 
@@ -1252,6 +1297,87 @@ export async function runYahooSupportVerifyLeagueMembership(
       outcome: report.outcome,
       stage,
       category,
+      correlation_id: correlationId,
+    })
+  );
+  return report;
+}
+
+// =============================================================================
+// RECOVER-LEAGUE — one direct, ownership-proven league write
+// =============================================================================
+
+export type YahooSupportLeagueRecoveryReport =
+  | {
+      outcome: 'ok';
+      userMasked: string;
+      checkedAt: string;
+      correlationId: string;
+      result: { status: YahooSupportRecoveryVisibility };
+    }
+  | { outcome: 'failed'; userMasked: string; error: 'league_recovery_failed' };
+
+export type YahooSupportLeagueRecoveryDependencies = {
+  now?: () => number;
+  recover?: typeof recoverYahooLeagueForSupport;
+};
+
+/**
+ * Run the one-league recovery without projecting provider metadata, team
+ * identity, the supplied key, or failure details to the support CLI. The core
+ * recovery function owns every Yahoo call and the exactly-one upsert; this
+ * wrapper owns redaction, timestamps, and structured operator audit logging.
+ */
+export async function runYahooSupportRecoverLeague(
+  env: YahooSupportEnv,
+  request: YahooSupportLeagueRecoveryRequest,
+  dependencies: YahooSupportLeagueRecoveryDependencies = {}
+): Promise<YahooSupportLeagueRecoveryReport> {
+  const now = dependencies.now ?? Date.now;
+  const recover = dependencies.recover ?? recoverYahooLeagueForSupport;
+  const userMasked = maskUserId(request.userId);
+  const correlationId = crypto.randomUUID();
+  const checkedAt = new Date(now()).toISOString();
+  let report: YahooSupportLeagueRecoveryReport;
+  let stage: 'recovered' | 'failed' | null = null;
+  let status: YahooSupportRecoveryVisibility | null = null;
+
+  try {
+    const recovery = await recover(
+      env as YahooConnectEnv,
+      request.userId,
+      request.leagueKey,
+      correlationId
+    );
+    stage = recovery.stage;
+    if (recovery.stage !== 'recovered') {
+      report = { outcome: 'failed', userMasked, error: 'league_recovery_failed' };
+    } else {
+      status = recovery.status;
+      report = {
+        outcome: 'ok',
+        userMasked,
+        checkedAt,
+        correlationId,
+        result: { status: recovery.status },
+      };
+    }
+  } catch (error) {
+    console.error(
+      '[yahoo-support] League recovery failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+    report = { outcome: 'failed', userMasked, error: 'league_recovery_failed' };
+  }
+
+  console.log(
+    JSON.stringify({
+      event: 'yahoo_support_recover_league',
+      service: 'auth-worker',
+      user_id: userMasked,
+      outcome: report.outcome,
+      stage,
+      status,
       correlation_id: correlationId,
     })
   );

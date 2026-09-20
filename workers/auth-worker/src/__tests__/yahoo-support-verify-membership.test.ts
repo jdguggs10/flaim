@@ -773,6 +773,14 @@ describe('verify-league-membership support contract', () => {
     expect(report).toMatchObject({ outcome: 'ok', interpretation: { category } });
     expect(report).not.toHaveProperty('evidence');
     expect(JSON.stringify(report)).not.toContain('managerGuidComparison');
+    if (category === 'membership_confirmed_collection_omitted') {
+      expect(report).toMatchObject({
+        interpretation: {
+          nextAction:
+            'Use the approved guarded exact-key recovery path for this confirmed league. Do not run a broad discovery refresh or prompt for reconnect.',
+        },
+      });
+    }
   });
 
   it('keeps a direct confirmation while correctly reporting an unavailable collection', async () => {

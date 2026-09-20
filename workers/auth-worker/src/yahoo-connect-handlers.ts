@@ -2152,6 +2152,9 @@ function yahooFootballCurrentSeasonUrl(): string {
 // won't exceed this. The cap only guards against malformed/cyclic pointer data;
 // matches Sleeper's MAX_HISTORY_YEARS intent.
 const MAX_YAHOO_CHAIN_DEPTH = 25;
+// Recovery counts a renew pointer as one hop. The final fetched node may be
+// the terminator at this bound; a further pointer fails closed without fetch.
+export const YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS = MAX_YAHOO_CHAIN_DEPTH;
 
 /**
  * Map Yahoo sport codes to our internal sport names
@@ -4191,4 +4194,401 @@ export async function verifyYahooLeagueMembership(
       managerGuidComparison,
     },
   };
+}
+
+// =============================================================================
+// SUPPORT LEAGUE RECOVERY
+//
+// Yahoo can report an account's league collection as empty while still
+// authoritatively serving an individually-addressed league to that same OAuth
+// identity. This is a deliberately separate, operator-only recovery primitive:
+// it proves one exact membership from direct Yahoo resources and writes exactly
+// that one record. It must never call discovery or touch provider_sync_state.
+// =============================================================================
+
+export type YahooSupportRecoveryVisibility =
+  | 'persisted_visible'
+  | 'already_present_visible'
+  | 'persisted_suppressed'
+  | 'visibility_unverified';
+
+/** Keep the complete support operation comfortably inside the CLI's 60s cap. */
+export const YAHOO_SUPPORT_RECOVERY_TIMEOUT_MS = 40_000;
+
+interface YahooRecoveryDeadline {
+  expiresAt: number;
+  now: () => number;
+}
+
+export interface YahooSupportRecoveryDependencies {
+  now?: () => number;
+}
+
+type YahooSupportRecoveryResult =
+  | { stage: 'recovered'; status: YahooSupportRecoveryVisibility }
+  | { stage: 'failed' };
+
+interface YahooRecoveryLeagueMeta {
+  leagueKey: string;
+  sport: DiscoveredYahooLeague['sport'];
+  seasonYear: number;
+  leagueName: string;
+  renew?: string;
+}
+
+interface YahooRecoveryRootMeta {
+  leagueKey: string;
+  renew?: string;
+}
+
+interface YahooRecoveryTeam {
+  teamId: string;
+  teamKey: string;
+  teamName: string;
+  directOwnership: boolean | null;
+  managerGuids: Set<string> | null;
+}
+
+type YahooRecoveryRenewStep =
+  | { kind: 'terminator' }
+  | { kind: 'prior'; leagueKey: string }
+  | { kind: 'invalid' };
+
+function nonBlankYahooString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Yahoo uses an absent/blank `renew` as the root terminator. Any nonblank
+ * value must be a complete numeric `{game_key}_{league_id}` pointer; unlike
+ * ordinary discovery, recovery cannot turn malformed provider metadata into a
+ * guessed archive root.
+ */
+function parseYahooRecoveryRenew(renew: string | undefined): YahooRecoveryRenewStep {
+  if (renew === undefined || renew.trim().length === 0) return { kind: 'terminator' };
+  if (!/^\d+_\d+$/.test(renew)) return { kind: 'invalid' };
+  const separator = renew.indexOf('_');
+  const leagueKey = `${renew.slice(0, separator)}.l.${renew.slice(separator + 1)}`;
+  return YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(leagueKey)
+    ? { kind: 'prior', leagueKey }
+    : { kind: 'invalid' };
+}
+
+/**
+ * The direct league metadata fetch is authoritative for the values we persist.
+ * Unlike ordinary discovery parsing, this is strict: an apparently-successful
+ * response is not enough unless it names the requested key, one supported
+ * sport, this sport's current season, and a nonblank league name.
+ */
+function parseYahooRecoveryLeagueMeta(
+  data: unknown,
+  requestedLeagueKey: string
+): YahooRecoveryLeagueMeta | null {
+  const fantasyContent = isYahooRecord(data) && isYahooRecord(data.fantasy_content)
+    ? data.fantasy_content
+    : null;
+  const league = fantasyContent?.league;
+  if (!Array.isArray(league) || league.length < 1 || !isYahooRecord(league[0])) return null;
+
+  const info = league[0];
+  if (info.league_key !== requestedLeagueKey) return null;
+  const gameCode = nonBlankYahooString(info.game_code)?.toLowerCase();
+  const sport = gameCode ? SPORT_CODE_MAP[gameCode] : undefined;
+  if (!sport) return null;
+
+  const rawSeason = info.season;
+  const seasonText = typeof rawSeason === 'number'
+    ? String(rawSeason)
+    : typeof rawSeason === 'string' ? rawSeason : '';
+  if (!/^\d{4}$/.test(seasonText)) return null;
+  const seasonYear = Number(seasonText);
+  if (!Number.isSafeInteger(seasonYear) || seasonYear !== getDefaultSeasonYear(sport)) return null;
+
+  const leagueName = nonBlankYahooString(info.name);
+  if (!leagueName) return null;
+
+  return {
+    leagueKey: requestedLeagueKey,
+    sport,
+    seasonYear,
+    leagueName,
+    ...(typeof info.renew === 'string' ? { renew: info.renew } : {}),
+  };
+}
+
+/** Root-chain hops need only prove that Yahoo returned the requested key. */
+function parseYahooRecoveryRootMeta(data: unknown, requestedLeagueKey: string): YahooRecoveryRootMeta | null {
+  const fantasyContent = isYahooRecord(data) && isYahooRecord(data.fantasy_content)
+    ? data.fantasy_content
+    : null;
+  const league = fantasyContent?.league;
+  if (!Array.isArray(league) || league.length < 1 || !isYahooRecord(league[0])) return null;
+  const info = league[0];
+  if (info.league_key !== requestedLeagueKey) return null;
+  return {
+    leagueKey: requestedLeagueKey,
+    ...(typeof info.renew === 'string' ? { renew: info.renew } : {}),
+  };
+}
+
+function readYahooRecoveryTeamManagerGuids(team: unknown): Set<string> | null {
+  const managerCollections = collectDirectYahooFields(team, 'managers');
+  if (managerCollections.length !== 1) return null;
+  const managerWrappers = readYahooManagerWrappers(managerCollections[0]);
+  if (!managerWrappers) return null;
+
+  const guids = new Set<string>();
+  for (const managerWrapper of managerWrappers) {
+    const manager = managerWrapper.manager;
+    if (!isYahooRecord(manager) && !Array.isArray(manager)) return null;
+    const values = readDirectYahooStrings(manager, 'guid');
+    if (values.length !== 1) return null;
+    const guid = nonBlankYahooString(values[0]);
+    if (!guid || guid !== values[0]) return null;
+    guids.add(guid);
+  }
+  return guids.size > 0 ? guids : null;
+}
+
+function parseYahooRecoveryTeams(data: unknown, leagueKey: string): YahooRecoveryTeam[] | null {
+  const fantasyContent = isYahooRecord(data) && isYahooRecord(data.fantasy_content)
+    ? data.fantasy_content
+    : null;
+  const league = fantasyContent?.league;
+  if (
+    !Array.isArray(league)
+    || league.length < 2
+    || !isYahooRecord(league[0])
+    || league[0].league_key !== leagueKey
+    || !isYahooRecord(league[1])
+  ) return null;
+  const teams = readYahooCountedCollection(league[1].teams);
+  if (!teams || Number(teams.count) < 1) return null;
+
+  const result: YahooRecoveryTeam[] = [];
+  const teamPrefix = `${leagueKey}.t.`;
+  for (let index = 0; index < Number(teams.count); index += 1) {
+    const wrapper = teams[String(index)];
+    if (!isYahooRecord(wrapper) || !Array.isArray(wrapper.team)) return null;
+    const team = wrapper.team;
+    const teamKeys = readDirectYahooStrings(team, 'team_key');
+    const teamNames = readDirectYahooStrings(team, 'name');
+    if (teamKeys.length !== 1 || teamNames.length !== 1) return null;
+    const teamKey = teamKeys[0];
+    const teamName = nonBlankYahooString(teamNames[0]);
+    const teamId = teamKey.startsWith(teamPrefix) ? teamKey.slice(teamPrefix.length) : '';
+    if (!teamName || !/^\d+$/.test(teamId)) return null;
+
+    const ownershipValues = collectDirectYahooFields(team, 'is_owned_by_current_login');
+    const directOwnership = ownershipValues.length === 1 ? readYahooFlag(ownershipValues[0]) : null;
+    result.push({
+      teamId,
+      teamKey,
+      teamName,
+      directOwnership,
+      managerGuids: readYahooRecoveryTeamManagerGuids(team),
+    });
+  }
+  return result;
+}
+
+function selectDirectlyOwnedYahooTeam(teams: readonly YahooRecoveryTeam[]): YahooRecoveryTeam | null {
+  if (teams.some((team) => team.directOwnership === null)) return null;
+  const owned = teams.filter((team) => team.directOwnership === true);
+  return owned.length === 1 ? owned[0] : null;
+}
+
+function parseYahooRecoveryLoggedInGuid(data: unknown): string | null {
+  const fantasyContent = isYahooRecord(data) && isYahooRecord(data.fantasy_content)
+    ? data.fantasy_content
+    : null;
+  const users = readYahooCountedCollection(fantasyContent?.users);
+  if (!users || Number(users.count) !== 1) return null;
+  const wrapper = users['0'];
+  if (!isYahooRecord(wrapper) || !Array.isArray(wrapper.user) || wrapper.user.length < 1) return null;
+  const guids = readDirectYahooStrings(wrapper.user[0], 'guid');
+  if (guids.length !== 1 || guids[0].trim() !== guids[0]) return null;
+  return nonBlankYahooString(guids[0]);
+}
+
+function selectGuidOwnedYahooTeam(
+  teams: readonly YahooRecoveryTeam[],
+  loggedInGuid: string
+): YahooRecoveryTeam | null {
+  if (teams.some((team) => team.managerGuids === null)) return null;
+  const owned = teams.filter((team) => team.managerGuids?.has(loggedInGuid));
+  return owned.length === 1 ? owned[0] : null;
+}
+
+/** Reads one JSON Yahoo resource but intentionally exposes no HTTP/body detail. */
+function yahooRecoveryDeadlineExpired(deadline: YahooRecoveryDeadline): boolean {
+  return deadline.now() >= deadline.expiresAt;
+}
+
+async function fetchYahooRecoveryJson(
+  url: string,
+  accessToken: string,
+  deadline: YahooRecoveryDeadline
+): Promise<unknown | null> {
+  const remainingMs = deadline.expiresAt - deadline.now();
+  if (remainingMs <= 0) return null;
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(Math.min(YAHOO_DIAGNOSTIC_TIMEOUT_MS, remainingMs)),
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the recurring root without discovery's best-effort fallback. A
+ * recovery write must not guess an archive key: any malformed, cyclic, deep,
+ * or unreachable renew chain fails closed before persistence.
+ */
+async function resolveYahooRecoveryRecurringRoot(
+  initialMeta: YahooRecoveryLeagueMeta,
+  accessToken: string,
+  deadline: YahooRecoveryDeadline
+): Promise<string | null> {
+  const visited = new Set<string>();
+  let current: YahooRecoveryRootMeta = initialMeta;
+  for (let hops = 0; ; hops += 1) {
+    if (visited.has(current.leagueKey)) return null;
+    visited.add(current.leagueKey);
+    const renewStep = parseYahooRecoveryRenew(current.renew);
+    if (renewStep.kind === 'terminator') return current.leagueKey;
+    if (renewStep.kind === 'invalid') return null;
+    // A terminator at exactly MAX hops is valid (and was processed above).
+    // Another pointer would exceed the cap, so fail before fetching it.
+    if (hops >= YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS) return null;
+    const priorKey = renewStep.leagueKey;
+
+    const nextData = await fetchYahooRecoveryJson(
+      `${YAHOO_FANTASY_API_URL}/league/${priorKey}?format=json`,
+      accessToken,
+      deadline
+    );
+    if (!nextData) return null;
+    const next = parseYahooRecoveryRootMeta(nextData, priorKey);
+    if (!next) return null;
+    current = next;
+  }
+  return null;
+}
+
+/**
+ * Recover exactly one current Yahoo league after direct metadata and ownership
+ * proof. All provider-derived identifiers remain local to this function; its
+ * result is a closed status suitable for operator tooling.
+ */
+export async function recoverYahooLeagueForSupport(
+  env: YahooConnectEnv,
+  userId: string,
+  leagueKey: string,
+  correlationId?: string,
+  dependencies: YahooSupportRecoveryDependencies = {}
+): Promise<YahooSupportRecoveryResult> {
+  if (!YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(leagueKey)) {
+    throw new Error('recoverYahooLeagueForSupport received an invalid full league key');
+  }
+  const storage = YahooStorage.fromEnvironment(env);
+  const now = dependencies.now ?? Date.now;
+  const deadline: YahooRecoveryDeadline = {
+    expiresAt: now() + YAHOO_SUPPORT_RECOVERY_TIMEOUT_MS,
+    now,
+  };
+  const credentials = await storage.getYahooCredentials(userId);
+  if (!credentials) return { stage: 'failed' };
+
+  const tokenResult = await getValidYahooAccessToken(
+    storage,
+    userId,
+    env,
+    credentials,
+    correlationId,
+    'support'
+  );
+  if ('error' in tokenResult) return { stage: 'failed' };
+
+  const metadataData = await fetchYahooRecoveryJson(
+    `${YAHOO_FANTASY_API_URL}/league/${leagueKey}?format=json`,
+    tokenResult.accessToken,
+    deadline
+  );
+  const metadata = metadataData ? parseYahooRecoveryLeagueMeta(metadataData, leagueKey) : null;
+  if (!metadata) return { stage: 'failed' };
+
+  const teamsData = await fetchYahooRecoveryJson(
+    `${YAHOO_FANTASY_API_URL}/league/${leagueKey}/teams?format=json`,
+    tokenResult.accessToken,
+    deadline
+  );
+  const teams = teamsData ? parseYahooRecoveryTeams(teamsData, leagueKey) : null;
+  if (!teams) return { stage: 'failed' };
+
+  const directOwnershipComplete = teams.every((team) => team.directOwnership !== null);
+  let ownedTeam = selectDirectlyOwnedYahooTeam(teams);
+  if (directOwnershipComplete && !ownedTeam) return { stage: 'failed' };
+  if (!ownedTeam) {
+    const loginData = await fetchYahooRecoveryJson(
+      `${YAHOO_FANTASY_API_URL}/users;use_login=1?format=json`,
+      tokenResult.accessToken,
+      deadline
+    );
+    const loggedInGuid = loginData ? parseYahooRecoveryLoggedInGuid(loginData) : null;
+    if (!loggedInGuid) return { stage: 'failed' };
+    ownedTeam = selectGuidOwnedYahooTeam(teams, loggedInGuid);
+    if (!ownedTeam) return { stage: 'failed' };
+  }
+
+  const recurringLeagueId = await resolveYahooRecoveryRecurringRoot(metadata, tokenResult.accessToken, deadline);
+  if (!recurringLeagueId) return { stage: 'failed' };
+
+  // The pre-read is intentionally archive-filtered. It gives the caller a
+  // truthful idempotency status while never exposing suppressed records.
+  let visibleBefore: YahooLeague[];
+  try {
+    visibleBefore = await storage.getYahooLeaguesForSupportReadback(userId, 'exclude-archived');
+  } catch {
+    return { stage: 'failed' };
+  }
+  const alreadyVisible = visibleBefore.some((league) => league.leagueKey === leagueKey);
+
+  // A final wall-clock guard prevents an unbounded provider/root walk from
+  // committing a late write after the operator client has abandoned the call.
+  if (yahooRecoveryDeadlineExpired(deadline)) return { stage: 'failed' };
+
+  try {
+    await storage.upsertYahooLeagueWithRecurringId({
+      clerkUserId: userId,
+      sport: metadata.sport,
+      seasonYear: metadata.seasonYear,
+      leagueKey: metadata.leagueKey,
+      leagueName: metadata.leagueName,
+      teamId: ownedTeam.teamId,
+      teamKey: ownedTeam.teamKey,
+      teamName: ownedTeam.teamName,
+      recurringLeagueId,
+    });
+  } catch {
+    return { stage: 'failed' };
+  }
+
+  try {
+    const visibleAfter = await storage.getYahooLeaguesForSupportReadback(userId, 'exclude-archived');
+    if (visibleAfter.some((league) => league.leagueKey === leagueKey)) {
+      return { stage: 'recovered', status: alreadyVisible ? 'already_present_visible' : 'persisted_visible' };
+    }
+    return { stage: 'recovered', status: 'persisted_suppressed' };
+  } catch {
+    // The recovery itself has committed. Preserve that fact but do not claim
+    // the active view's result when its archive-filtered read could not run.
+    return { stage: 'recovered', status: 'visibility_unverified' };
+  }
 }
