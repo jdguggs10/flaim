@@ -94,7 +94,10 @@ function userScopedPayload(includeTeam = true, loggedInGuid = STORED_GUID) {
   };
 }
 
-function directUserTeamsPayload(teamKeys: string[] = [TEAM_KEY]) {
+function directUserTeamsPayload(
+  teamKeys: string[] = [TEAM_KEY],
+  teamShape: 'fragments' | 'nested-fragments' | 'object' = 'fragments'
+) {
   return {
     fantasy_content: {
       users: {
@@ -106,7 +109,13 @@ function directUserTeamsPayload(teamKeys: string[] = [TEAM_KEY]) {
               teams: {
                 count: teamKeys.length,
                 ...Object.fromEntries(teamKeys.map((teamKey, index) => [
-                  String(index), { team: [{ team_key: teamKey }] },
+                  String(index), {
+                    team: teamShape === 'object'
+                      ? { team_key: teamKey }
+                      : teamShape === 'nested-fragments'
+                        ? [[{ team_key: teamKey }]]
+                        : [{ team_key: teamKey }],
+                  },
                 ])),
               },
             },
@@ -189,6 +198,8 @@ describe('verifyYahooLeagueMembership', () => {
     ['zero', directUserTeamsPayload([])],
     ['zero', directUserTeamsPayload(['470.l.12345678.t.1'])],
     ['one', directUserTeamsPayload([TEAM_KEY])],
+    ['one', directUserTeamsPayload([TEAM_KEY], 'nested-fragments')],
+    ['one', directUserTeamsPayload([TEAM_KEY], 'object')],
     ['multiple', directUserTeamsPayload([TEAM_KEY, `${LEAGUE_KEY}.t.8`])],
   ] as const)('logs the direct login-scoped requested-league shape as %s only', async (expected, directUserPayload) => {
     fetchSpy.mockImplementation(async (input: unknown) => {
@@ -238,7 +249,39 @@ describe('verifyYahooLeagueMembership', () => {
         users: { count: 1, 0: { user: [{}, { teams: { count: 2, 0: { team: [{ team_key: TEAM_KEY }] } } }] } },
       },
     }, 'invalid_teams_collection'],
-    ['noncanonical team key', directUserTeamsPayload([`${TEAM_KEY} `]), 'invalid_team_entry'],
+    ['noncanonical team key', directUserTeamsPayload([`${TEAM_KEY} `]), 'invalid_team_key'],
+    ['duplicate team key fields', {
+      fantasy_content: {
+        users: {
+          count: 1,
+          0: {
+            user: [{}, {
+              teams: {
+                count: 1,
+                0: { team: [{ team_key: TEAM_KEY }, { team_key: TEAM_KEY }] },
+              },
+            }],
+          },
+        },
+      },
+    }, 'invalid_team_key'],
+    ['invalid team wrapper', {
+      fantasy_content: {
+        users: {
+          count: 1,
+          0: {
+            user: [{}, {
+              teams: { count: 1, 0: 'not-a-team-wrapper' },
+            }],
+          },
+        },
+      },
+    }, 'invalid_team_wrapper'],
+    ['missing team entity', {
+      fantasy_content: {
+        users: { count: 1, 0: { user: [{}, { teams: { count: 1, 0: {} } }] } },
+      },
+    }, 'invalid_team_entity_shape'],
   ] as const)('keeps malformed direct login-scoped %s unavailable', async (_label, directUserPayload, parseStatus) => {
     fetchSpy.mockImplementation(async (input: unknown) => {
       const url = String(input);
