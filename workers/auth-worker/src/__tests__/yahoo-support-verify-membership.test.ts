@@ -384,7 +384,10 @@ describe('verifyYahooLeagueMembership', () => {
     }
   });
 
-  it('accepts Yahoo manager entities serialized as objects', async () => {
+  it.each([
+    ['counted object collection', { count: 1, 0: { manager: { guid: STORED_GUID } } }],
+    ['native array collection', [{ manager: { guid: STORED_GUID } }]],
+  ])('accepts nested Yahoo manager entities in a %s', async (_label, managers) => {
     const loggedInGuid = 'logged-in-yahoo-guid';
     fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
       ? json({
@@ -411,7 +414,7 @@ describe('verifyYahooLeagueMembership', () => {
                     team: [[
                       { team_key: TEAM_KEY },
                       { is_owned_by_current_login: 0 },
-                      { managers: { count: 1, 0: { manager: { guid: STORED_GUID } } } },
+                      { managers },
                     ]],
                   },
                 },
@@ -431,6 +434,47 @@ describe('verifyYahooLeagueMembership', () => {
     });
     expect(logSpy.mock.calls.map(([line]) => String(line)).join('\n'))
       .toContain('"direct_manager_parse":"complete"');
+  });
+
+  it('does not treat managers or ownership flags inside object-valued subresources as direct evidence', async () => {
+    const loggedInGuid = 'logged-in-yahoo-guid';
+    fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
+      ? json(userScopedPayload(false, loggedInGuid))
+      : json({
+          fantasy_content: {
+            league: [
+              { league_key: LEAGUE_KEY },
+              {
+                teams: {
+                  count: 1,
+                  0: {
+                    team: [
+                      [
+                        { team_key: TEAM_KEY },
+                        { is_owned_by_current_login: 0 },
+                        { managers: [{ manager: { guid: 'direct-manager-guid' } }] },
+                      ],
+                      {
+                        roster: {
+                          is_owned_by_current_login: 1,
+                          managers: [{ manager: { guid: loggedInGuid } }],
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        }));
+
+    const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+    expect(verification).toMatchObject({
+      evidence: {
+        directIsOwnedByCurrentLogin: false,
+        managerGuidComparison: 'does_not_match_authenticated_yahoo_guid',
+      },
+    });
   });
 
   it('preserves a logged-in GUID mismatch when Yahoo returns malformed user resources', async () => {
@@ -536,6 +580,9 @@ describe('verifyYahooLeagueMembership', () => {
     ]],
     ['blank manager GUID', [
       { managers: { count: 1, 0: { manager: [{ guid: '   ' }] } } },
+    ]],
+    ['multiple GUIDs in one manager entity', [
+      { managers: { count: 1, 0: { manager: [{ guid: 'first-guid' }, { guid: 'second-guid' }] } } },
     ]],
     ['duplicate manager collections', [
       { managers: { count: 1, 0: { manager: [{ guid: 'league-manager-guid' }] } } },

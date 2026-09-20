@@ -3846,11 +3846,9 @@ function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set
     if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
     const managerCollections = collectDirectYahooFields(teamWrapper.team, 'managers');
     if (managerCollections.length !== 1) return null;
-    const managers = readYahooCountedCollection(managerCollections[0]);
-    if (!managers || Number(managers.count) < 1) return null;
-    for (let managerIndex = 0; managerIndex < Number(managers.count); managerIndex += 1) {
-      const managerWrapper = managers[String(managerIndex)];
-      if (!isYahooRecord(managerWrapper)) return null;
+    const managerWrappers = readYahooManagerWrappers(managerCollections[0]);
+    if (!managerWrappers) return null;
+    for (const managerWrapper of managerWrappers) {
       const manager = managerWrapper.manager;
       // Yahoo uses both a one-record object and an array of entity fragments
       // for `manager` across its team resources. Accept either representation,
@@ -3864,6 +3862,21 @@ function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set
     }
   }
   return guids;
+}
+
+function readYahooManagerWrappers(value: unknown): Record<string, unknown>[] | null {
+  if (Array.isArray(value)) {
+    return value.length > 0 && value.every(isYahooRecord) ? value : null;
+  }
+  const collection = readYahooCountedCollection(value);
+  if (!collection || Number(collection.count) < 1) return null;
+  const wrappers: Record<string, unknown>[] = [];
+  for (let index = 0; index < Number(collection.count); index += 1) {
+    const wrapper = collection[String(index)];
+    if (!isYahooRecord(wrapper)) return null;
+    wrappers.push(wrapper);
+  }
+  return wrappers;
 }
 
 /**
@@ -3896,12 +3909,16 @@ function readYahooTeamKeys(collection: Record<string, unknown>): Set<string> | n
   return teamKeys;
 }
 
-function readDirectOwnership(parsed: unknown): boolean | null {
+function readDirectOwnership(collection: Record<string, unknown>): boolean | null {
   let sawFalse = false;
-  for (const value of collectYahooFields(parsed, 'is_owned_by_current_login')) {
-    const flag = readYahooFlag(value);
-    if (flag === true) return true;
-    if (flag === false) sawFalse = true;
+  for (let index = 0; index < Number(collection.count); index += 1) {
+    const teamWrapper = collection[String(index)];
+    if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
+    for (const value of collectDirectYahooFields(teamWrapper.team, 'is_owned_by_current_login')) {
+      const flag = readYahooFlag(value);
+      if (flag === true) return true;
+      if (flag === false) sawFalse = true;
+    }
   }
   return sawFalse ? false : null;
 }
