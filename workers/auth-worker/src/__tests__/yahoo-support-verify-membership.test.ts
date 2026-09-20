@@ -137,7 +137,7 @@ describe('verifyYahooLeagueMembership', () => {
       evidence: {
         requestedLeagueInUserScopedTeams: true,
         directIsOwnedByCurrentLogin: true,
-        managerGuidComparison: 'matches_stored_yahoo_guid',
+        managerGuidComparison: 'matches_logged_in_yahoo_guid',
       },
     });
     const report = JSON.stringify(result);
@@ -166,7 +166,7 @@ describe('verifyYahooLeagueMembership', () => {
       evidence: {
         requestedLeagueInUserScopedTeams: false,
         directIsOwnedByCurrentLogin: false,
-        managerGuidComparison: 'unavailable',
+        managerGuidComparison: 'does_not_match_authenticated_yahoo_guid',
       },
     });
   });
@@ -328,6 +328,242 @@ describe('verifyYahooLeagueMembership', () => {
         nextAction: expect.stringContaining('do not infer non-membership'),
       },
     });
+  });
+
+  it('preserves a logged-in GUID mismatch when Yahoo omits the scoped teams collection', async () => {
+    const loggedInGuid = 'logged-in-yahoo-guid';
+    fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
+      ? json({
+          fantasy_content: {
+            users: {
+              count: 1,
+              0: {
+                user: [
+                  { guid: loggedInGuid },
+                  { games: { count: 1, 0: { game: [{ game_key: '470' }, {}] } } },
+                ],
+              },
+            },
+          },
+        })
+      : json(directTeamsPayload(0, STORED_GUID)));
+
+    const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+    expect(verification).toMatchObject({
+      stage: 'completed',
+      evidence: {
+        requestedLeagueInUserScopedTeams: null,
+        directIsOwnedByCurrentLogin: false,
+        managerGuidComparison: 'does_not_match_authenticated_yahoo_guid',
+      },
+    });
+
+    const report = await runYahooSupportVerifyLeagueMembership(
+      env as unknown as YahooSupportEnv,
+      { userId: USER_ID, leagueKey: LEAGUE_KEY },
+      { verify: vi.fn().mockResolvedValue(verification) },
+    );
+    expect(report).toMatchObject({
+      collection: 'unavailable',
+      interpretation: {
+        category: 'membership_not_confirmed',
+        summary: expect.stringContaining('does not match any manager identity'),
+        nextAction: expect.stringContaining('reconnect Yahoo'),
+      },
+    });
+    const serialized = JSON.stringify(report);
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(log).toContain('"scoped_parse":"invalid_teams_collection"');
+    expect(log).toContain('"direct_manager_parse":"complete"');
+    for (const forbidden of [
+      LEAGUE_KEY, TEAM_KEY, STORED_GUID, loggedInGuid,
+      ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME,
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+      expect(log).not.toContain(forbidden);
+    }
+  });
+
+  it('keeps a GUID non-match inconclusive when direct manager metadata is incomplete', async () => {
+    storage.getYahooCredentials.mockResolvedValue({
+      clerkUserId: USER_ID,
+      accessToken: ACCESS_TOKEN,
+      refreshToken: REFRESH_TOKEN,
+      yahooGuid: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      needsRefresh: false,
+    });
+    fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
+      ? json({
+          fantasy_content: {
+            users: {
+              count: 1,
+              0: {
+                user: [
+                  { guid: 'logged-in-yahoo-guid' },
+                  { games: { count: 1, 0: { game: [{ game_key: '470' }, {}] } } },
+                ],
+              },
+            },
+          },
+        })
+      : json({
+          fantasy_content: {
+            league: [
+              { league_key: LEAGUE_KEY },
+              {
+                teams: {
+                  count: 1,
+                  0: { team: [{ team_key: TEAM_KEY }, { is_owned_by_current_login: 0 }] },
+                },
+              },
+            ],
+          },
+        }));
+
+    const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+    expect(verification).toMatchObject({
+      stage: 'completed',
+      evidence: {
+        requestedLeagueInUserScopedTeams: null,
+        directIsOwnedByCurrentLogin: false,
+        managerGuidComparison: 'unavailable',
+      },
+    });
+    const report = await runYahooSupportVerifyLeagueMembership(
+      env as unknown as YahooSupportEnv,
+      { userId: USER_ID, leagueKey: LEAGUE_KEY },
+      { verify: vi.fn().mockResolvedValue(verification) },
+    );
+    expect(report).toMatchObject({ interpretation: { category: 'inconclusive' } });
+    expect(logSpy.mock.calls.map(([line]) => String(line)).join('\n'))
+      .toContain('"direct_manager_parse":"incomplete"');
+  });
+
+  it.each([
+    ['zero managers', [
+      { managers: { count: 0 } },
+    ]],
+    ['contradictory manager count', [
+      { managers: { count: 0, 0: { manager: [{ guid: 'league-manager-guid' }] } } },
+    ]],
+    ['manager missing its GUID', [
+      { managers: { count: 1, 0: { manager: [{}] } } },
+    ]],
+    ['blank manager GUID', [
+      { managers: { count: 1, 0: { manager: [{ guid: '   ' }] } } },
+    ]],
+    ['duplicate manager collections', [
+      { managers: { count: 1, 0: { manager: [{ guid: 'league-manager-guid' }] } } },
+      { managers: { count: 1, 0: { manager: [{ guid: 'second-manager-guid' }] } } },
+    ]],
+  ])('requires complete manager evidence before a decisive mismatch: %s', async (_label, managerEntries) => {
+    storage.getYahooCredentials.mockResolvedValue({
+      clerkUserId: USER_ID,
+      accessToken: ACCESS_TOKEN,
+      refreshToken: REFRESH_TOKEN,
+      yahooGuid: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      needsRefresh: false,
+    });
+    fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
+      ? json({
+          fantasy_content: {
+            users: {
+              count: 1,
+              0: {
+                user: [
+                  { guid: 'logged-in-yahoo-guid' },
+                  { games: { count: 1, 0: { game: [{ game_key: '470' }, {}] } } },
+                ],
+              },
+            },
+          },
+        })
+      : json({
+          fantasy_content: {
+            league: [
+              { league_key: LEAGUE_KEY },
+              {
+                teams: {
+                  count: 1,
+                  0: {
+                    team: [
+                      { team_key: TEAM_KEY },
+                      { is_owned_by_current_login: 0 },
+                      ...managerEntries,
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        }));
+
+    const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+    expect(verification).toMatchObject({
+      evidence: { managerGuidComparison: 'unavailable' },
+    });
+    expect(logSpy.mock.calls.map(([line]) => String(line)).join('\n'))
+      .toContain('"direct_manager_parse":"incomplete"');
+  });
+
+  it.each([
+    ['multiple users', {
+      fantasy_content: {
+        users: {
+          count: 2,
+          0: { user: [{ guid: 'first-guid' }, { games: { count: 0 } }] },
+          1: { user: [{ guid: STORED_GUID }, { games: { count: 0 } }] },
+        },
+      },
+    }],
+    ['missing authenticated GUID', {
+      fantasy_content: {
+        users: { count: 1, 0: { user: [{}, { games: { count: 0 } }] } },
+      },
+    }],
+    ['blank authenticated GUID', {
+      fantasy_content: {
+        users: { count: 1, 0: { user: [{ guid: '   ' }, { games: { count: 0 } }] } },
+      },
+    }],
+    ['multiple authenticated GUIDs', {
+      fantasy_content: {
+        users: {
+          count: 1,
+          0: { user: [[{ guid: 'first-guid' }, { guid: STORED_GUID }], { games: { count: 0 } }] },
+        },
+      },
+    }],
+  ])('does not infer a mismatch from incomplete authenticated identity evidence: %s', async (_label, scopedPayload) => {
+    storage.getYahooCredentials.mockResolvedValue({
+      clerkUserId: USER_ID,
+      accessToken: ACCESS_TOKEN,
+      refreshToken: REFRESH_TOKEN,
+      yahooGuid: null,
+      expiresAt: new Date(Date.now() + 60_000),
+      needsRefresh: false,
+    });
+    fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
+      ? json(scopedPayload)
+      : json(directTeamsPayload(0, 'different-league-manager-guid')));
+
+    const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+    expect(verification).toMatchObject({
+      stage: 'completed',
+      evidence: {
+        requestedLeagueInUserScopedTeams: null,
+        directIsOwnedByCurrentLogin: false,
+        managerGuidComparison: 'unavailable',
+      },
+    });
+    const report = await runYahooSupportVerifyLeagueMembership(
+      env as unknown as YahooSupportEnv,
+      { userId: USER_ID, leagueKey: LEAGUE_KEY },
+      { verify: vi.fn().mockResolvedValue(verification) },
+    );
+    expect(report).toMatchObject({ interpretation: { category: 'inconclusive' } });
   });
 
   it.each(['1234567', 'nfl.l.1234567', '470.l.1234567.t.3', '../470.l.1234567', `${'4'.repeat(60)}.l.1234567`])(

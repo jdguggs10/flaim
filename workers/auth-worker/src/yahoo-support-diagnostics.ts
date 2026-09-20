@@ -1147,8 +1147,22 @@ function interpretLeagueMembership(
     evidence.directIsOwnedByCurrentLogin === true
     || evidence.managerGuidComparison === 'matches_stored_yahoo_guid'
     || evidence.managerGuidComparison === 'matches_logged_in_yahoo_guid';
+  const guidRejects =
+    evidence.managerGuidComparison === 'does_not_match_authenticated_yahoo_guid';
   const directRejects =
     evidence.directIsOwnedByCurrentLogin === false;
+  // A non-empty, login-scoped Yahoo GUID is identity evidence even when Yahoo
+  // omits the nested teams collection. If none of the league's manager GUIDs
+  // match it, the connected identity is not a manager of the requested league.
+  if (guidRejects && !directConfirms) {
+    return {
+      category: 'membership_not_confirmed',
+      summary:
+        'Yahoo’s logged-in identity does not match any manager identity on the reported league.',
+      nextAction:
+        'Ask the customer to reconnect Yahoo while signed into the identity that owns the league, then re-run this verification.',
+    };
+  }
   // “Omitted” is a conclusion about a usable collection response only. If
   // that response failed, direct ownership may still be known internally, but
   // the interpretation must keep the provider failure rather than call the
