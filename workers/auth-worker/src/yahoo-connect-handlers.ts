@@ -3769,6 +3769,7 @@ export interface YahooMembershipEvidence {
   managerGuidComparison:
     | 'matches_stored_yahoo_guid'
     | 'matches_logged_in_yahoo_guid'
+    | 'does_not_match_authenticated_yahoo_guid'
     | 'unavailable';
 }
 
@@ -3838,10 +3839,26 @@ function collectYahooFields(parsed: unknown, field: string): unknown[] {
   return values;
 }
 
-function collectYahooManagerGuids(parsed: unknown): Set<string> {
+function readCompleteYahooManagerGuids(collection: Record<string, unknown>): Set<string> | null {
   const guids = new Set<string>();
-  for (const entityValue of collectYahooFields(parsed, 'manager')) {
-    for (const guid of readDirectYahooStrings(entityValue, 'guid')) guids.add(guid);
+  for (let teamIndex = 0; teamIndex < Number(collection.count); teamIndex += 1) {
+    const teamWrapper = collection[String(teamIndex)];
+    if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
+    const managerCollections = teamWrapper.team.flatMap((entry) =>
+      isYahooRecord(entry) && 'managers' in entry ? [entry.managers] : []
+    );
+    if (managerCollections.length !== 1) return null;
+    const managers = readYahooCountedCollection(managerCollections[0]);
+    if (!managers || Number(managers.count) < 1) return null;
+    for (let managerIndex = 0; managerIndex < Number(managers.count); managerIndex += 1) {
+      const managerWrapper = managers[String(managerIndex)];
+      if (!isYahooRecord(managerWrapper) || !Array.isArray(managerWrapper.manager)) return null;
+      const managerGuids = readDirectYahooStrings(managerWrapper.manager, 'guid');
+      if (managerGuids.length !== 1 || managerGuids[0].trim() !== managerGuids[0] || managerGuids[0].length === 0) {
+        return null;
+      }
+      guids.add(managerGuids[0]);
+    }
   }
   return guids;
 }
@@ -3888,7 +3905,8 @@ type DirectMembershipParseResult =
   | {
       status: 'parsed';
       directIsOwnedByCurrentLogin: boolean | null;
-      managerGuids: Set<string>;
+      /** Null means at least one team's manager collection was incomplete. */
+      managerGuids: Set<string> | null;
     }
   | {
       status:
@@ -3913,7 +3931,7 @@ function readDirectMembershipEvidence(parsed: unknown): DirectMembershipParseRes
   return {
     status: 'parsed',
     directIsOwnedByCurrentLogin: readDirectOwnership(teams),
-    managerGuids: collectYahooManagerGuids(teams),
+    managerGuids: readCompleteYahooManagerGuids(teams),
   };
 }
 
@@ -3928,11 +3946,17 @@ type UserScopedMembershipParseResult =
         | 'missing_fantasy_content'
         | 'invalid_users_collection'
         | 'empty_users_collection'
-        | 'invalid_user_entity'
+        | 'invalid_user_entity';
+    }
+  | {
+      status:
+        | 'invalid_user_resources'
         | 'invalid_games_collection'
         | 'invalid_game_entity'
         | 'invalid_teams_collection'
         | 'invalid_team_entry';
+      /** Complete authenticated identity evidence parsed before the nested failure. */
+      loggedInGuids: Set<string>;
     };
 
 function readUserScopedMembershipEvidence(
@@ -3949,6 +3973,9 @@ function readUserScopedMembershipEvidence(
   // response, not proof that the user owns no team in the league.
   if (!users) return { status: 'invalid_users_collection' };
   if (Number(users.count) < 1) return { status: 'empty_users_collection' };
+  // `use_login=1` identifies exactly one authenticated Yahoo user. A
+  // non-match is only meaningful when that identity set is complete.
+  if (Number(users.count) !== 1) return { status: 'invalid_user_entity' };
 
   const loggedInGuids = new Set<string>();
   const teamKeys = new Set<string>();
@@ -3957,23 +3984,27 @@ function readUserScopedMembershipEvidence(
     if (!isYahooRecord(userWrapper) || !Array.isArray(userWrapper.user) || userWrapper.user.length < 2) {
       return { status: 'invalid_user_entity' };
     }
-    for (const guid of readDirectYahooStrings(userWrapper.user[0], 'guid')) loggedInGuids.add(guid);
+    const userGuids = readDirectYahooStrings(userWrapper.user[0], 'guid');
+    if (userGuids.length !== 1 || userGuids[0].trim() !== userGuids[0] || userGuids[0].length === 0) {
+      return { status: 'invalid_user_entity' };
+    }
+    loggedInGuids.add(userGuids[0]);
     const userResources = userWrapper.user[1];
-    if (!isYahooRecord(userResources)) return { status: 'invalid_user_entity' };
+    if (!isYahooRecord(userResources)) return { status: 'invalid_user_resources', loggedInGuids };
     const games = readYahooCountedCollection(userResources.games);
-    if (!games) return { status: 'invalid_games_collection' };
+    if (!games) return { status: 'invalid_games_collection', loggedInGuids };
 
     for (let gameIndex = 0; gameIndex < Number(games.count); gameIndex += 1) {
       const gameWrapper = games[String(gameIndex)];
       if (!isYahooRecord(gameWrapper) || !Array.isArray(gameWrapper.game) || gameWrapper.game.length < 2) {
-        return { status: 'invalid_game_entity' };
+        return { status: 'invalid_game_entity', loggedInGuids };
       }
       const gameResources = gameWrapper.game[1];
-      if (!isYahooRecord(gameResources)) return { status: 'invalid_game_entity' };
+      if (!isYahooRecord(gameResources)) return { status: 'invalid_game_entity', loggedInGuids };
       const teams = readYahooCountedCollection(gameResources.teams);
-      if (!teams) return { status: 'invalid_teams_collection' };
+      if (!teams) return { status: 'invalid_teams_collection', loggedInGuids };
       const gameTeamKeys = readYahooTeamKeys(teams);
-      if (!gameTeamKeys) return { status: 'invalid_team_entry' };
+      if (!gameTeamKeys) return { status: 'invalid_team_entry', loggedInGuids };
       for (const teamKey of gameTeamKeys) teamKeys.add(teamKey);
     }
   }
@@ -4103,19 +4134,28 @@ export async function verifyYahooLeagueMembership(
 
   const directEvidence = direct.result?.status === 'parsed' ? direct.result : null;
   const scopedEvidence = scoped.result?.status === 'parsed' ? scoped.result : null;
+  const scopedLoggedInGuids = scoped.result && 'loggedInGuids' in scoped.result
+    ? scoped.result.loggedInGuids
+    : new Set<string>();
   console.log(JSON.stringify({
     event: 'yahoo_support_membership_shape',
     direct_parse: direct.result?.status ?? 'response_unusable',
+    direct_manager_parse: !directEvidence
+      ? 'unavailable'
+      : directEvidence.managerGuids === null ? 'incomplete' : 'complete',
     scoped_parse: scoped.result?.status ?? 'response_unusable',
     correlation_id: correlationId ?? null,
   }));
 
   let managerGuidComparison: YahooMembershipEvidence['managerGuidComparison'] = 'unavailable';
-  if (directEvidence && directEvidence.managerGuids.size > 0) {
-    if (credentials.yahooGuid && directEvidence.managerGuids.has(credentials.yahooGuid)) {
-      managerGuidComparison = 'matches_stored_yahoo_guid';
-    } else if ([...(scopedEvidence?.loggedInGuids ?? [])].some((guid) => directEvidence.managerGuids.has(guid))) {
+  const directManagerGuids = directEvidence?.managerGuids;
+  if (directManagerGuids && directManagerGuids.size > 0) {
+    if ([...scopedLoggedInGuids].some((guid) => directManagerGuids.has(guid))) {
       managerGuidComparison = 'matches_logged_in_yahoo_guid';
+    } else if (scopedLoggedInGuids.size > 0) {
+      managerGuidComparison = 'does_not_match_authenticated_yahoo_guid';
+    } else if (credentials.yahooGuid && directManagerGuids.has(credentials.yahooGuid)) {
+      managerGuidComparison = 'matches_stored_yahoo_guid';
     }
   }
 
