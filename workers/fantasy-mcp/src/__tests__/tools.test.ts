@@ -148,7 +148,7 @@ describe('fantasy-mcp tools', () => {
       'whose typeRaw is an undocumented Sleeper convention that must not be read on its own as a redraft, keeper, dynasty, or guillotine signal'
     );
     expect(leagueInfo).toContain(
-      'Yahoo adds draftType, isAuctionDraft, and canTradeDraftPicks, but exposes no keeper-cost rule'
+      "Yahoo adds draftType, isAuctionDraft, and canTradeDraftPicks when Yahoo's settings fetch succeeds (omitted, with a warning, when it fails), but exposes no keeper-cost rule"
     );
 
     const roster = tools.get('get_roster')!.description;
@@ -159,18 +159,18 @@ describe('fantasy-mcp tools', () => {
       'a historical snapshot withholds keeperValueFuture and flags keeperValueFutureAvailable false'
     );
     expect(roster).toContain(
-      'non-empty only during Sleeper\'s pre-draft keeper-selection window'
+      'Sleeper resolves keepers to player entries on the current roster only, passing the list through as Sleeper sends it; an empty or null list does not show that the league has no keepers'
     );
 
-    // Yahoo's is_keeper.cost has never been observed populated, so no tool that
-    // surfaces isKeeper may imply a keeper cost is available.
+    // Yahoo has only ever been observed sending cost:false on is_keeper, so no
+    // tool that surfaces isKeeper may imply a numeric keeper cost is available.
     for (const name of ['get_free_agents', 'get_players']) {
       expect(tools.get(name)!.description).toContain(
-        'In a Yahoo keeper league, entries may add isKeeper as status, cost, and kept; Yahoo has never been observed populating cost, so no keeper cost is available'
+        'Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo'
       );
     }
     expect(roster).toContain(
-      'Yahoo may add per-player isKeeper as status, cost, and kept; its cost has never been observed populated, so no keeper cost is available from Yahoo'
+      'Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo'
     );
   });
 

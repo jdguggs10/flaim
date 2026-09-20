@@ -122,9 +122,11 @@ describe('Flaim MCP initialization instructions', () => {
   // FLA-374: keeper cost is the one keeper question no provider answers, and a
   // missing league record must not turn into an interrogation for raw IDs.
   it('keeps keeper cost a league house rule rather than provider data', () => {
-    expect(FLAIM_MCP_INSTRUCTIONS).toContain('Keeper cost is a league-specific house rule');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'No platform computes or preserves a keeper cost after a trade'
+      'Keeper cost is a league-specific house rule that Flaim never computes'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Only ESPN reports a keeper value (get_roster keeperValue and keeperValueFuture, which ESPN keeps with a player through a trade); Yahoo and Sleeper report none'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain("ask the user for their league's convention");
   });
