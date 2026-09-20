@@ -35,6 +35,7 @@ const env: YahooConnectEnv = {
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 let storage: { getYahooCredentials: ReturnType<typeof vi.fn> };
+let logSpy: ReturnType<typeof vi.spyOn>;
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
@@ -114,7 +115,7 @@ beforeEach(() => {
   });
   vi.stubGlobal('fetch', fetchSpy);
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  vi.spyOn(console, 'log').mockImplementation(() => {});
+  logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -143,6 +144,14 @@ describe('verifyYahooLeagueMembership', () => {
     for (const forbidden of [LEAGUE_KEY, TEAM_KEY, STORED_GUID, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
       expect(report).not.toContain(forbidden);
     }
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(log).toContain('"event":"yahoo_support_membership_shape"');
+    expect(log).toContain('"direct_parse":"parsed"');
+    expect(log).toContain('"scoped_parse":"parsed"');
+    expect(log).toContain('"correlation_id":"correlation-id"');
+    for (const forbidden of [LEAGUE_KEY, TEAM_KEY, STORED_GUID, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
+      expect(log).not.toContain(forbidden);
+    }
   });
 
   it('reports a collection omission without mistaking a direct public league read for proof by itself', async () => {
@@ -160,6 +169,30 @@ describe('verifyYahooLeagueMembership', () => {
         managerGuidComparison: 'unavailable',
       },
     });
+  });
+
+  it('logs only closed parse-stage reasons when usable envelopes lack membership structure', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
+      ? json({ fantasy_content: { users: { count: 0 } } })
+      : json({ fantasy_content: {} }));
+
+    const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, 'shape-correlation');
+
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: {
+        requestedLeagueInUserScopedTeams: null,
+        directIsOwnedByCurrentLogin: null,
+        managerGuidComparison: 'unavailable',
+      },
+    });
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(log).toContain('"direct_parse":"invalid_league_entity"');
+    expect(log).toContain('"scoped_parse":"empty_users_collection"');
+    expect(log).toContain('"correlation_id":"shape-correlation"');
+    for (const forbidden of [LEAGUE_KEY, TEAM_KEY, STORED_GUID, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
+      expect(log).not.toContain(forbidden);
+    }
   });
 
   it('accepts a direct manager match to Yahoo’s logged-in GUID as affirmative evidence', async () => {
