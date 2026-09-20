@@ -798,6 +798,20 @@ describe('runYahooSupportDiagnose', () => {
       expect(interpretation.category).toBe('fallback_inconclusive');
     });
 
+    it('reports the account as inconclusive when the fallback parser records an invalid envelope', async () => {
+      const interpretation = await categoryOf(
+        completed([
+          completedCall({ stats: statsWith({ accepted: 0, declared: { users: 1, games: 0, leagues: 0 } }) }),
+          completedCall({
+            label: 'football_current_season',
+            stats: statsWith({ envelope: 'missing_users' }),
+          }),
+        ])
+      );
+
+      expect(interpretation.category).toBe('fallback_inconclusive');
+    });
+
     it('classifies a parser gap and names the unmapped game codes', async () => {
       const interpretation = await categoryOf(
         completed([
@@ -871,6 +885,7 @@ describe('runYahooSupportDiagnose', () => {
       ['a non-200 response', { httpStatus: 500, ok: false, stats: null, errorSnippetCategory: 'yahoo_error_json' }],
       ['a non-JSON body', { bodyIsJson: false, bodyLooksLikeEnvelope: false, stats: null, errorSnippetCategory: 'html' }],
       ['a JSON body with no envelope', { bodyLooksLikeEnvelope: false, stats: null, errorSnippetCategory: 'yahoo_error_json' }],
+      ['an envelope with no users', { stats: statsWith({ envelope: 'missing_users' }) }],
       ['a parser that threw', { stats: statsWith({ threw: true, thrownErrorName: 'TypeError' }) }],
     ])('classifies %s as a malformed payload', async (_label, overrides) => {
       const interpretation = await categoryOf(completed([completedCall(overrides)]));

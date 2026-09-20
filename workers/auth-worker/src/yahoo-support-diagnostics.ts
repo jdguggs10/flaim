@@ -584,7 +584,14 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
   const stats = primary.stats;
   // `!stats` cannot occur alongside a 200-with-envelope from the probe itself;
   // it is here so a malformed diagnosis can never be read as a parse result.
-  if (!primary.ok || !primary.bodyIsJson || !primary.bodyLooksLikeEnvelope || !stats || stats.threw) {
+  if (
+    !primary.ok
+    || !primary.bodyIsJson
+    || !primary.bodyLooksLikeEnvelope
+    || !stats
+    || stats.envelope !== 'valid'
+    || stats.threw
+  ) {
     const status = primary.httpStatus === null ? 'no response' : `HTTP ${primary.httpStatus}`;
     const detail = stats?.threw
       ? `the parser threw ${stats.thrownErrorName ?? 'an error'}`
@@ -621,6 +628,7 @@ function interpretDiagnosis(diagnosis: YahooSupportDiagnosis): DiagnoseInterpret
     && fallback.bodyIsJson
     && fallback.bodyLooksLikeEnvelope
     && fallback.stats !== null
+    && fallback.stats.envelope === 'valid'
     && !fallback.stats.threw;
 
   if (!fallbackAnswered) {
