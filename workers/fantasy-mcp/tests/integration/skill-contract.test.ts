@@ -119,9 +119,10 @@ describe('shipped Flaim fantasy skill contract', () => {
 
   it('keeps keeper cost framed as a league house rule', () => {
     expect(skill).toContain('Keeper cost is a league house rule');
-    expect(skill).toContain(
-      'no platform computes what a player will cost as a keeper after a trade'
-    );
+    expect(skill).toContain('Flaim never computes one');
+    // ESPN carries a keeper value with a traded player, so the skill must not
+    // claim that no platform preserves a keeper cost after a trade.
+    expect(skill).not.toMatch(/no platform computes/i);
   });
 
   it('does not duplicate tool mechanics that live in descriptions or instructions', () => {

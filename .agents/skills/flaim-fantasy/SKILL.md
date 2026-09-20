@@ -73,7 +73,7 @@ Value both sides in this league's scoring and roster shape, not in generic ranki
 
 ### Keepers and dynasty
 
-Check the league's keeper format before advising, and expect it to differ sharply by platform. Keeper cost is a league house rule that the provider data often does not carry at all, and no platform computes what a player will cost as a keeper after a trade. When cost drives the recommendation, ask the user what their league does rather than assuming a convention. Value a player against the cost of keeping him, not against raw production.
+Check the league's keeper format before advising, and expect it to differ sharply by platform. Keeper cost is a league house rule, and Flaim never computes one. Some providers report a keeper value and others report nothing, and even a reported value may not be what the league actually charges. When cost drives the recommendation and the data does not settle it, ask the user what their league does rather than assuming a convention. Value a player against the cost of keeping him, not against raw production.
 
 ### Matchup previews
 
