@@ -2152,6 +2152,9 @@ function yahooFootballCurrentSeasonUrl(): string {
 // won't exceed this. The cap only guards against malformed/cyclic pointer data;
 // matches Sleeper's MAX_HISTORY_YEARS intent.
 const MAX_YAHOO_CHAIN_DEPTH = 25;
+// Recovery counts a renew pointer as one hop. The final fetched node may be
+// the terminator at this bound; a further pointer fails closed without fetch.
+export const YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS = MAX_YAHOO_CHAIN_DEPTH;
 
 /**
  * Map Yahoo sport codes to our internal sport names
@@ -4455,12 +4458,15 @@ async function resolveYahooRecoveryRecurringRoot(
 ): Promise<string | null> {
   const visited = new Set<string>();
   let current: YahooRecoveryRootMeta = initialMeta;
-  for (let depth = 0; depth < MAX_YAHOO_CHAIN_DEPTH; depth += 1) {
+  for (let hops = 0; ; hops += 1) {
     if (visited.has(current.leagueKey)) return null;
     visited.add(current.leagueKey);
     const renewStep = parseYahooRecoveryRenew(current.renew);
     if (renewStep.kind === 'terminator') return current.leagueKey;
     if (renewStep.kind === 'invalid') return null;
+    // A terminator at exactly MAX hops is valid (and was processed above).
+    // Another pointer would exceed the cap, so fail before fetching it.
+    if (hops >= YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS) return null;
     const priorKey = renewStep.leagueKey;
 
     const nextData = await fetchYahooRecoveryJson(

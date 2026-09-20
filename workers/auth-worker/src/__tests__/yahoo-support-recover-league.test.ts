@@ -7,6 +7,7 @@ vi.mock('../yahoo-storage', async () => {
 
 import {
   recoverYahooLeagueForSupport,
+  YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS,
   YAHOO_SUPPORT_RECOVERY_TIMEOUT_MS,
   type YahooConnectEnv,
 } from '../yahoo-connect-handlers';
@@ -95,6 +96,10 @@ function teamsPayload(options: { ownership?: 0 | 1 | undefined; managerGuid?: st
 
 function loginPayload(guid = YAHOO_GUID) {
   return { fantasy_content: { users: { count: 1, 0: { user: [{ guid }] } } } };
+}
+
+function rootMetadataPayload(leagueKey: string, renew: string) {
+  return { fantasy_content: { league: [{ league_key: leagueKey, renew }] } };
 }
 
 function visibleLeague() {
@@ -285,6 +290,61 @@ describe('recoverYahooLeagueForSupport', () => {
     });
     await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({ stage: 'failed' });
     expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('allows exactly the configured number of valid renew hops when the final fetched node terminates', async () => {
+    const rootKeys = Array.from(
+      { length: YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS },
+      (_, index) => `470.l.${9000000 + index}`
+    );
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([visibleLeague()]);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(teamsPayload({ ownership: 1 }));
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload({ renew: '470_9000000' }));
+      const rootIndex = rootKeys.findIndex((key) => url.includes(`/league/${key}?`));
+      if (rootIndex >= 0) {
+        const renew = rootIndex === rootKeys.length - 1
+          ? ''
+          : `470_${9000000 + rootIndex + 1}`;
+        return json(rootMetadataPayload(rootKeys[rootIndex], renew));
+      }
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'recovered', status: 'persisted_visible',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledWith(
+      expect.objectContaining({ recurringLeagueId: rootKeys.at(-1) })
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS + 2);
+  });
+
+  it('fails closed on one renew hop beyond the configured maximum without fetching it', async () => {
+    const rootKeys = Array.from(
+      { length: YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS },
+      (_, index) => `470.l.${8000000 + index}`
+    );
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(teamsPayload({ ownership: 1 }));
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload({ renew: '470_8000000' }));
+      const rootIndex = rootKeys.findIndex((key) => url.includes(`/league/${key}?`));
+      if (rootIndex >= 0) {
+        const renew = rootIndex === rootKeys.length - 1
+          ? '470_8000025'
+          : `470_${8000000 + rootIndex + 1}`;
+        return json(rootMetadataPayload(rootKeys[rootIndex], renew));
+      }
+      throw new Error('the MAX+1 root must not be fetched');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({ stage: 'failed' });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(YAHOO_SUPPORT_RECOVERY_MAX_RENEW_HOPS + 2);
   });
 
   it('checks the whole-operation deadline immediately before the strict persistence write', async () => {
