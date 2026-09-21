@@ -72,22 +72,29 @@ function teamsPayload(options: {
   managerGuid?: string;
   teamKey?: string;
   teamName?: string;
+  extraTeamKey?: unknown;
+  extraTeamName?: unknown;
+  extraManagerGuid?: unknown;
+  includeManagers?: boolean;
   secondOwned?: boolean;
 } = {}) {
   const firstTeam = [
     { team_key: options.teamKey ?? TEAM_KEY },
+    ...(options.extraTeamKey === undefined ? [] : [{ team_key: options.extraTeamKey }]),
     { name: options.teamName ?? TEAM_NAME },
+    ...(options.extraTeamName === undefined ? [] : [{ name: options.extraTeamName }]),
     ...(options.ownership === undefined ? [] : [{ is_owned_by_current_login: options.ownership }]),
-    {
+    ...(options.includeManagers === false ? [] : [{
       managers: {
         count: 1,
         0: {
           manager: [
             { guid: options.managerGuid ?? YAHOO_GUID },
+            ...(options.extraManagerGuid === undefined ? [] : [{ guid: options.extraManagerGuid }]),
           ],
         },
       },
-    },
+    }]),
   ];
   return {
     fantasy_content: {
@@ -116,6 +123,7 @@ function teamsPayload(options: {
 
 function twoTeamManagerPayload(options: {
   firstManagerGuid?: string;
+  firstExtraManagerGuid?: unknown;
   firstCurrentLogin?: unknown;
   firstCurrentLoginDuplicate?: boolean;
   firstDirectOwnership?: 0 | 1;
@@ -147,6 +155,7 @@ function twoTeamManagerPayload(options: {
                     0: {
                       manager: [
                         { guid: options.firstManagerGuid ?? YAHOO_GUID },
+                        ...(options.firstExtraManagerGuid === undefined ? [] : [{ guid: options.firstExtraManagerGuid }]),
                         ...(firstCurrentLogin === undefined
                           ? []
                           : [{ is_current_login: firstCurrentLogin }]),
@@ -238,8 +247,15 @@ function teamsPayloadWithAmbiguousSparseDirectOwnership() {
   };
 }
 
-function loginPayload(guid = YAHOO_GUID) {
-  return { fantasy_content: { users: { count: 1, 0: { user: [{ guid }] } } } };
+function loginPayload(guid = YAHOO_GUID, extraGuid?: unknown) {
+  return {
+    fantasy_content: {
+      users: {
+        count: 1,
+        0: { user: [extraGuid === undefined ? { guid } : [{ guid }, { guid: extraGuid }]] },
+      },
+    },
+  };
 }
 
 function rootMetadataPayload(leagueKey: string, renew: string) {
@@ -368,6 +384,63 @@ describe('recoverYahooLeagueForSupport', () => {
     expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledWith(
       expect.objectContaining({ teamName: TEAM_NAME })
     );
+  });
+
+  it.each([
+    ['team key', () => teamsPayload({ extraTeamKey: 42 }), () => loginPayload()],
+    ['team name', () => teamsPayload({ extraTeamName: 42 }), () => loginPayload()],
+    ['manager GUID', () => teamsPayload({ extraManagerGuid: 42 }), () => loginPayload()],
+    ['logged-in GUID', () => teamsPayload(), () => loginPayload(YAHOO_GUID, 42)],
+    ['current-login manager GUID', () => twoTeamManagerPayload({ firstExtraManagerGuid: 42 }), () => loginPayload()],
+  ])('fails closed for a valid plus non-string duplicate %s field', async (_label, makeTeamsPayload, makeLoginPayload) => {
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(makeTeamsPayload());
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(makeLoginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(
+      env, USER_ID, LEAGUE_KEY, undefined, undefined, digest,
+    )).resolves.toMatchObject({ stage: 'failed' });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed manager identity even when a no-digest direct-owner marker is unique', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(teamsPayload({ ownership: 1, extraManagerGuid: 42 }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'failed', reason: 'manager_identity_malformed',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('keeps no-digest direct-owner recovery available when Yahoo omits manager metadata', async () => {
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([visibleLeague()]);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(teamsPayload({ ownership: 1, includeManagers: false }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY)).resolves.toEqual({
+      stage: 'recovered', status: 'persisted_visible',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledTimes(1);
   });
 
   it.each([
