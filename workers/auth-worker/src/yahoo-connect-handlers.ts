@@ -4063,20 +4063,14 @@ type DirectUserTeamsMembershipParseResult =
         | 'missing_direct_team_key'
         | 'multiple_direct_team_keys'
         | 'non_string_direct_team_key'
-        | 'noncanonical_direct_team_key';
+        | 'malformed_target_team_key';
     };
-
-// The direct logged-in-user resource can include non-target teams from Yahoo
-// games/leagues with symbolic keys (for example, `nfl.l.1000.t.1` or
-// `123.l.auto.t.456`). This diagnostic accepts only that constrained Yahoo
-// key grammar; the requested target league key remains separately numeric and
-// strictly validated before this parser runs.
-const YAHOO_CANONICAL_TEAM_KEY_PATTERN = /^(?:\d+|[a-z][a-z0-9_-]*)\.l\.(?:\d+|[a-z][a-z0-9_-]*)\.t\.\d+$/;
 
 /**
  * This direct login-scoped resource is diagnostic-only. It deliberately does
  * not read a GUID, name, or any other user/team metadata: its only output is
- * the closed shape of the requested league's canonical team-key entries.
+ * the closed shape of exact requested-league team-key entries. Other teams
+ * can use Yahoo formats this diagnostic does not need to interpret.
  */
 function readDirectUserTeamsMembershipEvidence(
   parsed: unknown,
@@ -4100,6 +4094,7 @@ function readDirectUserTeamsMembershipEvidence(
   if (!teams) return { status: 'invalid_teams_collection' };
 
   let requestedLeagueMatchCount = 0;
+  const targetPrefix = `${leagueKey}.t.`;
   for (let teamIndex = 0; teamIndex < Number(teams.count); teamIndex += 1) {
     const teamWrapper = teams[String(teamIndex)];
     if (!isYahooRecord(teamWrapper)) return { status: 'invalid_team_wrapper' };
@@ -4112,10 +4107,13 @@ function readDirectUserTeamsMembershipEvidence(
     if (teamKeyValues.length > 1) return { status: 'multiple_direct_team_keys' };
     const [teamKey] = teamKeyValues;
     if (typeof teamKey !== 'string') return { status: 'non_string_direct_team_key' };
-    if (!YAHOO_CANONICAL_TEAM_KEY_PATTERN.test(teamKey)) {
-      return { status: 'noncanonical_direct_team_key' };
+    if (teamKey.includes(targetPrefix)) {
+      const teamId = teamKey.slice(targetPrefix.length);
+      if (!teamKey.startsWith(targetPrefix) || teamId.length === 0 || /\D/.test(teamId)) {
+        return { status: 'malformed_target_team_key' };
+      }
+      requestedLeagueMatchCount += 1;
     }
-    if (teamKey.startsWith(`${leagueKey}.t.`)) requestedLeagueMatchCount += 1;
   }
 
   return {
