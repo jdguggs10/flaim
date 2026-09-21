@@ -3666,6 +3666,13 @@ export const YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN = /^(?=.{1,64}$)\d+\.l\.\d+$/
  */
 export const YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
+/**
+ * The scoped user-league lookup accepts only Yahoo's numeric historical game
+ * key. Keeping this separate from a league key prevents an operator value from
+ * changing the resource chain or widening the request.
+ */
+export const YAHOO_SUPPORT_GAME_KEY_PATTERN = /^\d{1,64}$/;
+
 export type YahooSupportLeagueProbe =
   | { stage: 'not_connected' }
   | YahooCredentialRefreshFailure
@@ -4201,6 +4208,171 @@ function readDirectUserTeamsMembershipEvidence(
       ? 'zero'
       : requestedLeagueMatchCount === 1 ? 'one' : 'multiple',
   };
+}
+
+// =============================================================================
+// SUPPORT TEAM-NAME LEAGUE LOCATOR
+//
+// Yahoo's all-games direct user-teams collection has been observed omitting a
+// league. This is intentionally a different, one-request chain scoped to one
+// numeric game: users -> games -> leagues (with teams as the one-level out
+// resource). It is not discovery, persistence, or membership verification.
+// =============================================================================
+
+export type YahooSupportTeamNameLeagueLocation =
+  | { status: 'unique'; leagueKey: string }
+  | { status: 'none' | 'multiple' | 'unavailable' };
+
+type YahooScopedTeamNameLeagueParseResult =
+  | { status: 'parsed'; matches: string[] }
+  | { status: 'unavailable' };
+
+const YAHOO_SUPPORT_FULL_TEAM_KEY_PATTERN = /^(\d+\.l\.\d+)\.t\.\d+$/;
+
+/**
+ * Parse only the exact shape returned by the game-key-scoped user chain. A
+ * malformed sibling league/team makes the entire observation unavailable:
+ * returning a key from a partial response would turn an upstream omission into
+ * false certainty. Names and keys remain local to this reducer.
+ */
+async function readScopedYahooTeamNameLeagueMatches(
+  parsed: unknown,
+  gameKey: string,
+  teamNameSha256: string
+): Promise<YahooScopedTeamNameLeagueParseResult> {
+  const fantasyContent = isYahooRecord(parsed) && isYahooRecord(parsed.fantasy_content)
+    ? parsed.fantasy_content
+    : null;
+  if (!fantasyContent) return { status: 'unavailable' };
+  const users = readYahooCountedCollection(fantasyContent.users);
+  if (!users || Number(users.count) !== 1) return { status: 'unavailable' };
+
+  const userWrapper = users['0'];
+  if (!isYahooRecord(userWrapper) || !Array.isArray(userWrapper.user) || userWrapper.user.length < 2) {
+    return { status: 'unavailable' };
+  }
+  const userResources = userWrapper.user[1];
+  if (!isYahooRecord(userResources)) return { status: 'unavailable' };
+  const games = readYahooCountedCollection(userResources.games);
+  if (!games || Number(games.count) !== 1) return { status: 'unavailable' };
+
+  const gameWrapper = games['0'];
+  if (!isYahooRecord(gameWrapper) || !Array.isArray(gameWrapper.game) || gameWrapper.game.length < 2) {
+    return { status: 'unavailable' };
+  }
+  const gameInfo = gameWrapper.game[0];
+  const gameResources = gameWrapper.game[1];
+  if (!isYahooRecord(gameInfo) || gameInfo.game_key !== gameKey || !isYahooRecord(gameResources)) {
+    return { status: 'unavailable' };
+  }
+  const leagues = readYahooCountedCollection(gameResources.leagues);
+  if (!leagues) return { status: 'unavailable' };
+
+  const matches = new Set<string>();
+  for (let leagueIndex = 0; leagueIndex < Number(leagues.count); leagueIndex += 1) {
+    const leagueWrapper = leagues[String(leagueIndex)];
+    if (!isYahooRecord(leagueWrapper) || !Array.isArray(leagueWrapper.league) || leagueWrapper.league.length < 2) {
+      return { status: 'unavailable' };
+    }
+    const leagueInfo = leagueWrapper.league[0];
+    const leagueResources = leagueWrapper.league[1];
+    if (
+      !isYahooRecord(leagueInfo)
+      || typeof leagueInfo.league_key !== 'string'
+      || !YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(leagueInfo.league_key)
+      || !leagueInfo.league_key.startsWith(`${gameKey}.l.`)
+      || !isYahooRecord(leagueResources)
+    ) {
+      return { status: 'unavailable' };
+    }
+    const teams = readYahooCountedCollection(leagueResources.teams);
+    if (!teams) return { status: 'unavailable' };
+
+    for (let teamIndex = 0; teamIndex < Number(teams.count); teamIndex += 1) {
+      const teamWrapper = teams[String(teamIndex)];
+      if (!isYahooRecord(teamWrapper) || (!Array.isArray(teamWrapper.team) && !isYahooRecord(teamWrapper.team))) {
+        return { status: 'unavailable' };
+      }
+      const teamKeyValues = collectDirectYahooFields(teamWrapper.team, 'team_key');
+      const teamNameValues = collectDirectYahooFields(teamWrapper.team, 'name');
+      if (
+        teamKeyValues.length !== 1
+        || typeof teamKeyValues[0] !== 'string'
+        || teamNameValues.length !== 1
+        || typeof teamNameValues[0] !== 'string'
+        || nonBlankYahooString(teamNameValues[0]) === null
+      ) {
+        return { status: 'unavailable' };
+      }
+      const teamKeyMatch = YAHOO_SUPPORT_FULL_TEAM_KEY_PATTERN.exec(teamKeyValues[0]);
+      if (!teamKeyMatch || teamKeyMatch[1] !== leagueInfo.league_key) return { status: 'unavailable' };
+      // SHA-256 is over Yahoo's unmodified UTF-8 name: no trimming, Unicode
+      // normalization, or case folding is permitted before comparison.
+      if ((await sha256ExactUtf8(teamNameValues[0])) === teamNameSha256) {
+        matches.add(leagueInfo.league_key);
+      }
+    }
+  }
+  return { status: 'parsed', matches: [...matches] };
+}
+
+/**
+ * Locate one full Yahoo league key from an operator-provided digest. This
+ * operation has no write path: it refuses near-expiry tokens rather than using
+ * the ordinary refresh helper, so it makes only the documented Yahoo GET and
+ * cannot update credentials, lease state, or league rows.
+ */
+export async function locateYahooLeagueByTeamNameDigest(
+  env: YahooConnectEnv,
+  userId: string,
+  gameKey: string,
+  teamNameSha256: string
+): Promise<YahooSupportTeamNameLeagueLocation> {
+  if (!YAHOO_SUPPORT_GAME_KEY_PATTERN.test(gameKey)) {
+    throw new Error('locateYahooLeagueByTeamNameDigest received an invalid game key');
+  }
+  if (!YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN.test(teamNameSha256)) {
+    throw new Error('locateYahooLeagueByTeamNameDigest received an invalid team name digest');
+  }
+
+  const storage = YahooStorage.fromEnvironment(env);
+  const credentials = await storage.getYahooCredentials(userId);
+  // Deliberately no getValidYahooAccessToken here. The locator's strict
+  // read-only contract rejects a stale token rather than triggering its
+  // persistence-capable renewal path.
+  if (!credentials || credentials.needsRefresh) return { status: 'unavailable' };
+
+  try {
+    const response = await fetch(
+      `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/leagues;out=teams?format=json`,
+      {
+        headers: { Authorization: `Bearer ${credentials.accessToken}` },
+        signal: AbortSignal.timeout(YAHOO_DIAGNOSTIC_TIMEOUT_MS),
+      }
+    );
+    if (!response.ok) return { status: 'unavailable' };
+    const rawBody = await response.text();
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      return { status: 'unavailable' };
+    }
+    if (!looksLikeYahooEnvelope(parsed)) return { status: 'unavailable' };
+    const reduced = await readScopedYahooTeamNameLeagueMatches(parsed, gameKey, teamNameSha256);
+    if (reduced.status !== 'parsed') return { status: 'unavailable' };
+    return reduced.matches.length === 0
+      ? { status: 'none' }
+      : reduced.matches.length === 1
+        ? { status: 'unique', leagueKey: reduced.matches[0] }
+        : { status: 'multiple' };
+  } catch (error) {
+    console.error(
+      '[yahoo-connect] Support team-name league location failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+    return { status: 'unavailable' };
+  }
 }
 
 function usableYahooMembershipResponse(call: YahooMembershipInternalCall): boolean {

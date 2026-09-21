@@ -101,11 +101,13 @@ import {
   parseYahooSupportLeagueRequest,
   parseYahooSupportLeagueMembershipRequest,
   parseYahooSupportLeagueRecoveryRequest,
+  parseYahooSupportTeamNameLeagueLocationRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
   runYahooSupportRecoverLeague,
+  runYahooSupportLocateLeagueByTeamName,
   runYahooSupportRefresh,
   runYahooSupportVerifyLeagueMembership,
   type YahooSupportEnv,
@@ -207,7 +209,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
 }
 
 /**
- * Bounds diagnose/refresh/probe-league/verify-league-membership/recover-league to 15 calls/60s per action, deliberately
+ * Bounds diagnose/refresh/probe-league/verify-league-membership/recover-league/locate-league to 15 calls/60s per action, deliberately
  * keyed on the action alone rather than `${action}:${userId}` — a per-target
  * key would let repeated calls across rotating target ids evade the limit
  * entirely, which defeats the point for a route whose target id is
@@ -215,7 +217,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
  */
 async function enforceSupportRateLimit(
   c: Context<{ Bindings: Env }>,
-  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership' | 'recover-league'
+  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership' | 'recover-league' | 'locate-league'
 ) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
   if (success) return null;
@@ -1184,6 +1186,25 @@ api.post('/internal/support/yahoo/verify-league-membership', async (c) => {
 
   const report = await runYahooSupportVerifyLeagueMembership(c.env as YahooSupportEnv, validation.request);
   return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+// One read-only, game-key-scoped attempt to locate a league from an exact team
+// name digest. A unique key remains only a lead: existing membership
+// verification and guarded recovery are mandatory before any persistence.
+api.post('/internal/support/yahoo/locate-league', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'locate-league');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportTeamNameLeagueLocationRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportLocateLeagueByTeamName(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, 200);
 });
 
 // Explicit, one-key repair for an account whose Yahoo user-scoped discovery
@@ -2983,6 +3004,7 @@ api.notFound((c) => {
       '/internal/support/yahoo/diagnose': 'POST - Operator support diagnosis of Yahoo league discovery (two service secrets)',
       '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
       '/internal/support/yahoo/verify-league-membership': 'POST - Operator support verification of Yahoo ownership for one full league key (two service secrets)',
+      '/internal/support/yahoo/locate-league': 'POST - Operator read-only Yahoo league lookup by game key and team-name digest (two service secrets)',
       '/internal/support/yahoo/recover-league': 'POST - Operator recovery of one ownership-proven Yahoo league (two service secrets)',
       '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',
