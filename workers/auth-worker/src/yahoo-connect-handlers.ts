@@ -4522,7 +4522,10 @@ export async function captureYahooGameRawForSupport(
       `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/leagues;out=teams?format=json`,
       {
         headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
-        redirect: 'error',
+        // Preserve Yahoo's first response exactly without forwarding the
+        // bearer token to any redirect target. `error` hides redirect status
+        // and body behind a fetch exception, which defeats this diagnostic.
+        redirect: 'manual',
         signal: AbortSignal.timeout(YAHOO_DIAGNOSTIC_TIMEOUT_MS),
       }
     );
