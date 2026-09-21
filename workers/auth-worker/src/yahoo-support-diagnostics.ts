@@ -53,6 +53,7 @@ import {
   MAX_YAHOO_DIAGNOSTIC_REQUESTS,
   YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN,
   YAHOO_SUPPORT_LEAGUE_ID_PATTERN,
+  YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN,
   type YahooConnectEnv,
   type YahooCredentialHealthReport,
   type YahooCredentialRefreshFailure,
@@ -77,6 +78,7 @@ export const CLERK_USER_ID_PATTERN = /^user_[A-Za-z0-9]{20,64}$/;
 // and callers should be able to read it off the public support surface.
 export { YAHOO_SUPPORT_LEAGUE_ID_PATTERN };
 export { YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN };
+export { YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN };
 
 // Duplicated locally rather than imported from any of the ~13 other modules
 // that already carry their own private copy — that duplication is this
@@ -111,12 +113,16 @@ export interface YahooSupportLeagueRequest {
 export interface YahooSupportLeagueMembershipRequest {
   userId: string;
   leagueKey: string;
+  /** Optional SHA-256 of the exact UTF-8 Yahoo team name, never the name itself. */
+  teamNameSha256?: string;
 }
 
 /** Recovery uses the same exact-key contract as ownership verification. */
 export interface YahooSupportLeagueRecoveryRequest {
   userId: string;
   leagueKey: string;
+  /** Optional SHA-256 of the exact UTF-8 Yahoo team name, never the name itself. */
+  teamNameSha256?: string;
 }
 
 type ValidationError = {
@@ -185,7 +191,7 @@ async function readSupportRequestBody(
 
 const INSPECT_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId']);
 const LEAGUE_PROBE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueId']);
-const LEAGUE_MEMBERSHIP_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueKey']);
+const LEAGUE_MEMBERSHIP_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueKey', 'teamNameSha256']);
 
 export async function parseYahooSupportRequest(request: Request): Promise<YahooSupportValidation> {
   const parsed = await readSupportRequestBody(request, INSPECT_ALLOWED_KEYS);
@@ -253,7 +259,19 @@ export async function parseYahooSupportLeagueMembershipRequest(
       'leagueKey must be a 1-64 character full numeric Yahoo league key such as 470.l.1234567'
     );
   }
-  return { request: { userId: body.userId, leagueKey: body.leagueKey } };
+  if (
+    body.teamNameSha256 !== undefined
+    && (typeof body.teamNameSha256 !== 'string' || !YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN.test(body.teamNameSha256))
+  ) {
+    return invalidRequest('invalid_team_name_sha256', 'teamNameSha256 must be a 64 character lowercase hexadecimal SHA-256 digest');
+  }
+  return {
+    request: {
+      userId: body.userId,
+      leagueKey: body.leagueKey,
+      ...(body.teamNameSha256 !== undefined ? { teamNameSha256: body.teamNameSha256 } : {}),
+    },
+  };
 }
 
 /**
@@ -279,7 +297,19 @@ export async function parseYahooSupportLeagueRecoveryRequest(
       'leagueKey must be a 1-64 character full numeric Yahoo league key such as 470.l.1234567'
     );
   }
-  return { request: { userId: body.userId, leagueKey: body.leagueKey } };
+  if (
+    body.teamNameSha256 !== undefined
+    && (typeof body.teamNameSha256 !== 'string' || !YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN.test(body.teamNameSha256))
+  ) {
+    return invalidRequest('invalid_team_name_sha256', 'teamNameSha256 must be a 64 character lowercase hexadecimal SHA-256 digest');
+  }
+  return {
+    request: {
+      userId: body.userId,
+      leagueKey: body.leagueKey,
+      ...(body.teamNameSha256 !== undefined ? { teamNameSha256: body.teamNameSha256 } : {}),
+    },
+  };
 }
 
 // =============================================================================
@@ -1103,6 +1133,8 @@ export type YahooSupportLeagueMembershipReport =
       collection: YahooMembershipCollection;
       calls: [YahooMembershipDiagnosticCall, YahooMembershipDiagnosticCall] | null;
       interpretation: LeagueMembershipInterpretation;
+      /** Present only when the operator supplied a valid team-name digest. */
+      teamNameCorroboration?: 'unique_match' | 'zero_matches' | 'multiple_matches' | 'unavailable';
     }
   | { outcome: 'failed'; userMasked: string; error: 'membership_verification_failed' };
 
@@ -1268,7 +1300,8 @@ export async function runYahooSupportVerifyLeagueMembership(
       env as YahooConnectEnv,
       request.userId,
       request.leagueKey,
-      correlationId
+      correlationId,
+      request.teamNameSha256
     );
     stage = verification.stage;
     const interpretation = interpretLeagueMembership(verification);
@@ -1281,6 +1314,11 @@ export async function runYahooSupportVerifyLeagueMembership(
       collection: membershipCollectionFor(verification),
       calls: verification.stage === 'completed' ? verification.calls : null,
       interpretation,
+      ...(
+        request.teamNameSha256 !== undefined && verification.stage === 'completed'
+          ? { teamNameCorroboration: verification.evidence.teamNameCorroboration }
+          : {}
+      ),
     };
   } catch (error) {
     console.error(
@@ -1349,7 +1387,9 @@ export async function runYahooSupportRecoverLeague(
       env as YahooConnectEnv,
       request.userId,
       request.leagueKey,
-      correlationId
+      correlationId,
+      undefined,
+      request.teamNameSha256
     );
     stage = recovery.stage;
     if (recovery.stage !== 'recovered') {

@@ -48,6 +48,11 @@ function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), { status, headers: { 'content-type': 'application/json' } });
 }
 
+async function sha256ExactUtf8(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 function metadataPayload(options: { leagueKey?: string; renew?: string; gameCode?: string; season?: unknown; name?: string } = {}) {
   return {
     fantasy_content: {
@@ -319,6 +324,169 @@ describe('recoverYahooLeagueForSupport', () => {
     for (const forbidden of [USER_ID, LEAGUE_KEY, TEAM_KEY, YAHOO_GUID, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it('requires a fresh GUID plus the exact digest even when the legacy ownership marker is unique', async () => {
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([visibleLeague()]);
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+
+    const result = await recoverYahooLeagueForSupport(
+      env,
+      USER_ID,
+      LEAGUE_KEY,
+      'digest-correlation',
+      undefined,
+      digest,
+    );
+
+    expect(result).toEqual({ stage: 'recovered', status: 'persisted_visible' });
+    expect(fetchSpy.mock.calls.map(([url]) => String(url))).toEqual([
+      `https://fantasysports.yahooapis.com/fantasy/v2/league/${LEAGUE_KEY}?format=json`,
+      `https://fantasysports.yahooapis.com/fantasy/v2/league/${LEAGUE_KEY}/teams?format=json`,
+      'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1?format=json',
+    ]);
+    expect(JSON.stringify(storage.upsertYahooLeagueWithRecurringId.mock.calls)).not.toContain(digest);
+  });
+
+  it('uses the same exact whitespace-bearing provider-name bytes as membership verification while retaining the trimmed display name', async () => {
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([visibleLeague()]);
+    const rawTeamName = ` ${TEAM_NAME} `;
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(teamsPayload({ ownership: 1, teamName: rawTeamName }));
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    await expect(recoverYahooLeagueForSupport(
+      env, USER_ID, LEAGUE_KEY, undefined, undefined, await sha256ExactUtf8(rawTeamName),
+    )).resolves.toEqual({ stage: 'recovered', status: 'persisted_visible' });
+    expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledWith(
+      expect.objectContaining({ teamName: TEAM_NAME })
+    );
+  });
+
+  it.each([
+    ['case', 'sentinel team name'],
+    ['trailing space', `${TEAM_NAME} `],
+    ['unicode normalization', 'Sentinel Te\u0301am Name'],
+  ])('does not recover on a %s digest mismatch', async (_label, differentName) => {
+    const result = await recoverYahooLeagueForSupport(
+      env,
+      USER_ID,
+      LEAGUE_KEY,
+      undefined,
+      undefined,
+      await sha256ExactUtf8(differentName),
+    );
+    expect(result).toEqual({ stage: 'failed', reason: 'team_name_digest_no_match' });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('uses the digest only to resolve a multiple-manager-GUID selection and still writes the GUID-matching team', async () => {
+    storage.getYahooLeaguesForSupportReadback
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([visibleLeague()]);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstCurrentLogin: undefined, secondCurrentLogin: undefined }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    const result = await recoverYahooLeagueForSupport(
+      env,
+      USER_ID,
+      LEAGUE_KEY,
+      undefined,
+      undefined,
+      await sha256ExactUtf8(TEAM_NAME),
+    );
+    expect(result).toEqual({ stage: 'recovered', status: 'persisted_visible' });
+    expect(storage.upsertYahooLeagueWithRecurringId).toHaveBeenCalledWith(expect.objectContaining({ teamKey: TEAM_KEY }));
+  });
+
+  it('fails closed for duplicate GUID-and-digest matches and conflicting direct/current-login markers', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        const duplicate = twoTeamManagerPayload({ firstCurrentLogin: undefined, secondCurrentLogin: undefined });
+        const leagueResources = duplicate.fantasy_content.league[1];
+        const teams = leagueResources?.teams;
+        const secondTeam = teams?.[1];
+        if (!secondTeam) throw new Error('duplicate digest fixture requires a second team');
+        secondTeam.team[1] = { name: TEAM_NAME };
+        return json(duplicate);
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    await expect(recoverYahooLeagueForSupport(env, USER_ID, LEAGUE_KEY, undefined, undefined, digest)).resolves.toEqual({
+      stage: 'failed', reason: 'team_name_digest_ambiguous',
+    });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstDirectOwnership: 1, firstCurrentLogin: undefined, secondCurrentLogin: undefined }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    await expect(recoverYahooLeagueForSupport(
+      env, USER_ID, LEAGUE_KEY, undefined, undefined, await sha256ExactUtf8('Second Sentinel Team'),
+    )).resolves.toEqual({ stage: 'failed', reason: 'ownership_marker_conflict' });
+
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstCurrentLogin: 1, secondCurrentLogin: undefined }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    await expect(recoverYahooLeagueForSupport(
+      env, USER_ID, LEAGUE_KEY, undefined, undefined, await sha256ExactUtf8('Second Sentinel Team'),
+    )).resolves.toEqual({ stage: 'failed', reason: 'manager_current_login_marker_conflict' });
+
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(twoTeamManagerPayload({ firstDirectOwnership: 0, firstCurrentLogin: undefined, secondCurrentLogin: undefined }));
+      }
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    await expect(recoverYahooLeagueForSupport(
+      env, USER_ID, LEAGUE_KEY, undefined, undefined, await sha256ExactUtf8(TEAM_NAME),
+    )).resolves.toEqual({ stage: 'failed', reason: 'ownership_marker_conflict' });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
+  });
+
+  it('does not fall back to the stored GUID when digest recovery cannot prove the fresh identity', async () => {
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(teamsPayload({ ownership: undefined }));
+      if (url.includes(`/league/${LEAGUE_KEY}?`)) return json(metadataPayload());
+      if (url.includes('/users;use_login=1')) return json(loginPayload('fresh-but-wrong-guid'));
+      throw new Error('unexpected Yahoo request');
+    });
+    await expect(recoverYahooLeagueForSupport(
+      env, USER_ID, LEAGUE_KEY, undefined, undefined, await sha256ExactUtf8(TEAM_NAME),
+    )).resolves.toEqual({ stage: 'failed', reason: 'manager_identity_no_match' });
+    expect(storage.upsertYahooLeagueWithRecurringId).not.toHaveBeenCalled();
   });
 
   it('accepts a fresh use_login GUID only when direct ownership metadata is absent and exactly one manager matches', async () => {
@@ -849,7 +1017,7 @@ describe('recoverYahooLeagueForSupport', () => {
 });
 
 describe('support recovery request/report boundary', () => {
-  it('accepts only the exact full-key request shape', async () => {
+  it('accepts the exact full-key request shape with an optional lower-case SHA-256 team-name digest', async () => {
     await expect(parseYahooSupportLeagueRecoveryRequest(new Request('https://example.test', {
       method: 'POST', body: JSON.stringify({ userId: USER_ID, leagueKey: LEAGUE_KEY }),
     }))).resolves.toEqual({ request: { userId: USER_ID, leagueKey: LEAGUE_KEY } });
@@ -857,6 +1025,14 @@ describe('support recovery request/report boundary', () => {
     await expect(parseYahooSupportLeagueRecoveryRequest(new Request('https://example.test', {
       method: 'POST', body: JSON.stringify({ userId: USER_ID, leagueKey: '1234567' }),
     }))).resolves.toMatchObject({ error: { body: { error: 'invalid_league_key' } } });
+
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    await expect(parseYahooSupportLeagueRecoveryRequest(new Request('https://example.test', {
+      method: 'POST', body: JSON.stringify({ userId: USER_ID, leagueKey: LEAGUE_KEY, teamNameSha256: digest }),
+    }))).resolves.toEqual({ request: { userId: USER_ID, leagueKey: LEAGUE_KEY, teamNameSha256: digest } });
+    await expect(parseYahooSupportLeagueRecoveryRequest(new Request('https://example.test', {
+      method: 'POST', body: JSON.stringify({ userId: USER_ID, leagueKey: LEAGUE_KEY, teamNameSha256: digest.toUpperCase() }),
+    }))).resolves.toMatchObject({ error: { body: { error: 'invalid_team_name_sha256' } } });
   });
 
   it('returns only the contract fields and logs only masked/closed recovery data', async () => {
@@ -900,5 +1076,22 @@ describe('support recovery request/report boundary', () => {
     for (const forbidden of [USER_ID, LEAGUE_KEY, TEAM_KEY, YAHOO_GUID, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
       expect(log).not.toContain(forbidden);
     }
+  });
+
+  it('forwards a digest only to the internal recovery primitive and never returns or logs it', async () => {
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    const recover = vi.fn().mockResolvedValue({ stage: 'failed', reason: 'team_name_digest_no_match' });
+    const report = await runYahooSupportRecoverLeague(
+      env as YahooSupportEnv,
+      { userId: USER_ID, leagueKey: LEAGUE_KEY, teamNameSha256: digest },
+      { recover },
+    );
+    expect(recover).toHaveBeenCalledWith(expect.anything(), USER_ID, LEAGUE_KEY, expect.any(String), undefined, digest);
+    const serialized = JSON.stringify(report);
+    const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
+    expect(serialized).not.toContain(digest);
+    expect(log).not.toContain(digest);
+    expect(serialized).not.toContain('team_name_digest_no_match');
+    expect(log).toContain('"failure_reason":"team_name_digest_no_match"');
   });
 });
