@@ -833,6 +833,42 @@ describe('verifyYahooLeagueMembership', () => {
         },
       },
     }],
+    ['team entry has a valid plus non-string duplicate key', {
+      fantasy_content: {
+        users: {
+          count: 1,
+          0: {
+            user: [
+              { guid: STORED_GUID },
+              {
+                games: {
+                  count: 1,
+                  0: {
+                    game: [
+                      { game_key: '470' },
+                      { teams: { count: 1, 0: { team: [{ team_key: TEAM_KEY }, { team_key: 42 }] } } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+        },
+      },
+    }],
+    ['user has a valid plus non-string duplicate GUID', {
+      fantasy_content: {
+        users: {
+          count: 1,
+          0: {
+            user: [
+              [{ guid: STORED_GUID }, { guid: 42 }],
+              { games: { count: 0 } },
+            ],
+          },
+        },
+      },
+    }],
   ])('keeps a partial 200 scoped response unavailable: %s', async (_label, scopedPayload) => {
     fetchSpy.mockImplementation(async (input: unknown) => String(input).includes('/users;')
       ? json(scopedPayload)

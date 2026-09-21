@@ -3826,19 +3826,6 @@ function readYahooFlag(value: unknown): boolean | null {
   return null;
 }
 
-/**
- * Yahoo serializes an entity as an array of one-property records, for example
- * `team: [{ team_key: ... }, { name: ... }]`. This reads only a field directly
- * on those records; it deliberately does not descend through object-valued
- * fields, which prevents the enclosing `user` entity from accidentally
- * collecting GUIDs belonging to its nested teams and managers.
- */
-function readDirectYahooStrings(value: unknown, field: string): string[] {
-  return collectDirectYahooFields(value, field).filter(
-    (fieldValue): fieldValue is string => typeof fieldValue === 'string'
-  );
-}
-
 function readYahooManagerWrappers(value: unknown): Record<string, unknown>[] | null {
   if (Array.isArray(value)) {
     return value.length > 0 && value.every(isYahooRecord) ? value : null;
@@ -3877,9 +3864,14 @@ function readYahooTeamKeys(collection: Record<string, unknown>): Set<string> | n
   for (let index = 0; index < Number(collection.count); index += 1) {
     const teamWrapper = collection[String(index)];
     if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
-    const keys = readDirectYahooStrings(teamWrapper.team, 'team_key');
-    if (keys.length !== 1 || keys[0].trim() !== keys[0] || keys[0].length === 0) return null;
-    teamKeys.add(keys[0]);
+    const keyValues = collectDirectYahooFields(teamWrapper.team, 'team_key');
+    if (
+      keyValues.length !== 1
+      || typeof keyValues[0] !== 'string'
+      || keyValues[0].trim() !== keyValues[0]
+      || keyValues[0].length === 0
+    ) return null;
+    teamKeys.add(keyValues[0]);
   }
   return teamKeys;
 }
@@ -3961,7 +3953,7 @@ function readDirectMembershipTeams(
       // Keep the exact provider string. Do not trim, case-fold, or normalize
       // before SHA-256; the digest is deliberately byte-for-byte evidence.
       teamName,
-      managerGuids: readYahooRecoveryTeamManagerGuids(teamWrapper.team),
+      managerGuids: readYahooRecoveryTeamManagerGuids(teamWrapper.team).guids,
     });
   }
   return teams;
@@ -4093,11 +4085,16 @@ function readUserScopedMembershipEvidence(
     if (!isYahooRecord(userWrapper) || !Array.isArray(userWrapper.user) || userWrapper.user.length < 2) {
       return { status: 'invalid_user_entity' };
     }
-    const userGuids = readDirectYahooStrings(userWrapper.user[0], 'guid');
-    if (userGuids.length !== 1 || userGuids[0].trim() !== userGuids[0] || userGuids[0].length === 0) {
+    const userGuidValues = collectDirectYahooFields(userWrapper.user[0], 'guid');
+    if (
+      userGuidValues.length !== 1
+      || typeof userGuidValues[0] !== 'string'
+      || userGuidValues[0].trim() !== userGuidValues[0]
+      || userGuidValues[0].length === 0
+    ) {
       return { status: 'invalid_user_entity' };
     }
-    loggedInGuids.add(userGuids[0]);
+    loggedInGuids.add(userGuidValues[0]);
     const userResources = userWrapper.user[1];
     if (!isYahooRecord(userResources)) return { status: 'invalid_user_resources', loggedInGuids };
     const games = readYahooCountedCollection(userResources.games);
@@ -4432,6 +4429,7 @@ export type YahooSupportRecoveryFailureReason =
   | 'manager_current_login_marker_ambiguous'
   | 'manager_current_login_marker_conflict'
   | 'login_identity_unavailable'
+  | 'manager_identity_malformed'
   | 'manager_identity_incomplete'
   | 'manager_identity_no_match'
   | 'manager_identity_ambiguous'
@@ -4475,6 +4473,7 @@ interface YahooRecoveryTeam {
   managerCurrentLoginGuid: string | null;
   managerCurrentLoginInvalid: boolean;
   managerGuids: Set<string> | null;
+  managerIdentityMalformed: boolean;
 }
 
 type YahooRecoveryRenewStep =
@@ -4561,23 +4560,33 @@ function parseYahooRecoveryRootMeta(data: unknown, requestedLeagueKey: string): 
   };
 }
 
-function readYahooRecoveryTeamManagerGuids(team: unknown): Set<string> | null {
+type YahooRecoveryTeamManagerGuidParse = {
+  guids: Set<string> | null;
+  /** A present manager identity had invalid cardinality, type, or value. */
+  malformed: boolean;
+};
+
+function readYahooRecoveryTeamManagerGuids(team: unknown): YahooRecoveryTeamManagerGuidParse {
   const managerCollections = collectDirectYahooFields(team, 'managers');
-  if (managerCollections.length !== 1) return null;
+  if (managerCollections.length === 0) return { guids: null, malformed: false };
+  if (managerCollections.length !== 1) return { guids: null, malformed: true };
   const managerWrappers = readYahooManagerWrappers(managerCollections[0]);
-  if (!managerWrappers) return null;
+  if (!managerWrappers) return { guids: null, malformed: false };
 
   const guids = new Set<string>();
   for (const managerWrapper of managerWrappers) {
     const manager = managerWrapper.manager;
-    if (!isYahooRecord(manager) && !Array.isArray(manager)) return null;
-    const values = readDirectYahooStrings(manager, 'guid');
-    if (values.length !== 1) return null;
-    const guid = nonBlankYahooString(values[0]);
-    if (!guid || guid !== values[0]) return null;
+    if (!isYahooRecord(manager) && !Array.isArray(manager)) return { guids: null, malformed: false };
+    const guidValues = collectDirectYahooFields(manager, 'guid');
+    if (guidValues.length === 0) return { guids: null, malformed: false };
+    if (guidValues.length !== 1 || typeof guidValues[0] !== 'string') {
+      return { guids: null, malformed: true };
+    }
+    const guid = nonBlankYahooString(guidValues[0]);
+    if (!guid || guid !== guidValues[0]) return { guids: null, malformed: true };
     guids.add(guid);
   }
-  return guids.size > 0 ? guids : null;
+  return { guids: guids.size > 0 ? guids : null, malformed: false };
 }
 
 function readYahooRecoveryTeamCurrentLogin(
@@ -4601,10 +4610,12 @@ function readYahooRecoveryTeamCurrentLogin(
     if (flag === null) return { guid: null, invalid: true };
     if (!flag) continue;
 
-    const guids = readDirectYahooStrings(manager, 'guid');
-    if (guids.length !== 1) return { guid: null, invalid: true };
-    const guid = nonBlankYahooString(guids[0]);
-    if (!guid || guid !== guids[0] || currentLoginGuid !== null) {
+    const guidValues = collectDirectYahooFields(manager, 'guid');
+    if (guidValues.length !== 1 || typeof guidValues[0] !== 'string') {
+      return { guid: null, invalid: true };
+    }
+    const guid = nonBlankYahooString(guidValues[0]);
+    if (!guid || guid !== guidValues[0] || currentLoginGuid !== null) {
       return { guid: null, invalid: true };
     }
     currentLoginGuid = guid;
@@ -4633,11 +4644,16 @@ function parseYahooRecoveryTeams(data: unknown, leagueKey: string): YahooRecover
     const wrapper = teams[String(index)];
     if (!isYahooRecord(wrapper) || !Array.isArray(wrapper.team)) return null;
     const team = wrapper.team;
-    const teamKeys = readDirectYahooStrings(team, 'team_key');
-    const teamNames = readDirectYahooStrings(team, 'name');
-    if (teamKeys.length !== 1 || teamNames.length !== 1) return null;
-    const teamKey = teamKeys[0];
-    const rawTeamName = teamNames[0];
+    const teamKeyValues = collectDirectYahooFields(team, 'team_key');
+    const teamNameValues = collectDirectYahooFields(team, 'name');
+    if (
+      teamKeyValues.length !== 1
+      || teamNameValues.length !== 1
+      || typeof teamKeyValues[0] !== 'string'
+      || typeof teamNameValues[0] !== 'string'
+    ) return null;
+    const teamKey = teamKeyValues[0];
+    const rawTeamName = teamNameValues[0];
     const teamName = nonBlankYahooString(rawTeamName);
     const teamId = teamKey.startsWith(teamPrefix) ? teamKey.slice(teamPrefix.length) : '';
     if (!teamName || !/^\d+$/.test(teamId)) return null;
@@ -4645,6 +4661,7 @@ function parseYahooRecoveryTeams(data: unknown, leagueKey: string): YahooRecover
     const ownershipValues = collectDirectYahooFields(team, 'is_owned_by_current_login');
     const directOwnership = ownershipValues.length === 1 ? readYahooFlag(ownershipValues[0]) : null;
     const managerCurrentLogin = readYahooRecoveryTeamCurrentLogin(team);
+    const managerIdentity = readYahooRecoveryTeamManagerGuids(team);
     result.push({
       teamId,
       teamKey,
@@ -4654,7 +4671,8 @@ function parseYahooRecoveryTeams(data: unknown, leagueKey: string): YahooRecover
       directOwnershipInvalid: ownershipValues.length > 0 && directOwnership === null,
       managerCurrentLoginGuid: managerCurrentLogin.guid,
       managerCurrentLoginInvalid: managerCurrentLogin.invalid,
-      managerGuids: readYahooRecoveryTeamManagerGuids(team),
+      managerGuids: managerIdentity.guids,
+      managerIdentityMalformed: managerIdentity.malformed,
     });
   }
   return result;
@@ -4668,9 +4686,13 @@ function parseYahooRecoveryLoggedInGuid(data: unknown): string | null {
   if (!users || Number(users.count) !== 1) return null;
   const wrapper = users['0'];
   if (!isYahooRecord(wrapper) || !Array.isArray(wrapper.user) || wrapper.user.length < 1) return null;
-  const guids = readDirectYahooStrings(wrapper.user[0], 'guid');
-  if (guids.length !== 1 || guids[0].trim() !== guids[0]) return null;
-  return nonBlankYahooString(guids[0]);
+  const guidValues = collectDirectYahooFields(wrapper.user[0], 'guid');
+  if (
+    guidValues.length !== 1
+    || typeof guidValues[0] !== 'string'
+    || guidValues[0].trim() !== guidValues[0]
+  ) return null;
+  return nonBlankYahooString(guidValues[0]);
 }
 
 type YahooGuidOwnedTeamSelection =
@@ -4835,6 +4857,9 @@ export async function recoverYahooLeagueForSupport(
 
   if (teams.some((team) => team.directOwnershipInvalid)) {
     return { stage: 'failed', reason: 'ownership_marker_invalid' };
+  }
+  if (teams.some((team) => team.managerIdentityMalformed)) {
+    return { stage: 'failed', reason: 'manager_identity_malformed' };
   }
 
   const directlyOwnedTeams = teams.filter((team) => team.directOwnership === true);
