@@ -102,12 +102,14 @@ import {
   parseYahooSupportLeagueMembershipRequest,
   parseYahooSupportLeagueRecoveryRequest,
   parseYahooSupportTeamNameLeagueLocationRequest,
+  parseYahooSupportGameRawCaptureRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
   runYahooSupportRecoverLeague,
   runYahooSupportLocateLeagueByTeamName,
+  runYahooSupportGameRawCapture,
   runYahooSupportRefresh,
   runYahooSupportVerifyLeagueMembership,
   type YahooSupportEnv,
@@ -209,7 +211,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
 }
 
 /**
- * Bounds diagnose/refresh/probe-league/verify-league-membership/recover-league/locate-league to 15 calls/60s per action, deliberately
+ * Bounds support actions that reach Yahoo to 15 calls/60s per action, deliberately
  * keyed on the action alone rather than `${action}:${userId}` — a per-target
  * key would let repeated calls across rotating target ids evade the limit
  * entirely, which defeats the point for a route whose target id is
@@ -217,7 +219,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
  */
 async function enforceSupportRateLimit(
   c: Context<{ Bindings: Env }>,
-  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership' | 'recover-league' | 'locate-league'
+  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership' | 'recover-league' | 'locate-league' | 'capture-game-raw'
 ) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
   if (success) return null;
@@ -1205,6 +1207,42 @@ api.post('/internal/support/yahoo/locate-league', async (c) => {
 
   const report = await runYahooSupportLocateLeagueByTeamName(c.env as YahooSupportEnv, validation.request);
   return c.json(report, 200);
+});
+
+// Bounded, operator-only incident capture for the exact user-game collection
+// whose parsed reduction has been inconclusive. The route has no caller-chosen
+// Yahoo path or response mode. A successful capture intentionally preserves
+// Yahoo's response status in a header while returning the raw bytes with 200.
+api.post('/internal/support/yahoo/capture-game-raw', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'capture-game-raw');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportGameRawCaptureRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportGameRawCapture(c.env as YahooSupportEnv, validation.request);
+  if (report.outcome !== 'captured') {
+    return c.json({ error: report.error }, report.httpStatus);
+  }
+
+  return new Response(report.capture.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Flaim-Support-Capture': 'yahoo-game-raw-v1',
+      'X-Flaim-Upstream-Status': String(report.capture.upstreamStatus),
+      'X-Flaim-Capture-Bytes': String(report.capture.byteLength),
+      'X-Flaim-Capture-SHA256': report.capture.sha256,
+      'X-Flaim-Correlation-Id': report.correlationId,
+    },
+  });
 });
 
 // Explicit, one-key repair for an account whose Yahoo user-scoped discovery
@@ -3005,6 +3043,7 @@ api.notFound((c) => {
       '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
       '/internal/support/yahoo/verify-league-membership': 'POST - Operator support verification of Yahoo ownership for one full league key (two service secrets)',
       '/internal/support/yahoo/locate-league': 'POST - Operator read-only Yahoo league lookup by game key and team-name digest (two service secrets)',
+      '/internal/support/yahoo/capture-game-raw': 'POST - Operator bounded raw Yahoo user-game capture for one numeric game key (two service secrets)',
       '/internal/support/yahoo/recover-league': 'POST - Operator recovery of one ownership-proven Yahoo league (two service secrets)',
       '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',

@@ -830,7 +830,11 @@ async function getValidYahooAccessToken(
   authType?: string
 ): Promise<GetTokenResult> {
   const logDiagnostic = (event: string, fields: YahooRefreshDiagnosticFields = {}) => {
+    if (authType === 'support_capture') return;
     logYahooRefreshDiagnostic(event, { correlationId, authType, ...fields });
+  };
+  const logConsole = (method: 'error' | 'warn' | 'log', ...args: unknown[]) => {
+    if (authType !== 'support_capture') console[method](...args);
   };
 
   let credentials = initialCredentials ?? await storage.getYahooCredentials(userId);
@@ -871,7 +875,7 @@ async function getValidYahooAccessToken(
       runtimeAppFingerprint,
       secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
     });
-    console.error(
+    logConsole('error',
       `[yahoo-connect] Yahoo app fingerprint mismatch for user ${maskUserId(userId)}: stored tokens were minted by a different Yahoo app than this worker is configured with`
     );
     return {
@@ -950,7 +954,7 @@ async function getValidYahooAccessToken(
     try {
       await storage.releaseRefreshLease(userId, ownerId);
     } catch (releaseError) {
-      console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after short lease window:', releaseError);
+      logConsole('warn', '[yahoo-connect] Failed to release Yahoo refresh lease after short lease window:', releaseError);
     }
     return {
       error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
@@ -975,7 +979,7 @@ async function getValidYahooAccessToken(
     try {
       await storage.releaseRefreshLease(userId, ownerId);
     } catch (releaseError) {
-      console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after missing Yahoo client config:', releaseError);
+      logConsole('warn', '[yahoo-connect] Failed to release Yahoo refresh lease after missing Yahoo client config:', releaseError);
     }
     return {
       error: 'refresh_failed',
@@ -1008,14 +1012,14 @@ async function getValidYahooAccessToken(
       reason: isAbort ? 'abort' : 'fetch_error',
       requestTimeoutMs: YAHOO_TOKEN_REQUEST_TIMEOUT_MS,
     });
-    console.error(
+    logConsole('error',
       `[yahoo-connect] Yahoo token refresh request failed for user ${maskUserId(userId)}:`,
       error instanceof Error ? error.message : error
     );
     try {
       await storage.releaseRefreshLease(userId, ownerId);
     } catch (releaseError) {
-      console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after refresh exception:', releaseError);
+      logConsole('warn', '[yahoo-connect] Failed to release Yahoo refresh lease after refresh exception:', releaseError);
     }
     return {
       error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
@@ -1049,7 +1053,7 @@ async function getValidYahooAccessToken(
     // excludes `result.error_description`, which is free-form upstream text and can
     // carry more than a closed error code (FLA-363). `diagnosticClass` is the same
     // closed-set classification already computed above and sent to logDiagnostic.
-    console.error(
+    logConsole('error',
       `[yahoo-connect] Yahoo token refresh failed for user ${maskUserId(userId)}: ${result.error}${statusSuffix} (${diagnosticClass})`
     );
 
@@ -1103,7 +1107,7 @@ async function getValidYahooAccessToken(
             }
           }
         } catch (cooldownError) {
-          console.warn('[yahoo-connect] Failed to mark Yahoo refresh cooldown:', cooldownError);
+          logConsole('warn', '[yahoo-connect] Failed to mark Yahoo refresh cooldown:', cooldownError);
           logDiagnostic('refresh_cooldown_mark_failed', {
             userId,
             phase: 'cooldown',
@@ -1143,7 +1147,7 @@ async function getValidYahooAccessToken(
     try {
       await storage.releaseRefreshLease(userId, ownerId);
     } catch (releaseError) {
-      console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after Yahoo refresh error:', releaseError);
+      logConsole('warn', '[yahoo-connect] Failed to release Yahoo refresh lease after Yahoo refresh error:', releaseError);
     }
 
     logDiagnostic('refresh_permanent_failure', {
@@ -1169,11 +1173,11 @@ async function getValidYahooAccessToken(
       bodyClass: result.upstream_body_class,
       hasRetryAfter: result.retry_after_source === 'upstream_header',
     });
-    console.error(`[yahoo-connect] Yahoo token refresh returned an invalid token response for user ${maskUserId(userId)}`);
+    logConsole('error', `[yahoo-connect] Yahoo token refresh returned an invalid token response for user ${maskUserId(userId)}`);
     try {
       await storage.releaseRefreshLease(userId, ownerId);
     } catch (releaseError) {
-      console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after invalid Yahoo refresh response:', releaseError);
+      logConsole('warn', '[yahoo-connect] Failed to release Yahoo refresh lease after invalid Yahoo refresh response:', releaseError);
     }
     return { error: 'refresh_failed', errorDescription: 'Failed to refresh access token' };
   }
@@ -1200,7 +1204,7 @@ async function getValidYahooAccessToken(
       refreshTokenChanged,
       secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
     });
-    console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
+    logConsole('log', `[yahoo-connect] Token refreshed for user ${maskUserId(userId)}`);
     return { accessToken: result.access_token, expiresIn: result.expires_in };
   }
 
@@ -1228,7 +1232,7 @@ async function getValidYahooAccessToken(
       recoverySucceeded: true,
       secondsSinceCredentialUpdate: secondsSince(credentials.updatedAt),
     });
-    console.log(`[yahoo-connect] Token refreshed for user ${maskUserId(userId)} after owner guard miss`);
+    logConsole('log', `[yahoo-connect] Token refreshed for user ${maskUserId(userId)} after owner guard miss`);
     return { accessToken: result.access_token, expiresIn: result.expires_in };
   }
 
@@ -1248,7 +1252,7 @@ async function getValidYahooAccessToken(
   try {
     await storage.releaseRefreshLease(userId, ownerId);
   } catch (releaseError) {
-    console.warn('[yahoo-connect] Failed to release Yahoo refresh lease after owner guard miss:', releaseError);
+    logConsole('warn', '[yahoo-connect] Failed to release Yahoo refresh lease after owner guard miss:', releaseError);
   }
   return {
     error: YahooAuthWorkerErrorCode.REFRESH_TEMPORARILY_UNAVAILABLE,
@@ -4223,6 +4227,27 @@ export type YahooSupportTeamNameLeagueLocation =
   | { status: 'unique'; leagueKey: string }
   | { status: 'none' | 'multiple' | 'unavailable' };
 
+/**
+ * A raw support capture is intentionally bounded before it crosses the worker
+ * boundary. It is an operator-only incident primitive, not another discovery
+ * or parsing path.
+ */
+export const YAHOO_SUPPORT_RAW_CAPTURE_MAX_BYTES = 8 * 1024 * 1024;
+
+export type YahooSupportGameRawCapture =
+  | {
+      status: 'captured';
+      body: Uint8Array;
+      upstreamStatus: number;
+      byteLength: number;
+      sha256: string;
+    }
+  | {
+      status: 'unavailable' | 'too_large' | 'token_detected';
+      upstreamStatus: number | null;
+      byteLength: number;
+    };
+
 type YahooScopedTeamNameLeagueParseResult =
   | { status: 'parsed'; matches: string[] }
   | { status: 'unavailable' };
@@ -4373,6 +4398,176 @@ export async function locateYahooLeagueByTeamNameDigest(
     );
     return { status: 'unavailable' };
   }
+}
+
+function parsedContentLength(response: Response): number | null {
+  const value = response.headers.get('content-length');
+  if (value === null || !/^(?:0|[1-9]\d*)$/.test(value)) return null;
+  const length = Number(value);
+  return Number.isSafeInteger(length) ? length : null;
+}
+
+async function readYahooSupportCaptureBody(response: Response): Promise<
+  | { status: 'captured'; body: Uint8Array }
+  | { status: 'too_large'; byteLength: number }
+> {
+  const declaredLength = parsedContentLength(response);
+  if (declaredLength !== null && declaredLength > YAHOO_SUPPORT_RAW_CAPTURE_MAX_BYTES) {
+    return { status: 'too_large', byteLength: declaredLength };
+  }
+
+  if (!response.body) return { status: 'captured', body: new Uint8Array() };
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > YAHOO_SUPPORT_RAW_CAPTURE_MAX_BYTES) {
+        // Stop the upstream body, but preserve the closed size result even if
+        // an already-failed stream refuses cancellation.
+        void reader.cancel().catch(() => undefined);
+        return { status: 'too_large', byteLength };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { status: 'captured', body };
+}
+
+function containsExactByteSequence(haystack: Uint8Array, needle: Uint8Array): boolean {
+  if (needle.byteLength === 0 || needle.byteLength > haystack.byteLength) return false;
+  for (let start = 0; start <= haystack.byteLength - needle.byteLength; start += 1) {
+    let matches = true;
+    for (let offset = 0; offset < needle.byteLength; offset += 1) {
+      if (haystack[start + offset] !== needle[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
+}
+
+function containsAnyYahooCredentialValue(body: Uint8Array, credentialValues: readonly string[]): boolean {
+  const encoder = new TextEncoder();
+  const checked = new Set<string>();
+  for (const value of credentialValues) {
+    if (!value || checked.has(value)) continue;
+    checked.add(value);
+    if (containsExactByteSequence(body, encoder.encode(value))) return true;
+  }
+  return false;
+}
+
+async function sha256Bytes(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Captures one fixed user-game Yahoo response for an authorized support
+ * investigation. Unlike the digest locator, this deliberately uses the normal
+ * guarded token path: a near-expiry credential may renew through its existing
+ * lease and storage guard before the single Yahoo data GET. The raw bytes never
+ * enter logs or parsed objects, and the capture is refused if they contain any
+ * access or refresh token held before or after that renewal.
+ */
+export async function captureYahooGameRawForSupport(
+  env: YahooConnectEnv,
+  userId: string,
+  gameKey: string,
+  correlationId?: string
+): Promise<YahooSupportGameRawCapture> {
+  if (!YAHOO_SUPPORT_GAME_KEY_PATTERN.test(gameKey)) {
+    throw new Error('captureYahooGameRawForSupport received an invalid game key');
+  }
+
+  const storage = YahooStorage.fromEnvironment(env);
+  let beforeCredentials: YahooCredentials | null;
+  try {
+    beforeCredentials = await storage.getYahooCredentials(userId);
+  } catch {
+    return { status: 'unavailable', upstreamStatus: null, byteLength: 0 };
+  }
+
+  const tokenResult = await getValidYahooAccessToken(
+    storage,
+    userId,
+    env,
+    beforeCredentials ?? undefined,
+    correlationId,
+    'support_capture'
+  );
+  if ('error' in tokenResult) {
+    return { status: 'unavailable', upstreamStatus: tokenResult.upstreamStatus ?? null, byteLength: 0 };
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(
+      `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/leagues;out=teams?format=json`,
+      {
+        headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
+        redirect: 'error',
+        signal: AbortSignal.timeout(YAHOO_DIAGNOSTIC_TIMEOUT_MS),
+      }
+    );
+  } catch {
+    return { status: 'unavailable', upstreamStatus: null, byteLength: 0 };
+  }
+
+  let buffered: Awaited<ReturnType<typeof readYahooSupportCaptureBody>>;
+  try {
+    buffered = await readYahooSupportCaptureBody(response);
+  } catch {
+    return { status: 'unavailable', upstreamStatus: response.status, byteLength: 0 };
+  }
+  if (buffered.status === 'too_large') {
+    return { status: 'too_large', upstreamStatus: response.status, byteLength: buffered.byteLength };
+  }
+
+  let afterCredentials: YahooCredentials | null;
+  try {
+    afterCredentials = await storage.getYahooCredentials(userId);
+  } catch {
+    return { status: 'unavailable', upstreamStatus: response.status, byteLength: buffered.body.byteLength };
+  }
+  const credentialValues = [
+    beforeCredentials?.accessToken ?? '',
+    beforeCredentials?.refreshToken ?? '',
+    tokenResult.accessToken,
+    afterCredentials?.accessToken ?? '',
+    afterCredentials?.refreshToken ?? '',
+  ];
+  if (containsAnyYahooCredentialValue(buffered.body, credentialValues)) {
+    return {
+      status: 'token_detected',
+      upstreamStatus: response.status,
+      byteLength: buffered.body.byteLength,
+    };
+  }
+
+  return {
+    status: 'captured',
+    body: buffered.body,
+    upstreamStatus: response.status,
+    byteLength: buffered.body.byteLength,
+    sha256: await sha256Bytes(buffered.body),
+  };
 }
 
 function usableYahooMembershipResponse(call: YahooMembershipInternalCall): boolean {
