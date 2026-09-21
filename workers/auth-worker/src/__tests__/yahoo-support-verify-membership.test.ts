@@ -72,6 +72,40 @@ function directTeamsPayload(owned: 0 | 1 = 1, managerGuid = STORED_GUID, teamNam
   };
 }
 
+function directTeamsPayloadWithEntries(entries: Array<{
+  name?: string;
+  managerGuid?: string;
+  teamKey?: string;
+  extraTeamKey?: unknown;
+  extraName?: unknown;
+}>) {
+  return {
+    fantasy_content: {
+      league: [
+        { league_key: LEAGUE_KEY, name: LEAGUE_NAME },
+        {
+          teams: {
+            count: entries.length,
+            ...Object.fromEntries(entries.map((entry, index) => [
+              String(index), {
+                team: [
+                  { team_key: entry.teamKey ?? `${LEAGUE_KEY}.t.${index + 1}` },
+                  ...(entry.extraTeamKey === undefined ? [] : [{ team_key: entry.extraTeamKey }]),
+                  ...(entry.name === undefined ? [] : [{ name: entry.name }]),
+                  ...(entry.extraName === undefined ? [] : [{ name: entry.extraName }]),
+                  ...(entry.managerGuid === undefined
+                    ? []
+                    : [{ managers: { count: 1, 0: { manager: [{ guid: entry.managerGuid }] } } }]),
+                ],
+              },
+            ])),
+          },
+        },
+      ],
+    },
+  };
+}
+
 function userScopedPayload(includeTeam = true, loggedInGuid = STORED_GUID) {
   return {
     fantasy_content: {
@@ -186,6 +220,8 @@ describe('verifyYahooLeagueMembership', () => {
         managerGuidComparison: 'matches_logged_in_yahoo_guid',
       },
     });
+    if (result.stage !== 'completed') throw new Error('expected completed verification');
+    expect(result.evidence).not.toHaveProperty('teamNameDigestPresence');
     const report = JSON.stringify(result);
     for (const forbidden of [LEAGUE_KEY, TEAM_KEY, STORED_GUID, ACCESS_TOKEN, REFRESH_TOKEN, LEAGUE_NAME, TEAM_NAME]) {
       expect(report).not.toContain(forbidden);
@@ -421,9 +457,11 @@ describe('verifyYahooLeagueMembership', () => {
     const digest = await sha256ExactUtf8(TEAM_NAME);
     const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, 'digest-correlation', digest);
 
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+
     expect(result).toMatchObject({
       stage: 'completed',
-      evidence: { teamNameCorroboration: 'unique_match' },
+      evidence: { teamNameCorroboration: 'unique_match', teamNameDigestPresence: 'one' },
     });
     const serialized = JSON.stringify(result);
     const log = logSpy.mock.calls.map(([line]) => String(line)).join('\n');
@@ -432,6 +470,65 @@ describe('verifyYahooLeagueMembership', () => {
       expect(log).not.toContain(forbidden);
     }
     expect(log).toContain('"team_name_corroboration":"unique_match"');
+    expect(log).toContain('"team_name_digest_presence":"one"');
+  });
+
+  it('counts exact name digest presence across every direct team independently of the fresh GUID', async () => {
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(directTeamsPayloadWithEntries([
+          { name: TEAM_NAME, managerGuid: STORED_GUID },
+          { name: TEAM_NAME, managerGuid: 'other-yahoo-guid' },
+        ]));
+      }
+      if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload(false));
+      if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: { teamNameCorroboration: 'unique_match', teamNameDigestPresence: 'multiple' },
+    });
+  });
+
+  it('reports a name present on a non-GUID-matching team without turning it into ownership evidence', async () => {
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) {
+        return json(directTeamsPayloadWithEntries([
+          { name: 'Different Team', managerGuid: STORED_GUID },
+          { name: TEAM_NAME, managerGuid: 'other-yahoo-guid' },
+        ]));
+      }
+      if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload(false));
+      if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: { teamNameCorroboration: 'zero_matches', teamNameDigestPresence: 'one' },
+    });
+  });
+
+  it('keeps GUID-based corroboration unavailable without withholding complete direct name presence', async () => {
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    fetchSpy.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(directTeamsPayloadWithEntries([{ name: TEAM_NAME }]));
+      if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json({ fantasy_content: { users: { count: 0 } } });
+      if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
+      throw new Error('unexpected Yahoo request');
+    });
+    const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: { teamNameCorroboration: 'unavailable', teamNameDigestPresence: 'one' },
+    });
   });
 
   it('hashes whitespace-bearing provider names byte-for-byte rather than their trimmed display value', async () => {
@@ -446,8 +543,12 @@ describe('verifyYahooLeagueMembership', () => {
     const rawDigest = await sha256ExactUtf8(rawTeamName);
     const exact = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, rawDigest);
     const trimmed = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, await sha256ExactUtf8(TEAM_NAME));
-    expect(exact).toMatchObject({ stage: 'completed', evidence: { teamNameCorroboration: 'unique_match' } });
-    expect(trimmed).toMatchObject({ stage: 'completed', evidence: { teamNameCorroboration: 'zero_matches' } });
+    expect(exact).toMatchObject({
+      stage: 'completed', evidence: { teamNameCorroboration: 'unique_match', teamNameDigestPresence: 'one' },
+    });
+    expect(trimmed).toMatchObject({
+      stage: 'completed', evidence: { teamNameCorroboration: 'zero_matches', teamNameDigestPresence: 'zero' },
+    });
   });
 
   it.each([
@@ -462,7 +563,9 @@ describe('verifyYahooLeagueMembership', () => {
       undefined,
       await sha256ExactUtf8(differentName)
     );
-    expect(result).toMatchObject({ stage: 'completed', evidence: { teamNameCorroboration: 'zero_matches' } });
+    expect(result).toMatchObject({
+      stage: 'completed', evidence: { teamNameCorroboration: 'zero_matches', teamNameDigestPresence: 'zero' },
+    });
   });
 
   it('makes digest corroboration unavailable for incomplete manager data or no fresh authenticated GUID', async () => {
@@ -482,7 +585,10 @@ describe('verifyYahooLeagueMembership', () => {
       });
     });
     const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
-    expect(result).toMatchObject({ stage: 'completed', evidence: { teamNameCorroboration: 'unavailable' } });
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: { teamNameCorroboration: 'unavailable', teamNameDigestPresence: 'one' },
+    });
   });
 
   it('keeps digest corroboration unavailable when a provider team name is blank, even with a fresh matching GUID', async () => {
@@ -503,7 +609,10 @@ describe('verifyYahooLeagueMembership', () => {
       });
     });
     const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
-    expect(result).toMatchObject({ stage: 'completed', evidence: { teamNameCorroboration: 'unavailable' } });
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: { teamNameCorroboration: 'unavailable', teamNameDigestPresence: 'unavailable' },
+    });
   });
 
   it('keeps digest corroboration unavailable for a structurally valid empty direct team collection', async () => {
@@ -519,7 +628,120 @@ describe('verifyYahooLeagueMembership', () => {
       });
     });
     const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
-    expect(result).toMatchObject({ stage: 'completed', evidence: { teamNameCorroboration: 'unavailable' } });
+    expect(result).toMatchObject({
+      stage: 'completed',
+      evidence: { teamNameCorroboration: 'unavailable', teamNameDigestPresence: 'unavailable' },
+    });
+  });
+
+  it('fails closed on a mismatched direct league identity or noncanonical direct team key', async () => {
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    const mismatchedLeague = directTeamsPayloadWithEntries([{ name: TEAM_NAME, managerGuid: STORED_GUID }]);
+    mismatchedLeague.fantasy_content.league[0].league_key = '471.l.7654321';
+    const wrongLeagueTeam = directTeamsPayloadWithEntries([
+      { name: TEAM_NAME, managerGuid: STORED_GUID, teamKey: '471.l.7654321.t.1' },
+    ]);
+    const malformedTeam = directTeamsPayloadWithEntries([
+      { name: TEAM_NAME, managerGuid: STORED_GUID, teamKey: `${LEAGUE_KEY}.t.not-numeric` },
+    ]);
+
+    for (const directPayload of [mismatchedLeague, wrongLeagueTeam, malformedTeam]) {
+      fetchSpy.mockImplementation(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(directPayload);
+        if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload(false));
+        if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
+        throw new Error('unexpected Yahoo request');
+      });
+      const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
+      expect(result).toMatchObject({
+        stage: 'completed',
+        evidence: { teamNameCorroboration: 'unavailable', teamNameDigestPresence: 'unavailable' },
+      });
+      expect(JSON.stringify(result)).not.toContain(TEAM_NAME);
+    }
+  });
+
+  it('fails closed on malformed direct league evidence without changing no-digest interpretation', async () => {
+    const mismatchedLeague = directTeamsPayloadWithEntries([{ name: TEAM_NAME, managerGuid: STORED_GUID }]);
+    mismatchedLeague.fantasy_content.league[0].league_key = '471.l.7654321';
+    const malformedTeam = directTeamsPayloadWithEntries([{
+      name: TEAM_NAME,
+      managerGuid: STORED_GUID,
+      teamKey: `${LEAGUE_KEY}.t.not-numeric`,
+    }]);
+
+    for (const directPayload of [mismatchedLeague, malformedTeam]) {
+      fetchSpy.mockImplementation(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(directPayload);
+        if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload());
+        if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
+        throw new Error('unexpected Yahoo request');
+      });
+      const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+      expect(verification).toMatchObject({
+        stage: 'completed',
+        evidence: {
+          requestedLeagueInUserScopedTeams: true,
+          directIsOwnedByCurrentLogin: null,
+          managerGuidComparison: 'unavailable',
+        },
+      });
+      if (verification.stage !== 'completed') throw new Error('expected completed verification');
+      expect(verification.evidence).not.toHaveProperty('teamNameCorroboration');
+      expect(verification.evidence).not.toHaveProperty('teamNameDigestPresence');
+
+      const report = await runYahooSupportVerifyLeagueMembership(
+        env as unknown as YahooSupportEnv,
+        { userId: USER_ID, leagueKey: LEAGUE_KEY },
+        { verify: vi.fn().mockResolvedValue(verification) },
+      );
+      expect(report).toMatchObject({
+        outcome: 'ok',
+        collection: 'contains_requested_team',
+        interpretation: { category: 'membership_confirmed_collection_present' },
+      });
+      expect(report).not.toHaveProperty('teamNameCorroboration');
+      expect(report).not.toHaveProperty('teamNameDigestPresence');
+    }
+  });
+
+  it('counts mixed-type duplicate direct fields before using team keys or names', async () => {
+    const digest = await sha256ExactUtf8(TEAM_NAME);
+    const duplicateTeamKey = directTeamsPayloadWithEntries([{
+      name: TEAM_NAME,
+      managerGuid: STORED_GUID,
+      extraTeamKey: 42,
+    }]);
+    const duplicateTeamName = directTeamsPayloadWithEntries([{
+      name: TEAM_NAME,
+      managerGuid: STORED_GUID,
+      extraName: 42,
+    }]);
+
+    for (const [directPayload, expectedManagerGuidComparison] of [
+      [duplicateTeamKey, 'unavailable'],
+      [duplicateTeamName, 'matches_logged_in_yahoo_guid'],
+    ] as const) {
+      fetchSpy.mockImplementation(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(directPayload);
+        if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload(false));
+        if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
+        throw new Error('unexpected Yahoo request');
+      });
+      const result = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY, undefined, digest);
+      expect(result).toMatchObject({
+        stage: 'completed',
+        evidence: {
+          managerGuidComparison: expectedManagerGuidComparison,
+          teamNameCorroboration: 'unavailable',
+          teamNameDigestPresence: 'unavailable',
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain(TEAM_NAME);
+    }
   });
 
   it.each([
@@ -1078,6 +1300,7 @@ describe('verify-league-membership support contract', () => {
         directIsOwnedByCurrentLogin: null,
         managerGuidComparison: 'unavailable',
         teamNameCorroboration: 'multiple_matches',
+        teamNameDigestPresence: 'one',
       },
     };
     const report = await runYahooSupportVerifyLeagueMembership(
@@ -1085,7 +1308,7 @@ describe('verify-league-membership support contract', () => {
       { userId: USER_ID, leagueKey: LEAGUE_KEY, teamNameSha256: digest },
       { verify: vi.fn().mockResolvedValue(completed) },
     );
-    expect(report).toMatchObject({ teamNameCorroboration: 'multiple_matches' });
+    expect(report).toMatchObject({ teamNameCorroboration: 'multiple_matches', teamNameDigestPresence: 'one' });
     expect(JSON.stringify(report)).not.toContain(digest);
   });
 
@@ -1118,6 +1341,7 @@ describe('verify-league-membership support contract', () => {
     );
     expect(report).toMatchObject({ outcome: 'ok', interpretation: { category } });
     expect(report).not.toHaveProperty('evidence');
+    expect(report).not.toHaveProperty('teamNameDigestPresence');
     expect(JSON.stringify(report)).not.toContain('managerGuidComparison');
     if (category === 'membership_confirmed_collection_omitted') {
       expect(report).toMatchObject({

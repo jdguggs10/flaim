@@ -1135,6 +1135,8 @@ export type YahooSupportLeagueMembershipReport =
       interpretation: LeagueMembershipInterpretation;
       /** Present only when the operator supplied a valid team-name digest. */
       teamNameCorroboration?: 'unique_match' | 'zero_matches' | 'multiple_matches' | 'unavailable';
+      /** Present only when the operator supplied a valid team-name digest. */
+      teamNameDigestPresence?: 'zero' | 'one' | 'multiple' | 'unavailable';
     }
   | { outcome: 'failed'; userMasked: string; error: 'membership_verification_failed' };
 
@@ -1316,7 +1318,10 @@ export async function runYahooSupportVerifyLeagueMembership(
       interpretation,
       ...(
         request.teamNameSha256 !== undefined && verification.stage === 'completed'
-          ? { teamNameCorroboration: verification.evidence.teamNameCorroboration }
+          ? {
+              teamNameCorroboration: verification.evidence.teamNameCorroboration,
+              teamNameDigestPresence: verification.evidence.teamNameDigestPresence,
+            }
           : {}
       ),
     };
