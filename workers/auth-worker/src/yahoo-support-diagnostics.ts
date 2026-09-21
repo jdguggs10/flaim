@@ -48,10 +48,12 @@ import {
   diagnoseYahooDiscovery,
   probeYahooLeague,
   recoverYahooLeagueForSupport,
+  locateYahooLeagueByTeamNameDigest,
   verifyYahooLeagueMembership,
   readYahooCredentialHealthReport,
   MAX_YAHOO_DIAGNOSTIC_REQUESTS,
   YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN,
+  YAHOO_SUPPORT_GAME_KEY_PATTERN,
   YAHOO_SUPPORT_LEAGUE_ID_PATTERN,
   YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN,
   type YahooConnectEnv,
@@ -61,6 +63,7 @@ import {
   type YahooMembershipDiagnosticCall,
   type YahooSupportDiagnosis,
   type YahooSupportLeagueMembershipVerification,
+  type YahooSupportTeamNameLeagueLocation,
   type YahooSupportLeagueProbe,
   type YahooSupportRecoveryFailureReason,
   type YahooSupportRecoveryVisibility,
@@ -78,6 +81,7 @@ export const CLERK_USER_ID_PATTERN = /^user_[A-Za-z0-9]{20,64}$/;
 // and callers should be able to read it off the public support surface.
 export { YAHOO_SUPPORT_LEAGUE_ID_PATTERN };
 export { YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN };
+export { YAHOO_SUPPORT_GAME_KEY_PATTERN };
 export { YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN };
 
 // Duplicated locally rather than imported from any of the ~13 other modules
@@ -125,6 +129,16 @@ export interface YahooSupportLeagueRecoveryRequest {
   teamNameSha256?: string;
 }
 
+/**
+ * The game-key-scoped locator accepts only digest corroboration. The raw team
+ * name never crosses the support route boundary.
+ */
+export interface YahooSupportTeamNameLeagueLocationRequest {
+  userId: string;
+  gameKey: string;
+  teamNameSha256: string;
+}
+
 type ValidationError = {
   error: { status: 400 | 413; body: { error: string; error_description: string } };
 };
@@ -141,6 +155,10 @@ export type YahooSupportLeagueMembershipValidation =
 
 export type YahooSupportLeagueRecoveryValidation =
   | { request: YahooSupportLeagueRecoveryRequest }
+  | ValidationError;
+
+export type YahooSupportTeamNameLeagueLocationValidation =
+  | { request: YahooSupportTeamNameLeagueLocationRequest }
   | ValidationError;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -192,6 +210,7 @@ async function readSupportRequestBody(
 const INSPECT_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId']);
 const LEAGUE_PROBE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueId']);
 const LEAGUE_MEMBERSHIP_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueKey', 'teamNameSha256']);
+const TEAM_NAME_LEAGUE_LOCATION_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'gameKey', 'teamNameSha256']);
 
 export async function parseYahooSupportRequest(request: Request): Promise<YahooSupportValidation> {
   const parsed = await readSupportRequestBody(request, INSPECT_ALLOWED_KEYS);
@@ -310,6 +329,30 @@ export async function parseYahooSupportLeagueRecoveryRequest(
       ...(body.teamNameSha256 !== undefined ? { teamNameSha256: body.teamNameSha256 } : {}),
     },
   };
+}
+
+/**
+ * Parse the bounded user-game locator separately from key-based verification
+ * and recovery. Its numeric game key is appended to a Yahoo URL, so validate
+ * it here and again in the provider helper before the URL is constructed.
+ */
+export async function parseYahooSupportTeamNameLeagueLocationRequest(
+  request: Request
+): Promise<YahooSupportTeamNameLeagueLocationValidation> {
+  const parsed = await readSupportRequestBody(request, TEAM_NAME_LEAGUE_LOCATION_ALLOWED_KEYS);
+  if ('error' in parsed) return parsed;
+
+  const { body } = parsed;
+  if (typeof body.userId !== 'string' || !CLERK_USER_ID_PATTERN.test(body.userId)) {
+    return invalidRequest('invalid_user_id', 'userId must be a valid user ID');
+  }
+  if (typeof body.gameKey !== 'string' || !YAHOO_SUPPORT_GAME_KEY_PATTERN.test(body.gameKey)) {
+    return invalidRequest('invalid_game_key', 'gameKey must be a 1-64 character numeric Yahoo game key');
+  }
+  if (typeof body.teamNameSha256 !== 'string' || !YAHOO_SUPPORT_TEAM_NAME_SHA256_PATTERN.test(body.teamNameSha256)) {
+    return invalidRequest('invalid_team_name_sha256', 'teamNameSha256 must be a 64 character lowercase hexadecimal SHA-256 digest');
+  }
+  return { request: { userId: body.userId, gameKey: body.gameKey, teamNameSha256: body.teamNameSha256 } };
 }
 
 // =============================================================================
@@ -1341,6 +1384,75 @@ export async function runYahooSupportVerifyLeagueMembership(
       outcome: report.outcome,
       stage,
       category,
+      correlation_id: correlationId,
+    })
+  );
+  return report;
+}
+
+// =============================================================================
+// LOCATE-LEAGUE-BY-TEAM-NAME — one game-scoped, read-only Yahoo observation
+// =============================================================================
+
+export type YahooSupportTeamNameLeagueLocationReport = {
+  outcome: 'ok';
+  userMasked: string;
+  checkedAt: string;
+  correlationId: string;
+  result: YahooSupportTeamNameLeagueLocation;
+};
+
+export type YahooSupportTeamNameLeagueLocationDependencies = {
+  now?: () => number;
+  locate?: typeof locateYahooLeagueByTeamNameDigest;
+};
+
+/**
+ * Return only a closed digest-match result. In particular, no provider body,
+ * team name, team key, URL, GUID, or nonmatching league key can leave the
+ * locator; a complete numeric league key is projected only for one match.
+ * This does not establish ownership or persist anything, so the existing
+ * verification and recovery actions remain mandatory after a unique result.
+ */
+export async function runYahooSupportLocateLeagueByTeamName(
+  env: YahooSupportEnv,
+  request: YahooSupportTeamNameLeagueLocationRequest,
+  dependencies: YahooSupportTeamNameLeagueLocationDependencies = {}
+): Promise<YahooSupportTeamNameLeagueLocationReport> {
+  const now = dependencies.now ?? Date.now;
+  const locate = dependencies.locate ?? locateYahooLeagueByTeamNameDigest;
+  const userMasked = maskUserId(request.userId);
+  const correlationId = crypto.randomUUID();
+  const checkedAt = new Date(now()).toISOString();
+  let result: YahooSupportTeamNameLeagueLocation = { status: 'unavailable' };
+
+  try {
+    result = await locate(
+      env as YahooConnectEnv,
+      request.userId,
+      request.gameKey,
+      request.teamNameSha256
+    );
+  } catch (error) {
+    console.error(
+      '[yahoo-support] Team-name league location failed:',
+      error instanceof Error ? error.name : 'unknown error'
+    );
+  }
+
+  const report: YahooSupportTeamNameLeagueLocationReport = {
+    outcome: 'ok',
+    userMasked,
+    checkedAt,
+    correlationId,
+    result,
+  };
+  console.log(
+    JSON.stringify({
+      event: 'yahoo_support_locate_league_by_team_name',
+      service: 'auth-worker',
+      user_id: userMasked,
+      result_status: result.status,
       correlation_id: correlationId,
     })
   );
