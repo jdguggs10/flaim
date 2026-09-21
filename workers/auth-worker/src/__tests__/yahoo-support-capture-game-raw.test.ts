@@ -69,10 +69,27 @@ describe('captureYahooGameRawForSupport', () => {
       'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=470/leagues;out=teams?format=json',
       expect.objectContaining({
         headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-        redirect: 'error',
+        redirect: 'manual',
       }),
     );
     expect(storage.getYahooCredentials).toHaveBeenCalledTimes(2);
+  });
+
+  it('captures a redirect response without following it or forwarding the token', async () => {
+    fetchSpy.mockResolvedValue(new Response('redirect body', {
+      status: 302,
+      headers: { Location: 'https://example.invalid/should-not-be-followed' },
+    }));
+
+    const result = await captureYahooGameRawForSupport(env, USER_ID, GAME_KEY);
+
+    expect(result).toMatchObject({
+      status: 'captured',
+      upstreamStatus: 302,
+      byteLength: 13,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
   });
 
   it('refuses a response whose declared length exceeds the fixed cap before reading it', async () => {
