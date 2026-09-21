@@ -49,6 +49,7 @@ import {
   probeYahooLeague,
   recoverYahooLeagueForSupport,
   locateYahooLeagueByTeamNameDigest,
+  captureYahooGameRawForSupport,
   verifyYahooLeagueMembership,
   readYahooCredentialHealthReport,
   MAX_YAHOO_DIAGNOSTIC_REQUESTS,
@@ -64,6 +65,7 @@ import {
   type YahooSupportDiagnosis,
   type YahooSupportLeagueMembershipVerification,
   type YahooSupportTeamNameLeagueLocation,
+  type YahooSupportGameRawCapture,
   type YahooSupportLeagueProbe,
   type YahooSupportRecoveryFailureReason,
   type YahooSupportRecoveryVisibility,
@@ -139,6 +141,12 @@ export interface YahooSupportTeamNameLeagueLocationRequest {
   teamNameSha256: string;
 }
 
+/** The raw-capture route is fixed to one account and one numeric game key. */
+export interface YahooSupportGameRawCaptureRequest {
+  userId: string;
+  gameKey: string;
+}
+
 type ValidationError = {
   error: { status: 400 | 413; body: { error: string; error_description: string } };
 };
@@ -159,6 +167,10 @@ export type YahooSupportLeagueRecoveryValidation =
 
 export type YahooSupportTeamNameLeagueLocationValidation =
   | { request: YahooSupportTeamNameLeagueLocationRequest }
+  | ValidationError;
+
+export type YahooSupportGameRawCaptureValidation =
+  | { request: YahooSupportGameRawCaptureRequest }
   | ValidationError;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -211,6 +223,7 @@ const INSPECT_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId']);
 const LEAGUE_PROBE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueId']);
 const LEAGUE_MEMBERSHIP_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueKey', 'teamNameSha256']);
 const TEAM_NAME_LEAGUE_LOCATION_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'gameKey', 'teamNameSha256']);
+const GAME_RAW_CAPTURE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'gameKey']);
 
 export async function parseYahooSupportRequest(request: Request): Promise<YahooSupportValidation> {
   const parsed = await readSupportRequestBody(request, INSPECT_ALLOWED_KEYS);
@@ -353,6 +366,27 @@ export async function parseYahooSupportTeamNameLeagueLocationRequest(
     return invalidRequest('invalid_team_name_sha256', 'teamNameSha256 must be a 64 character lowercase hexadecimal SHA-256 digest');
   }
   return { request: { userId: body.userId, gameKey: body.gameKey, teamNameSha256: body.teamNameSha256 } };
+}
+
+/**
+ * Capture uses the same numeric game-key URL boundary as the locator, but it
+ * deliberately accepts no provider selector, response mode, or other
+ * caller-controlled field.
+ */
+export async function parseYahooSupportGameRawCaptureRequest(
+  request: Request
+): Promise<YahooSupportGameRawCaptureValidation> {
+  const parsed = await readSupportRequestBody(request, GAME_RAW_CAPTURE_ALLOWED_KEYS);
+  if ('error' in parsed) return parsed;
+
+  const { body } = parsed;
+  if (typeof body.userId !== 'string' || !CLERK_USER_ID_PATTERN.test(body.userId)) {
+    return invalidRequest('invalid_user_id', 'userId must be a valid user ID');
+  }
+  if (typeof body.gameKey !== 'string' || !YAHOO_SUPPORT_GAME_KEY_PATTERN.test(body.gameKey)) {
+    return invalidRequest('invalid_game_key', 'gameKey must be a 1-64 character numeric Yahoo game key');
+  }
+  return { request: { userId: body.userId, gameKey: body.gameKey } };
 }
 
 // =============================================================================
@@ -1457,6 +1491,101 @@ export async function runYahooSupportLocateLeagueByTeamName(
     })
   );
   return report;
+}
+
+// =============================================================================
+// CAPTURE-GAME-RAW — one bounded raw Yahoo response for support investigation
+// =============================================================================
+
+export type YahooSupportGameRawCaptureReport =
+  | {
+      outcome: 'captured';
+      correlationId: string;
+      capture: Extract<YahooSupportGameRawCapture, { status: 'captured' }>;
+    }
+  | {
+      outcome: 'capture_unavailable' | 'capture_too_large' | 'capture_token_detected';
+      correlationId: string;
+      error: 'capture_unavailable' | 'capture_too_large' | 'capture_token_detected';
+      httpStatus: 413 | 502;
+    };
+
+export type YahooSupportGameRawCaptureDependencies = {
+  now?: () => number;
+  capture?: typeof captureYahooGameRawForSupport;
+};
+
+/**
+ * Keep raw bytes inside this narrow transport handoff. The only non-byte
+ * metadata returned to the router is bounded and independently computed by
+ * the provider helper; failure bodies expose a closed error code only.
+ */
+export async function runYahooSupportGameRawCapture(
+  env: YahooSupportEnv,
+  request: YahooSupportGameRawCaptureRequest,
+  dependencies: YahooSupportGameRawCaptureDependencies = {}
+): Promise<YahooSupportGameRawCaptureReport> {
+  const now = dependencies.now ?? Date.now;
+  const capture = dependencies.capture ?? captureYahooGameRawForSupport;
+  const userMasked = maskUserId(request.userId);
+  const correlationId = crypto.randomUUID();
+  const startedAt = now();
+  let result: YahooSupportGameRawCapture = {
+    status: 'unavailable',
+    upstreamStatus: null,
+    byteLength: 0,
+  };
+
+  try {
+    result = await capture(env as YahooConnectEnv, request.userId, request.gameKey, correlationId);
+  } catch {
+    // A capture failure deliberately has no error text: Yahoo payload and
+    // transport details are valid capture evidence, not safe route metadata.
+  }
+
+  const durationMs = Math.max(0, now() - startedAt);
+  const outcome = result.status === 'captured'
+    ? 'captured'
+    : result.status === 'too_large'
+      ? 'capture_too_large'
+      : result.status === 'token_detected'
+        ? 'capture_token_detected'
+        : 'capture_unavailable';
+  console.log(JSON.stringify({
+    event: 'yahoo_support_capture_game_raw',
+    user_id: userMasked,
+    outcome,
+    upstream_status: result.upstreamStatus,
+    bytes: result.byteLength,
+    duration_ms: durationMs,
+    correlation_id: correlationId,
+  }));
+
+  if (result.status === 'captured') {
+    return { outcome: 'captured', correlationId, capture: result };
+  }
+  if (result.status === 'too_large') {
+    return {
+      outcome: 'capture_too_large',
+      correlationId,
+      error: 'capture_too_large',
+      httpStatus: 413,
+    };
+  }
+  if (result.status === 'token_detected') {
+    return {
+      outcome: 'capture_token_detected',
+      correlationId,
+      error: 'capture_token_detected',
+      httpStatus: 502,
+    };
+  }
+  return {
+    outcome: 'capture_unavailable',
+    correlationId,
+    error: 'capture_unavailable',
+    httpStatus: 502,
+  };
 }
 
 // =============================================================================
