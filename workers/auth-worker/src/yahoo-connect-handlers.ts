@@ -4268,7 +4268,7 @@ async function readScopedYahooTeamNameLeagueMatches(
   const leagues = readYahooCountedCollection(gameResources.leagues);
   if (!leagues) return { status: 'unavailable' };
 
-  const matches: string[] = [];
+  const matches = new Set<string>();
   for (let leagueIndex = 0; leagueIndex < Number(leagues.count); leagueIndex += 1) {
     const leagueWrapper = leagues[String(leagueIndex)];
     if (!isYahooRecord(leagueWrapper) || !Array.isArray(leagueWrapper.league) || leagueWrapper.league.length < 2) {
@@ -4309,11 +4309,11 @@ async function readScopedYahooTeamNameLeagueMatches(
       // SHA-256 is over Yahoo's unmodified UTF-8 name: no trimming, Unicode
       // normalization, or case folding is permitted before comparison.
       if ((await sha256ExactUtf8(teamNameValues[0])) === teamNameSha256) {
-        matches.push(leagueInfo.league_key);
+        matches.add(leagueInfo.league_key);
       }
     }
   }
-  return { status: 'parsed', matches };
+  return { status: 'parsed', matches: [...matches] };
 }
 
 /**

@@ -136,6 +136,16 @@ describe('locateYahooLeagueByTeamNameDigest', () => {
     expect(result).toEqual({ status: 'none' });
   });
 
+  it('deduplicates matching teams within one league before deciding uniqueness', async () => {
+    fetchSpy.mockResolvedValue(json(payload([
+      { leagueKey: LEAGUE_KEY, teamNames: [TEAM_NAME, TEAM_NAME] },
+    ])));
+
+    const result = await locateYahooLeagueByTeamNameDigest(env, USER_ID, GAME_KEY, await sha256ExactUtf8(TEAM_NAME));
+
+    expect(result).toEqual({ status: 'unique', leagueKey: LEAGUE_KEY });
+  });
+
   it.each([
     ['no exact name match', payload([{ leagueKey: LEAGUE_KEY, teamNames: ['Different Team'] }]), { status: 'none' }],
     ['two exact name matches', payload([
