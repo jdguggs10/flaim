@@ -3920,7 +3920,7 @@ type DirectMembershipParseResult =
       directIsOwnedByCurrentLogin: boolean | null;
       /** Null means at least one team's manager collection was incomplete. */
       managerGuids: Set<string> | null;
-      /** Every team is retained so a supplied name digest can stay GUID-bound. */
+      /** Every team is retained for GUID-bound corroboration and raw-name presence. */
       teams: YahooDirectMembershipTeam[];
     }
   | {
@@ -3932,7 +3932,6 @@ type DirectMembershipParseResult =
     };
 
 interface YahooDirectMembershipTeam {
-  teamKey: string;
   /** Null leaves ordinary membership evidence intact but blocks digest use. */
   teamName: string | null;
   managerGuids: Set<string> | null;
@@ -3959,7 +3958,6 @@ function readDirectMembershipTeams(
       ? teamNameValues[0]
       : null;
     teams.push({
-      teamKey,
       // Keep the exact provider string. Do not trim, case-fold, or normalize
       // before SHA-256; the digest is deliberately byte-for-byte evidence.
       teamName,

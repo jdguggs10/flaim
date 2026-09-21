@@ -662,6 +662,51 @@ describe('verifyYahooLeagueMembership', () => {
     }
   });
 
+  it('fails closed on malformed direct league evidence without changing no-digest interpretation', async () => {
+    const mismatchedLeague = directTeamsPayloadWithEntries([{ name: TEAM_NAME, managerGuid: STORED_GUID }]);
+    mismatchedLeague.fantasy_content.league[0].league_key = '471.l.7654321';
+    const malformedTeam = directTeamsPayloadWithEntries([{
+      name: TEAM_NAME,
+      managerGuid: STORED_GUID,
+      teamKey: `${LEAGUE_KEY}.t.not-numeric`,
+    }]);
+
+    for (const directPayload of [mismatchedLeague, malformedTeam]) {
+      fetchSpy.mockImplementation(async (input: unknown) => {
+        const url = String(input);
+        if (url.includes(`/league/${LEAGUE_KEY}/teams`)) return json(directPayload);
+        if (url.includes('/users;use_login=1/games;game_keys=470/teams')) return json(userScopedPayload());
+        if (url.includes('/users;use_login=1/teams')) return json(directUserTeamsPayload());
+        throw new Error('unexpected Yahoo request');
+      });
+      const verification = await verifyYahooLeagueMembership(env, USER_ID, LEAGUE_KEY);
+      expect(verification).toMatchObject({
+        stage: 'completed',
+        evidence: {
+          requestedLeagueInUserScopedTeams: true,
+          directIsOwnedByCurrentLogin: null,
+          managerGuidComparison: 'unavailable',
+        },
+      });
+      if (verification.stage !== 'completed') throw new Error('expected completed verification');
+      expect(verification.evidence).not.toHaveProperty('teamNameCorroboration');
+      expect(verification.evidence).not.toHaveProperty('teamNameDigestPresence');
+
+      const report = await runYahooSupportVerifyLeagueMembership(
+        env as unknown as YahooSupportEnv,
+        { userId: USER_ID, leagueKey: LEAGUE_KEY },
+        { verify: vi.fn().mockResolvedValue(verification) },
+      );
+      expect(report).toMatchObject({
+        outcome: 'ok',
+        collection: 'contains_requested_team',
+        interpretation: { category: 'membership_confirmed_collection_present' },
+      });
+      expect(report).not.toHaveProperty('teamNameCorroboration');
+      expect(report).not.toHaveProperty('teamNameDigestPresence');
+    }
+  });
+
   it('counts mixed-type duplicate direct fields before using team keys or names', async () => {
     const digest = await sha256ExactUtf8(TEAM_NAME);
     const duplicateTeamKey = directTeamsPayloadWithEntries([{
