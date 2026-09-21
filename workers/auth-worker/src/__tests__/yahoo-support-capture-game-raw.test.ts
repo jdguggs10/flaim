@@ -92,6 +92,20 @@ describe('captureYahooGameRawForSupport', () => {
     expect(fetchSpy.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
   });
 
+  it('captures the separately fixed user-game teams collection when requested', async () => {
+    fetchSpy.mockResolvedValue(new Response('{"teams":[]}', { status: 200 }));
+
+    await captureYahooGameRawForSupport(env, USER_ID, GAME_KEY, undefined, 'teams');
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://fantasysports.yahooapis.com/fantasy/v2/users;use_login=1/games;game_keys=470/teams?format=json',
+      expect.objectContaining({
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+        redirect: 'manual',
+      }),
+    );
+  });
+
   it('refuses a response whose declared length exceeds the fixed cap before reading it', async () => {
     fetchSpy.mockResolvedValue(new Response('not-read', {
       status: 200,
@@ -153,7 +167,7 @@ describe('captureYahooGameRawForSupport', () => {
 
     const report = await runYahooSupportGameRawCapture(
       env,
-      { userId: USER_ID, gameKey: GAME_KEY },
+      { userId: USER_ID, gameKey: GAME_KEY, collection: 'leagues' },
       {
         now: vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(145),
         capture: vi.fn().mockResolvedValue({

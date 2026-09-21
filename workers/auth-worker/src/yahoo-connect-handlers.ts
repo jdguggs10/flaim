@@ -4234,6 +4234,13 @@ export type YahooSupportTeamNameLeagueLocation =
  */
 export const YAHOO_SUPPORT_RAW_CAPTURE_MAX_BYTES = 8 * 1024 * 1024;
 
+/**
+ * The support capture can observe one of two fixed Yahoo user-game
+ * collections. This is a closed set so the operator can never supply a path,
+ * query, or response selector.
+ */
+export type YahooSupportGameRawCaptureCollection = 'leagues' | 'teams';
+
 export type YahooSupportGameRawCapture =
   | {
       status: 'captured';
@@ -4490,10 +4497,14 @@ export async function captureYahooGameRawForSupport(
   env: YahooConnectEnv,
   userId: string,
   gameKey: string,
-  correlationId?: string
+  correlationId?: string,
+  collection: YahooSupportGameRawCaptureCollection = 'leagues'
 ): Promise<YahooSupportGameRawCapture> {
   if (!YAHOO_SUPPORT_GAME_KEY_PATTERN.test(gameKey)) {
     throw new Error('captureYahooGameRawForSupport received an invalid game key');
+  }
+  if (collection !== 'leagues' && collection !== 'teams') {
+    throw new Error('captureYahooGameRawForSupport received an invalid collection');
   }
 
   const storage = YahooStorage.fromEnvironment(env);
@@ -4518,8 +4529,11 @@ export async function captureYahooGameRawForSupport(
 
   let response: Response;
   try {
+    const url = collection === 'teams'
+      ? `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/teams?format=json`
+      : `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/leagues;out=teams?format=json`;
     response = await fetch(
-      `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/leagues;out=teams?format=json`,
+      url,
       {
         headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
         // Preserve Yahoo's first response exactly without forwarding the
