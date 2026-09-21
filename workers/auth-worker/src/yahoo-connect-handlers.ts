@@ -3783,6 +3783,8 @@ export interface YahooMembershipEvidence {
     | 'unavailable';
   /** Present only when the request included a valid team-name digest. */
   teamNameCorroboration?: 'unique_match' | 'zero_matches' | 'multiple_matches' | 'unavailable';
+  /** Closed raw-name presence count, independent of manager GUID membership. */
+  teamNameDigestPresence?: 'zero' | 'one' | 'multiple' | 'unavailable';
 }
 
 export type YahooSupportLeagueMembershipVerification =
@@ -3936,21 +3938,25 @@ interface YahooDirectMembershipTeam {
   managerGuids: Set<string> | null;
 }
 
-function readDirectMembershipTeams(collection: Record<string, unknown>): YahooDirectMembershipTeam[] | null {
+function readDirectMembershipTeams(
+  collection: Record<string, unknown>,
+  leagueKey: string
+): YahooDirectMembershipTeam[] | null {
   const teams: YahooDirectMembershipTeam[] = [];
+  const teamPrefix = `${leagueKey}.t.`;
   for (let index = 0; index < Number(collection.count); index += 1) {
     const teamWrapper = collection[String(index)];
     if (!isYahooRecord(teamWrapper) || !Array.isArray(teamWrapper.team)) return null;
-    const teamKeys = readDirectYahooStrings(teamWrapper.team, 'team_key');
-    const teamNames = readDirectYahooStrings(teamWrapper.team, 'name');
-    if (teamKeys.length !== 1) return null;
-    const [teamKey] = teamKeys;
-    if (
-      teamKey.trim() !== teamKey
-      || teamKey.length === 0
-    ) return null;
-    const teamName = teamNames.length === 1 && nonBlankYahooString(teamNames[0]) !== null
-      ? teamNames[0]
+    const teamKeyValues = collectDirectYahooFields(teamWrapper.team, 'team_key');
+    if (teamKeyValues.length !== 1 || typeof teamKeyValues[0] !== 'string') return null;
+    const teamKey = teamKeyValues[0];
+    const teamId = teamKey.startsWith(teamPrefix) ? teamKey.slice(teamPrefix.length) : '';
+    if (teamId.length === 0 || /\D/.test(teamId)) return null;
+    const teamNameValues = collectDirectYahooFields(teamWrapper.team, 'name');
+    const teamName = teamNameValues.length === 1
+      && typeof teamNameValues[0] === 'string'
+      && nonBlankYahooString(teamNameValues[0]) !== null
+      ? teamNameValues[0]
       : null;
     teams.push({
       teamKey,
@@ -3963,18 +3969,24 @@ function readDirectMembershipTeams(collection: Record<string, unknown>): YahooDi
   return teams;
 }
 
-function readDirectMembershipEvidence(parsed: unknown): DirectMembershipParseResult {
+function readDirectMembershipEvidence(parsed: unknown, requestedLeagueKey: string): DirectMembershipParseResult {
   const fantasyContent = isYahooRecord(parsed) && isYahooRecord(parsed.fantasy_content)
     ? parsed.fantasy_content
     : null;
   if (!fantasyContent) return { status: 'missing_fantasy_content' };
   const league = fantasyContent?.league;
-  if (!Array.isArray(league) || league.length < 2 || !isYahooRecord(league[1])) {
+  if (
+    !Array.isArray(league)
+    || league.length < 2
+    || !isYahooRecord(league[0])
+    || league[0].league_key !== requestedLeagueKey
+    || !isYahooRecord(league[1])
+  ) {
     return { status: 'invalid_league_entity' };
   }
   const teams = readYahooCountedCollection(league[1].teams);
   if (!teams) return { status: 'invalid_teams_collection' };
-  const directTeams = readDirectMembershipTeams(teams);
+  const directTeams = readDirectMembershipTeams(teams, requestedLeagueKey);
   if (!directTeams) return { status: 'invalid_team_entry' };
   return {
     status: 'parsed',
@@ -4015,6 +4027,23 @@ async function corroborateYahooTeamNameDigest(
   })));
   const matchCount = candidates.filter((candidate) => candidate.matchesGuid && candidate.matchesDigest).length;
   return matchCount === 0 ? 'zero_matches' : matchCount === 1 ? 'unique_match' : 'multiple_matches';
+}
+
+/**
+ * Count exact provider-name digest matches across the direct league teams.
+ * This deliberately ignores manager GUIDs and authenticated identity: it is
+ * structural evidence about Yahoo's direct payload, not an ownership claim.
+ */
+async function countYahooTeamNameDigestPresence(
+  teams: YahooDirectMembershipTeam[] | null,
+  teamNameSha256: string
+): Promise<NonNullable<YahooMembershipEvidence['teamNameDigestPresence']>> {
+  if (!teams || teams.length === 0 || teams.some((team) => team.teamName === null)) {
+    return 'unavailable';
+  }
+  const digests = await Promise.all(teams.map((team) => sha256ExactUtf8(team.teamName!)));
+  const matchCount = digests.filter((digest) => digest === teamNameSha256).length;
+  return matchCount === 0 ? 'zero' : matchCount === 1 ? 'one' : 'multiple';
 }
 
 type UserScopedMembershipParseResult =
@@ -4289,7 +4318,7 @@ export async function verifyYahooLeagueMembership(
     'league_teams',
     `${YAHOO_FANTASY_API_URL}/league/${leagueKey}/teams?format=json`,
     tokenResult.accessToken,
-    readDirectMembershipEvidence
+    (parsed) => readDirectMembershipEvidence(parsed, leagueKey)
   );
   const scoped = await runYahooMembershipCall(
     'user_game_teams',
@@ -4327,6 +4356,12 @@ export async function verifyYahooLeagueMembership(
       scopedLoggedInGuids,
       teamNameSha256
     );
+  const teamNameDigestPresence = teamNameSha256 === undefined
+    ? undefined
+    : await countYahooTeamNameDigestPresence(
+      directEvidence ? directEvidence.teams : null,
+      teamNameSha256
+    );
 
   console.log(JSON.stringify({
     event: 'yahoo_support_membership_shape',
@@ -4341,6 +4376,7 @@ export async function verifyYahooLeagueMembership(
       : 'unavailable',
     manager_guid_comparison: managerGuidComparison,
     ...(teamNameCorroboration !== undefined ? { team_name_corroboration: teamNameCorroboration } : {}),
+    ...(teamNameDigestPresence !== undefined ? { team_name_digest_presence: teamNameDigestPresence } : {}),
     correlation_id: correlationId ?? null,
   }));
 
@@ -4352,6 +4388,7 @@ export async function verifyYahooLeagueMembership(
       directIsOwnedByCurrentLogin: directEvidence?.directIsOwnedByCurrentLogin ?? null,
       managerGuidComparison,
       ...(teamNameCorroboration !== undefined ? { teamNameCorroboration } : {}),
+      ...(teamNameDigestPresence !== undefined ? { teamNameDigestPresence } : {}),
     },
   };
 }
