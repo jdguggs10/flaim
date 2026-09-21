@@ -67,7 +67,7 @@ const DIAGNOSE_PATH = '/auth/internal/support/yahoo/diagnose';
 const PROBE_LEAGUE_PATH = '/auth/internal/support/yahoo/probe-league';
 const VERIFY_LEAGUE_MEMBERSHIP_PATH = '/auth/internal/support/yahoo/verify-league-membership';
 const RECOVER_LEAGUE_PATH = '/auth/internal/support/yahoo/recover-league';
-const LOCATE_LEAGUE_BY_TEAM_NAME_PATH = '/auth/internal/support/yahoo/locate-league-by-team-name';
+const LOCATE_LEAGUE_BY_TEAM_NAME_PATH = '/auth/internal/support/yahoo/locate-league';
 const REFRESH_PATH = '/auth/internal/support/yahoo/refresh';
 
 // All seven actions are implemented; no stub route remains.
@@ -788,7 +788,7 @@ describe(`POST ${LOCATE_LEAGUE_BY_TEAM_NAME_PATH} (implemented)`, () => {
     const limitedEnv = {
       ...baseEnv,
       CREDENTIALS_RATE_LIMITER: {
-        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:locate-league-by-team-name' })),
+        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:locate-league' })),
       },
     };
 
