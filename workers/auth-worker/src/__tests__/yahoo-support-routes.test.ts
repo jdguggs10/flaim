@@ -844,13 +844,25 @@ describe(`POST ${CAPTURE_GAME_RAW_PATH} (implemented)`, () => {
     await expect(res.text()).resolves.toBe('{"sentinel":true}');
     expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
       expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
-      { userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY },
+      { userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'leagues' },
+    );
+  });
+
+  it('passes the teams collection through the closed request contract', async () => {
+    const body = JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'teams' });
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'teams' },
     );
   });
 
   it.each([
     ['missing game key', JSON.stringify({ userId: TARGET_USER_ID }), 'invalid_game_key'],
     ['non-numeric game key', JSON.stringify({ userId: TARGET_USER_ID, gameKey: 'nfl' }), 'invalid_game_key'],
+    ['invalid collection', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'rosters' }), 'invalid_collection'],
     ['unknown selector', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, path: '/users' }), 'invalid_request'],
   ])('rejects %s before capture', async (_label, body, error) => {
     const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
