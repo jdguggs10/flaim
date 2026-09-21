@@ -49,7 +49,7 @@ import {
   probeYahooLeague,
   recoverYahooLeagueForSupport,
   locateYahooLeagueByTeamNameDigest,
-  captureYahooGameRawForSupport,
+  captureYahooRawForSupport,
   verifyYahooLeagueMembership,
   readYahooCredentialHealthReport,
   MAX_YAHOO_DIAGNOSTIC_REQUESTS,
@@ -67,6 +67,7 @@ import {
   type YahooSupportTeamNameLeagueLocation,
   type YahooSupportGameRawCapture,
   type YahooSupportGameRawCaptureCollection,
+  type YahooSupportRawCaptureTarget,
   type YahooSupportLeagueProbe,
   type YahooSupportRecoveryFailureReason,
   type YahooSupportRecoveryVisibility,
@@ -142,12 +143,15 @@ export interface YahooSupportTeamNameLeagueLocationRequest {
   teamNameSha256: string;
 }
 
-/** The raw-capture route is fixed to one account, numeric game key, and collection. */
-export interface YahooSupportGameRawCaptureRequest {
-  userId: string;
-  gameKey: string;
-  collection: YahooSupportGameRawCaptureCollection;
-}
+/**
+ * The raw-capture route accepts one of three fixed provider resources. Omitting
+ * `target` retains the original game-key request shape and is normalized to
+ * `target: 'game'`; every explicit target rejects fields for another target.
+ */
+export type YahooSupportGameRawCaptureRequest =
+  | ({ userId: string } & Extract<YahooSupportRawCaptureTarget, { target: 'game' }>)
+  | ({ userId: string } & Extract<YahooSupportRawCaptureTarget, { target: 'discovery' }>)
+  | ({ userId: string } & Extract<YahooSupportRawCaptureTarget, { target: 'league-teams' }>);
 
 type ValidationError = {
   error: { status: 400 | 413; body: { error: string; error_description: string } };
@@ -225,7 +229,13 @@ const INSPECT_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId']);
 const LEAGUE_PROBE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueId']);
 const LEAGUE_MEMBERSHIP_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'leagueKey', 'teamNameSha256']);
 const TEAM_NAME_LEAGUE_LOCATION_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'gameKey', 'teamNameSha256']);
-const GAME_RAW_CAPTURE_ALLOWED_KEYS: ReadonlySet<string> = new Set(['userId', 'gameKey', 'collection']);
+const RAW_CAPTURE_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+  'userId',
+  'target',
+  'gameKey',
+  'collection',
+  'leagueKey',
+]);
 
 export async function parseYahooSupportRequest(request: Request): Promise<YahooSupportValidation> {
   const parsed = await readSupportRequestBody(request, INSPECT_ALLOWED_KEYS);
@@ -371,21 +381,50 @@ export async function parseYahooSupportTeamNameLeagueLocationRequest(
 }
 
 /**
- * Capture uses the same numeric game-key URL boundary as the locator, but it
- * deliberately accepts no provider path, response mode, or other
- * caller-controlled field. `collection` is a closed enum mapping to exactly
- * two fixed Yahoo URLs; omitted stays compatible with the original leagues
- * collection.
+ * Capture accepts a closed target union: the legacy numeric game-key target,
+ * exact broad discovery, or one strict full-key direct league teams resource.
+ * It deliberately accepts no provider URL, path, query, response mode, or
+ * fields from a different target. Omitting `target` keeps the original game
+ * capture compatible, including its default leagues collection.
  */
 export async function parseYahooSupportGameRawCaptureRequest(
   request: Request
 ): Promise<YahooSupportGameRawCaptureValidation> {
-  const parsed = await readSupportRequestBody(request, GAME_RAW_CAPTURE_ALLOWED_KEYS);
+  const parsed = await readSupportRequestBody(request, RAW_CAPTURE_ALLOWED_KEYS);
   if ('error' in parsed) return parsed;
 
   const { body } = parsed;
   if (typeof body.userId !== 'string' || !CLERK_USER_ID_PATTERN.test(body.userId)) {
     return invalidRequest('invalid_user_id', 'userId must be a valid user ID');
+  }
+
+  const target = body.target ?? 'game';
+  if (target !== 'game' && target !== 'discovery' && target !== 'league-teams') {
+    return invalidRequest('invalid_capture_target', 'target must be game, discovery, or league-teams');
+  }
+
+  if (target === 'discovery') {
+    if (body.gameKey !== undefined || body.collection !== undefined || body.leagueKey !== undefined) {
+      return invalidRequest('invalid_request', 'discovery capture accepts no gameKey, collection, or leagueKey');
+    }
+    return { request: { userId: body.userId, target } };
+  }
+
+  if (target === 'league-teams') {
+    if (body.gameKey !== undefined || body.collection !== undefined) {
+      return invalidRequest('invalid_request', 'league-teams capture accepts no gameKey or collection');
+    }
+    if (typeof body.leagueKey !== 'string' || !YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(body.leagueKey)) {
+      return invalidRequest(
+        'invalid_league_key',
+        'leagueKey must be a 1-64 character full numeric Yahoo league key such as 470.l.1234567'
+      );
+    }
+    return { request: { userId: body.userId, target, leagueKey: body.leagueKey } };
+  }
+
+  if (body.leagueKey !== undefined) {
+    return invalidRequest('invalid_request', 'game capture accepts no leagueKey');
   }
   if (typeof body.gameKey !== 'string' || !YAHOO_SUPPORT_GAME_KEY_PATTERN.test(body.gameKey)) {
     return invalidRequest('invalid_game_key', 'gameKey must be a 1-64 character numeric Yahoo game key');
@@ -393,13 +432,7 @@ export async function parseYahooSupportGameRawCaptureRequest(
   if (body.collection !== undefined && body.collection !== 'leagues' && body.collection !== 'teams') {
     return invalidRequest('invalid_collection', 'collection must be either leagues or teams');
   }
-  return {
-    request: {
-      userId: body.userId,
-      gameKey: body.gameKey,
-      collection: body.collection ?? 'leagues',
-    },
-  };
+  return { request: { userId: body.userId, target, gameKey: body.gameKey, collection: body.collection ?? 'leagues' } };
 }
 
 // =============================================================================
@@ -1525,7 +1558,7 @@ export type YahooSupportGameRawCaptureReport =
 
 export type YahooSupportGameRawCaptureDependencies = {
   now?: () => number;
-  capture?: typeof captureYahooGameRawForSupport;
+  capture?: typeof captureYahooRawForSupport;
 };
 
 /**
@@ -1539,7 +1572,7 @@ export async function runYahooSupportGameRawCapture(
   dependencies: YahooSupportGameRawCaptureDependencies = {}
 ): Promise<YahooSupportGameRawCaptureReport> {
   const now = dependencies.now ?? Date.now;
-  const capture = dependencies.capture ?? captureYahooGameRawForSupport;
+  const capture = dependencies.capture ?? captureYahooRawForSupport;
   const userMasked = maskUserId(request.userId);
   const correlationId = crypto.randomUUID();
   const startedAt = now();
@@ -1550,7 +1583,8 @@ export async function runYahooSupportGameRawCapture(
   };
 
   try {
-    result = await capture(env as YahooConnectEnv, request.userId, request.gameKey, correlationId, request.collection);
+    const { userId, ...target } = request;
+    result = await capture(env as YahooConnectEnv, userId, target, correlationId);
   } catch {
     // A capture failure deliberately has no error text: Yahoo payload and
     // transport details are valid capture evidence, not safe route metadata.

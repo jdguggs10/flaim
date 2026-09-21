@@ -2137,7 +2137,7 @@ const YAHOO_FANTASY_API_URL = 'https://fantasysports.yahooapis.com/fantasy/v2';
 // Yahoo can fail an otherwise valid unfiltered all-history discovery. Flaim
 // supports full fantasy leagues, so filter at the games collection before
 // expanding leagues and teams.
-const YAHOO_LEAGUE_DISCOVERY_URL =
+export const YAHOO_LEAGUE_DISCOVERY_URL =
   `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_types=full/leagues;out=teams?format=json`;
 
 /**
@@ -4241,6 +4241,20 @@ export const YAHOO_SUPPORT_RAW_CAPTURE_MAX_BYTES = 8 * 1024 * 1024;
  */
 export type YahooSupportGameRawCaptureCollection = 'leagues' | 'teams';
 
+/**
+ * Every support raw-capture target is fixed in code. `game` remains the
+ * compatibility target for the original request shape; neither its game key
+ * nor the two new target kinds can carry a caller-provided Yahoo URL piece.
+ */
+export type YahooSupportRawCaptureTarget =
+  | {
+      target: 'game';
+      gameKey: string;
+      collection: YahooSupportGameRawCaptureCollection;
+    }
+  | { target: 'discovery' }
+  | { target: 'league-teams'; leagueKey: string };
+
 export type YahooSupportGameRawCapture =
   | {
       status: 'captured';
@@ -4486,25 +4500,42 @@ async function sha256Bytes(bytes: Uint8Array): Promise<string> {
 }
 
 /**
- * Captures one fixed user-game Yahoo response for an authorized support
- * investigation. Unlike the digest locator, this deliberately uses the normal
- * guarded token path: a near-expiry credential may renew through its existing
- * lease and storage guard before the single Yahoo data GET. The raw bytes never
- * enter logs or parsed objects, and the capture is refused if they contain any
- * access or refresh token held before or after that renewal.
+ * Fixed raw-capture targets use the normal guarded token path: a near-expiry
+ * credential may renew through its existing lease and storage guard before the
+ * single Yahoo data GET. The raw bytes never enter logs or parsed objects, and
+ * the capture is refused if they contain any access or refresh token held
+ * before or after that renewal.
  */
-export async function captureYahooGameRawForSupport(
+function yahooSupportRawCaptureUrl(target: YahooSupportRawCaptureTarget): string {
+  if (target.target === 'discovery') return YAHOO_LEAGUE_DISCOVERY_URL;
+  if (target.target === 'league-teams') {
+    return `${YAHOO_FANTASY_API_URL}/league/${target.leagueKey}/teams?format=json`;
+  }
+  return target.collection === 'teams'
+    ? `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${target.gameKey}/teams?format=json`
+    : `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${target.gameKey}/leagues;out=teams?format=json`;
+}
+
+/**
+ * Capture exactly one of the code-owned Yahoo response targets for an
+ * authorized support investigation. The caller receives only bytes after the
+ * existing cap and before/after credential-value scans succeed.
+ */
+export async function captureYahooRawForSupport(
   env: YahooConnectEnv,
   userId: string,
-  gameKey: string,
+  target: YahooSupportRawCaptureTarget,
   correlationId?: string,
-  collection: YahooSupportGameRawCaptureCollection = 'leagues'
 ): Promise<YahooSupportGameRawCapture> {
-  if (!YAHOO_SUPPORT_GAME_KEY_PATTERN.test(gameKey)) {
-    throw new Error('captureYahooGameRawForSupport received an invalid game key');
-  }
-  if (collection !== 'leagues' && collection !== 'teams') {
-    throw new Error('captureYahooGameRawForSupport received an invalid collection');
+  if (
+    (target.target !== 'game' && target.target !== 'discovery' && target.target !== 'league-teams')
+    || (target.target === 'game' && (
+      !YAHOO_SUPPORT_GAME_KEY_PATTERN.test(target.gameKey)
+      || (target.collection !== 'leagues' && target.collection !== 'teams')
+    ))
+    || (target.target === 'league-teams' && !YAHOO_SUPPORT_FULL_LEAGUE_KEY_PATTERN.test(target.leagueKey))
+  ) {
+    throw new Error('captureYahooRawForSupport received an invalid fixed target');
   }
 
   const storage = YahooStorage.fromEnvironment(env);
@@ -4529,11 +4560,8 @@ export async function captureYahooGameRawForSupport(
 
   let response: Response;
   try {
-    const url = collection === 'teams'
-      ? `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/teams?format=json`
-      : `${YAHOO_FANTASY_API_URL}/users;use_login=1/games;game_keys=${gameKey}/leagues;out=teams?format=json`;
     response = await fetch(
-      url,
+      yahooSupportRawCaptureUrl(target),
       {
         headers: { Authorization: `Bearer ${tokenResult.accessToken}` },
         // Preserve Yahoo's first response exactly without forwarding the
@@ -4585,6 +4613,27 @@ export async function captureYahooGameRawForSupport(
     byteLength: buffered.body.byteLength,
     sha256: await sha256Bytes(buffered.body),
   };
+}
+
+/**
+ * Compatibility wrapper for existing support callers and tests. New support
+ * routes use the closed target union above so discovery/direct-league capture
+ * cannot be represented as a path or query string.
+ */
+export async function captureYahooGameRawForSupport(
+  env: YahooConnectEnv,
+  userId: string,
+  gameKey: string,
+  correlationId?: string,
+  collection: YahooSupportGameRawCaptureCollection = 'leagues'
+): Promise<YahooSupportGameRawCapture> {
+  if (!YAHOO_SUPPORT_GAME_KEY_PATTERN.test(gameKey)) {
+    throw new Error('captureYahooGameRawForSupport received an invalid game key');
+  }
+  if (collection !== 'leagues' && collection !== 'teams') {
+    throw new Error('captureYahooGameRawForSupport received an invalid collection');
+  }
+  return captureYahooRawForSupport(env, userId, { target: 'game', gameKey, collection }, correlationId);
 }
 
 function usableYahooMembershipResponse(call: YahooMembershipInternalCall): boolean {

@@ -1209,10 +1209,11 @@ api.post('/internal/support/yahoo/locate-league', async (c) => {
   return c.json(report, 200);
 });
 
-// Bounded, operator-only incident capture for the exact user-game collection
-// whose parsed reduction has been inconclusive. The route has no caller-chosen
-// Yahoo path or response mode. A successful capture intentionally preserves
-// Yahoo's response status in a header while returning the raw bytes with 200.
+// Bounded, operator-only incident capture for one fixed game collection, the
+// exact broad discovery resource, or one direct full-key league teams resource.
+// The closed parser permits no caller-chosen Yahoo path or response mode. A
+// successful capture intentionally preserves Yahoo's response status in a
+// header while returning the raw bytes with 200.
 api.post('/internal/support/yahoo/capture-game-raw', async (c) => {
   const gate = await requireSupportRoute(c);
   if (gate) return gate;
@@ -3043,7 +3044,7 @@ api.notFound((c) => {
       '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
       '/internal/support/yahoo/verify-league-membership': 'POST - Operator support verification of Yahoo ownership for one full league key (two service secrets)',
       '/internal/support/yahoo/locate-league': 'POST - Operator read-only Yahoo league lookup by game key and team-name digest (two service secrets)',
-      '/internal/support/yahoo/capture-game-raw': 'POST - Operator bounded raw Yahoo user-game capture for one numeric game key (two service secrets)',
+      '/internal/support/yahoo/capture-game-raw': 'POST - Operator bounded raw Yahoo capture for a fixed game, discovery, or direct league-teams target (two service secrets)',
       '/internal/support/yahoo/recover-league': 'POST - Operator recovery of one ownership-proven Yahoo league (two service secrets)',
       '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport and per-sport defaults)',

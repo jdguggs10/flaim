@@ -844,7 +844,7 @@ describe(`POST ${CAPTURE_GAME_RAW_PATH} (implemented)`, () => {
     await expect(res.text()).resolves.toBe('{"sentinel":true}');
     expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
       expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
-      { userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'leagues' },
+      { userId: TARGET_USER_ID, target: 'game', gameKey: TARGET_GAME_KEY, collection: 'leagues' },
     );
   });
 
@@ -855,7 +855,29 @@ describe(`POST ${CAPTURE_GAME_RAW_PATH} (implemented)`, () => {
     expect(res.status).toBe(200);
     expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
       expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
-      { userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'teams' },
+      { userId: TARGET_USER_ID, target: 'game', gameKey: TARGET_GAME_KEY, collection: 'teams' },
+    );
+  });
+
+  it('passes the fixed broad discovery target without game fields', async () => {
+    const body = JSON.stringify({ userId: TARGET_USER_ID, target: 'discovery' });
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, target: 'discovery' },
+    );
+  });
+
+  it('passes one strict direct-league teams target without game fields', async () => {
+    const body = JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams', leagueKey: TARGET_LEAGUE_KEY });
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, target: 'league-teams', leagueKey: TARGET_LEAGUE_KEY },
     );
   });
 
@@ -864,6 +886,13 @@ describe(`POST ${CAPTURE_GAME_RAW_PATH} (implemented)`, () => {
     ['non-numeric game key', JSON.stringify({ userId: TARGET_USER_ID, gameKey: 'nfl' }), 'invalid_game_key'],
     ['invalid collection', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'rosters' }), 'invalid_collection'],
     ['unknown selector', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, path: '/users' }), 'invalid_request'],
+    ['unknown target', JSON.stringify({ userId: TARGET_USER_ID, target: 'url', gameKey: TARGET_GAME_KEY }), 'invalid_capture_target'],
+    ['discovery with a game key', JSON.stringify({ userId: TARGET_USER_ID, target: 'discovery', gameKey: TARGET_GAME_KEY }), 'invalid_request'],
+    ['discovery with a collection', JSON.stringify({ userId: TARGET_USER_ID, target: 'discovery', collection: 'leagues' }), 'invalid_request'],
+    ['league teams missing a full key', JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams' }), 'invalid_league_key'],
+    ['league teams with a malformed key', JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams', leagueKey: '../470.l.1234567' }), 'invalid_league_key'],
+    ['league teams with game fields', JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams', leagueKey: TARGET_LEAGUE_KEY, gameKey: TARGET_GAME_KEY }), 'invalid_request'],
+    ['game with a league key', JSON.stringify({ userId: TARGET_USER_ID, target: 'game', gameKey: TARGET_GAME_KEY, leagueKey: TARGET_LEAGUE_KEY }), 'invalid_request'],
   ])('rejects %s before capture', async (_label, body, error) => {
     const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
 

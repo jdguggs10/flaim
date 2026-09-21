@@ -6,7 +6,9 @@ vi.mock('../yahoo-storage', async () => {
 });
 
 import {
+  captureYahooRawForSupport,
   captureYahooGameRawForSupport,
+  YAHOO_LEAGUE_DISCOVERY_URL,
   YAHOO_SUPPORT_RAW_CAPTURE_MAX_BYTES,
   type YahooConnectEnv,
 } from '../yahoo-connect-handlers';
@@ -106,6 +108,37 @@ describe('captureYahooGameRawForSupport', () => {
     );
   });
 
+  it('captures the exact broad discovery URL without accepting a caller URL', async () => {
+    fetchSpy.mockResolvedValue(new Response('{"games":[]}', { status: 200 }));
+
+    await captureYahooRawForSupport(env, USER_ID, { target: 'discovery' });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      YAHOO_LEAGUE_DISCOVERY_URL,
+      expect.objectContaining({
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+        redirect: 'manual',
+      }),
+    );
+  });
+
+  it('captures the one direct full-league teams URL', async () => {
+    fetchSpy.mockResolvedValue(new Response('{"teams":[]}', { status: 200 }));
+
+    await captureYahooRawForSupport(env, USER_ID, {
+      target: 'league-teams',
+      leagueKey: '470.l.1234567',
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://fantasysports.yahooapis.com/fantasy/v2/league/470.l.1234567/teams?format=json',
+      expect.objectContaining({
+        headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+        redirect: 'manual',
+      }),
+    );
+  });
+
   it('refuses a response whose declared length exceeds the fixed cap before reading it', async () => {
     fetchSpy.mockResolvedValue(new Response('not-read', {
       status: 200,
@@ -161,13 +194,24 @@ describe('captureYahooGameRawForSupport', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('rejects an invalid direct league key before storage or Yahoo calls', async () => {
+    await expect(captureYahooRawForSupport(
+      env,
+      USER_ID,
+      { target: 'league-teams', leagueKey: '../470.l.1234567' } as never,
+    )).rejects.toThrow('invalid fixed target');
+
+    expect(storage.getYahooCredentials).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('logs only the closed capture audit fields', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const capturedBytes = new TextEncoder().encode(`private ${ACCESS_TOKEN} is not logged`);
 
     const report = await runYahooSupportGameRawCapture(
       env,
-      { userId: USER_ID, gameKey: GAME_KEY, collection: 'leagues' },
+      { userId: USER_ID, target: 'game', gameKey: GAME_KEY, collection: 'leagues' },
       {
         now: vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(145),
         capture: vi.fn().mockResolvedValue({
