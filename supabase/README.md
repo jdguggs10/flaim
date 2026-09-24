@@ -218,6 +218,17 @@ grouped pass, rather than rescanning materialized history once per user. The
 call-count descending and client-name lexical tie-break remains unchanged, and
 NULL clients remain excluded from mode selection.
 
+The FLA-412 optimization likewise keeps the payload contract unchanged while
+consolidating raw-event reads. `rolling` reads the trailing 30 days once,
+grouped by user, instead of scanning every retained event four times; a user
+counts toward a trailing window exactly when that user's latest event falls
+inside it, and rows without a user still count toward `calls_7d` only. The
+four raw health keys share one `grouping sets ((tool_name), ())` pass over the
+30-day window, with seven-day values as filtered aggregates of the same rows;
+`tool_health_7d` still lists only tools with a seven-day call. The migration
+refuses to run unless the deployed body is the reviewed FLA-378 body with the
+60-day stale guard.
+
 The reviewed scheduling artifact lives outside the migration path:
 `cron/analytics-history.sql` schedules history preservation only after an
 explicit initial close/backfill has been verified. The one-time guarded
@@ -449,6 +460,12 @@ first, then drop the three views, then the RPC, then the table. The restored
 function body is reproduced verbatim rather than referenced. Reversing that
 order would leave the live purge referencing a table that no longer exists, and
 the next real account deletion would fail outright.
+
+`supabase/rollback/20260924_rollback_consolidate_dashboard_raw_scans.sql`
+restores `analytics.dashboard_payload_history(boolean)` to its pre-FLA-412
+body, reproduced verbatim, with the same owner and ACL. It refuses to run
+unless the live body is the FLA-412 definition. The change was
+performance-only, so rolling it back restores query cost, not payload values.
 
 ## Demo platform contract
 

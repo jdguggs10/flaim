@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Dashboard Snapshot Raw-Event Scans (FLA-412)
+
+- **Changed**: The history-backed dashboard payload's `rolling` key now reads the trailing 30 days of raw events once, grouped by user, instead of materializing every retained event and scanning it four times. Each user's latest event time and seven-day call count yield the same `wau`, `mau`, `dau`, and `calls_7d`. On production this section measured 18.2 seconds before the change; a prototype of the grouped pass measured 1.9 seconds.
+- **Changed**: `health_summary`, `health_summary_7d`, `tool_health`, and `tool_health_7d` now come from one grouping-sets pass over the 30-day raw window, with the seven-day values computed as filtered aggregates of the same rows. The four separate scans measured about 28 seconds combined; the single-pass prototype measured 8.0 seconds. No payload key, value, window, rounding, ordering, grant, cadence, or retention policy changed. A reviewed rollback that restores the previous body lives in `supabase/rollback/`.
+
 ### Skill: Provider-Write Requests Stay Tool-Free (FLA-345)
 
 - **Fixed**: production evidence showed the model calling `get_user_session` before refusing a request such as "use Flaim to swap the players in my ESPN lineup." The skill's tool-free rule named only questions about whether Flaim can make a change, and the once-per-chat session step said to call it "at the start." The skill now says a request to make a provider change is answered without any tool call, including `get_user_session`; the session is looked up before the first question that needs league data; and setup, capability, permission, and provider-write requests need no session call. Shipped skill text: ships with the next reviewed OpenAI version.
