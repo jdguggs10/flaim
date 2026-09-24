@@ -85,6 +85,13 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain('Establish session context once per chat with `get_user_session`');
     expect(skill).toContain('A new chat needs its own lookup');
     expect(skill).toContain(
+      'Do not call `get_user_session` again for a follow-up question, a second player'
+    );
+    // "Same order every time" read as a per-message checklist and invited a
+    // session call on every turn.
+    expect(skill).not.toContain('Same order every time');
+    expect(skill).not.toContain('when the context you need is not there');
+    expect(skill).toContain(
       "use the user's applicable default for that sport and do not ask a clarifying question"
     );
     expect(skill).toContain('fan out over every matching league');
