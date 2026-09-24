@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Skill: Provider-Write Requests Stay Tool-Free (FLA-345)
+
+- **Fixed**: production evidence showed the model calling `get_user_session` before refusing a request such as "use Flaim to swap the players in my ESPN lineup." The skill's tool-free rule named only questions about whether Flaim can make a change, and the once-per-chat session step said to call it "at the start." The skill now says a request to make a provider change is answered without any tool call, including `get_user_session`; the session is looked up before the first question that needs league data; and setup, capability, permission, and provider-write requests need no session call. Shipped skill text: ships with the next reviewed OpenAI version.
+
 ### MCP Session and League-Settings Reuse Wording (FLA-345)
 
 - **Changed**: the MCP initialize instructions and tool descriptions in `workers/fantasy-mcp/src/mcp/instructions.ts` and `tools.ts` now say session context (`get_user_session`) is reused for the whole chat and reloaded only after a successful `refresh_leagues`, when the user confirms an account, league, or default change, when the earlier session call failed, or when its result is no longer visible in the conversation — replacing the vaguer "or when the needed session context is missing" condition. They also now say `get_league_info` is loaded once per league per chat, before the first league-specific data call for that league, and reused for later questions about that league, so every MCP client reads the same rule the shipped skill already states. Description and server-instruction text only; no input schema, annotation, or tool behavior changed.

@@ -31,6 +31,12 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain('submit waiver claims or trades');
     expect(skill).toContain('User permission does not change this boundary');
     expect(skill).toContain('without calling any tool');
+    // Execute requests ("use Flaim to swap my lineup") are tool-free too, and
+    // must not trigger a session lookup first.
+    expect(skill).toContain('without calling any tool, including `get_user_session`');
+    expect(skill).toContain('asks Flaim to make it');
+    expect(skill).toContain('need no session call at all');
+    expect(skill).not.toContain('`get_user_session`, at the start,');
     expect(skill).toContain('the user has to make the change themselves on ESPN, Yahoo, or Sleeper');
     expect(skill).toContain('Never describe the limit as uncertain or conditional');
     expect(skill).toContain('`refresh_leagues` is the only bounded write tool');
