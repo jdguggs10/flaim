@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Supabase Seed Determinism
+
+- **Fixed**: the local/CI Supabase seed no longer depends on the time of day. Its synthetic MCP events are clamped into the current UTC and ET day, so the "Check Supabase" reproducibility proof stops failing intermittently when it runs shortly after 00:00 UTC or ET midnight. Test data only; no schema or production change.
+
 ### Yahoo Direct League Recovery
 
 - **Improved**: the bounded two-secret Yahoo support capture now has a closed target contract for the existing game-key capture (still the default), the exact production broad discovery resource, and one direct teams resource for a strictly validated full numeric league key. Each target rejects irrelevant or conflicting fields before credentials are read; no target accepts a Yahoo URL, path, query, or response selector. All three retain the existing one-fetch guarded-token flow, manual redirect handling, 8 MiB cap, before/after token-content scan, closed audit log, no-store binary response, and v1 capture marker.
