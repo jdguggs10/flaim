@@ -1,164 +1,225 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const skill = readFileSync(
-  new URL('../../../../.agents/skills/flaim-fantasy/SKILL.md', import.meta.url),
-  'utf8'
-);
+const repoFile = (relativePath: string) =>
+  readFileSync(new URL(`../../../../${relativePath}`, import.meta.url), 'utf8');
 
-const expectedTools = [
-  'get_user_session',
-  'refresh_leagues',
-  'get_ancient_history',
-  'get_league_info',
-  'get_standings',
-  'get_matchups',
-  'get_roster',
-  'get_free_agents',
-  'get_players',
-  'get_transactions',
-];
+const skill = repoFile('.agents/skills/flaim-fantasy/SKILL.md');
+const toolsSource = repoFile('workers/fantasy-mcp/src/mcp/tools.ts');
+const instructions = repoFile('workers/fantasy-mcp/src/mcp/instructions.ts');
 
+/**
+ * The shipped skill is the analyst playbook: judgment, refusal posture, and the
+ * context-gathering backbone. Tool mechanics (parameters, response fields,
+ * provider quirks, wording prohibitions, error codes) live in the tool
+ * descriptions and the server instructions, which every MCP client reads live.
+ * These tests pin the safety-critical posture in the skill and assert the
+ * mechanics are not duplicated back into it.
+ */
 describe('shipped Flaim fantasy skill contract', () => {
-  it('has valid routing frontmatter and documents all eleven tools', () => {
+  it('has valid routing frontmatter', () => {
     expect(skill).toMatch(/^---\nname: flaim-fantasy\ndescription: .+\nlicense: MIT\n---/);
     const description = skill.match(/^description: (.+)$/m)?.[1] ?? '';
     expect(description.length).toBeGreaterThan(0);
     expect(description.length).toBeLessThanOrEqual(1024);
     expect(description).toContain('Use when');
     expect(description).toContain('Do not use');
-
-    for (const tool of expectedTools) {
-      expect(skill).toContain(`### \`${tool}\``);
-    }
   });
 
-  it('locks tool-free capability, setup, weather, and coding or scraping paths', () => {
-    expect(skill).toContain('Generic setup how-to, capability, or permission questions are a separate tool-free path');
-    expect(skill).toContain('Do not call Flaim tools for generic coding or scraping requests, weather');
-    expect(skill).toContain('"Can Flaim change my lineup?" → no tools');
-    expect(skill).toContain('web search only, no Flaim tools needed');
-  });
-
-  it('distinguishes generic setup from user-specific connection status', () => {
-    expect(skill).toContain('"How do I connect Yahoo?" → no tools');
-    expect(skill).toContain('"Is my Yahoo league connected?" → `get_user_session`');
-    expect(skill).toContain('"Which leagues do I have connected?" → `get_user_session`');
-  });
-
-  it('locks the provider-write boundary and refresh exception', () => {
+  it('locks the provider-write boundary and the refresh exception', () => {
+    expect(skill).toContain('Flaim cannot change anything on ESPN, Yahoo, or Sleeper');
     expect(skill).toContain('submit waiver claims or trades');
     expect(skill).toContain('User permission does not change this boundary');
+    expect(skill).toContain('without calling any tool');
+    expect(skill).toContain('the user has to make the change themselves on ESPN, Yahoo, or Sleeper');
+    expect(skill).toContain('Never describe the limit as uncertain or conditional');
     expect(skill).toContain('`refresh_leagues` is the only bounded write tool');
-    expect(skill).toContain('"Refresh my connected leagues" → `refresh_leagues` → `get_user_session`');
-    expect(skill).toContain('"Add a league" → no tools; guide the user to https://flaim.app/leagues');
+    expect(skill).toContain('changes nothing on a provider');
     expect(skill).not.toContain('All tools are read-only');
     expect(skill).not.toContain('Flaim is strictly read-only');
-    expect(skill).not.toContain('200 MCP calls per day');
-    expect(skill).not.toContain('type=waiver filtering is not supported');
   });
 
-  it('locks current connection, sport, retry, and league-management facts', () => {
-    expect(skill).toContain('captured via the Flaim Chrome extension');
-    expect(skill).not.toMatch(/cookies? expire/i);
-    expect(skill).not.toMatch(/re-enter cookies|manual entry/i);
-    expect(skill).toContain('- **Sports:** Football and basketball.');
-    expect(skill).not.toContain('Football and basketball only (Phase 1)');
-    expect(skill).toContain('one retry with the same inputs is reasonable');
-    expect(skill).toContain('Do not retry in a loop');
-    expect(skill).toContain('do not offer another attempt until the user confirms');
-    expect(skill).toContain("follow the MCP client's connect or reauthorization flow");
-    expect(skill).toContain('network timeout or explicitly temporary provider/Flaim service failure');
-    expect(skill).not.toContain('After an authentication, connection, or missing-league error');
-    expect(skill).not.toContain('the result will be the same');
-    expect(skill).toContain('Do not ask the user to verify or provide numeric league IDs or season values');
+  it('locks the tool-free setup path and separates it from account state', () => {
+    expect(skill).toContain(
+      'Generic setup how-to, capability, or permission questions are a separate tool-free path'
+    );
+    expect(skill).toContain('Chrome extension');
+    expect(skill).toContain(
+      '**the Flaim Chrome extension for ESPN**, which is required to connect an ESPN league'
+    );
+    expect(skill).toContain('**Yahoo sign-in inside the Flaim UI** for Yahoo');
+    expect(skill).toContain('**a Sleeper username** for Sleeper, which needs no password');
+    expect(skill).toContain(
+      'That is the user’s own account state, so read it with `get_user_session`'.replace(
+        '’',
+        "'"
+      )
+    );
+  });
+
+  it('locks credential and routing safety', () => {
+    expect(skill).toContain('Never ask a user for a password, cookie, or token');
+    expect(skill).toContain('never exposes them to the model');
     expect(skill).toContain('https://flaim.app/leagues');
+    expect(skill).toContain('**flaim.app/leagues** to connect platforms');
+    expect(skill).toContain("follow the MCP client's connect or reauthorization flow");
+    expect(skill).toContain(
+      'Do not ask the user to verify or provide numeric league IDs or season values'
+    );
+    expect(skill).toContain('Never expose internal platform IDs');
   });
 
-  it('locks the ordinary selected-league sequence', () => {
+  it('locks the data-source rule and the no-inference clauses', () => {
+    expect(skill).toContain('must come from a Flaim tool call');
+    expect(skill).toContain('Never guess them');
+    expect(skill).toContain('a standings position is not a championship');
+    expect(skill).toContain('a market ownership rate is not league ownership');
+    expect(skill).toContain('a roster slot is not a draft position');
+    expect(skill).toContain('First place in the standings is not a title');
     expect(skill).toContain(
-      'With session context established, call `get_league_info` for the selected active league'
-    );
-    expect(skill).toContain('call `get_user_session` only when no usable successful session result is available in this chat');
-    expect(skill).toContain('do not repeat it merely because a new user message arrived');
-    expect(skill).toContain('when the user confirms account, connection, league-list, or default changes');
-    expect(skill).toContain('when the needed session context is missing');
-    expect(skill).toContain('A new chat needs its own session lookup');
-    expect(skill).toContain('a failed session lookup is not reusable context');
-    expect(skill).toContain('Reuse session context, not stale roster, score, or player data');
-    expect(skill).toContain('Analysis sequences below show a fresh chat');
-    expect(skill).toContain(
-      '"What are the standings in my league?" → `get_user_session` → `get_league_info` → `get_standings`'
-    );
-    expect(skill).toContain(
-      '"Show me this week\'s matchup" → `get_user_session` → `get_league_info` → `get_matchups`'
-    );
-    expect(skill).toContain(
-      '"Find the right Ben Rice and show market ownership context" → `get_user_session` → `get_league_info` → `get_players`'
+      'the team that made a selection in a past draft is not necessarily the team that owns a future pick'
     );
   });
 
-  it('keeps fantasy availability distinct from professional, market, and waiver context', () => {
-    expect(skill).toContain('available to acquire in the selected fantasy league');
-    expect(skill).toContain('not players who are unsigned professionally');
+  it('locks the context-gathering backbone without restating tool mechanics', () => {
+    expect(skill).toContain('Establish session context once per chat with `get_user_session`');
+    expect(skill).toContain('A new chat needs its own lookup');
     expect(skill).toContain(
-      'ESPN `percentOwned`/`percentStarted` are the percentages of all ESPN leagues where the player is rostered/started'
+      'Do not call `get_user_session` again for a follow-up question, a second player'
     );
-    expect(skill).toContain('Yahoo `percentOwned`, when present, is Yahoo-wide');
+    // "Same order every time" read as a per-message checklist and invited a
+    // session call on every turn.
+    expect(skill).not.toContain('Same order every time');
+    expect(skill).not.toContain('when the context you need is not there');
     expect(skill).toContain(
-      'Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate'
+      "use the user's applicable default for that sport and do not ask a clarifying question"
     );
+    expect(skill).toContain('fan out over every matching league');
+    expect(skill).toContain('call `refresh_leagues` first, then `get_user_session`');
+    expect(skill).toContain('When listing the user’s leagues'.replace('’', "'"));
+    expect(skill).toContain('Do not group, summarize, or truncate the list');
+    expect(skill).toContain('Ground every league claim in a record the tools returned');
+    expect(skill).toContain('Call `get_league_info` before the league-specific data tool');
+    expect(skill).toContain('branches to `get_ancient_history`');
     expect(skill).toContain(
-      'If a rate is missing, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call `get_players`, or offer a lookup'
+      'The tool descriptions and the server instructions carry the parameters, response fields, provider differences, and error handling'
     );
+  });
+
+  it('locks web research and expert consensus ahead of the model\'s own call', () => {
+    expect(skill).toContain('must come from current web reporting');
+    expect(skill).toContain("Never state a player's current team, role, or health from memory");
+    expect(skill).toContain('Your own judgment comes after all three');
+    expect(skill).toContain('needs fresh web research first');
+    expect(skill).toContain('Start from expert consensus');
+    expect(skill).toContain('When you depart from consensus, say so and say why');
+    expect(skill).toContain('Check the date on everything');
+    expect(skill).toContain('label the recommendation as based on league data alone');
+    // Setup and capability answers stay tool-free and research-free.
+    expect(skill).toContain('without Flaim tools or web research');
+  });
+
+  it('locks scope refusals and honesty posture', () => {
     expect(skill).toContain(
-      'A returned player is already confirmed available in the selected league'
+      'Do not call Flaim tools for generic coding or scraping requests, weather, travel, betting'
     );
+    expect(skill).toContain('Answer general sports questions from the web with no Flaim call');
+    expect(skill).toContain('do not retry in a loop');
+    expect(skill).toContain('do not offer another attempt when the fix is something the user has to do first');
+    expect(skill).toContain('never present a provider limitation as a fact about the league');
+  });
+
+  it('locks the category-scoring judgment rule (FLA-406)', () => {
     expect(skill).toContain(
-      'prefer the normalized fields over the legacy provider fields, which stay visible'
+      'the side total is the number of categories won rather than points'
     );
-    expect(skill).toContain('`ownershipScope` is `platform_global` or `unavailable`');
-    expect(skill).toContain('rates are platform-wide, never league-scoped');
-    expect(skill).toContain(
-      'Normalized `team` is the real-life club, `null` when the provider lists none'
-    );
-    expect(skill).toContain(
-      'prefer normalized `acquisitionState` (`free_agent` or `waivers`; `null` when undetermined) and `waiverClearsAt` (ISO 8601) over legacy `status`/`waiverProcessDate`'
-    );
-    expect(skill).toContain('Only ESPN reports fantasy acquisition state here');
-    expect(skill).toContain(
-      'Call Yahoo/Sleeper rows "available players," never specifically free agents or waivers'
-    );
-    expect(skill).toContain(
-      'Hard stop: after satisfying a returned-list or field-explanation request, end the answer immediately after the requested facts'
-    );
-    expect(skill).toContain(
-      'Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100'
-    );
-    expect(skill).toContain(
-      'An ESPN-wide started rate is never conditional on the player being rostered'
-    );
-    expect(skill).toContain(
-      'Translate ownership scope silently into that provider-wide wording; never print the `ownershipScope` key, `platform_global` enum, or `get_free_agents` tool name'
-    );
-    expect(skill).toContain(
-      'never append "if you want", "tell me which player", or a similar invitation unless the user\'s current request explicitly asks for that additional work'
-    );
-    expect(skill).toContain(
-      'Render acquisition state silently in plain language; never print raw codes such as `FREEAGENT`, `WAIVERS`, or `free_agent`'
-    );
-    expect(skill).toContain(
-      'Use `get_roster` only when the current request separately asks who owns a player; never offer it after an available-player result'
-    );
-    expect(skill).toContain('Use current web evidence before adding analysis or pickup recommendations');
-    expect(skill.indexOf('Pass a requested count exactly from 1 through 100')).toBeGreaterThan(
-      skill.indexOf('Returns players available to acquire in the selected fantasy league')
-    );
-    expect(skill.indexOf('Hard stop:')).toBeGreaterThan(
-      skill.indexOf('Use current web evidence before adding analysis or pickup recommendations')
-    );
-    expect(skill).toContain(
-      'Do not include `injuryStatus` or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language'
-    );
+    expect(skill).toContain('reason category by category');
+    expect(skill).toContain('Treat it as unknown, never as a zero');
+  });
+
+  it('keeps keeper cost framed as a league house rule', () => {
+    expect(skill).toContain('Keeper cost is a league house rule');
+    expect(skill).toContain('Flaim never computes one');
+    // ESPN carries a keeper value with a traded player, so the skill must not
+    // claim that no platform preserves a keeper cost after a trade.
+    expect(skill).not.toMatch(/no platform computes/i);
+  });
+
+  it('does not duplicate tool mechanics that live in descriptions or instructions', () => {
+    // Per-tool reference section is gone.
+    expect(skill).not.toMatch(/^## Tools reference$/m);
+    expect(skill).not.toMatch(/^### `get_(user_session|roster|free_agents|transactions)`$/m);
+
+    // Field, enum, and parameter names belong in tool descriptions.
+    for (const mechanic of [
+      'percentOwned',
+      'percentStarted',
+      'ownershipScope',
+      'platform_global',
+      'acquisitionState',
+      'waiverClearsAt',
+      'FREEAGENT',
+      'free_agent',
+      'allLeagues',
+      'defaultLeagues',
+      'outcomeConfidence',
+      'championshipWon',
+      'selectionInRound',
+      'draftColumn',
+      'currentOwnerTeamId',
+      'changed_picks_only',
+      'keeperPlayerIds',
+      'as_of_date',
+      'season_year',
+      'mTransactions2',
+      'retry_after',
+      'detail: "players"',
+    ]) {
+      expect(skill).not.toContain(mechanic);
+    }
+
+    // Wording prohibitions and count limits are description-level mechanics.
+    expect(skill).not.toContain('Hard stop:');
+    expect(skill).not.toContain('market ownership rate: not provided');
+    expect(skill).not.toContain('1 through 100');
+
+    // No version-, count-, or week-specific facts that go stale mid-season.
+    expect(skill).not.toMatch(/\b(?:ten|eleven|twelve) tools\b/i);
+    expect(skill).not.toMatch(/\bweek \d+\b/i);
+    expect(skill).not.toMatch(/\b20\d\d\b/);
+  });
+
+  it('keeps the mechanics it removed alive on a live MCP surface', () => {
+    const liveSurfaces = `${toolsSource}\n${instructions}`;
+
+    for (const mechanic of [
+      // get_free_agents ownership and wording contract
+      'An ESPN-wide started rate is never conditional on the player being rostered',
+      'Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate',
+      'market ownership rate: not provided',
+      'never specifically free agents or waivers',
+      'Hard stop: after satisfying a returned-list or field-explanation request',
+      'never print the ownershipScope key, platform_global enum, or get_free_agents tool name',
+      // draft provenance
+      'A historical selecting team is not a current pick owner',
+      'changed_picks_only is not a complete pick inventory',
+      // standings outcome verification
+      'do not infer championship from rank or team name',
+      // matchup category scoring
+      'the side total is a category count or null rather than fantasy points',
+      // roster snapshot selectors
+      'ask the user for a specific date rather than guessing',
+      // session reuse and bootstrap
+      'A new chat needs its own session lookup',
+      'Skip get_league_info only when answering from session data alone',
+      // error posture
+      'do not retry in a loop',
+      'season_year is always the start year of the season',
+      // provider-write boundary fallback for clients that never see the skill
+      'Flaim cannot change lineups or rosters, add or drop players, submit waiver claims or trades',
+      'directly and tool-free',
+    ]) {
+      expect(liveSurfaces).toContain(mechanic);
+    }
   });
 });
