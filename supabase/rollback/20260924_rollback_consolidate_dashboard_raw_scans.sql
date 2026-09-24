@@ -16,28 +16,33 @@
 -- supabase/migrations/20260913010733_optimize_dashboard_history_scans.sql with
 -- the stale-guard substitution from
 -- supabase/migrations/20260913114133_tighten_analytics_history_stale_guard.sql
--- applied, rather than referenced, so this file is self-contained. The guard
--- below refuses to run unless the live body is the FLA-412 definition; if
--- something else has landed since, restore that instead of this.
+-- applied, rather than referenced, so this file is self-contained.
+--
+-- Both ends are verified by digest of the exact function body. The preflight
+-- refuses to run unless md5(prosrc) is the reviewed FLA-412 body,
+-- 'b022a8d9c651d372e6ef9be8b5192bc2' (30,336 characters); if something else
+-- has landed since, restore that instead of this. After the restore, the
+-- transaction commits only if md5(prosrc) is back to the reviewed predecessor,
+-- '3bf5ed96d09f081c91ac4d42e96b3301' (29,512 characters).
 
 begin;
 
 do $preflight$
 declare
-  current_body text;
+  observed_digest text;
 begin
-  select p.prosrc
-  into current_body
+  select pg_catalog.md5(p.prosrc)
+  into observed_digest
   from pg_catalog.pg_proc as p
   where p.oid = 'analytics.dashboard_payload_history(boolean)'::regprocedure;
 
-  if current_body is null
-    or pg_catalog.strpos(current_body, 'raw_health as (') = 0
-    or pg_catalog.strpos(current_body, 'recent_ev as (') > 0
-  then
+  if observed_digest is distinct from 'b022a8d9c651d372e6ef9be8b5192bc2' then
     raise exception using
       errcode = '55000',
-      message = 'dashboard_payload_history is not the FLA-412 definition this rollback reverses';
+      message = pg_catalog.format(
+        'dashboard_payload_history body digest %s is not the FLA-412 body b022a8d9c651d372e6ef9be8b5192bc2 this rollback reverses',
+        coalesce(observed_digest, '(none)')
+      );
   end if;
 end;
 $preflight$;
@@ -877,5 +882,25 @@ from public, anon, authenticated, service_role, analytics_readonly;
 
 grant execute on function analytics.dashboard_payload_history(boolean)
 to postgres;
+
+do $postcheck$
+declare
+  observed_digest text;
+begin
+  select pg_catalog.md5(p.prosrc)
+  into observed_digest
+  from pg_catalog.pg_proc as p
+  where p.oid = 'analytics.dashboard_payload_history(boolean)'::regprocedure;
+
+  if observed_digest is distinct from '3bf5ed96d09f081c91ac4d42e96b3301' then
+    raise exception using
+      errcode = '55000',
+      message = pg_catalog.format(
+        'restored dashboard_payload_history body digest %s is not the reviewed predecessor 3bf5ed96d09f081c91ac4d42e96b3301',
+        coalesce(observed_digest, '(none)')
+      );
+  end if;
+end;
+$postcheck$;
 
 commit;

@@ -1,7 +1,9 @@
 -- FLA-412: the dashboard refresh regrew to roughly 70 s per run after the
 -- Sep 15 traffic surge. Its remaining cost was raw passes over
 -- public.mcp_tool_events. This migration removes two of them without changing
--- the payload's JSON contract, sources, windows, grants, cadence, or retention.
+-- the payload's keys, value types, values, rounding, windows, ordering
+-- expressions, sources, grants, cadence, or retention. The order of tool rows
+-- tied on `calls` was unspecified before and remains unspecified.
 --
 -- 1. `rolling` selected every prod/oauth event with no time bound into one CTE
 --    and referenced it four times, so Postgres materialized the whole retained
@@ -9,10 +11,10 @@
 --    output looks back at most 30 days, so one pass over that window, grouped
 --    by user, yields each user's latest event time and seven-day call count.
 --    wau, mau, and dau count users whose latest event falls inside the window,
---    which is exactly the set with any event there; calls_7d sums every
---    group, including rows without a user, as the former count(*) did. The
---    `user_id not in (select user_id from excluded)` predicate is unchanged,
---    so rows without a user are treated exactly as before for both variants.
+--    which is exactly the set with any event there; calls_7d sums the
+--    per-user seven-day counts, as the former count(*) did. The
+--    `user_id is not null` filters defensively mirror the predecessor's
+--    count(distinct user_id) semantics; the column is NOT NULL.
 --
 -- 2. health_summary, health_summary_7d, tool_health, and tool_health_7d were
 --    four separate scans and sorts of the same rows. One grouped pass with
@@ -30,39 +32,29 @@
 -- change; the end-to-end refresh time is measured by the first scheduled run
 -- after hosted promotion, as FLA-378 did.
 --
--- The preflight below refuses any deployed body other than the reviewed
--- FLA-378 body with the FLA-388 60-day stale guard, rather than overwriting an
--- unexpected definition with this full copy. Full CREATE OR REPLACE of that
--- body with only the two sections above changed. Hosted application and every
--- snapshot refresh remain separate approval gates.
+-- The preflight below requires the deployed body to be exactly the reviewed
+-- FLA-378 body with the FLA-388 60-day stale guard, verified by
+-- md5(prosrc) = '3bf5ed96d09f081c91ac4d42e96b3301' (29,512 characters), rather
+-- than overwriting any other definition with this full copy. Full CREATE OR
+-- REPLACE of that body with only the two sections above changed. Hosted
+-- application and every snapshot refresh remain separate approval gates.
 
 do $preflight$
 declare
-  current_body text;
-  expected_guard constant text := $guard$
-  -- Refuse a plausible-looking partial history while retained raw events still
-  -- leave a recovery runway. The close function retains the authoritative
-  -- 90-day availability check for any attempted repair.
-  if (history_marker_et_day + 1)::timestamp
-      at time zone 'America/New_York' < now() - interval '60 days'
-  then
-    raise exception using
-      errcode = '55000',
-      message = 'analytics history rollup is more than 60 days stale; repair it before the 90-day raw window closes';
-  end if;$guard$;
+  observed_digest text;
 begin
-  select p.prosrc
-  into current_body
+  select pg_catalog.md5(p.prosrc)
+  into observed_digest
   from pg_catalog.pg_proc as p
   where p.oid = 'analytics.dashboard_payload_history(boolean)'::regprocedure;
 
-  if current_body is null
-    or pg_catalog.strpos(current_body, expected_guard) = 0
-    or pg_catalog.strpos(current_body, 'raw_health as (') > 0
-  then
+  if observed_digest is distinct from '3bf5ed96d09f081c91ac4d42e96b3301' then
     raise exception using
       errcode = '55000',
-      message = 'dashboard_payload_history does not match the reviewed FLA-388 predecessor';
+      message = pg_catalog.format(
+        'dashboard_payload_history body digest %s is not the reviewed FLA-388 predecessor 3bf5ed96d09f081c91ac4d42e96b3301',
+        coalesce(observed_digest, '(none)')
+      );
   end if;
 end;
 $preflight$;
@@ -498,8 +490,8 @@ begin
           -- FLA-412: one grouped pass over the trailing 30 days instead of four
           -- scans of every retained event. Every output looks back at most 30
           -- days, and a user has a row inside a trailing window exactly when
-          -- that user's latest row is inside it. The NULL-user group adds its
-          -- rows to calls_7d but is never counted as a user.
+          -- that user's latest row is inside it. The `user_id is not null`
+          -- filters defensively mirror count(distinct user_id).
           with recent_users as (
             select
               e.user_id,
