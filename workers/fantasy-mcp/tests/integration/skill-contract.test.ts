@@ -91,12 +91,25 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain('call `refresh_leagues` first, then `get_user_session`');
     expect(skill).toContain('When listing the user’s leagues'.replace('’', "'"));
     expect(skill).toContain('Do not group, summarize, or truncate the list');
-    expect(skill).toContain('Ground every claim in a record the tools returned');
+    expect(skill).toContain('Ground every league claim in a record the tools returned');
     expect(skill).toContain('Call `get_league_info` before the league-specific data tool');
     expect(skill).toContain('branches to `get_ancient_history`');
     expect(skill).toContain(
       'The tool descriptions and the server instructions carry the parameters, response fields, provider differences, and error handling'
     );
+  });
+
+  it('locks web research and expert consensus ahead of the model\'s own call', () => {
+    expect(skill).toContain('must come from current web reporting');
+    expect(skill).toContain("Never state a player's current team, role, or health from memory");
+    expect(skill).toContain('Your own judgment comes after all three');
+    expect(skill).toContain('needs fresh web research first');
+    expect(skill).toContain('Start from expert consensus');
+    expect(skill).toContain('When you depart from consensus, say so and say why');
+    expect(skill).toContain('Check the date on everything');
+    expect(skill).toContain('label the recommendation as based on league data alone');
+    // Setup and capability answers stay tool-free and research-free.
+    expect(skill).toContain('without Flaim tools or web research');
   });
 
   it('locks scope refusals and honesty posture', () => {
