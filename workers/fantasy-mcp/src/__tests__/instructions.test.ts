@@ -36,7 +36,7 @@ describe('Flaim MCP initialization instructions', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('do not repeat get_user_session merely because a new user message arrived');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('switching to another league already in allLeagues');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('when the user confirms account, connection, league-list, or default changes');
-    expect(FLAIM_MCP_INSTRUCTIONS).toContain('when the needed session context is missing');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('when the earlier session call failed, or when its result is no longer visible in the conversation');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('A new chat needs its own session lookup');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('Reuse session context, not stale roster, score, or player data');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('With session context established, call get_league_info');
