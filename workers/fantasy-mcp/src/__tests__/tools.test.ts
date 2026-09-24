@@ -78,7 +78,7 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('do not repeat this call merely because a new user message arrived');
     expect(tool!.description).toContain('switching to another league already in allLeagues');
     expect(tool!.description).toContain('when the user confirms account, connection, league-list, or default changes');
-    expect(tool!.description).toContain('when the needed session context is missing');
+    expect(tool!.description).toContain('when the earlier session call failed, or when its result is no longer visible in the conversation');
     expect(tool!.description).toContain('A new chat needs its own session lookup');
     expect(tool!.description).toContain('Follow the error guidance if a call fails');
     expect(tool!.description).toContain('Session reuse does not replace fresh roster, score, or player reads');

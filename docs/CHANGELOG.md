@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### MCP Session and League-Settings Reuse Wording (FLA-345)
+
+- **Changed**: the MCP initialize instructions and tool descriptions in `workers/fantasy-mcp/src/mcp/instructions.ts` and `tools.ts` now say session context (`get_user_session`) is reused for the whole chat and reloaded only after a successful `refresh_leagues`, when the user confirms an account, league, or default change, when the earlier session call failed, or when its result is no longer visible in the conversation — replacing the vaguer "or when the needed session context is missing" condition. They also now say `get_league_info` is loaded once per league per chat, before the first league-specific data call for that league, and reused for later questions about that league, so every MCP client reads the same rule the shipped skill already states. Description and server-instruction text only; no input schema, annotation, or tool behavior changed.
+
 ### Supabase Seed Determinism
 
 - **Fixed**: the local/CI Supabase seed no longer depends on the time of day. Its synthetic MCP events are clamped into the current UTC and ET day, so the "Check Supabase" reproducibility proof stops failing intermittently when it runs shortly after 00:00 UTC or ET midnight. Test data only; no schema or production change.
