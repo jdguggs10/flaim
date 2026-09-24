@@ -912,3 +912,26 @@ from public, anon, authenticated, service_role, analytics_readonly;
 
 grant execute on function analytics.dashboard_payload_history(boolean)
 to postgres;
+
+-- Postcheck, symmetric with the rollback artifact: the body just installed
+-- must be the reviewed FLA-412 body, so a formatting drift or a partial apply
+-- cannot leave a function the rollback would later refuse to recognize.
+do $postcheck$
+declare
+  observed_digest text;
+begin
+  select pg_catalog.md5(p.prosrc)
+  into observed_digest
+  from pg_catalog.pg_proc as p
+  where p.oid = 'analytics.dashboard_payload_history(boolean)'::regprocedure;
+
+  if observed_digest is distinct from 'b022a8d9c651d372e6ef9be8b5192bc2' then
+    raise exception using
+      errcode = '55000',
+      message = pg_catalog.format(
+        'installed dashboard_payload_history body digest %s is not the reviewed FLA-412 body b022a8d9c651d372e6ef9be8b5192bc2',
+        coalesce(observed_digest, '(none)')
+      );
+  end if;
+end;
+$postcheck$;

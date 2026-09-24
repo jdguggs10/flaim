@@ -231,7 +231,8 @@ seven-day values as filtered aggregates of the same rows; `tool_health_7d`
 still lists only tools with a seven-day call. The migration refuses to run
 unless the digest of the exact deployed function body is the reviewed FLA-378
 body with the 60-day stale guard,
-`md5(prosrc) = '3bf5ed96d09f081c91ac4d42e96b3301'`; the body it installs has
+`md5(prosrc) = '3bf5ed96d09f081c91ac4d42e96b3301'`, and refuses to commit
+unless the body it installed has
 `md5(prosrc) = 'b022a8d9c651d372e6ef9be8b5192bc2'`.
 
 The reviewed scheduling artifact lives outside the migration path:
