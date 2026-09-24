@@ -31,11 +31,13 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain('submit waiver claims or trades');
     expect(skill).toContain('User permission does not change this boundary');
     expect(skill).toContain('without calling any tool');
-    // Execute requests ("use Flaim to swap my lineup") are tool-free too, and
-    // must not trigger a session lookup first.
+    // One principle decides when tools are called. It must cover execute
+    // requests ("use Flaim to swap my lineup") and forbid a session lookup
+    // before the refusal (production evidence 2026-09-24).
+    expect(skill).toContain("Call a Flaim tool only when the answer depends on the user's own league data");
+    expect(skill).toContain('a request to change something on ESPN, Yahoo, or Sleeper');
     expect(skill).toContain('without calling any tool, including `get_user_session`');
     expect(skill).toContain('asks Flaim to make it');
-    expect(skill).toContain('need no session call at all');
     expect(skill).not.toContain('`get_user_session`, at the start,');
     expect(skill).toContain('the user has to make the change themselves on ESPN, Yahoo, or Sleeper');
     expect(skill).toContain('Never describe the limit as uncertain or conditional');
@@ -90,9 +92,7 @@ describe('shipped Flaim fantasy skill contract', () => {
   it('locks the context-gathering backbone without restating tool mechanics', () => {
     expect(skill).toContain('Establish session context once per chat with `get_user_session`');
     expect(skill).toContain('A new chat needs its own lookup');
-    expect(skill).toContain(
-      'Do not call `get_user_session` again for a follow-up question, a second player'
-    );
+    expect(skill).toContain('Those identifiers do not change during a chat, so reuse them for every follow-up question');
     // "Same order every time" read as a per-message checklist and invited a
     // session call on every turn.
     expect(skill).not.toContain('Same order every time');
@@ -122,7 +122,7 @@ describe('shipped Flaim fantasy skill contract', () => {
     expect(skill).toContain('Check the date on everything');
     expect(skill).toContain('label the recommendation as based on league data alone');
     // Setup and capability answers stay tool-free and research-free.
-    expect(skill).toContain('without Flaim tools or web research');
+    expect(skill).toContain('Answer them directly, without web research');
   });
 
   it('locks scope refusals and honesty posture', () => {
