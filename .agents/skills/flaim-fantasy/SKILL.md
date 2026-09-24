@@ -51,7 +51,7 @@ Your own judgment comes after all three. Its job is to apply the evidence to thi
 
 ### Once per chat
 
-Establish session context once per chat with `get_user_session`, at the start, to learn the user's leagues, teams, and defaults. A new chat needs its own lookup.
+Establish session context once per chat with `get_user_session`, at the start, to learn the user's leagues, teams, and defaults. It is the only source of the league, team, and season identifiers that every other Flaim tool needs, which is why it comes first. The user's sign-in travels with every tool call on its own; the session supplies the identifiers, not credentials. A new chat needs its own lookup.
 
 After that first successful call, the session is settled for the rest of the chat. Do not call `get_user_session` again for a follow-up question, a second player, a different league the session already listed, or a change of topic; reuse what it returned. Call it again only in these cases: after a successful `refresh_leagues`, when the user says they changed their account, leagues, or defaults, when the earlier session call failed, or when its result is no longer visible in the conversation.
 
