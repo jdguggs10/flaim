@@ -483,11 +483,14 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain(
       "applyTheme(globals && globals.theme !== undefined ? globals.theme : readHostTheme());\n    if (hasRendered) return;"
     );
-    // Hide-widget support (FLA-277) applies uniformly to every URI's body,
-    // since the frozen-body rule was retired (PR #243) and both
-    // USER_SESSION_WIDGET_HTML and LEGACY_USER_SESSION_WIDGET_HTML are now
-    // produced by the same buildUserSessionWidgetHtml template.
-    for (const html of [USER_SESSION_WIDGET_HTML, LEGACY_USER_SESSION_WIDGET_HTML]) {
+    // Hide-widget support (FLA-277) applies uniformly to every published
+    // URI's body (v1/v2 legacy, v3, v4), since all three bodies are produced
+    // by the same buildUserSessionWidgetHtml template.
+    for (const html of [
+      USER_SESSION_WIDGET_HTML,
+      V3_USER_SESSION_WIDGET_HTML,
+      LEGACY_USER_SESSION_WIDGET_HTML,
+    ]) {
       expect(html).toContain('var widgetHidden = false;');
       expect(html).toContain('function sendZeroSize() {');
       expect(html).toContain(
