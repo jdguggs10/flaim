@@ -9,11 +9,26 @@
 -- tools/list (Mechanism A) is a separate, later change that can read this
 -- same column.
 --
--- Applying this migration to any hosted database remains a separate
--- approval gate.
+-- The production database already has this exact column: it was applied out
+-- of band before this file was committed. The statement is therefore
+-- `add column if not exists`, so running this file there changes nothing.
+-- Applying it to any other hosted database remains a separate approval gate.
+-- The auth-worker reads the preference as false when the column is absent,
+-- so this migration and the Worker deploy can land in either order.
+
+begin;
+
+-- The constant default makes ADD COLUMN metadata-only (no table rewrite), but
+-- ALTER TABLE still takes an ACCESS EXCLUSIVE lock on user_preferences, even
+-- when the column already exists, and queues every preference read behind it
+-- while it waits. Fail fast instead of stalling get_user_session behind a
+-- long-running transaction.
+set local lock_timeout = '5s';
 
 alter table public.user_preferences
   add column if not exists hide_league_widget boolean not null default false;
 
 comment on column public.user_preferences.hide_league_widget is
   'When true, get_user_session tells the ChatGPT/Claude league widget to render nothing (FLA-277). Leagues are still returned to the model.';
+
+commit;

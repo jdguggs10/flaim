@@ -392,18 +392,27 @@ lives.
 ## League widget preference
 
 The forward migration
-`20260818170000_add_hide_league_widget_preference.sql` adds
+`20260925180000_add_hide_league_widget_preference.sql` (FLA-277) adds
 `hide_league_widget` (`boolean not null default false`) to
 `user_preferences`. When true, the fantasy-mcp gateway's `get_user_session`
 tool tells the ChatGPT/Claude league widget to render nothing; the leagues
 themselves are still returned to the model. This migration creates no other
-table, index, function, or cron job. Applying it to any hosted database
-remains a separate approval gate. Because the Worker auto-deploys independently
-of hosted migration application, `EspnSupabaseStorage.getUserPreferences()`
-detects a missing-column error on `hide_league_widget` and retries with the
-pre-migration column list (returning `hideLeagueWidget: false` and preserving
-every other saved preference) so migration order and deploy order never have
-to be coordinated.
+table, index, function, or cron job, and adds no grant: table privileges
+already cover new columns. The constant default makes the `ADD COLUMN`
+metadata-only, and like the ESPN `created_at` migration it sets
+`lock_timeout = '5s'` so a conflicting long-running transaction fails it fast
+instead of queueing preference reads behind it.
+
+The column already exists in production, where it was applied out of band
+before this file was committed, so the statement is written
+`add column if not exists` and adds nothing there. Applying it to any other
+hosted database remains a separate approval gate. Because the Worker
+auto-deploys independently of hosted migration application,
+`EspnSupabaseStorage.getUserPreferences()` detects a missing-column error that
+names `hide_league_widget` and retries with the pre-migration column list
+(returning `hideLeagueWidget: false` and preserving every other saved
+preference), so migration order and deploy order never have to be coordinated.
+Any other undefined-column error is still reported as a failure.
 
 ## Signup log
 
@@ -532,6 +541,12 @@ the rebuild does not block writes to `demo_refresh_runs`, and `CONCURRENTLY`
 cannot run inside a transaction block. A failed or cancelled concurrent build
 leaves an invalid index under that name, which `if not exists` would then
 silently skip, so drop the invalid index before retrying.
+
+`supabase/rollback/20260925_rollback_hide_league_widget_preference.sql` drops
+`user_preferences.hide_league_widget`. That discards every user's saved
+choice, and every league widget shows again. The auth-worker keeps working
+without the column (it reads the preference as off), but the `/leagues` toggle
+fails to save until the column is restored.
 
 
 ## Demo platform contract
