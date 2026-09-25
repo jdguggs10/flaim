@@ -394,13 +394,15 @@ lives.
 `20260915120000_add_signup_log.sql` adds `public.signup_log`, the
 `public.record_signup(...)` write RPC, and three aggregate `analytics` views,
 and adds one redaction statement to `public.purge_account_data(text)`.
+`20260924200000_add_signups_hourly_paths.sql` (FLA-413) adds a fourth
+aggregate view, `analytics.signups_hourly_paths`, and nothing else.
 
 `signup_log` holds exactly four columns — `clerk_user_id` (the natural key and
 the only dedupe that matters), `created_at` (Clerk's own signup instant, never
 the observation time), nullable `first_touch`, and a `source` constrained to
 `webhook` or `backfill`. There is no email column here or in any view over it,
 and no index on `created_at`: the table holds roughly one row per account ever
-created and all three views scan it whole.
+created and every view over it scans it whole.
 
 The grants are the boundary. Both baseline default-privilege traps apply and
 `GRANT` is additive, so the migration revokes the table and the function from
@@ -409,7 +411,7 @@ The grants are the boundary. Both baseline default-privilege traps apply and
 `SELECT (clerk_user_id, first_touch)` on the table and `EXECUTE` on the RPC.
 `select *` by `service_role` therefore fails. RLS is enabled with no policies
 as a second layer; it blocks the browser roles and does not bind
-`service_role`, which carries `BYPASSRLS`. The three `analytics` views are
+`service_role`, which carries `BYPASSRLS`. The four `analytics` views are
 owned by `postgres` and so bypass the table's RLS by design, exactly as
 `analytics.funnel_snapshot` does; their boundary is the explicit view ACL plus
 `analytics` not being exposed on the Data API.
@@ -437,6 +439,25 @@ flag; it exposes attributed, non-deleted rows only. None of the three exposes
 `clerk_user_id`, raw `first_touch` jsonb, or `landing_path`, and
 `analytics_readonly` receives `SELECT` on them and nothing else.
 
+`analytics.signups_hourly_paths` serves an internal hourly acquisition monitor.
+It is zero-filled: exactly one row per America/New_York wall-clock hour for the
+trailing 21 days plus the open current hour (505 rows), so an hour with no
+signups is a real row of zeros rather than a missing key. `hour_et` is a local
+`timestamp`, so the same hour on an earlier day is plain wall-clock
+subtraction; at the autumn DST change the local 01:00 bucket holds two real
+hours, and at the spring change the local 02:00 bucket is always empty. Each
+row carries `total` and five path counts: `card_flow` (attributed, no referrer
+host, first landing on the OAuth consent page — the connector install flow),
+`ref_chatgpt`, `ref_google`, `ref_claude`, and `noref_site` (attributed, no
+referrer host, any other landing). Referrer hosts are lower-cased and a NULL or
+empty host counts as none; the categories are not exhaustive, so another
+referrer counts toward `total` only. Deleted accounts are excluded with the
+same `account_deletions` anti-join the daily views use. Hourly buckets are
+finer-grained than the daily views but remain identifier-free aggregates: the
+landing path is read only inside a predicate, and no identifier, raw jsonb, or
+free-text referrer column is exposed. It has the same owner and exact ACL as
+the other three.
+
 `purge_account_data` gains one statement — set `first_touch` to NULL for that
 identifier — placed after the tombstone insert and inside the lock. The table
 is deliberately not added to the delete list: the row survives and only the
@@ -447,7 +468,10 @@ load-bearing for the entire purge transaction.
 `supabase/tests/signup_log.sql` proves every grant by execution rather than by
 inspecting an ACL, plus replay, fill-if-null, update-before-create,
 tombstone-before-write, write-before-purge, a full purge run, and the view
-semantics including ET-versus-UTC day placement.
+semantics including ET-versus-UTC day placement. For the hourly view it also
+pins the exact column list and proves the 505-row zero-filled span, ET-hour
+placement, each path classification, deleted-account exclusion, and the scan
+bound, with fixtures placed relative to the transaction's fixed `now()`.
 `supabase/tests/signup_log_concurrency.sh` races two live sessions in both
 orders and requires the advisory lock to serialize them, with the
 tombstone-aware result in each case and no deadlock.
@@ -462,10 +486,18 @@ one is a separate, explicitly approved operation.
 
 `supabase/rollback/20260915_rollback_signup_log.sql` reverses the signup log in
 a fixed order — restore `purge_account_data` to its pre-FLA-396 definition
-first, then drop the three views, then the RPC, then the table. The restored
-function body is reproduced verbatim rather than referenced. Reversing that
-order would leave the live purge referencing a table that no longer exists, and
-the next real account deletion would fail outright.
+first, then drop the four views over the table, then the RPC, then the table.
+The restored function body is reproduced verbatim rather than referenced.
+Reversing that order would leave the live purge referencing a table that no
+longer exists, and the next real account deletion would fail outright. The table
+drop has no `CASCADE`, so any later view over `signup_log` must be added to the
+view-drop step or the whole rollback fails.
+
+`supabase/rollback/20260924_rollback_signups_hourly_paths.sql` drops only
+`analytics.signups_hourly_paths`. It loses no data, since the view is computed
+from `signup_log`. Pause the internal hourly acquisition monitor that reads it
+first; otherwise the monitor sees repeated read failures and reports its data
+source as unusable.
 
 `supabase/rollback/20260924_rollback_consolidate_dashboard_raw_scans.sql`
 restores `analytics.dashboard_payload_history(boolean)` to its pre-FLA-412

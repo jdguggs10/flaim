@@ -9,9 +9,14 @@
 -- ORDER MATTERS, AND THE FIRST STEP IS NOT OPTIONAL.
 --
 --   1. Restore public.purge_account_data(text) to its pre-FLA-396 definition.
---   2. Drop the three analytics views.
+--   2. Drop the three analytics views, plus the FLA-413
+--      analytics.signups_hourly_paths view that later landed on the same table.
 --   3. Drop public.record_signup(...).
 --   4. Drop public.signup_log.
+--
+-- Step 4 has no CASCADE on purpose, so any view over public.signup_log that
+-- this file does not name makes the table drop fail and the whole transaction
+-- roll back. A later view over the table must be added to step 2.
 --
 -- Dropping the objects first would leave the live purge function referencing
 -- public.signup_log after that table is gone, and plpgsql resolves table
@@ -82,6 +87,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 2. Drop the analytics views (they depend on public.signup_log).
 -- ---------------------------------------------------------------------------
+drop view if exists analytics.signups_hourly_paths;
 drop view if exists analytics.signup_sources_daily;
 drop view if exists analytics.signup_rollups;
 drop view if exists analytics.signups_daily;

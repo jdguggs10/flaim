@@ -44,9 +44,9 @@ begin
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'v';
   -- 17 since FLA-396 added signups_daily, signup_rollups, and
-  -- signup_sources_daily.
-  if actual_count <> 17 then
-    raise exception 'expected 17 analytics views, found %', actual_count;
+  -- signup_sources_daily; 18 since FLA-413 added signups_hourly_paths.
+  if actual_count <> 18 then
+    raise exception 'expected 18 analytics views, found %', actual_count;
   end if;
 
   select count(*) into actual_count
