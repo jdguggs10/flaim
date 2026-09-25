@@ -118,6 +118,31 @@ begin
     raise exception 'dashboard history hot-path optimization is missing';
   end if;
 
+  -- FLA-412: rolling and the four raw health keys each read raw events once.
+  -- The body keeps exactly three raw-event scans: the open history bridge, the
+  -- grouped 30-day rolling pass, and the grouping-sets health pass.
+  if not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'analytics'
+      and p.proname = 'dashboard_payload_history'
+      and p.pronargs = 1
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%recent_usersas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%raw_healthas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%groupbygroupingsets((e.tool_name),())%'
+      and p.prosrc not like '%recent_ev%'
+      and (
+        length(p.prosrc)
+          - length(replace(p.prosrc, 'public.mcp_tool_events', ''))
+      ) / length('public.mcp_tool_events') = 3
+  ) then
+    raise exception 'dashboard raw-event scan consolidation is missing';
+  end if;
+
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
