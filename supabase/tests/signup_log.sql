@@ -148,13 +148,35 @@ begin
     join pg_namespace n on n.oid = c.relnamespace
     where n.nspname = 'analytics'
       and c.relkind = 'v'
-      and c.relname in ('signups_daily', 'signup_rollups', 'signup_sources_daily')
+      and c.relname in (
+        'signups_daily', 'signup_rollups', 'signup_sources_daily',
+        'signups_hourly_paths'
+      )
       and a.attnum > 0
       and not a.attisdropped
       and (a.attname in ('clerk_user_id', 'first_touch', 'landing_path')
            or format_type(a.atttypid, a.atttypmod) = 'jsonb')
   ) then
     raise exception 'a signup analytics view exposes a per-user or raw-jsonb column';
+  end if;
+
+  -- FLA-413: the hourly view is finer-grained than the daily ones, so its
+  -- shape is pinned exactly: the bucket hour plus six counts, nothing else. A
+  -- later column (a free-text referrer, a path) must fail here and be argued
+  -- for rather than slip in.
+  if (
+    select string_agg(
+      a.attname || ':' || format_type(a.atttypid, a.atttypmod), ',' order by a.attnum
+    )
+    from pg_attribute a
+    where a.attrelid = 'analytics.signups_hourly_paths'::regclass
+      and a.attnum > 0
+      and not a.attisdropped
+  ) is distinct from
+    'hour_et:timestamp without time zone,total:bigint,card_flow:bigint,'
+    'ref_chatgpt:bigint,ref_google:bigint,ref_claude:bigint,noref_site:bigint'
+  then
+    raise exception 'analytics.signups_hourly_paths column shape changed';
   end if;
 end $catalog_proof$;
 
@@ -287,7 +309,8 @@ declare
   v_owner oid;
 begin
   foreach v_view in array array[
-    'analytics.signups_daily', 'analytics.signup_rollups', 'analytics.signup_sources_daily'
+    'analytics.signups_daily', 'analytics.signup_rollups', 'analytics.signup_sources_daily',
+    'analytics.signups_hourly_paths'
   ]
   loop
     select relowner into v_owner from pg_class where oid = v_view::regclass;
@@ -528,6 +551,11 @@ begin
     raise exception 'service_role unexpectedly read analytics.signups_daily';
   exception when insufficient_privilege then null;
   end;
+  begin
+    perform 1 from analytics.signups_hourly_paths limit 1;
+    raise exception 'service_role unexpectedly read analytics.signups_hourly_paths';
+  exception when insufficient_privilege then null;
+  end;
 end $service_role_proof$;
 
 -- Forbidden operations: the grants above hand service_role exactly INSERT
@@ -561,7 +589,7 @@ end $service_role_forbidden$;
 reset role;
 
 -- ---------------------------------------------------------------------------
--- 4. analytics_readonly reads the three views and no per-user table.
+-- 4. analytics_readonly reads the four views and no per-user table.
 -- ---------------------------------------------------------------------------
 -- analytics_readonly is NOLOGIN and postgres is not a member of it, so the
 -- membership is granted here purely to be able to SET ROLE and prove the read
@@ -577,6 +605,7 @@ begin
   perform 1 from analytics.signups_daily;
   perform 1 from analytics.signup_rollups;
   perform 1 from analytics.signup_sources_daily;
+  perform 1 from analytics.signups_hourly_paths;
 
   begin
     perform clerk_user_id from public.signup_log limit 1;
@@ -753,5 +782,167 @@ begin
     raise exception 'signup_rollups d7_prev boundary wrong (found %, expected 2)', v_row.d7_prev;
   end if;
 end $boundary_proof$;
+
+-- ---------------------------------------------------------------------------
+-- 7. FLA-413 hourly view: zero-filled ET hours and path classification.
+-- The view reads now() at query time and now() is fixed for this whole
+-- transaction, so fixtures placed relative to the same now() land in known
+-- buckets even when the proof runs near midnight. Fixtures are anchored to
+-- complete hours before the current one, never to the open current hour, and
+-- nothing printed here depends on now(): the two reset snapshots are diffed.
+-- ---------------------------------------------------------------------------
+delete from public.signup_log;
+delete from public.account_deletions;
+
+do $hourly_view_proof$
+declare
+  v_now timestamptz := now();
+  v_current_hour timestamp := date_trunc('hour', now() at time zone 'America/New_York');
+  v_hour timestamp;
+  v_placement_hour timestamp;
+  v_placement_at timestamptz;
+  v_at timestamptz;
+  v_row record;
+begin
+  -- Anchor three hours back. On the spring-forward date a local hour can be
+  -- one that never existed on the clock; step back one more hour if the
+  -- anchor does not round-trip, so the fixtures land where the proof expects.
+  v_hour := v_current_hour - interval '3 hours';
+  if date_trunc('hour', (v_hour at time zone 'America/New_York') at time zone 'America/New_York')
+      <> v_hour then
+    v_hour := v_hour - interval '1 hour';
+  end if;
+  v_at := v_hour at time zone 'America/New_York';
+
+  v_placement_hour := v_current_hour - interval '10 hours';
+  if date_trunc('hour', (v_placement_hour at time zone 'America/New_York') at time zone 'America/New_York')
+      <> v_placement_hour then
+    v_placement_hour := v_placement_hour - interval '1 hour';
+  end if;
+  v_placement_at := (v_placement_hour at time zone 'America/New_York') + interval '20 minutes';
+
+  insert into public.signup_log (clerk_user_id, created_at, first_touch, source)
+  values
+    -- (c) card flow: consent landing with no referrer key at all ...
+    ('hourly_cf_null_ref', v_at + interval '10 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/oauth/consent?client_id=x'),
+     'webhook'),
+    -- ... and with an empty-string referrer.
+    ('hourly_cf_empty_ref', v_at + interval '11 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/oauth/consent',
+                        'referrerHost', ''), 'webhook'),
+    -- (d) a ChatGPT referrer on the consent page is ref_chatgpt, not card
+    -- flow; the mixed case also proves the host is lower-cased.
+    ('hourly_chatgpt_consent', v_at + interval '12 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/oauth/consent',
+                        'referrerHost', 'ChatGPT.com'), 'webhook'),
+    ('hourly_google', v_at + interval '13 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/',
+                        'referrerHost', 'www.google.co.uk'), 'webhook'),
+    ('hourly_claude', v_at + interval '14 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/',
+                        'referrerHost', 'claude.ai'), 'webhook'),
+    -- (e) no referrer on a site landing is noref_site.
+    ('hourly_noref_site', v_at + interval '15 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/'), 'webhook'),
+    -- (f) an unattributed signup counts toward total only.
+    ('hourly_unattributed', v_at + interval '16 minutes', null, 'webhook'),
+    -- (g) a deleted account's signup is excluded from every column.
+    ('hourly_deleted', v_at + interval '17 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/oauth/consent'), 'webhook'),
+    -- (b) placement: bucketed by its ET wall-clock hour.
+    ('hourly_placement', v_placement_at, null, 'backfill'),
+    -- The oldest bucket is not cut off by the scan bound ...
+    ('hourly_edge_in',
+     ((v_current_hour - interval '21 days') at time zone 'America/New_York') + interval '30 minutes',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/oauth/consent'), 'backfill'),
+    -- (h) ... and a row older than the window is absent.
+    ('hourly_too_old', v_now - interval '23 days',
+     jsonb_build_object('schemaVersion', 1, 'landingPath', '/oauth/consent'), 'backfill');
+  insert into public.account_deletions (clerk_user_id) values ('hourly_deleted');
+
+  -- (a) Exactly 21 days of hours plus the open current hour, one row each.
+  select
+    count(*) as n,
+    count(distinct hour_et) as n_distinct,
+    min(hour_et) as first_hour,
+    max(hour_et) as last_hour
+  into v_row
+  from analytics.signups_hourly_paths;
+  if v_row.n is distinct from 505::bigint or v_row.n_distinct is distinct from 505::bigint then
+    raise exception 'signups_hourly_paths returned % rows (% distinct), expected 505',
+      v_row.n, v_row.n_distinct;
+  end if;
+  if v_row.first_hour is distinct from v_current_hour - interval '21 days'
+    or v_row.last_hour is distinct from v_current_hour then
+    raise exception 'signups_hourly_paths does not span the trailing 21 days through the current ET hour';
+  end if;
+
+  -- (c)-(g) The anchor hour's classification.
+  select * into v_row
+  from analytics.signups_hourly_paths
+  where hour_et = v_hour;
+  if v_row.total is distinct from 7::bigint then
+    raise exception 'hourly total wrong (found %, expected 7)', v_row.total;
+  end if;
+  if v_row.card_flow is distinct from 2::bigint then
+    raise exception 'hourly card_flow wrong (found %, expected 2)', v_row.card_flow;
+  end if;
+  if v_row.ref_chatgpt is distinct from 1::bigint then
+    raise exception 'hourly ref_chatgpt wrong (found %, expected 1)', v_row.ref_chatgpt;
+  end if;
+  if v_row.ref_google is distinct from 1::bigint then
+    raise exception 'hourly ref_google wrong (found %, expected 1)', v_row.ref_google;
+  end if;
+  if v_row.ref_claude is distinct from 1::bigint then
+    raise exception 'hourly ref_claude wrong (found %, expected 1)', v_row.ref_claude;
+  end if;
+  if v_row.noref_site is distinct from 1::bigint then
+    raise exception 'hourly noref_site wrong (found %, expected 1)', v_row.noref_site;
+  end if;
+
+  -- (b) The placement row sits in its ET hour, and the hour its UTC wall
+  -- clock would name holds nothing.
+  if (select total from analytics.signups_hourly_paths where hour_et = v_placement_hour) is distinct from 1::bigint then
+    raise exception 'signups_hourly_paths did not place a signup in its ET hour';
+  end if;
+  if coalesce((
+    select total from analytics.signups_hourly_paths
+    where hour_et = date_trunc('hour', v_placement_at at time zone 'UTC')
+  ), 0) <> 0 then
+    raise exception 'signups_hourly_paths placed a signup in its UTC hour';
+  end if;
+
+  -- (g), (h) and the scan bound together: the deleted and too-old rows are
+  -- nowhere, and the oldest-bucket row is present.
+  select sum(total) as total, sum(card_flow) as card_flow into v_row
+  from analytics.signups_hourly_paths;
+  if v_row.total is distinct from 9::numeric or v_row.card_flow is distinct from 3::numeric then
+    raise exception
+      'signups_hourly_paths window sums wrong (total %, card_flow %; expected 9, 3)',
+      v_row.total, v_row.card_flow;
+  end if;
+
+  -- (i) Empty hours are real zero rows, including the open current hour, and
+  -- no column is ever NULL.
+  if (
+    select count(*) from analytics.signups_hourly_paths
+    where hour_et in (v_hour - interval '1 hour', v_current_hour)
+      and (total, card_flow, ref_chatgpt, ref_google, ref_claude, noref_site)
+          is not distinct from (0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint, 0::bigint)
+  ) <> 2 then
+    raise exception 'an empty hour in signups_hourly_paths did not read as zeros';
+  end if;
+  if (
+    select count(*) from analytics.signups_hourly_paths
+    where total is null or card_flow is null or ref_chatgpt is null
+       or ref_google is null or ref_claude is null or noref_site is null
+  ) <> 0 then
+    raise exception 'signups_hourly_paths returned a NULL count';
+  end if;
+  if (select count(*) from analytics.signups_hourly_paths where total <> 0) <> 3 then
+    raise exception 'signups_hourly_paths has unexpected non-empty hours';
+  end if;
+end $hourly_view_proof$;
 
 rollback;

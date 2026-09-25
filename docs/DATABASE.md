@@ -140,14 +140,20 @@ table is deliberately not on its delete list: a deleted account's signup is
 still a signup that happened, so the row is retained and only the attribution
 is erased, which is what the published retention commitment requires.
 
-The `analytics` schema exposes the log to the internal dashboard as three
-aggregate views and no per-user relation: `signups_daily` (one row per
-America/New_York day, with and without deleted accounts), `signup_rollups` (a
-single row of window counts computed from one clock reading, which the row also
-carries), and `signup_sources_daily` (one row per ET day and lower-cased
-first-touch dimension, attributed and non-deleted rows only). None exposes a
-user identifier, the raw first-touch object, or the landing path.
-`analytics_readonly` receives `SELECT` on the three views and nothing else.
+The `analytics` schema exposes the log as four aggregate views and no
+per-user relation: `signups_daily` (one row per America/New_York day, with and
+without deleted accounts), `signup_rollups` (a single row of window counts
+computed from one clock reading, which the row also carries),
+`signup_sources_daily` (one row per ET day and lower-cased first-touch
+dimension, attributed and non-deleted rows only), and `signups_hourly_paths`
+(for an internal hourly acquisition monitor: one zero-filled row per ET
+wall-clock hour for the trailing 21 days plus the current hour, with the total
+and counts for the connector install flow, ChatGPT, Google, and Claude
+referrers, and referrer-less site visits, deleted accounts excluded). Hourly
+buckets are finer-grained than the daily views but remain identifier-free
+aggregates. None exposes a user identifier, the raw first-touch object, or the
+landing path. `analytics_readonly` receives `SELECT` on the four views and
+nothing else.
 
 ## Analytics
 

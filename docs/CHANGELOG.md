@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Hourly Signup Paths View (FLA-413)
+
+- **Added**: `analytics.signups_hourly_paths`, an aggregate view over the signup log for an internal hourly acquisition monitor. It returns one zero-filled row per America/New_York wall-clock hour for the trailing 21 days plus the current hour, with the hour's total signups and counts for the connector install flow (consent-page landing with no referrer), ChatGPT, Google, and Claude referrers, and referrer-less site visits. Deleted accounts are excluded the same way the daily signup views exclude them. Hourly buckets are finer-grained than the daily views but remain identifier-free aggregates: no user identifier, raw first-touch object, or landing-path column is exposed, and only `analytics_readonly` can read it. The signup-log rollback now drops this view before the table, and a separate rollback for the view alone lives in `supabase/rollback/`.
+
 ### Dashboard Snapshot Raw-Event Scans (FLA-412)
 
 - **Changed**: The history-backed dashboard payload's `rolling` key now reads the trailing 30 days of raw events once, grouped by user, instead of materializing every retained event and scanning it four times. Each user's latest event time and seven-day call count yield the same `wau`, `mau`, `dau`, and `calls_7d`. On production this section measured 18.2 seconds before the change; a prototype of the grouped pass measured 1.9 seconds.
