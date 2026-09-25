@@ -116,7 +116,13 @@ export default function RootLayout({
                   name: "Gerry",
                   sameAs: ["https://www.threads.com/@jdguggs10"],
                 },
-                sameAs: ["https://www.threads.com/@flaim_app"],
+                sameAs: [
+                  "https://www.threads.com/@flaim_app",
+                  "https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
+                  "https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754",
+                  "https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn",
+                  "https://github.com/jdguggs10/flaim",
+                ],
               },
             ]),
           }}
