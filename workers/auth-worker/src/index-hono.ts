@@ -2905,6 +2905,7 @@ api.delete('/leagues/default/:sport', async (c) => {
       defaultBaseball: preferences.defaultBaseball,
       defaultBasketball: preferences.defaultBasketball,
       defaultHockey: preferences.defaultHockey,
+      hideLeagueWidget: preferences.hideLeagueWidget,
     }
   });
 });

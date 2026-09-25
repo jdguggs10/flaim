@@ -1498,7 +1498,12 @@ function LeaguesPageContent() {
 
       const data = await res.json() as { preferences?: UserPreferencesState };
       if (data.preferences) {
-        setPreferences(data.preferences);
+        const serverPreferences = data.preferences;
+        // The hide-widget toggle is the only writer of hideLeagueWidget on this
+        // page, so local state stays authoritative for it: a set-default
+        // response read before an in-flight toggle's write must not revert the
+        // optimistic value (FLA-277).
+        setPreferences(prev => ({ ...serverPreferences, hideLeagueWidget: prev.hideLeagueWidget }));
       }
 
       // Auto-set sport as default if no sport default exists
