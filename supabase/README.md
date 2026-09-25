@@ -13,7 +13,7 @@ migrations.
 The [reconciliation manifest](./reconciliation.md) records the live objects
 represented by this baseline and its one intentional omission.
 
-The current forward contract has 27 public tables and 79 public indexes. Its
+The current forward contract has 27 public tables and 78 public indexes. Its
 FLA-308 migration adds service-role-only `espn_history_jobs` and the
 `advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
 `persist_espn_league_with_lease(...)` RPCs. The FLA-311 migration adds the
@@ -508,6 +508,15 @@ restored body's digest is the reviewed predecessor,
 `md5(prosrc) = '3bf5ed96d09f081c91ac4d42e96b3301'`. The change was
 performance-only, so rolling it back restores query cost, not payload values.
 
+`supabase/rollback/20260925_rollback_drop_duplicate_demo_refresh_runs_index.sql`
+recreates `public.idx_public_demo_refresh_runs_preset_sport_created` with its
+exact baseline definition. It is the one rollback artifact without a
+`begin`/`commit` wrapper: it uses `create index concurrently if not exists` so
+the rebuild does not block writes to `demo_refresh_runs`, and `CONCURRENTLY`
+cannot run inside a transaction block. A failed or cancelled concurrent build
+leaves an invalid index under that name, which `if not exists` would then
+silently skip, so drop the invalid index before retrying.
+
 ## Demo platform contract
 
 The forward migration `20260805112500_add_platform_to_demo_tables.sql` makes
@@ -524,6 +533,37 @@ column defaults, and no existing index is touched. `demo_target_state`
 matches the `demo_antigravity_cache` posture: RLS enabled with no policies
 and table privileges granted only to `service_role`. Applying this migration
 to any hosted database remains a separate approval gate.
+
+## Duplicate demo index removal
+
+`20260925013000_drop_duplicate_demo_refresh_runs_index.sql` (FLA-231) drops
+`public.idx_public_demo_refresh_runs_preset_sport_created`, the exact
+duplicate that the baseline reproduces from the before-state. The survivor,
+`public.public_demo_refresh_runs_preset_sport_created_at_idx`, has the same
+`btree (preset_id, sport, created_at desc)` definition on
+`public.demo_refresh_runs`. In production the dropped index had recorded no
+scans since the last statistics reset while the survivor served the queries.
+Nothing else changes: no table, grant, policy, or other index.
+
+A `do` preflight raises unless both indexes exist on that table, the survivor
+is valid, the two are structurally identical by the same `pg_index`
+comparison the reproducibility proof used for the before-state (plus
+uniqueness), and no constraint or dependency other than the index's automatic
+dependency on its table references the candidate. The drop has no
+`if exists`, so applying the migration twice, or to a database that never had
+the duplicate, fails loudly instead of doing nothing. A postcheck refuses to
+commit unless the candidate is gone and the survivor is still present and
+valid.
+
+It is a plain `drop index`, not `drop index concurrently`, because Supabase
+runs each migration in a transaction, where `CONCURRENTLY` is not allowed. The
+plain drop holds an `ACCESS EXCLUSIVE` lock on `demo_refresh_runs` only while
+it removes a roughly 1 MB index, and `lock_timeout = '5s'` makes the migration
+fail fast rather than queue demo traffic behind a long-running transaction.
+`supabase/tests/reproducibility.sql` now requires the candidate to be absent
+and the survivor to keep its exact definition. The rollback artifact is
+described under [Rollback artifacts](#rollback-artifacts). Applying this
+migration to any hosted database remains a separate approval gate.
 
 ## Token-matching RPCs
 

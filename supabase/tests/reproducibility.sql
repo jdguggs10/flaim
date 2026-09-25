@@ -147,9 +147,10 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
-  -- 79 since FLA-396 added public.signup_log's primary key.
-  if actual_count <> 79 then
-    raise exception 'expected 79 public indexes, found %', actual_count;
+  -- 79 after FLA-396 added public.signup_log's primary key; 78 since FLA-231
+  -- dropped the exact duplicate demo_refresh_runs index.
+  if actual_count <> 78 then
+    raise exception 'expected 78 public indexes, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -513,48 +514,31 @@ begin
     raise exception 'platform supabase_admin default ACL semantics differ: % expected rows', actual_count;
   end if;
 
-  if not exists (
+  -- FLA-231 dropped the exact duplicate that the baseline reproduces from the
+  -- before-state. The survivor must keep the exact definition and stay valid.
+  if exists (
     select 1
-    from pg_indexes
-    where schemaname = 'public'
-      and indexname = 'idx_public_demo_refresh_runs_preset_sport_created'
-  ) or not exists (
-    select 1
-    from pg_indexes
-    where schemaname = 'public'
-      and indexname = 'public_demo_refresh_runs_preset_sport_created_at_idx'
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'idx_public_demo_refresh_runs_preset_sport_created'
   ) then
-    raise exception 'expected duplicate before-state indexes are missing';
+    raise exception 'duplicate index public.idx_public_demo_refresh_runs_preset_sport_created should have been dropped by FLA-231';
   end if;
 
-  if (
-    select row(
-      i.indrelid,
-      i.indkey,
-      i.indcollation,
-      i.indclass,
-      i.indoption,
-      pg_get_expr(i.indexprs, i.indrelid),
-      pg_get_expr(i.indpred, i.indrelid)
-    )
-    from pg_index i
-    join pg_class c on c.oid = i.indexrelid
-    where c.relname = 'idx_public_demo_refresh_runs_preset_sport_created'
-  ) is distinct from (
-    select row(
-      i.indrelid,
-      i.indkey,
-      i.indcollation,
-      i.indclass,
-      i.indoption,
-      pg_get_expr(i.indexprs, i.indrelid),
-      pg_get_expr(i.indpred, i.indrelid)
-    )
-    from pg_index i
-    join pg_class c on c.oid = i.indexrelid
-    where c.relname = 'public_demo_refresh_runs_preset_sport_created_at_idx'
+  if not exists (
+    select 1
+    from pg_indexes x
+    join pg_class c on c.relname = x.indexname
+    join pg_namespace n on n.oid = c.relnamespace and n.nspname = x.schemaname
+    join pg_index i on i.indexrelid = c.oid
+    where x.schemaname = 'public'
+      and x.tablename = 'demo_refresh_runs'
+      and x.indexname = 'public_demo_refresh_runs_preset_sport_created_at_idx'
+      and x.indexdef = 'CREATE INDEX public_demo_refresh_runs_preset_sport_created_at_idx ON public.demo_refresh_runs USING btree (preset_id, sport, created_at DESC)'
+      and i.indisvalid
   ) then
-    raise exception 'known duplicate indexes are not structurally identical';
+    raise exception 'surviving index public.public_demo_refresh_runs_preset_sport_created_at_idx is missing, invalid, or not btree (preset_id, sport, created_at DESC) on public.demo_refresh_runs';
   end if;
 
   for relation_name, expected_count in
