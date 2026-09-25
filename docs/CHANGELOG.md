@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Duplicate Demo Index Removed (FLA-231)
+
+- **Removed**: `public.idx_public_demo_refresh_runs_preset_sport_created`, an exact duplicate of `public.public_demo_refresh_runs_preset_sport_created_at_idx` (both `btree (preset_id, sport, created_at desc)` on `demo_refresh_runs`) that the database baseline carried over from the original production state. Production recorded no scans on the dropped index; the survivor already serves those queries. The migration refuses to run unless both indexes exist, the survivor is valid, the two are structurally identical, and nothing else depends on the one being dropped, and it refuses to commit unless the survivor is still present and valid afterwards. The reproducibility proof now expects 78 public indexes. A rollback that rebuilds the index concurrently lives in `supabase/rollback/`.
+
 ### Hourly Signup Paths View (FLA-413)
 
 - **Added**: `analytics.signups_hourly_paths`, an aggregate view over the signup log for an internal hourly acquisition monitor. It returns one zero-filled row per America/New_York wall-clock hour for the trailing 21 days plus the current hour, with the hour's total signups and counts for the connector install flow (consent-page landing with no referrer), ChatGPT, Google, and Claude referrers, and referrer-less site visits. Deleted accounts are excluded the same way the daily signup views exclude them. Hourly buckets are finer-grained than the daily views but remain identifier-free aggregates: no user identifier, raw first-touch object, or landing-path column is exposed, and only `analytics_readonly` can read it. The signup-log rollback now drops this view before the table, and a separate rollback for the view alone lives in `supabase/rollback/`.

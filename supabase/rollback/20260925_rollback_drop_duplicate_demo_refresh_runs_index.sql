@@ -1,0 +1,32 @@
+-- Reviewed rollback artifact for
+-- 20260925013000_drop_duplicate_demo_refresh_runs_index.sql (FLA-231).
+--
+-- This file lives OUTSIDE supabase/migrations on purpose, exactly like the
+-- artifacts in supabase/cron: a local `supabase db reset` applies every
+-- timestamped file in supabase/migrations, so a rollback stored there would
+-- undo the migration it is meant to reverse on every reset. Apply this file
+-- only as a deliberate, separately approved operation.
+--
+-- It recreates public.idx_public_demo_refresh_runs_preset_sport_created with
+-- the exact definition from 20260727230606_baseline.sql. The index was an
+-- exact duplicate of public.public_demo_refresh_runs_preset_sport_created_at_idx,
+-- so recreating it restores the before-state catalog, not any query plan; no
+-- data is involved.
+--
+-- Unlike the other rollback artifacts, this file has NO begin/commit wrapper.
+-- It is applied manually outside the migration runner, so it can use
+-- CREATE INDEX CONCURRENTLY, which builds the index without blocking writes to
+-- demo_refresh_runs but cannot run inside a transaction block. Run it as a
+-- single statement with autocommit on (plain `psql -f` does this).
+--
+-- If the concurrent build fails or is cancelled, it leaves behind an INVALID
+-- index under this name, and `if not exists` would then skip the retry while
+-- reporting success. Before retrying, check
+-- `select indisvalid from pg_index where indexrelid =
+-- 'public.idx_public_demo_refresh_runs_preset_sport_created'::regclass;`
+-- and, if it returns false, run
+-- `drop index concurrently public.idx_public_demo_refresh_runs_preset_sport_created;`
+-- first.
+
+create index concurrently if not exists idx_public_demo_refresh_runs_preset_sport_created
+  on public.demo_refresh_runs using btree (preset_id, sport, created_at desc);
