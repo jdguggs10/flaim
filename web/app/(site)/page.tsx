@@ -124,6 +124,14 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
             mainEntity: [
               {
                 "@type": "Question",
+                name: "Is there a ChatGPT app for my fantasy league?",
+                acceptedAnswer: {
+                  "@type": "Answer",
+                  text: "Yes, that's what Flaim is. Add Flaim Fantasy to ChatGPT or Claude, connect your ESPN, Yahoo, or Sleeper league, and ask about your real team.",
+                },
+              },
+              {
+                "@type": "Question",
                 name: "Is there a subscription?",
                 acceptedAnswer: {
                   "@type": "Answer",
@@ -330,6 +338,20 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
         <div className="container max-w-2xl mx-auto">
           <h2 className="text-2xl font-bold text-center mb-5">FAQs</h2>
           <div className="space-y-3">
+            <details className="group border rounded-lg bg-background">
+              <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
+                Is there a ChatGPT app for my fantasy league?
+                <ChevronDown className="ml-2 h-5 w-5 transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
+                <p>
+                  Yes, that&apos;s what Flaim is. Add Flaim Fantasy to ChatGPT
+                  or Claude, connect your ESPN, Yahoo, or Sleeper league, and
+                  ask about your real team.
+                </p>
+              </div>
+            </details>
+
             <details className="group border rounded-lg bg-background">
               <summary className="flex cursor-pointer items-center justify-between p-4 font-medium">
                 Is there a subscription?

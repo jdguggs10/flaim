@@ -9,7 +9,7 @@ import { CHROME_EXTENSION_URL } from "@/config/constants";
 export const metadata: Metadata = {
   title: "Connect ESPN, Yahoo & Sleeper to Flaim",
   description:
-    "Connect ESPN, Yahoo, or Sleeper fantasy leagues to Flaim. Use the ESPN Chrome extension, Yahoo sign-in, or your Sleeper username.",
+    "Connect ESPN, Yahoo, or Sleeper fantasy leagues to Flaim so ChatGPT and Claude can use them. Use the ESPN Chrome extension, Yahoo sign-in, or your Sleeper username.",
   alternates: {
     canonical: "https://flaim.app/docs/platforms",
   },
@@ -116,7 +116,8 @@ export default function PlatformsGuidePage() {
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">
             Open Your Leagues and connect ESPN, Yahoo, or Sleeper. When your
-            leagues appear in Flaim, you are ready to add your AI.
+            leagues appear in Flaim, you are ready to add Flaim Fantasy to
+            ChatGPT or Claude.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">

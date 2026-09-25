@@ -8,15 +8,21 @@ import { Button } from "@/components/ui/button";
 import { CHROME_EXTENSION_URL } from "@/config/constants";
 
 export const metadata: Metadata = {
-  title: "Connect ESPN Leagues with the Flaim Chrome Extension",
+  title: "Connect ESPN Fantasy to ChatGPT and Claude",
   description:
-    "Set up the Flaim Chrome extension to connect your ESPN Fantasy leagues. Follow the same Chrome profile steps, sync your leagues, and troubleshoot common setup issues.",
+    "Connect your ESPN fantasy league to ChatGPT or Claude with Flaim Fantasy. Sync once with the free Flaim Chrome extension on a computer, then ask about your real team from anywhere.",
   alternates: {
     canonical: "https://flaim.app/docs/espn",
   },
 };
 
-const SETUP_STEPS = [
+type SetupStep = {
+  title: string;
+  body: string;
+  link?: { href: string; label: string };
+};
+
+const SETUP_STEPS: readonly SetupStep[] = [
   {
     title: "Sign in to Flaim",
     body: "Open Flaim in Chrome and sign in to the Flaim account where you want your leagues to appear.",
@@ -35,11 +41,21 @@ const SETUP_STEPS = [
   },
   {
     title: "Confirm your leagues",
-    body: "Open Your Leagues and confirm the league name, your team, and the season. You are ready to connect your AI app once the league you want appears.",
+    body: "Open Your Leagues and confirm the league name, your team, and the season.",
   },
-] as const;
+  {
+    title: "Add Flaim to ChatGPT or Claude",
+    body: "Open Flaim Fantasy in ChatGPT or Claude, sign in with the same Flaim account, and ask what fantasy leagues you have.",
+    link: { href: "/docs/ai", label: "AI app docs" },
+  },
+];
 
 const ESPN_FAQS = [
+  {
+    question: "How do I connect my ESPN fantasy league to ChatGPT?",
+    answer:
+      "Install the free Flaim Chrome extension on a computer, sign in to Flaim and ESPN in the same Chrome profile, and choose Sync to Flaim. Then open Flaim Fantasy in ChatGPT and sign in with your Flaim account. Claude works the same way.",
+  },
   {
     question: "I installed the extension but cannot find it",
     answer:
@@ -80,10 +96,10 @@ const ESPN_FAQS = [
 const HOW_TO_SCHEMA = {
   "@context": "https://schema.org",
   "@type": "HowTo",
-  name: "Connect ESPN Fantasy leagues to Flaim",
-  dateModified: "2026-09-17",
+  name: "Connect an ESPN fantasy league to ChatGPT or Claude",
+  dateModified: "2026-09-25",
   description:
-    "Set up the Flaim Chrome extension in the Chrome profile where you use both Flaim and ESPN Fantasy.",
+    "Sync ESPN with the Flaim Chrome extension, then add Flaim Fantasy to ChatGPT or Claude.",
   step: SETUP_STEPS.map((step, index) => ({
     "@type": "HowToStep",
     position: index + 1,
@@ -122,12 +138,14 @@ export default function EspnGuidePage() {
             Docs
           </p>
           <h1 className="mt-4 max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl">
-            Connect your ESPN leagues with the Flaim Chrome extension
+            Connect your ESPN fantasy league to ChatGPT and Claude
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Set up the extension in Google Chrome on a computer. Use the same
-            Chrome profile for Flaim and ESPN Fantasy, then sync and confirm
-            your leagues in Flaim.
+            ChatGPT and Claude can read your ESPN league through Flaim Fantasy.
+            ESPN needs the free Flaim Chrome extension once, on a computer.
+            Yahoo and Sleeper don&apos;t. After that one sync, ask about your
+            roster, matchup, and waiver wire from any device, including your
+            phone.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild size="lg">
@@ -196,7 +214,7 @@ export default function EspnGuidePage() {
             Set up ESPN
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight">
-            Five steps to connect your leagues
+            Six steps from ESPN to ChatGPT or Claude
           </h2>
           <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {SETUP_STEPS.map((step, index) => (
@@ -211,6 +229,14 @@ export default function EspnGuidePage() {
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   {step.body}
                 </p>
+                {step.link ? (
+                  <Link
+                    href={step.link.href}
+                    className="mt-3 inline-flex text-sm font-medium text-primary hover:underline"
+                  >
+                    {step.link.label}
+                  </Link>
+                ) : null}
               </article>
             ))}
           </div>
@@ -263,7 +289,7 @@ export default function EspnGuidePage() {
       <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            Troubleshooting
+            Questions
           </p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight">
             Where are you stuck?

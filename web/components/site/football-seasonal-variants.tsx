@@ -210,11 +210,12 @@ export function FootballSeasonalPage() {
               Your actual fantasy football league
             </p>
             <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
-              Your Fantasy Football Team + AI
+              Your Fantasy Football Team, in ChatGPT and Claude
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-muted-foreground">
-              Ask about the team you drafted, weekly matchups, available
-              players, standings, trades, and league history.
+              Ask ChatGPT or Claude about the team you drafted, weekly
+              matchups, available players, standings, trades, and league
+              history.
             </p>
           </div>
           <ConnectedLeaguesProof />
