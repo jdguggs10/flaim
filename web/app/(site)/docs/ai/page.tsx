@@ -18,15 +18,20 @@ import {
 } from "@/lib/product-links";
 
 export const metadata: Metadata = {
-  title: "Connect Flaim to ChatGPT, Claude & Other AI Apps",
+  title: "Add Flaim Fantasy to ChatGPT and Claude",
   description:
-    "Connect Flaim to ChatGPT or Claude. Find custom connector setup instructions and current availability for Perplexity, Gemini, and Grok.",
+    "Add Flaim Fantasy to ChatGPT or Claude so they can read your ESPN, Yahoo, and Sleeper leagues. Custom connector setup for Perplexity, Gemini, and Grok is here too.",
   alternates: {
     canonical: "https://flaim.app/docs/ai",
   },
 };
 
 const CONNECTION_FAQS = [
+  {
+    question: "Is there a ChatGPT app for my fantasy league?",
+    answer:
+      "Yes. Flaim Fantasy is an app in ChatGPT and a connector in Claude. It works with your ESPN, Yahoo, and Sleeper leagues, and it's free.",
+  },
   {
     question: "My AI cannot see any leagues",
     answer:
@@ -138,12 +143,13 @@ export default function AiGuidePage() {
             Step 3 of 3
           </p>
           <h1 className="mt-4 max-w-4xl text-4xl font-bold tracking-tight sm:text-5xl">
-            Connect Flaim to your AI
+            Add Flaim Fantasy to ChatGPT and Claude
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Connect your leagues first. Then open Flaim Fantasy in ChatGPT or
-            Claude, or add it to Perplexity, Gemini or Grok as a custom
-            connector.
+            Flaim Fantasy is an app in ChatGPT&apos;s plugin directory and a
+            connector in Claude&apos;s directory. Connect your leagues first,
+            then open it in either one. You can also add it to Perplexity,
+            Gemini or Grok as a custom connector.
           </p>
         </div>
       </section>

@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Public Pages Say ChatGPT and Claude (FLA-414)
+
+- **Changed**: the ESPN docs page is now titled and led by the outcome, "Connect ESPN Fantasy to ChatGPT and Claude", with the Chrome extension as the how; it says plainly that ESPN needs the extension once on a computer and Yahoo and Sleeper do not, adds a sixth step for adding Flaim to ChatGPT or Claude, and opens its FAQ with "How do I connect my ESPN fantasy league to ChatGPT?". The AI docs page, the fantasy football page, and the platforms page now name ChatGPT and Claude in their titles, headings, and first sentences instead of a generic "AI", and the football page gains a four-question FAQ with matching FAQPage data. The home page gains one FAQ entry, "Is there a ChatGPT app for my fantasy league?"; the hero is unchanged. No new routes.
+- **Changed**: the site's Organization structured data now lists the ChatGPT plugin listing, the Claude connector listing, the Chrome Web Store listing, and the GitHub repository under `sameAs`, and the README's first sentence says what Flaim Fantasy is and where it lives. Copy and metadata only; no behavior change.
+
 ### Duplicate Demo Index Removed (FLA-231)
 
 - **Removed**: `public.idx_public_demo_refresh_runs_preset_sport_created`, an exact duplicate of `public.public_demo_refresh_runs_preset_sport_created_at_idx` (both `btree (preset_id, sport, created_at desc)` on `demo_refresh_runs`) that the database baseline carried over from the original production state. Production recorded no scans on the dropped index; the survivor already serves those queries. The migration refuses to run unless both indexes exist, the survivor is valid, the two are structurally identical, and nothing else depends on the one being dropped, and it refuses to commit unless the survivor is still present and valid afterwards. The reproducibility proof now expects 78 public indexes. A rollback that rebuilds the index concurrently lives in `supabase/rollback/`.

@@ -2,9 +2,9 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-11-green.svg)](https://api.flaim.app/mcp)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.2-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.6.0-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
-Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT or Claude for read-only analysis grounded in your real league. Advanced users can also add Flaim manually as a custom connector in compatible AI platforms.
+Flaim Fantasy, at [flaim.app](https://flaim.app), is an app in [ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) and a connector in [Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754) that reads your real ESPN, Yahoo, and Sleeper fantasy leagues so you can ask about your actual team. Advanced users can also add Flaim manually as a custom connector in compatible AI platforms.
 
 Analysis tools are read-only by design. No trades, no drops, no roster changes — just advice. League refresh can update Flaim's connected-league records so newly available seasons show up.
 
