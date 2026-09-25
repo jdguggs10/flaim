@@ -558,8 +558,15 @@ valid.
 It is a plain `drop index`, not `drop index concurrently`, because Supabase
 runs each migration in a transaction, where `CONCURRENTLY` is not allowed. The
 plain drop holds an `ACCESS EXCLUSIVE` lock on `demo_refresh_runs` only while
-it removes a roughly 1 MB index, and `lock_timeout = '5s'` makes the migration
-fail fast rather than queue demo traffic behind a long-running transaction.
+it removes a roughly 1 MB index, and `set local lock_timeout = '5s'` makes the
+migration fail fast rather than queue demo traffic behind a long-running
+transaction. The file has no `begin`/`commit` of its own: it relies on the
+migration runner's transaction, which also covers the runner's ledger insert,
+so the drop and its ledger row commit together, and which is what makes
+`set local` apply. The CLI sends that transaction as one implicit batch rather
+than an explicit `BEGIN`, so it prints a harmless 25P01 "SET LOCAL can only be
+used in transaction blocks" warning; the timeout still applies. A manual test
+apply must run as one transaction, for example `psql -1 -f`.
 `supabase/tests/reproducibility.sql` now requires the candidate to be absent
 and the survivor to keep its exact definition. The rollback artifact is
 described under [Rollback artifacts](#rollback-artifacts). Applying this

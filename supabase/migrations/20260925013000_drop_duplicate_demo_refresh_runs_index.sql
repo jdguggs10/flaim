@@ -33,10 +33,19 @@
 -- refuses to commit unless the candidate is gone and the survivor is still
 -- present and valid.
 --
+-- The file has no begin/commit of its own. It relies on the migration
+-- runner's transaction, which also covers the runner's migration-ledger
+-- insert, so the drop and its ledger row commit together or not at all. That
+-- transaction is also why `set local lock_timeout` applies. The Supabase CLI
+-- sends the file as one implicit-transaction batch rather than inside an
+-- explicit BEGIN, so it prints "SET LOCAL can only be used in transaction
+-- blocks" (25P01), yet the timeout still holds for the whole batch. When
+-- applying this file by hand for a test, run it as one transaction (for
+-- example `psql -1 -f`); otherwise `set local` is ignored with a warning and
+-- the preflight, drop, and postcheck are not atomic.
+--
 -- Rollback: supabase/rollback/20260925_rollback_drop_duplicate_demo_refresh_runs_index.sql.
 -- Hosted application remains a separate approval gate.
-
-begin;
 
 set local lock_timeout = '5s';
 
@@ -195,5 +204,3 @@ begin
   end if;
 end;
 $postcheck$;
-
-commit;
