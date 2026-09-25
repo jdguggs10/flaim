@@ -1,0 +1,388 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  buildSupabaseRpcHeaders,
+  classifySupabaseKey,
+  mapClerkUserToSignup,
+  normalizeFirstTouch,
+  recordSignup,
+  SignupLogWriteError,
+  SignupPayloadError,
+} from "../signup-log";
+
+// 2025-08-24T02:26:40.000Z — a realistic Clerk millisecond epoch.
+const CREATED_AT_MS = 1756002400000;
+const CREATED_AT_ISO = "2025-08-24T02:26:40.000Z";
+
+// Every first touch the browser writer produces carries a capturedAt; the
+// shared validator rejects a bag without one.
+const CAPTURED_AT = "2025-08-24T02:26:39.000Z";
+
+function acquisition(fields: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    capturedAt: CAPTURED_AT,
+    landingPath: "/",
+    ...fields,
+  };
+}
+
+function payload(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "user_123",
+    created_at: CREATED_AT_MS,
+    email_addresses: [{ id: "email_123", email_address: "gerry@example.com" }],
+    first_name: "Gerry",
+    last_name: "Gugger",
+    primary_email_address_id: "email_123",
+    ...overrides,
+  };
+}
+
+describe("normalizeFirstTouch", () => {
+  it("returns null when the metadata bag is empty or missing the key", () => {
+    expect(normalizeFirstTouch(undefined)).toBeNull();
+    expect(normalizeFirstTouch(null)).toBeNull();
+    expect(normalizeFirstTouch({})).toBeNull();
+    expect(normalizeFirstTouch({ flaimAcquisition: null })).toBeNull();
+    expect(normalizeFirstTouch("not an object")).toBeNull();
+  });
+
+  it("rejects a first touch written under a different schema version", () => {
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: acquisition({ schemaVersion: 2 }),
+      })
+    ).toBeNull();
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: acquisition({ schemaVersion: "1" }),
+      })
+    ).toBeNull();
+  });
+
+  it("rejects a bag with no usable capturedAt, as the shared validator does", () => {
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: { schemaVersion: 1, landingPath: "/" },
+      })
+    ).toBeNull();
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: acquisition({ capturedAt: "not-a-date" }),
+      })
+    ).toBeNull();
+  });
+
+  it("rejects a landing path that is not site-relative", () => {
+    for (const landingPath of [
+      "https://evil.example/steal",
+      "pricing",
+      "",
+      42,
+      null,
+    ]) {
+      expect(
+        normalizeFirstTouch({ flaimAcquisition: acquisition({ landingPath }) })
+      ).toBeNull();
+    }
+  });
+
+  it("rejects a landing path carrying a query or a fragment", () => {
+    for (const landingPath of ["/guides?utm_source=evil", "/guides#frag"]) {
+      expect(
+        normalizeFirstTouch({ flaimAcquisition: acquisition({ landingPath }) })
+      ).toBeNull();
+    }
+  });
+
+  it("keeps the attribution dimensions from a realistic payload", () => {
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: acquisition({
+          landingPath: "/guides/espn",
+          utmSource: "newsletter",
+          utmMedium: "email",
+          utmCampaign: "launch",
+          utmTerm: "espn",
+          utmContent: "cta-top",
+          referrerHost: "news.ycombinator.com",
+          ref: "hn",
+        }),
+      })
+    ).toEqual({
+      schemaVersion: 1,
+      landingPath: "/guides/espn",
+      utmSource: "newsletter",
+      utmMedium: "email",
+      utmCampaign: "launch",
+      utmTerm: "espn",
+      utmContent: "cta-top",
+      referrerHost: "news.ycombinator.com",
+      ref: "hn",
+    });
+  });
+
+  it("bounds an oversized landing path and rejects an over-limit dimension", () => {
+    // The landing path is bounded, exactly as the browser writer bounds it.
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: acquisition({ landingPath: `/${"a".repeat(500)}` }),
+      })?.landingPath
+    ).toHaveLength(200);
+
+    // A dimension longer than its own limit never came from the writer, which
+    // slices at capture time — the shared validator rejects the whole object.
+    for (const field of [
+      "utmSource",
+      "utmMedium",
+      "utmCampaign",
+      "utmTerm",
+      "utmContent",
+      "referrerHost",
+      "ref",
+    ]) {
+      expect(
+        normalizeFirstTouch({
+          flaimAcquisition: acquisition({ [field]: "z".repeat(500) }),
+        })
+      ).toBeNull();
+    }
+  });
+
+  it("rejects a non-string dimension", () => {
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: acquisition({ utmMedium: { nested: true } }),
+      })
+    ).toBeNull();
+  });
+
+  it("strips control and markup characters and collapses whitespace", () => {
+    const result = normalizeFirstTouch({
+      flaimAcquisition: acquisition({
+        utmSource: "  news\u0000letter  <b>  ",
+        ref: "`|[]*~",
+      }),
+    });
+
+    expect(result?.utmSource).toBe("newsletter b");
+    expect(result?.ref).toBeUndefined();
+  });
+
+  it("lower-cases a referrer host and drops one that is not a bare hostname", () => {
+    expect(
+      normalizeFirstTouch({
+        flaimAcquisition: acquisition({ referrerHost: "News.YCombinator.COM" }),
+      })?.referrerHost
+    ).toBe("news.ycombinator.com");
+
+    for (const referrerHost of [
+      "https://news.ycombinator.com",
+      "news.ycombinator.com/path",
+      "news.ycombinator.com:8443",
+      "news ycombinator com",
+    ]) {
+      const result = normalizeFirstTouch({
+        flaimAcquisition: acquisition({ referrerHost }),
+      });
+      expect(result).not.toBeNull();
+      expect(result?.referrerHost).toBeUndefined();
+    }
+  });
+});
+
+describe("mapClerkUserToSignup", () => {
+  it("maps the snake_case webhook shape with attribution", () => {
+    expect(
+      mapClerkUserToSignup(
+        payload({
+          unsafe_metadata: {
+            flaimAcquisition: acquisition({ landingPath: "/pricing", ref: "hn" }),
+          },
+        })
+      )
+    ).toEqual({
+      clerkUserId: "user_123",
+      createdAt: CREATED_AT_ISO,
+      firstTouch: { schemaVersion: 1, landingPath: "/pricing", ref: "hn" },
+    });
+  });
+
+  it("maps a payload with no unsafe_metadata to a null first touch", () => {
+    expect(mapClerkUserToSignup(payload())).toEqual({
+      clerkUserId: "user_123",
+      createdAt: CREATED_AT_ISO,
+      firstTouch: null,
+    });
+  });
+
+  it("reads snake_case only and does not accept the Backend SDK camelCase shape", () => {
+    expect(() =>
+      mapClerkUserToSignup({ id: "user_123", createdAt: CREATED_AT_MS })
+    ).toThrow(SignupPayloadError);
+  });
+
+  it("rejects a payload with no user id", () => {
+    expect(() => mapClerkUserToSignup({ created_at: CREATED_AT_MS })).toThrow(
+      SignupPayloadError
+    );
+    expect(() =>
+      mapClerkUserToSignup({ id: "   ", created_at: CREATED_AT_MS })
+    ).toThrow(SignupPayloadError);
+  });
+
+  it("rejects missing, string, non-finite, and non-integer created_at", () => {
+    for (const created_at of [
+      undefined,
+      null,
+      String(CREATED_AT_MS),
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      CREATED_AT_MS + 0.5,
+    ]) {
+      expect(() => mapClerkUserToSignup(payload({ created_at }))).toThrow(
+        SignupPayloadError
+      );
+    }
+  });
+
+  it("rejects created_at outside the accepted range", () => {
+    expect(() =>
+      mapClerkUserToSignup(payload({ created_at: Date.UTC(2019, 11, 31) }))
+    ).toThrow(SignupPayloadError);
+    expect(() =>
+      mapClerkUserToSignup(
+        payload({ created_at: Date.now() + 2 * 24 * 60 * 60 * 1000 })
+      )
+    ).toThrow(SignupPayloadError);
+  });
+
+  it("accepts a created_at inside the one-day forward skew allowance", () => {
+    const soon = Date.now() + 60 * 60 * 1000;
+    expect(mapClerkUserToSignup(payload({ created_at: soon })).createdAt).toBe(
+      new Date(soon).toISOString()
+    );
+  });
+});
+
+describe("classifySupabaseKey", () => {
+  it("classifies new-style secret keys", () => {
+    expect(classifySupabaseKey("sb_secret_abcdef123456")).toBe("sb_secret");
+  });
+
+  it("classifies legacy three-segment JWTs", () => {
+    expect(classifySupabaseKey("aaaa.bbbb.cccc")).toBe("jwt");
+    expect(classifySupabaseKey("eyJh-bG_ciOi.eyJpc3MiOiJz.dGVzdC1zaWc")).toBe("jwt");
+  });
+
+  it("classifies anything else as unrecognised", () => {
+    expect(classifySupabaseKey("")).toBe("unrecognised");
+    expect(classifySupabaseKey("   ")).toBe("unrecognised");
+    expect(classifySupabaseKey("sb_publishable_abc")).toBe("unrecognised");
+    expect(classifySupabaseKey("aaaa.bbbb")).toBe("unrecognised");
+    expect(classifySupabaseKey("aaaa.bbbb.cccc.dddd")).toBe("unrecognised");
+  });
+});
+
+describe("buildSupabaseRpcHeaders", () => {
+  it("sends a new-style secret key in apikey only", () => {
+    const headers = buildSupabaseRpcHeaders("sb_secret_abcdef123456");
+    expect(headers.apikey).toBe("sb_secret_abcdef123456");
+    expect(headers.Authorization).toBeUndefined();
+  });
+
+  it("sends a legacy JWT service key in both headers", () => {
+    const headers = buildSupabaseRpcHeaders("aaaa.bbbb.cccc");
+    expect(headers.apikey).toBe("aaaa.bbbb.cccc");
+    expect(headers.Authorization).toBe("Bearer aaaa.bbbb.cccc");
+  });
+
+  it("sends an unrecognised key in both headers, matching the live PostgREST paths", () => {
+    const headers = buildSupabaseRpcHeaders("legacy-opaque-key");
+    expect(headers.Authorization).toBe("Bearer legacy-opaque-key");
+  });
+});
+
+describe("recordSignup", () => {
+  const input = {
+    clerkUserId: "user_123",
+    createdAt: CREATED_AT_ISO,
+    firstTouch: null,
+  };
+
+  beforeEach(() => {
+    vi.stubEnv("SUPABASE_URL", "https://project.supabase.co/");
+    vi.stubEnv("SUPABASE_SERVICE_KEY", "sb_secret_abcdef123456");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("throws rather than silently skipping when Supabase is not configured", async () => {
+    vi.stubEnv("SUPABASE_SERVICE_KEY", "");
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(recordSignup(input, { source: "webhook" })).rejects.toBeInstanceOf(
+      SignupLogWriteError
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("posts the RPC contract to the trailing-slash-normalised URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await recordSignup(
+      {
+        ...input,
+        firstTouch: { schemaVersion: 1, landingPath: "/pricing" },
+      },
+      { source: "webhook" }
+    );
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://project.supabase.co/rest/v1/rpc/record_signup");
+    expect(init.method).toBe("POST");
+    expect(init.cache).toBe("no-store");
+    expect(init.headers.apikey).toBe("sb_secret_abcdef123456");
+    expect(init.headers.Authorization).toBeUndefined();
+    expect(JSON.parse(init.body)).toEqual({
+      p_clerk_user_id: "user_123",
+      p_created_at: CREATED_AT_ISO,
+      p_first_touch: { schemaVersion: 1, landingPath: "/pricing" },
+      p_source: "webhook",
+    });
+  });
+
+  it("sends a null first touch as null", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await recordSignup(input, { source: "webhook" });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).p_first_touch).toBeNull();
+  });
+
+  it("throws with the status and without the response body on failure", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("permission denied for table signup_log (sb_secret_abcdef123456)", {
+          status: 401,
+        })
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const error = await recordSignup(input, { source: "webhook" }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(SignupLogWriteError);
+    expect(error.status).toBe(401);
+    expect(error.message).toBe("Failed to record signup (401)");
+    expect(error.message).not.toContain("sb_secret");
+  });
+});

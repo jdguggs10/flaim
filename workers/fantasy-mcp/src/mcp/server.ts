@@ -9,6 +9,8 @@ import {
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_HTML,
+  V3_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
 
@@ -59,6 +61,24 @@ function safeEmit(
 export const WIDGET_READ_LOG_SAMPLE_RATE = 50;
 
 /**
+ * Redirect domains published per widget URI. Each URI declares exactly the
+ * provider attribution links its body carries. A published URI's list never
+ * changes: clients cache read-result _meta per URI, so a new link target mints
+ * a new URI rather than widening an existing one.
+ */
+const WIDGET_REDIRECT_DOMAINS: Record<string, readonly string[]> = {
+  [LEGACY_USER_SESSION_WIDGET_URI]: ['https://flaim.app'],
+  [V2_USER_SESSION_WIDGET_URI]: ['https://flaim.app'],
+  [V3_USER_SESSION_WIDGET_URI]: ['https://flaim.app', 'https://sports.yahoo.com'],
+  [USER_SESSION_WIDGET_URI]: [
+    'https://flaim.app',
+    'https://sports.yahoo.com',
+    'https://www.espn.com',
+    'https://sleeper.com',
+  ],
+};
+
+/**
  * Create and configure the MCP server with all unified fantasy tools registered.
  * Uses closure capture to make env/authHeader available to tool handlers.
  */
@@ -94,16 +114,20 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
     { instructions: FLAIM_MCP_INSTRUCTIONS }
   );
 
-  // A published URI's read-result _meta is frozen (OpenAI snapshots it), but
-  // its body may change compatibly within the metadata that URI already
-  // declares. v1 and v2 declare only the flaim.app redirect domain, so they
-  // share the body whose provider credits are plain text. v3 also declares
-  // sports.yahoo.com, so its body links the Yahoo Fantasy credit; v3 is the
-  // tool descriptor target.
+  // A published widget URI is a cache key for ChatGPT clients, so each URI's
+  // read-result _meta and body must stay backward compatible; a body may
+  // change only within the metadata that URI already declares. v1 and v2
+  // declare only the flaim.app redirect domain, so they share the body whose
+  // provider credits are plain text. v3 also declares sports.yahoo.com, so its
+  // body links the Yahoo Fantasy credit. v4 additionally declares www.espn.com
+  // and sleeper.com, so its body links all three provider credits; v4 is the
+  // tool descriptor target. A body that needs metadata its URI does not
+  // declare gets a new URI.
   const widgetResources = [
     ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
     ['user-session-widget-v2', V2_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
-    ['user-session-widget-v3', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v3', V3_USER_SESSION_WIDGET_URI, V3_USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v4', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
   ] as const;
 
   for (const [name, uri, widgetHtml] of widgetResources) {
@@ -115,8 +139,8 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
       },
       async () => {
         // Structured log on a sample of widget resource reads so v1's share
-        // of reads is computable (v1-retirement tracking, FLA-258) — log all
-        // three URIs, not just v1, so the denominator is available too.
+        // of reads is computable (v1-retirement tracking, FLA-258) — log every
+        // URI, not just v1, so the denominator is available too.
         // client_name is intentionally omitted: this path is public and
         // never goes through token introspection, so ctx.clientName is
         // always null here.
@@ -141,11 +165,12 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
             uri,
             mimeType: 'text/html;profile=mcp-app',
             text: widgetHtml,
-            // Every published URI's read-result _meta is a frozen contract:
-            // it must stay byte-identical to the snapshot OpenAI scanned
-            // (v1: original submission; v2: v2.1 submission incl. the
-            // FLA-177 descriptor additions; v3: the attribution revision).
-            // A body change that would need new metadata needs a new URI.
+            // Each published URI is a cache key for ChatGPT clients, so its
+            // read-result _meta must stay backward compatible with what
+            // clients already hold for that URI (v1: plain-text credits;
+            // v2: adds the FLA-177 descriptor fields; v3: adds the Yahoo
+            // attribution link; v4: adds the ESPN and Sleeper links). A body
+            // change that would need new metadata gets a new URI instead.
             _meta: {
               ui: {
                 csp: {
@@ -155,7 +180,8 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
               },
               ...(uri !== LEGACY_USER_SESSION_WIDGET_URI && {
                 // Plain-language widget summary for directory/host surfaces.
-                // Part of v2's frozen _meta (FLA-177); carried forward on v3.
+                // Introduced on v2 (FLA-177) and carried forward on v3 and v4;
+                // v1 stays without it so its published _meta stays compatible.
                 'openai/widgetDescription':
                   'Summary card of your connected fantasy leagues, showing league names, sports, and your default league.',
               }),
@@ -166,12 +192,11 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
                 // widget domain — the widget is fully self-contained (empty
                 // connect/resource CSP), so a dedicated domain adds no capability;
                 // revisit only if a portal scan explicitly requires _meta.ui.domain.
-                // v3 additionally allowlists the Yahoo Fantasy attribution link
-                // target; the published v1/v2 _meta stays byte-identical.
-                redirect_domains:
-                  uri === USER_SESSION_WIDGET_URI
-                    ? ['https://flaim.app', 'https://sports.yahoo.com']
-                    : ['https://flaim.app'],
+                // Each URI allowlists exactly the provider attribution links its
+                // body carries: v3 added Yahoo Fantasy, v4 adds ESPN and
+                // Sleeper. v1/v2 keep the metadata already published under
+                // their URIs.
+                redirect_domains: [...WIDGET_REDIRECT_DOMAINS[uri]],
               },
             },
           }],

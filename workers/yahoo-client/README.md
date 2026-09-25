@@ -18,6 +18,26 @@ Yahoo's roster resource is sport-sensitive: `;week=` is valid for football only,
 
 Player entries omit `team` and `status` on any historical (`week`/`date`) snapshot, and the response adds `limitations: { playerProTeamAvailable: false }` (FLA-278). Yahoo's roster player object exposes `editorial_team_abbr`/`status` as the player's CURRENT club and CURRENT status only — there is no historical value in this payload for a past week/date, so a player traded or whose status changed since would otherwise show present-day facts mislabeled as historical. Current-roster entries are unaffected.
 
+### Weekly Player Points
+
+Football `get_roster` requests append Yahoo's week-scoped player stats sub-resource and emit an additive `points` per player, plus a response-level `pointsCoverage: { type: 'week', week }`. The request selectors are `/team/{team_key}/roster;week={N}/players/stats` for a week snapshot and `/team/{team_key}/roster;week=current/players/stats` for the current roster — no `;type=`, and current rosters must carry the literal `;week=current`; a bare `/players/stats` with no week selector 400s.
+
+If the stats-augmented request comes back non-ok, the handler logs one line and retries the plain legacy roster URL, continuing without points and reporting `limitations: { playerPointsAvailable: false }` rather than failing the whole roster read.
+
+Points only surface when Yahoo's echoed coverage confirms a single week: a week snapshot requires `coverage.type === 'week'` and `coverage.week` to exactly equal the requested week; a current snapshot resolves one positive-integer week from the first usable player and drops any player whose echoed week differs. A genuine `0.00` total is preserved as `0`, never omitted. `limitations.playerPointsAvailable: false` is added whenever no player's points were usable.
+
+### Market Ownership Rate (`percent_owned`)
+
+`get_free_agents` and `get_players` both request the same player sub-resources through Yahoo's `;out=` filter, but on different request shapes: `get_free_agents` uses `/league/{key}/players;status=A;count={N};sort=OR;start={N}[;position={P}];out=ownership,percent_owned`, while `get_players` uses `/league/{key}/players;search={query};count={N}[;position={P}];out=ownership,percent_owned` — no `status`, `sort`, or `start`. The rate itself lives in `percent_owned`, a **sibling** of `ownership`, not inside it. A trailing `/ownership` path segment returns league-level owner and waiver state only, with no rate anywhere in the payload, which is why every rate came back `null` before FLA-9. `;out=` takes a comma-separated list and accepts no parameters of its own, so it cannot be combined with a trailing sub-resource path; the filter goes last, after `;position=`.
+
+`percent_owned` is expected, as observed by referenced clients; not yet live-verified from this worker, to arrive as an array of single-key objects (`[{coverage_type}, {week|date}, {value}, {delta}]`), so `value` is found by key at any position; the flattened-object and numeric-keyed container forms are accepted too. Only `value` is read, so football's `week` coverage and the daily sports' `date` coverage need no separate handling. A value is accepted only within 0-100 inclusive (a numeric string must fully match the expected decimal-with-optional-`%` shape, not merely start with one); a genuine `0` rate is preserved, and a missing sub-resource, out-of-range, or non-numeric value yields `null`.
+
+`get_free_agents` sorts locally by rate descending, with a name/id tiebreak between equal rates. Entries without a rate sort last and keep Yahoo's returned `sort=OR` (overall rank) order rather than falling through to a name comparison — a response with no rates at all would otherwise be re-ranked alphabetically. The gateway reports `capabilities.rosteredRate` for Yahoo from the entries actually returned, so a rate-less response tells clients the rate is unavailable instead of advertising one.
+
+### Pagination (`get_free_agents`)
+
+Yahoo's `players` collection silently clamps to 25 entries per response regardless of the requested `;count=`, rather than erroring, so `get_free_agents` always requests `;count=25` per page (`YAHOO_PLAYERS_PAGE_SIZE`) and pages until it either collects enough entries to satisfy the caller's `count` (1-100) or gets back a genuinely empty page — never merely a page shorter than requested, which was the FLA-9 bug (the loop previously requested 100 and broke the moment Yahoo's real 25-entry cap came back short). A 20-page safety bound returns whatever was collected instead of looping forever if an upstream response never returns an empty page. `get_players` is unaffected: it already clamps its own request to Yahoo's real 25-entry cap and takes a single page.
+
 ### Keeper / League-Format Context (FLA-284)
 
 **Status: coded and fixture-tested only, not live-verified.** Yahoo API access has been cut since 2026-07-27 (FLA-237); the fields below are shaped from real captured fixtures and Yahoo's own (sparse) documentation, not a live call against this worker. Treat them as best-effort until FLA-237 clears and a live check runs.
@@ -34,6 +54,20 @@ Player entries omit `team` and `status` on any historical (`week`/`date`) snapsh
 The `/settings` fetch runs **sequentially after** `/teams`, not concurrently with it: Yahoo's aggressive throttling (HTTP 999) is sensitive to concurrent requests per the team's operating posture, so this worker deliberately avoids firing them in parallel.
 
 The `/settings` fetch degrades independently and can never fail `get_league_info`: if it 404s/5xxs, times out, rejects outright, or returns an unexpected shape, the response still returns exactly what `/teams` alone would have (unchanged from before this fetch existed) plus a `warning: "LEAGUE_SETTINGS_UNAVAILABLE: ..."` string, matching this worker's existing `get_transactions` degrade-with-warning convention. It never throws out of the handler.
+
+### Category Scoring (`get_matchups`)
+
+`get_matchups` emits `scoringType` (`points`/`categories`/`roto`/`unknown`, normalized from Yahoo's `scoring_type`) and `scoringTypeRaw` on every response. The gate for category behavior is `scoring_type` alone, **never** the presence of `team_stats` — a verified `headpoint` (ordinary points) capture carries `team_stats` too, and must not be mistaken for a categories league.
+
+On a categories league (Yahoo's `scoring_type: "head"` — counter-intuitively, `head` means H2H **categories**, not points), each side of a matchup additionally carries `categories: [{ statId, name, displayName, value, result, isDisplayOnly }]`, `categoryScore: { wins, losses, ties }`, and `categoriesWon` (the same number as `points`, honestly labeled). `points` itself is unchanged everywhere, on every league type: on a categories league it is a category count rather than a fantasy-points total, but nulling it out would be a silent behavior change on the one league type this worker cannot test before shipping — `scoringType` and `categoriesWon` tell the model how to read it instead.
+
+Category names come from a second, best-effort `GET /league/{key}/settings` fetch — the same shared helper `get_league_info` uses (`src/shared/handlers/league-settings.ts`) — run **sequentially after** the scoreboard request and **only** on categories leagues, for the same HTTP-999 throttling reason as the `get_league_info` settings fetch above. When it fails, categories fall back to being labeled by stat id only, `categoryNamesAvailable` is `false`, and a `MATCHUP_CATEGORY_NAMES_UNAVAILABLE` warning is attached.
+
+`categoryScore` and each category's `result` come only from Yahoo's undocumented `stat_winners` (a sibling of `matchup["0"]`, not nested inside it) — never computed by comparing category values, and never derived from `team_points.total`. When `stat_winners` is absent or empty, `categoryScore` is `null` and every `result` is `null`, never zero; a per-matchup `statWinnersAvailable` flag says which case applies. `stat_winners` is itself undocumented and absent from at least one known older capture, so this is the field most likely to force a re-design if production shows it missing on live leagues.
+
+Yahoo also sends a matchup-level `winner_team_key`/`is_tied` pair (on `matchup["0"]` itself, distinct from the per-stat `stat_winners` array) that this handler does not yet read — the `winner` field is still derived from comparing `points`, on every league type, unchanged from before this feature; picking up the matchup-level fields is a follow-up, not part of this change.
+
+A roto or unrecognized (`unknown`) scoring type that returns an empty scoreboard adds `matchupsUnavailableReason: "NOT_HEAD_TO_HEAD"` plus a warning, instead of a bare `matchups: []` with no explanation. If such a league unexpectedly returns matchups, they pass through unchanged and neither field is set.
 
 ## Architecture
 
@@ -131,6 +165,7 @@ Yahoo's JSON is structurally quirky:
 - `getPath()` - Safe deep path traversal
 - `toYahooBoolean()` - Normalizes a boolean flag that may arrive as a native boolean, `"0"`/`"1"` string, or `0`/`1` number, depending on resource
 - `toYahooFiniteNumber()` - Parses a numeric field that may arrive as a string
+- `extractYahooPercentOwnedValue()` - Reads `value` out of the `percent_owned` sub-resource in any of its observed shapes (see [Market Ownership Rate](#market-ownership-rate-percent_owned))
 
 ### Resource Keys
 Yahoo uses hierarchical keys:

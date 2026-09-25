@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { asArray, getPath, toYahooBoolean, toYahooFiniteNumber, unwrapLeague, unwrapTeam } from '../shared/normalizers';
+import {
+  asArray,
+  extractYahooPercentOwnedValue,
+  getPath,
+  parseYahooPercentOwned,
+  toYahooBoolean,
+  toYahooFiniteNumber,
+  unwrapLeague,
+  unwrapTeam,
+} from '../shared/normalizers';
 
 describe('normalizers', () => {
   describe('asArray', () => {
@@ -233,6 +242,48 @@ describe('normalizers', () => {
       // the finite value 0 instead of "not sent."
       expect(toYahooFiniteNumber('')).toBeUndefined();
       expect(toYahooFiniteNumber('  ')).toBeUndefined();
+    });
+  });
+
+  describe('parseYahooPercentOwned (FLA-9 strict-parse audit)', () => {
+    it('accepts plain and percent-suffixed numeric strings', () => {
+      expect(parseYahooPercentOwned('47')).toBe(47);
+      expect(parseYahooPercentOwned('47%')).toBe(47);
+      expect(parseYahooPercentOwned('0')).toBe(0);
+    });
+
+    it('accepts in-range finite numbers, including 0', () => {
+      expect(parseYahooPercentOwned(47)).toBe(47);
+      expect(parseYahooPercentOwned(0)).toBe(0);
+      expect(parseYahooPercentOwned(100)).toBe(100);
+    });
+
+    it('rejects a numeric prefix of a longer string instead of parsing it loosely', () => {
+      // Number.parseFloat('47oops') === 47 — the old behavior. A percent-owned
+      // string must be the whole value, not a numeric prefix of garbage.
+      expect(parseYahooPercentOwned('47oops')).toBeNull();
+      expect(parseYahooPercentOwned('1,000')).toBeNull();
+    });
+
+    it('rejects out-of-range values, in-string and numeric', () => {
+      expect(parseYahooPercentOwned(-1)).toBeNull();
+      expect(parseYahooPercentOwned(101)).toBeNull();
+      expect(parseYahooPercentOwned('-1')).toBeNull();
+      expect(parseYahooPercentOwned('101')).toBeNull();
+    });
+
+    it('rejects non-numeric/non-string values', () => {
+      expect(parseYahooPercentOwned(null)).toBeNull();
+      expect(parseYahooPercentOwned(undefined)).toBeNull();
+      expect(parseYahooPercentOwned(Number.NaN)).toBeNull();
+      expect(parseYahooPercentOwned({})).toBeNull();
+    });
+
+    it('extractYahooPercentOwnedValue accepts a bare percent_owned scalar, not just the array/object sub-resource forms', () => {
+      // Some captures/wrapper libraries flatten percent_owned straight to a
+      // scalar rather than Yahoo's usual array-of-single-key-objects form.
+      expect(extractYahooPercentOwnedValue(47)).toBe(47);
+      expect(extractYahooPercentOwnedValue('47')).toBe(47);
     });
   });
 });

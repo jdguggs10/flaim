@@ -113,16 +113,17 @@ The separately controlled production schedule defines:
 
 | Job | Schedule | Function |
 |---|---|---|
-| `mcp-rollup` | `15 5 * * *` | `public.rollup_mcp_usage()` |
+| `mcp-rollup` | `15 5 * * *` | Seven completed UTC days via `public.rollup_mcp_usage(day)` |
 | `mcp-prune` | `30 5 * * *` | `public.prune_mcp_events()` |
 | `oauth-tokens-cleanup` | `45 5 * * *` | `public.cleanup_expired_oauth_tokens()` |
 | `oauth-ephemeral-cleanup` | `47 5 * * *` | `public.cleanup_expired_oauth_ephemeral()` |
-| `dashboard-snapshot` | `*/5 * * * *` | `analytics.refresh_dashboard_snapshot()` |
+| `dashboard-snapshot` | `*/15 * * * *` | `analytics.refresh_dashboard_snapshot()` |
 | `provider-flags-snapshot` | `*/5 * * * *` | `analytics.refresh_provider_flags_snapshot()` |
 
-That table is the canonical posture defined by `cron/production.sql`. Both
-analytics jobs remain on five-minute schedules; the no-argument dashboard
-function controls which dashboard row is rebuilt.
+That table is the canonical posture defined by `cron/production.sql`. The
+human dashboard runs every fifteen minutes; the independent provider-health
+snapshot remains on its five-minute alerting schedule. The no-argument
+dashboard function controls which dashboard row is rebuilt.
 
 ## Intentional and environment-managed differences
 

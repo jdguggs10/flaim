@@ -36,7 +36,7 @@ describe('Flaim MCP initialization instructions', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('do not repeat get_user_session merely because a new user message arrived');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('switching to another league already in allLeagues');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('when the user confirms account, connection, league-list, or default changes');
-    expect(FLAIM_MCP_INSTRUCTIONS).toContain('when the needed session context is missing');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('when the earlier session call failed, or when its result is no longer visible in the conversation');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('A new chat needs its own session lookup');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('Reuse session context, not stale roster, score, or player data');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('With session context established, call get_league_info');
@@ -99,6 +99,41 @@ describe('Flaim MCP initialization instructions', () => {
     );
     expect(FLAIM_MCP_INSTRUCTIONS.indexOf('Hard stop:')).toBeGreaterThan(
       FLAIM_MCP_INSTRUCTIONS.indexOf('Do not include injuryStatus')
+    );
+  });
+
+  it('scopes get_players league ownership resolution and keeps the market-ownership guardrail platform-wide', () => {
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      "In get_players, Sleeper always evaluates league ownership against the selected league's current rosters"
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('Sleeper-only league_team_id (the roster id, or null)');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'alongside the cross-platform league_status/league_team_name/league_owner_name'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'ESPN and Yahoo populate league ownership only when credentials and league context allow'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Never infer league ownership from market_percent_owned, percentOwned, or ownership_scope on any platform'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('except during an active draft');
+  });
+
+  // FLA-374: keeper cost is the one keeper question no provider answers, and a
+  // missing league record must not turn into an interrogation for raw IDs.
+  it('keeps keeper cost a league house rule rather than provider data', () => {
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Keeper cost is a league-specific house rule that Flaim never computes'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Only ESPN reports a keeper value (get_roster keeperValue and keeperValueFuture, which ESPN keeps with a player through a trade); Yahoo and Sleeper report none'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain("ask the user for their league's convention");
+  });
+
+  it('never asks the user for raw league IDs or season values', () => {
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'Never ask the user to supply a numeric league ID or a season value; league IDs and seasons come from session context'
     );
   });
 

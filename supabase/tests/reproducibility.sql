@@ -16,8 +16,9 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'r';
-  if actual_count <> 26 then
-    raise exception 'expected 26 public tables, found %', actual_count;
+  -- 27 since FLA-396 added public.signup_log.
+  if actual_count <> 27 then
+    raise exception 'expected 27 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -42,16 +43,19 @@ begin
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'analytics' and c.relkind = 'v';
-  if actual_count <> 14 then
-    raise exception 'expected 14 analytics views, found %', actual_count;
+  -- 17 since FLA-396 added signups_daily, signup_rollups, and
+  -- signup_sources_daily; 18 since FLA-413 added signups_hourly_paths.
+  if actual_count <> 18 then
+    raise exception 'expected 18 analytics views, found %', actual_count;
   end if;
 
   select count(*) into actual_count
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.prokind = 'f';
-  if actual_count <> 26 then
-    raise exception 'expected 26 public functions, found %', actual_count;
+  -- 27 since FLA-396 added public.record_signup.
+  if actual_count <> 27 then
+    raise exception 'expected 27 public functions, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -91,10 +95,60 @@ begin
     raise exception 'dashboard_payload is not the canonical history wrapper';
   end if;
 
+  -- FLA-378: the history reader must keep the two production-proven hot paths
+  -- eliminated. The raw bridge compares the indexed timestamptz column with
+  -- the next ET midnight, while client modes are aggregated once rather than
+  -- rescanning the materialized history once per user.
+  if not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'analytics'
+      and p.proname = 'dashboard_payload_history'
+      and p.pronargs = 1
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%e.ts>=((history_marker_et_day+1)::timestampattimezone''America/New_York'')%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%per_user_clientas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%client_modeas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') not like
+        '%selectc.client_namefromhistory_callsascwherec.user_id=h.user_id%'
+  ) then
+    raise exception 'dashboard history hot-path optimization is missing';
+  end if;
+
+  -- FLA-412: rolling and the four raw health keys each read raw events once.
+  -- The body keeps exactly three raw-event scans: the open history bridge, the
+  -- grouped 30-day rolling pass, and the grouping-sets health pass.
+  if not exists (
+    select 1
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'analytics'
+      and p.proname = 'dashboard_payload_history'
+      and p.pronargs = 1
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%recent_usersas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%raw_healthas(%'
+      and regexp_replace(p.prosrc, '\s+', '', 'g') like
+        '%groupbygroupingsets((e.tool_name),())%'
+      and p.prosrc not like '%recent_ev%'
+      and (
+        length(p.prosrc)
+          - length(replace(p.prosrc, 'public.mcp_tool_events', ''))
+      ) / length('public.mcp_tool_events') = 3
+  ) then
+    raise exception 'dashboard raw-event scan consolidation is missing';
+  end if;
+
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'i';
+  -- 79 after FLA-396 added public.signup_log's primary key; 78 since FLA-231
+  -- dropped the exact duplicate demo_refresh_runs index.
   if actual_count <> 78 then
     raise exception 'expected 78 public indexes, found %', actual_count;
   end if;
@@ -122,8 +176,8 @@ begin
   where n.nspname = 'public'
     and c.relkind = 'r'
     and c.relrowsecurity;
-  if actual_count <> 26 then
-    raise exception 'expected RLS on all 26 public tables, found %', actual_count;
+  if actual_count <> 27 then
+    raise exception 'expected RLS on all 27 public tables, found %', actual_count;
   end if;
 
   select count(*) into actual_count
@@ -460,48 +514,31 @@ begin
     raise exception 'platform supabase_admin default ACL semantics differ: % expected rows', actual_count;
   end if;
 
-  if not exists (
+  -- FLA-231 dropped the exact duplicate that the baseline reproduces from the
+  -- before-state. The survivor must keep the exact definition and stay valid.
+  if exists (
     select 1
-    from pg_indexes
-    where schemaname = 'public'
-      and indexname = 'idx_public_demo_refresh_runs_preset_sport_created'
-  ) or not exists (
-    select 1
-    from pg_indexes
-    where schemaname = 'public'
-      and indexname = 'public_demo_refresh_runs_preset_sport_created_at_idx'
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public'
+      and c.relname = 'idx_public_demo_refresh_runs_preset_sport_created'
   ) then
-    raise exception 'expected duplicate before-state indexes are missing';
+    raise exception 'duplicate index public.idx_public_demo_refresh_runs_preset_sport_created should have been dropped by FLA-231';
   end if;
 
-  if (
-    select row(
-      i.indrelid,
-      i.indkey,
-      i.indcollation,
-      i.indclass,
-      i.indoption,
-      pg_get_expr(i.indexprs, i.indrelid),
-      pg_get_expr(i.indpred, i.indrelid)
-    )
-    from pg_index i
-    join pg_class c on c.oid = i.indexrelid
-    where c.relname = 'idx_public_demo_refresh_runs_preset_sport_created'
-  ) is distinct from (
-    select row(
-      i.indrelid,
-      i.indkey,
-      i.indcollation,
-      i.indclass,
-      i.indoption,
-      pg_get_expr(i.indexprs, i.indrelid),
-      pg_get_expr(i.indpred, i.indrelid)
-    )
-    from pg_index i
-    join pg_class c on c.oid = i.indexrelid
-    where c.relname = 'public_demo_refresh_runs_preset_sport_created_at_idx'
+  if not exists (
+    select 1
+    from pg_indexes x
+    join pg_class c on c.relname = x.indexname
+    join pg_namespace n on n.oid = c.relnamespace and n.nspname = x.schemaname
+    join pg_index i on i.indexrelid = c.oid
+    where x.schemaname = 'public'
+      and x.tablename = 'demo_refresh_runs'
+      and x.indexname = 'public_demo_refresh_runs_preset_sport_created_at_idx'
+      and x.indexdef = 'CREATE INDEX public_demo_refresh_runs_preset_sport_created_at_idx ON public.demo_refresh_runs USING btree (preset_id, sport, created_at DESC)'
+      and i.indisvalid
   ) then
-    raise exception 'known duplicate indexes are not structurally identical';
+    raise exception 'surviving index public.public_demo_refresh_runs_preset_sport_created_at_idx is missing, invalid, or not btree (preset_id, sport, created_at DESC) on public.demo_refresh_runs';
   end if;
 
   for relation_name, expected_count in

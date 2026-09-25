@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 
 import {
   FootballConnectionButtons,
@@ -8,16 +8,16 @@ import {
 } from "@/components/site/football-seasonal-variants";
 
 export const metadata: Metadata = {
-  title: "Fantasy Football in AI: Analyze Your Real Team",
+  title: "Fantasy Football in ChatGPT and Claude",
   description:
-    "Connect your ESPN, Yahoo, or Sleeper fantasy football league to AI. Grade your real roster, find waiver options, evaluate trades, compare matchups, and get start/sit help without uploading screenshots.",
+    "Connect your ESPN, Yahoo, or Sleeper fantasy football league to ChatGPT or Claude with Flaim Fantasy. Grade your real roster, find waiver options, evaluate trades, compare matchups, and get start/sit help without uploading screenshots.",
   alternates: {
     canonical: "https://flaim.app/fantasy-football",
   },
   openGraph: {
-    title: "Fantasy Football in AI: Analyze Your Real Team",
+    title: "Fantasy Football in ChatGPT and Claude",
     description:
-      "Grade your connected roster, evaluate waivers and trades, and analyze real matchups without screenshots.",
+      "Ask ChatGPT or Claude about your real fantasy football roster, waivers, trades, and matchups, without screenshots.",
     url: "https://flaim.app/fantasy-football",
   },
 };
@@ -37,9 +37,55 @@ const CONNECTION_STEPS = [
   },
 ] as const;
 
+const FOOTBALL_FAQS: readonly {
+  question: string;
+  answer: string;
+  link?: { href: string; label: string };
+}[] = [
+  {
+    question: "Is there a ChatGPT app for fantasy football?",
+    answer:
+      "Yes. Flaim Fantasy works inside ChatGPT and Claude. Connect your ESPN, Yahoo, or Sleeper league once, then ask about your actual team, from start or sit calls to waiver pickups and trades. It's free.",
+  },
+  {
+    question: "How do I connect my ESPN league to ChatGPT?",
+    answer:
+      "Sync ESPN once with the free Flaim Chrome extension on a computer, then add Flaim Fantasy to ChatGPT. The ESPN docs walk through each step.",
+    link: { href: "/docs/espn", label: "ESPN docs" },
+  },
+  {
+    question: "Do Yahoo and Sleeper need the extension?",
+    answer:
+      "No. Yahoo connects with Yahoo sign-in, and Sleeper just needs your username. Only ESPN needs the Chrome extension, and only once.",
+  },
+  {
+    question: "Can Flaim set my lineup or make trades?",
+    answer:
+      "No. Flaim is read-only. It can't set lineups, add or drop players, or make trades.",
+  },
+];
+
 export default function FantasyFootballPage() {
   return (
     <div className="min-h-screen bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: FOOTBALL_FAQS.map((faq) => ({
+              "@type": "Question",
+              name: faq.question,
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: faq.answer,
+              },
+            })),
+          }),
+        }}
+      />
+
       <FootballSeasonalPage />
 
       <section className="px-4 py-12 sm:px-6 lg:px-8">
@@ -72,6 +118,39 @@ export default function FantasyFootballPage() {
                   {step.body}
                 </p>
               </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-4 pb-14 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl">
+          <h2 className="text-2xl font-bold tracking-tight">FAQs</h2>
+          <div className="mt-6 space-y-3">
+            {FOOTBALL_FAQS.map((faq) => (
+              <details
+                key={faq.question}
+                className="group rounded-xl border bg-background"
+              >
+                <summary className="flex cursor-pointer items-center justify-between gap-4 p-4 font-medium">
+                  {faq.question}
+                  <ChevronDown className="h-5 w-5 shrink-0 transition-transform group-open:rotate-180" />
+                </summary>
+                <p className="px-4 pb-4 text-sm leading-6 text-muted-foreground">
+                  {faq.answer}
+                  {faq.link ? (
+                    <>
+                      {" "}
+                      <Link
+                        href={faq.link.href}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {faq.link.label}
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
+              </details>
             ))}
           </div>
         </div>

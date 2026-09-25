@@ -8,6 +8,7 @@ import {
   LEGACY_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 
 function buildRequest(method: string, params: Record<string, unknown> = {}): Request {
@@ -57,11 +58,12 @@ describe('mcp auth gate helpers', () => {
       isPublicStaticWidgetResourceRequest(buildRequest('resources/list'))
     ).resolves.toBe(true);
 
-    // All three published cache keys must stay anonymously readable: cached
-    // ChatGPT clients keep reading v1/v2 after the descriptor moved to v3.
+    // Every published cache key must stay anonymously readable: cached ChatGPT
+    // clients keep reading v1/v2/v3 after the descriptor moved to v4.
     for (const uri of [
       LEGACY_USER_SESSION_WIDGET_URI,
       V2_USER_SESSION_WIDGET_URI,
+      V3_USER_SESSION_WIDGET_URI,
       USER_SESSION_WIDGET_URI,
     ]) {
       await expect(

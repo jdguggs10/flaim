@@ -11,6 +11,10 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     // two auth gates have passed.
     parseYahooSupportRequest: vi.fn(actual.parseYahooSupportRequest),
     parseYahooSupportLeagueRequest: vi.fn(actual.parseYahooSupportLeagueRequest),
+    parseYahooSupportLeagueMembershipRequest: vi.fn(actual.parseYahooSupportLeagueMembershipRequest),
+    parseYahooSupportLeagueRecoveryRequest: vi.fn(actual.parseYahooSupportLeagueRecoveryRequest),
+    parseYahooSupportTeamNameLeagueLocationRequest: vi.fn(actual.parseYahooSupportTeamNameLeagueLocationRequest),
+    parseYahooSupportGameRawCaptureRequest: vi.fn(actual.parseYahooSupportGameRawCaptureRequest),
     // Business logic is stubbed here: these tests own routing, auth and
     // status mapping. The snapshot itself is covered by
     // yahoo-support-inspect.test.ts, the diagnosis by
@@ -20,7 +24,11 @@ vi.mock('../yahoo-support-diagnostics', async () => {
     runYahooSupportInspect: vi.fn(),
     runYahooSupportDiagnose: vi.fn(),
     runYahooSupportProbeLeague: vi.fn(),
+    runYahooSupportRecoverLeague: vi.fn(),
+    runYahooSupportLocateLeagueByTeamName: vi.fn(),
+    runYahooSupportGameRawCapture: vi.fn(),
     runYahooSupportRefresh: vi.fn(),
+    runYahooSupportVerifyLeagueMembership: vi.fn(),
   };
 });
 
@@ -36,24 +44,40 @@ import app from '../index-hono';
 import { validateOAuthToken } from '../oauth-handlers';
 import {
   parseYahooSupportLeagueRequest,
+  parseYahooSupportLeagueMembershipRequest,
+  parseYahooSupportLeagueRecoveryRequest,
+  parseYahooSupportTeamNameLeagueLocationRequest,
+  parseYahooSupportGameRawCaptureRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
+  runYahooSupportRecoverLeague,
+  runYahooSupportLocateLeagueByTeamName,
+  runYahooSupportGameRawCapture,
   runYahooSupportRefresh,
+  runYahooSupportVerifyLeagueMembership,
   type YahooSupportDiagnoseReport,
   type YahooSupportInspectReport,
   type YahooSupportProbeLeagueReport,
   type YahooSupportRefreshReport,
+  type YahooSupportLeagueMembershipReport,
+  type YahooSupportLeagueRecoveryReport,
+  type YahooSupportTeamNameLeagueLocationReport,
+  type YahooSupportGameRawCaptureReport,
 } from '../yahoo-support-diagnostics';
 
 const INSPECT_PATH = '/auth/internal/support/yahoo/inspect';
 const DIAGNOSE_PATH = '/auth/internal/support/yahoo/diagnose';
 const PROBE_LEAGUE_PATH = '/auth/internal/support/yahoo/probe-league';
+const VERIFY_LEAGUE_MEMBERSHIP_PATH = '/auth/internal/support/yahoo/verify-league-membership';
+const RECOVER_LEAGUE_PATH = '/auth/internal/support/yahoo/recover-league';
+const LOCATE_LEAGUE_BY_TEAM_NAME_PATH = '/auth/internal/support/yahoo/locate-league';
+const CAPTURE_GAME_RAW_PATH = '/auth/internal/support/yahoo/capture-game-raw';
 const REFRESH_PATH = '/auth/internal/support/yahoo/refresh';
 
-// All four actions are implemented; no stub route remains.
-const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, REFRESH_PATH] as const;
+// All seven actions are implemented; no stub route remains.
+const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, VERIFY_LEAGUE_MEMBERSHIP_PATH, LOCATE_LEAGUE_BY_TEAM_NAME_PATH, CAPTURE_GAME_RAW_PATH, RECOVER_LEAGUE_PATH, REFRESH_PATH] as const;
 
 /**
  * probe-league is the one route with its own body shape and its own parser, so
@@ -61,7 +85,12 @@ const SUPPORT_PATHS = [INSPECT_PATH, DIAGNOSE_PATH, PROBE_LEAGUE_PATH, REFRESH_P
  * asserting on rather than assuming one.
  */
 function parserFor(path: string) {
-  return path === PROBE_LEAGUE_PATH ? parseYahooSupportLeagueRequest : parseYahooSupportRequest;
+  if (path === PROBE_LEAGUE_PATH) return parseYahooSupportLeagueRequest;
+  if (path === VERIFY_LEAGUE_MEMBERSHIP_PATH) return parseYahooSupportLeagueMembershipRequest;
+  if (path === RECOVER_LEAGUE_PATH) return parseYahooSupportLeagueRecoveryRequest;
+  if (path === LOCATE_LEAGUE_BY_TEAM_NAME_PATH) return parseYahooSupportTeamNameLeagueLocationRequest;
+  if (path === CAPTURE_GAME_RAW_PATH) return parseYahooSupportGameRawCaptureRequest;
+  return parseYahooSupportRequest;
 }
 
 const INSPECT_OK_REPORT: YahooSupportInspectReport = {
@@ -110,6 +139,51 @@ const PROBE_LEAGUE_OK_REPORT: YahooSupportProbeLeagueReport = {
   },
 };
 
+const VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT: YahooSupportLeagueMembershipReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  collection: 'contains_requested_team',
+  calls: [
+    { label: 'league_teams', httpStatus: 200, ok: true, bodyIsJson: true, bodyLooksLikeEnvelope: true, errorSnippetCategory: 'none', durationMs: 12 },
+    { label: 'user_game_teams', httpStatus: 200, ok: true, bodyIsJson: true, bodyLooksLikeEnvelope: true, errorSnippetCategory: 'none', durationMs: 13 },
+  ],
+  interpretation: {
+    category: 'membership_confirmed_collection_present',
+    summary: 'Yahoo confirms membership.',
+    nextAction: 'Investigate discovery.',
+  },
+};
+
+const RECOVER_LEAGUE_OK_REPORT: YahooSupportLeagueRecoveryReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  result: { status: 'persisted_visible' },
+};
+
+const LOCATE_LEAGUE_BY_TEAM_NAME_OK_REPORT: YahooSupportTeamNameLeagueLocationReport = {
+  outcome: 'ok',
+  userMasked: 'user_3Ie...',
+  checkedAt: '2026-09-09T15:00:00.000Z',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  result: { status: 'unique', leagueKey: '470.l.1234567' },
+};
+
+const CAPTURE_GAME_RAW_OK_REPORT: YahooSupportGameRawCaptureReport = {
+  outcome: 'captured',
+  correlationId: '11111111-2222-3333-4444-555555555555',
+  capture: {
+    status: 'captured',
+    body: new TextEncoder().encode('{"sentinel":true}'),
+    upstreamStatus: 503,
+    byteLength: 17,
+    sha256: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
+  },
+};
+
 const REFRESH_OK_REPORT: YahooSupportRefreshReport = {
   outcome: 'ok',
   userMasked: 'user_3Ie...',
@@ -129,12 +203,17 @@ const DEMO_API_KEY = 'flaim_demo_support_routes_test';
 const DEMO_USER_ID = 'user_demo_support';
 const TARGET_USER_ID = 'user_3Ie4m68lUbzxyv22NsMU';
 const TARGET_LEAGUE_ID = '153104';
+const TARGET_LEAGUE_KEY = '470.l.1234567';
+const TARGET_GAME_KEY = '470';
+const TARGET_TEAM_NAME_SHA256 = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 /** The smallest valid body for each route. Only probe-league takes a second field. */
 function validBodyFor(path: string): string {
-  return path === PROBE_LEAGUE_PATH
-    ? JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_ID })
-    : JSON.stringify({ userId: TARGET_USER_ID });
+  if (path === PROBE_LEAGUE_PATH) return JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_ID });
+  if (path === VERIFY_LEAGUE_MEMBERSHIP_PATH || path === RECOVER_LEAGUE_PATH) return JSON.stringify({ userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY });
+  if (path === LOCATE_LEAGUE_BY_TEAM_NAME_PATH) return JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, teamNameSha256: TARGET_TEAM_NAME_SHA256 });
+  if (path === CAPTURE_GAME_RAW_PATH) return JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY });
+  return JSON.stringify({ userId: TARGET_USER_ID });
 }
 
 const baseEnv = {
@@ -229,7 +308,11 @@ beforeEach(() => {
   vi.mocked(runYahooSupportInspect).mockResolvedValue(INSPECT_OK_REPORT);
   vi.mocked(runYahooSupportDiagnose).mockResolvedValue(DIAGNOSE_OK_REPORT);
   vi.mocked(runYahooSupportProbeLeague).mockResolvedValue(PROBE_LEAGUE_OK_REPORT);
+  vi.mocked(runYahooSupportRecoverLeague).mockResolvedValue(RECOVER_LEAGUE_OK_REPORT);
+  vi.mocked(runYahooSupportLocateLeagueByTeamName).mockResolvedValue(LOCATE_LEAGUE_BY_TEAM_NAME_OK_REPORT);
+  vi.mocked(runYahooSupportGameRawCapture).mockResolvedValue(CAPTURE_GAME_RAW_OK_REPORT);
   vi.mocked(runYahooSupportRefresh).mockResolvedValue(REFRESH_OK_REPORT);
+  vi.mocked(runYahooSupportVerifyLeagueMembership).mockResolvedValue(VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT);
   // Clerk JWKS lookup — the only network call these tests can trigger.
   vi.stubGlobal('fetch', vi.fn(async () => new Response(
     JSON.stringify({ keys: [publicJwk] }),
@@ -369,7 +452,12 @@ describe.each(SUPPORT_PATHS)('POST %s', (path) => {
     // Past both gates and through validation. What the handler then answers is
     // per-route and asserted below.
     expect([403, 500]).not.toContain(res.status);
-    await expect(res.json()).resolves.toHaveProperty('outcome');
+    if (path === CAPTURE_GAME_RAW_PATH) {
+      expect(res.status).toBe(200);
+      expect(res.headers.get('X-Flaim-Support-Capture')).toBe('yahoo-game-raw-v1');
+    } else {
+      await expect(res.json()).resolves.toHaveProperty('outcome');
+    }
     expect(parserFor(path)).toHaveBeenCalledTimes(1);
   });
 
@@ -414,7 +502,9 @@ describe.each(SUPPORT_PATHS)('POST %s (no stub remains)', (path) => {
     const res = await app.fetch(makeRequest(path, bothTokens()), baseEnv);
 
     expect(res.status).not.toBe(501);
-    await expect(res.json()).resolves.not.toMatchObject({ outcome: 'not_implemented' });
+    if (path !== CAPTURE_GAME_RAW_PATH) {
+      await expect(res.json()).resolves.not.toMatchObject({ outcome: 'not_implemented' });
+    }
   });
 });
 
@@ -642,6 +732,254 @@ describe(`POST ${PROBE_LEAGUE_PATH} (implemented)`, () => {
 
     expect(res.status).toBe(403);
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${VERIFY_LEAGUE_MEMBERSHIP_PATH} (implemented)`, () => {
+  it('runs the membership verifier and returns its redacted report verbatim', async () => {
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(VERIFY_LEAGUE_MEMBERSHIP_OK_REPORT);
+    expect(runYahooSupportVerifyLeagueMembership).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY },
+    );
+    expect(runYahooSupportProbeLeague).not.toHaveBeenCalled();
+    expect(runYahooSupportRefresh).not.toHaveBeenCalled();
+  });
+
+  it('maps a failed verification to 500 without inventing an error body', async () => {
+    const failed = { outcome: 'failed', userMasked: 'user_3Ie...', error: 'membership_verification_failed' } as const;
+    vi.mocked(runYahooSupportVerifyLeagueMembership).mockResolvedValue(failed);
+
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual(failed);
+  });
+
+  it.each([
+    ['a bare numeric id', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '1234567' })],
+    ['a nonnumeric game key', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: 'nfl.l.1234567' })],
+    ['a path traversal', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '../470.l.1234567' })],
+    ['a suffix', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '470.l.1234567.t.1' })],
+    ['a wrong field name', JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_KEY })],
+  ])('rejects %s without running the verifier', async (_label, body) => {
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(400);
+    expect(runYahooSupportVerifyLeagueMembership).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits independently under the verifier action key', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: {
+        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:verify-league-membership' })),
+      },
+    };
+
+    const res = await app.fetch(makeRequest(VERIFY_LEAGUE_MEMBERSHIP_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(runYahooSupportVerifyLeagueMembership).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${LOCATE_LEAGUE_BY_TEAM_NAME_PATH} (implemented)`, () => {
+  it('runs the bounded locator and returns only the closed report', async () => {
+    const res = await app.fetch(makeRequest(LOCATE_LEAGUE_BY_TEAM_NAME_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(LOCATE_LEAGUE_BY_TEAM_NAME_OK_REPORT);
+    expect(runYahooSupportLocateLeagueByTeamName).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, teamNameSha256: TARGET_TEAM_NAME_SHA256 },
+    );
+  });
+
+  it.each([
+    ['missing game key', JSON.stringify({ userId: TARGET_USER_ID, teamNameSha256: TARGET_TEAM_NAME_SHA256 }), 'invalid_game_key'],
+    ['non-numeric game key', JSON.stringify({ userId: TARGET_USER_ID, gameKey: 'nfl', teamNameSha256: TARGET_TEAM_NAME_SHA256 }), 'invalid_game_key'],
+    ['uppercase digest', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, teamNameSha256: TARGET_TEAM_NAME_SHA256.toUpperCase() }), 'invalid_team_name_sha256'],
+    ['unknown field', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, teamNameSha256: TARGET_TEAM_NAME_SHA256, leagueKey: TARGET_LEAGUE_KEY }), 'invalid_request'],
+  ])('rejects %s without running the locator', async (_label, body, error) => {
+    const res = await app.fetch(makeRequest(LOCATE_LEAGUE_BY_TEAM_NAME_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error });
+    expect(runYahooSupportLocateLeagueByTeamName).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits under its own action key before parsing or locating', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: {
+        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:locate-league' })),
+      },
+    };
+
+    const res = await app.fetch(makeRequest(LOCATE_LEAGUE_BY_TEAM_NAME_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(runYahooSupportLocateLeagueByTeamName).not.toHaveBeenCalled();
+    expect(parseYahooSupportTeamNameLeagueLocationRequest).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${CAPTURE_GAME_RAW_PATH} (implemented)`, () => {
+  it('returns exact capture bytes and the fixed binary success headers', async () => {
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/octet-stream');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('X-Flaim-Support-Capture')).toBe('yahoo-game-raw-v1');
+    expect(res.headers.get('X-Flaim-Upstream-Status')).toBe('503');
+    expect(res.headers.get('X-Flaim-Capture-Bytes')).toBe('17');
+    expect(res.headers.get('X-Flaim-Capture-SHA256')).toBe(CAPTURE_GAME_RAW_OK_REPORT.capture.sha256);
+    expect(res.headers.get('X-Flaim-Correlation-Id')).toBe(CAPTURE_GAME_RAW_OK_REPORT.correlationId);
+    await expect(res.text()).resolves.toBe('{"sentinel":true}');
+    expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, target: 'game', gameKey: TARGET_GAME_KEY, collection: 'leagues' },
+    );
+  });
+
+  it('passes the teams collection through the closed request contract', async () => {
+    const body = JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'teams' });
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, target: 'game', gameKey: TARGET_GAME_KEY, collection: 'teams' },
+    );
+  });
+
+  it('passes the fixed broad discovery target without game fields', async () => {
+    const body = JSON.stringify({ userId: TARGET_USER_ID, target: 'discovery' });
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, target: 'discovery' },
+    );
+  });
+
+  it('passes one strict direct-league teams target without game fields', async () => {
+    const body = JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams', leagueKey: TARGET_LEAGUE_KEY });
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(runYahooSupportGameRawCapture).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, target: 'league-teams', leagueKey: TARGET_LEAGUE_KEY },
+    );
+  });
+
+  it.each([
+    ['missing game key', JSON.stringify({ userId: TARGET_USER_ID }), 'invalid_game_key'],
+    ['non-numeric game key', JSON.stringify({ userId: TARGET_USER_ID, gameKey: 'nfl' }), 'invalid_game_key'],
+    ['invalid collection', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, collection: 'rosters' }), 'invalid_collection'],
+    ['unknown selector', JSON.stringify({ userId: TARGET_USER_ID, gameKey: TARGET_GAME_KEY, path: '/users' }), 'invalid_request'],
+    ['unknown target', JSON.stringify({ userId: TARGET_USER_ID, target: 'url', gameKey: TARGET_GAME_KEY }), 'invalid_capture_target'],
+    ['discovery with a game key', JSON.stringify({ userId: TARGET_USER_ID, target: 'discovery', gameKey: TARGET_GAME_KEY }), 'invalid_request'],
+    ['discovery with a collection', JSON.stringify({ userId: TARGET_USER_ID, target: 'discovery', collection: 'leagues' }), 'invalid_request'],
+    ['league teams missing a full key', JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams' }), 'invalid_league_key'],
+    ['league teams with a malformed key', JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams', leagueKey: '../470.l.1234567' }), 'invalid_league_key'],
+    ['league teams with game fields', JSON.stringify({ userId: TARGET_USER_ID, target: 'league-teams', leagueKey: TARGET_LEAGUE_KEY, gameKey: TARGET_GAME_KEY }), 'invalid_request'],
+    ['game with a league key', JSON.stringify({ userId: TARGET_USER_ID, target: 'game', gameKey: TARGET_GAME_KEY, leagueKey: TARGET_LEAGUE_KEY }), 'invalid_request'],
+  ])('rejects %s before capture', async (_label, body, error) => {
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(400);
+    await expect(res.json()).resolves.toMatchObject({ error });
+    expect(runYahooSupportGameRawCapture).not.toHaveBeenCalled();
+  });
+
+  it('returns only a closed JSON error when capture fails', async () => {
+    vi.mocked(runYahooSupportGameRawCapture).mockResolvedValue({
+      outcome: 'capture_token_detected',
+      correlationId: CAPTURE_GAME_RAW_OK_REPORT.correlationId,
+      error: 'capture_token_detected',
+      httpStatus: 502,
+    });
+
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(502);
+    await expect(res.json()).resolves.toEqual({ error: 'capture_token_detected' });
+    expect(res.headers.get('X-Flaim-Support-Capture')).toBeNull();
+  });
+
+  it('rate-limits under its own action before validation or capture', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: {
+        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:capture-game-raw' })),
+      },
+    };
+
+    const res = await app.fetch(makeRequest(CAPTURE_GAME_RAW_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(parseYahooSupportGameRawCaptureRequest).not.toHaveBeenCalled();
+    expect(runYahooSupportGameRawCapture).not.toHaveBeenCalled();
+  });
+});
+
+describe(`POST ${RECOVER_LEAGUE_PATH} (implemented)`, () => {
+  it('runs the one-league recovery and returns only its closed report', async () => {
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toEqual(RECOVER_LEAGUE_OK_REPORT);
+    expect(runYahooSupportRecoverLeague).toHaveBeenCalledWith(
+      expect.objectContaining({ SUPABASE_URL: baseEnv.SUPABASE_URL }),
+      { userId: TARGET_USER_ID, leagueKey: TARGET_LEAGUE_KEY },
+    );
+    expect(runYahooSupportRefresh).not.toHaveBeenCalled();
+  });
+
+  it('maps a fail-closed recovery result to 500 without inventing detail', async () => {
+    const failed = { outcome: 'failed', userMasked: 'user_3Ie...', error: 'league_recovery_failed' } as const;
+    vi.mocked(runYahooSupportRecoverLeague).mockResolvedValue(failed);
+
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens()), baseEnv);
+
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual(failed);
+  });
+
+  it.each([
+    ['a bare numeric id', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '1234567' })],
+    ['a nonnumeric game key', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: 'nfl.l.1234567' })],
+    ['a path traversal', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '../470.l.1234567' })],
+    ['a suffix', JSON.stringify({ userId: TARGET_USER_ID, leagueKey: '470.l.1234567.t.1' })],
+    ['a wrong field name', JSON.stringify({ userId: TARGET_USER_ID, leagueId: TARGET_LEAGUE_KEY })],
+  ])('rejects %s without running the recovery', async (_label, body) => {
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens(), body), baseEnv);
+
+    expect(res.status).toBe(400);
+    expect(runYahooSupportRecoverLeague).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits under its own action key before the recovery can write', async () => {
+    const limitedEnv = {
+      ...baseEnv,
+      CREDENTIALS_RATE_LIMITER: {
+        limit: vi.fn(async ({ key }: { key: string }) => ({ success: key !== 'support:recover-league' })),
+      },
+    };
+
+    const res = await app.fetch(makeRequest(RECOVER_LEAGUE_PATH, bothTokens()), limitedEnv);
+
+    expect(res.status).toBe(429);
+    expect(runYahooSupportRecoverLeague).not.toHaveBeenCalled();
   });
 });
 

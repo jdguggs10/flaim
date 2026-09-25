@@ -31,13 +31,13 @@ interface SendProductEmailParams {
 
 interface SendWelcomeEmailParams {
   idempotencyKey?: string;
-  leaguesUrl: string;
+  leaguesUrl?: string;
   to: string;
-  unsubscribeUrl: string;
   userId: string;
 }
 
 interface SendEspnSetupLinkEmailParams {
+  docsUrl: string;
   extensionUrl: string;
   leaguesUrl: string;
   to: string;
@@ -108,16 +108,12 @@ export function sendWelcomeEmail({
   idempotencyKey,
   leaguesUrl,
   to,
-  unsubscribeUrl,
   userId,
 }: SendWelcomeEmailParams) {
   return sendProductEmail({
     idempotencyKey,
     react: (
-      <WelcomeEmail
-        leaguesUrl={leaguesUrl}
-        unsubscribeUrl={unsubscribeUrl}
-      />
+      <WelcomeEmail leaguesUrl={leaguesUrl} />
     ),
     subject: "Welcome to Flaim",
     template: "welcome",
@@ -127,6 +123,7 @@ export function sendWelcomeEmail({
 }
 
 export function sendEspnSetupLinkEmail({
+  docsUrl,
   extensionUrl,
   leaguesUrl,
   to,
@@ -134,7 +131,11 @@ export function sendEspnSetupLinkEmail({
 }: SendEspnSetupLinkEmailParams) {
   return sendProductEmail({
     react: (
-      <EspnSetupLinkEmail extensionUrl={extensionUrl} leaguesUrl={leaguesUrl} />
+      <EspnSetupLinkEmail
+        docsUrl={docsUrl}
+        extensionUrl={extensionUrl}
+        leaguesUrl={leaguesUrl}
+      />
     ),
     subject: "Your ESPN setup link for Flaim",
     template: "espn-setup-link",

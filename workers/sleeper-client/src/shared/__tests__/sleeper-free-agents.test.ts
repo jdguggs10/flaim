@@ -94,4 +94,30 @@ describe('buildSleeperPlayerSearch', () => {
     const result = buildSleeperPlayerSearch(big, 'test', undefined, 100);
     expect(result).toHaveLength(25);
   });
+
+  it('orders an exact full-name match first even when it would otherwise be cut by the count cap', () => {
+    // Inserted first and alphabetically first, so without exact-match-first
+    // ordering this substring match would win the count=1 cap over the
+    // player who exactly matches the query.
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['1', { player_id: '1', full_name: 'AAA Josh Allen Jr', position: 'QB', team: 'BUF', active: true }],
+      ['2', { player_id: '2', full_name: 'Josh Allen', position: 'QB', team: 'BUF', active: true }],
+    ]);
+
+    const result = buildSleeperPlayerSearch(players, 'Josh Allen', undefined, 1);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('2');
+  });
+
+  it('breaks ties between identical names by player_id ascending', () => {
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['b2', { player_id: 'b2', full_name: 'Same Name', active: true }],
+      ['a1', { player_id: 'a1', full_name: 'Same Name', active: true }],
+    ]);
+
+    const result = buildSleeperPlayerSearch(players, 'same name');
+
+    expect(result.map((p) => p.id)).toEqual(['a1', 'b2']);
+  });
 });

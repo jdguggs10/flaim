@@ -49,7 +49,8 @@ function parseTimestamp(value, flag) {
   return timestamp;
 }
 
-export function parseArgs(argv) {
+/** @param {string[]} argv @param {Record<string, string | undefined>} env */
+export function parseArgs(argv, env = process.env) {
   const args = {
     apply: false,
     delayMs: DEFAULT_DELAY_MS,
@@ -153,6 +154,12 @@ export function parseArgs(argv) {
   if (args.apply && !args.maxSend) throw new Error("--apply requires --max-send");
   if (args.apply && args.maxSend > 1 && !args.verifiedCanaryHash) {
     throw new Error("--apply with --max-send greater than 1 requires --verified-canary-hash");
+  }
+
+  if (args.apply && env.FLAIM_WELCOME_DELIVERY_MODE?.trim().toLowerCase() === "direct") {
+    throw new Error(
+      "Resend welcome-event recovery is disabled when FLAIM_WELCOME_DELIVERY_MODE=direct",
+    );
   }
 
   return args;

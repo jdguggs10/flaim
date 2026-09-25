@@ -8,11 +8,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth, useClerk, useUser, SignedIn, SignedOut } from '@clerk/chrome-extension';
 import {
-  getSetupState,
-  setSetupState,
-  clearSetupState,
   getEspnHistoryState,
   setEspnHistoryState,
+  getReviewInvitationState,
+  setReviewInvitationState,
   type SeasonCounts,
 } from '../lib/storage';
 import { getEspnCredentials, validateCredentials } from '../lib/espn';
@@ -22,6 +21,7 @@ import {
   getSiteBase,
   discoverLeagues,
   getEspnHistoryStatus,
+  ApiRequestError,
   type DiscoveredLeague,
   type EspnHistoryStatus,
 } from '../lib/api';
@@ -34,7 +34,15 @@ type State =
   | 'setup_syncing'
   | 'setup_discovering'
   | 'setup_complete'
+  | 'setup_unknown'
   | 'setup_error';
+
+type DiagnosticStage = 'idle' | 'status' | 'sync' | 'discovery';
+type DiscoveryResult = 'not_run' | 'confirmed' | 'none' | 'unknown';
+
+const ESPN_SETUP_PATH = '/docs/espn';
+const CHROME_WEB_STORE_REVIEW_URL =
+  'https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn/reviews';
 
 type SportIconDefinition = {
   label: string;
@@ -160,10 +168,30 @@ function SportIcon({ sport }: { sport: string }) {
   );
 }
 
-// Cap error message length and provide fallbacks for unexpected errors
-function sanitizeError(msg: string, fallback: string): string {
-  if (!msg || msg.length > 200) return fallback;
-  return msg;
+function requestError(error: unknown): ApiRequestError {
+  return error instanceof ApiRequestError
+    ? error
+    : new ApiRequestError('Unexpected request failure', { code: 'unknown_error' });
+}
+
+function retryAfterMessage(retryAfter: number | null): string {
+  if (!retryAfter) return 'Please try again shortly.';
+  const minutes = Math.ceil(retryAfter / 60);
+  return minutes === 1 ? 'Please try again in about a minute.' : `Please try again in about ${minutes} minutes.`;
+}
+
+function setupErrorMessage(stage: DiagnosticStage, error: ApiRequestError): string {
+  if (stage === 'discovery' && error.timedOut) {
+    return 'ESPN access was saved, but the league check did not finish.';
+  }
+  if (stage === 'discovery' && error.code === 'espn_auth_failed') {
+    return 'ESPN did not accept this Chrome profile’s sign-in. Sign in to ESPN Fantasy again, then retry.';
+  }
+  if (error.status === 429 || error.code === 'rate_limited' || error.code === 'cooldown') {
+    return `ESPN needs a short break before another check. ${retryAfterMessage(error.retryAfter)}`;
+  }
+  if (stage === 'sync') return 'We could not save ESPN access to Flaim. Please try again.';
+  return 'We could not check ESPN right now. Please try again.';
 }
 
 // Discovery counts for granular messaging
@@ -209,6 +237,11 @@ function getDiscoveryMessage(counts: DiscoveryCounts): string {
   return parts.join(' + ');
 }
 
+function hasPersistedCurrentLeague(counts: SeasonCounts): boolean {
+  // `refreshed` is supplementary metadata. The established current-season
+  // counters that prove a row exists are `added` and `alreadySaved`.
+  return counts.added + counts.alreadySaved > 0;
+}
 
 function formatLastSync(value: string | null): string {
   if (!value) return 'Never';
@@ -253,6 +286,9 @@ export default function Popup() {
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
   const espnHistoryOwnerRef = useRef<string | null>(null);
+  const popupActiveRef = useRef(true);
+  const currentUserIdRef = useRef<string | null>(null);
+  const accountGenerationRef = useRef(0);
 
   const primaryEmail =
     user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? null;
@@ -262,7 +298,7 @@ export default function Popup() {
   // Local state
   const [state, setState] = useState<State>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [hasCredentials, setHasCredentials] = useState(false);
+  const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSetupInProgress, setIsSetupInProgress] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -272,8 +308,16 @@ export default function Popup() {
   const [extensionVersion, setExtensionVersion] = useState<string | null>(null);
   const [espnHistory, setEspnHistory] = useState<EspnHistoryStatus | null>(null);
   const [espnHistoryStatusNeedsRetry, setEspnHistoryStatusNeedsRetry] = useState(false);
+  const [diagnosticStage, setDiagnosticStage] = useState<DiagnosticStage>('idle');
+  const [apiError, setApiError] = useState<ApiRequestError | null>(null);
+  const [discoveryResult, setDiscoveryResult] = useState<DiscoveryResult>('not_run');
+  const [showReviewInvitation, setShowReviewInvitation] = useState(false);
 
-  const userId = user?.id ?? null;
+  const userId = isSignedIn ? user?.id ?? null : null;
+  if (currentUserIdRef.current !== userId) {
+    currentUserIdRef.current = userId;
+    accountGenerationRef.current += 1;
+  }
   const currentEspnHistory = espnHistoryOwnerRef.current === userId ? espnHistory : null;
 
   const supportInfo = useMemo(() => {
@@ -282,10 +326,17 @@ export default function Popup() {
       `userId=${truncatedUserId}`,
       `version=${extensionVersion ?? 'unknown'}`,
       `lastSync=${lastSync ?? 'unknown'}`,
-      `siteBase=auto`,
+      `stage=${diagnosticStage}`,
+      `cookies=${hasEspnCookies === null ? 'unknown' : hasEspnCookies}`,
+      `credentials=${hasCredentials === null ? 'unknown' : hasCredentials}`,
+      `discovery=${discoveryResult}`,
+      `status=${apiError?.status ?? 'unknown'}`,
+      `code=${apiError?.code ?? 'unknown'}`,
+      `retryAfter=${apiError?.retryAfter ?? 'unknown'}`,
+      `clientTimeout=${apiError?.timedOut ?? false}`,
     ];
     return parts.join(' | ');
-  }, [userId, extensionVersion, lastSync]);
+  }, [userId, extensionVersion, lastSync, diagnosticStage, hasEspnCookies, hasCredentials, discoveryResult, apiError]);
 
   // Setup flow state
   const [discoveredLeagues, setDiscoveredLeagues] = useState<DiscoveredLeague[]>([]);
@@ -294,20 +345,45 @@ export default function Popup() {
     pastSeasons: { found: 0, added: 0, alreadySaved: 0 },
   });
 
+  useEffect(() => {
+    popupActiveRef.current = true;
+    return () => {
+      popupActiveRef.current = false;
+    };
+  }, []);
+
   // Initialize on Clerk load
   useEffect(() => {
     if (!isLoaded) return;
     let isActive = true;
 
     const init = async () => {
-      // Check for saved setup state (popup close recovery)
-      const savedSetup = await getSetupState();
-      if (!isActive) return;
-      // Never show a prior account's persisted job while this account's status loads.
+      setError(null);
+      setHasCredentials(null);
+      setHasEspnCookies(null);
+      setLastSync(null);
+      setDiscoveredLeagues([]);
+      setDiscoveryCounts({
+        currentSeason: { found: 0, added: 0, alreadySaved: 0 },
+        pastSeasons: { found: 0, added: 0, alreadySaved: 0 },
+      });
+      setDiscoveryResult('not_run');
+      setShowReviewInvitation(false);
+      setIsSetupInProgress(false);
+      setIsRefreshing(false);
+      setState('loading');
+      setDiagnosticStage('status');
+      setApiError(null);
+      // Never show a prior account's persisted history while this account's status loads.
       espnHistoryOwnerRef.current = null;
       setEspnHistory(null);
       setEspnHistoryStatusNeedsRetry(false);
-      const savedHistory = await getEspnHistoryState(isSignedIn ? userId : null);
+      let savedHistory: EspnHistoryStatus | null = null;
+      try {
+        savedHistory = await getEspnHistoryState(isSignedIn ? userId : null);
+      } catch {
+        // History is a local cache; setup can continue without it.
+      }
       if (!isActive) return;
       if (savedHistory && userId) {
         espnHistoryOwnerRef.current = userId;
@@ -323,16 +399,6 @@ export default function Popup() {
         setExtensionVersion(null);
       }
 
-      if (savedSetup?.step === 'complete') {
-        await clearSetupState();
-      } else if (savedSetup?.step === 'error') {
-        setError(savedSetup.error || 'Setup failed');
-        setState('setup_error');
-        return;
-      } else if (savedSetup?.step === 'syncing' || savedSetup?.step === 'discovering') {
-        await clearSetupState();
-      }
-
       // If not signed in, we'll show the signed-out UI via SignedOut component
       if (!isSignedIn) {
         setError(null);
@@ -341,7 +407,17 @@ export default function Popup() {
       }
 
       // Check ESPN cookies
-      const espnCreds = await getEspnCredentials();
+      let espnCreds: Awaited<ReturnType<typeof getEspnCredentials>>;
+      try {
+        espnCreds = await getEspnCredentials();
+      } catch {
+        if (!isActive) return;
+        setHasEspnCookies(null);
+        setError('We could not check ESPN sign-in in this Chrome profile. Try refreshing or use ESPN setup help.');
+        setState('ready');
+        return;
+      }
+      if (!isActive) return;
       if (!espnCreds || !validateCredentials(espnCreds)) {
         setHasEspnCookies(false);
         setState('no_espn');
@@ -363,13 +439,22 @@ export default function Popup() {
           espnHistoryOwnerRef.current = userId;
           setEspnHistory(history);
           setEspnHistoryStatusNeedsRetry(false);
-          await setEspnHistoryState(userId, history);
+          try {
+            await setEspnHistoryState(userId, history);
+          } catch {
+            // History is a local cache; connection status remains known.
+          }
+          if (!isActive) return;
         } else {
           setEspnHistoryStatusNeedsRetry(true);
         }
+        setApiError(null);
         setState('ready');
-      } catch {
+      } catch (err) {
+        if (!isActive) return;
         // Token or status reads may be transient; retry while the popup stays open.
+        setHasCredentials(null);
+        setApiError(requestError(err));
         setEspnHistoryStatusNeedsRetry(true);
         setState('ready');
       }
@@ -401,7 +486,11 @@ export default function Popup() {
         espnHistoryOwnerRef.current = userId;
         setEspnHistory(history);
         setEspnHistoryStatusNeedsRetry(false);
-        await setEspnHistoryState(userId, history);
+        try {
+          await setEspnHistoryState(userId, history);
+        } catch {
+          // Polling can continue without updating the local cache.
+        }
       } catch {
         // A confirmed queued/running job keeps polling. An unknown initial
         // status gets only the bounded recovery sequence below.
@@ -430,52 +519,89 @@ export default function Popup() {
   const handleFullSetup = async () => {
     if (isSetupInProgress || !isLoaded || !isSignedIn) return;
 
-    const token = await getToken();
-    if (!token) {
-      setError('Not signed in. Please sign in at flaim.app first.');
-      return;
-    }
-
-    const espnCreds = await getEspnCredentials();
-    if (!espnCreds || !validateCredentials(espnCreds)) {
-      setState('no_espn');
-      return;
-    }
+    const initiatingUserId = userId;
+    const initiatingGeneration = accountGenerationRef.current;
+    const isCurrentSetup = () =>
+      popupActiveRef.current &&
+      currentUserIdRef.current === initiatingUserId &&
+      accountGenerationRef.current === initiatingGeneration;
 
     setError(null);
+    setApiError(null);
+    setDiagnosticStage('sync');
+    setDiscoveryResult('not_run');
+    setShowReviewInvitation(false);
     setIsSetupInProgress(true);
-
-    // Step 1: Sync credentials
     setState('setup_syncing');
-    await setSetupState({ step: 'syncing' });
+
+    let token: string | null;
+    try {
+      token = await getToken();
+    } catch (err) {
+      if (!isCurrentSetup()) return;
+      const apiRequestError = requestError(err);
+      setApiError(apiRequestError);
+      setError('We could not verify your Flaim sign-in. Please sign in again and retry.');
+      setState('setup_error');
+      setIsSetupInProgress(false);
+      return;
+    }
+    if (!isCurrentSetup()) return;
+    if (!token) {
+      setError('Not signed in. Please sign in at flaim.app first.');
+      setState('setup_error');
+      setIsSetupInProgress(false);
+      return;
+    }
+
+    let espnCreds: Awaited<ReturnType<typeof getEspnCredentials>>;
+    try {
+      espnCreds = await getEspnCredentials();
+    } catch (err) {
+      if (!isCurrentSetup()) return;
+      const apiRequestError = requestError(err);
+      setApiError(apiRequestError);
+      setHasEspnCookies(null);
+      setError('We could not check ESPN sign-in in this Chrome profile. Please try again.');
+      setState('setup_error');
+      setIsSetupInProgress(false);
+      return;
+    }
+    if (!isCurrentSetup()) return;
+    if (!espnCreds || !validateCredentials(espnCreds)) {
+      setState('no_espn');
+      setIsSetupInProgress(false);
+      return;
+    }
 
     try {
       await syncCredentials(token, espnCreds);
+      if (!isCurrentSetup()) return;
       setHasCredentials(true);
       setLastSync(new Date().toISOString());
     } catch (err) {
-      const errorMsg = sanitizeError(
-        err instanceof Error ? err.message : '',
-        'Failed to sync credentials'
-      );
-      setError(errorMsg);
+      if (!isCurrentSetup()) return;
+      const apiRequestError = requestError(err);
+      setApiError(apiRequestError);
+      setError(setupErrorMessage('sync', apiRequestError));
       setState('setup_error');
-      await setSetupState({ step: 'error', error: errorMsg });
       setIsSetupInProgress(false);
       return;
     }
 
     // Step 2: Discover leagues
     setState('setup_discovering');
-    await setSetupState({ step: 'discovering' });
+    setDiagnosticStage('discovery');
 
     try {
       // Re-fetch token in case the JWT expired during sync
       const freshToken = await getToken();
+      if (!isCurrentSetup()) return;
       if (!freshToken) {
-        throw new Error('Session expired. Please sign in again.');
+        throw new ApiRequestError('Session expired', { code: 'session_expired' });
       }
       const result = await discoverLeagues(freshToken);
+      if (!isCurrentSetup()) return;
 
       setDiscoveredLeagues(result.discovered);
       setDiscoveryCounts({
@@ -485,27 +611,69 @@ export default function Popup() {
       espnHistoryOwnerRef.current = userId;
       setEspnHistory(result.history ?? null);
       setEspnHistoryStatusNeedsRetry(false);
-      await setEspnHistoryState(userId, result.history ?? null);
+      try {
+        await setEspnHistoryState(userId, result.history ?? null);
+      } catch {
+        // History is a local cache; the completed league result remains valid.
+      }
+      if (!isCurrentSetup()) return;
+
+      const foundCurrentLeague = result.currentSeason.found > 0;
+      const leagueConfirmed = foundCurrentLeague && hasPersistedCurrentLeague(result.currentSeason);
+      setDiscoveryResult(leagueConfirmed ? 'confirmed' : foundCurrentLeague ? 'unknown' : 'none');
+      setApiError(null);
+
+      if (foundCurrentLeague && !leagueConfirmed) {
+        setError('ESPN found a league, but Flaim could not confirm that it was saved. Your league result is unknown.');
+        setState('setup_unknown');
+        setIsSetupInProgress(false);
+        return;
+      }
+
+      if (leagueConfirmed && initiatingUserId) {
+        let reviewState = null;
+        try {
+          reviewState = await getReviewInvitationState(initiatingUserId);
+        } catch {
+          // The invitation is optional and must not change a completed result.
+        }
+        if (!isCurrentSetup()) return;
+        if (!reviewState?.shown && !reviewState?.dismissed) {
+          try {
+            await setReviewInvitationState(initiatingUserId, { shown: true, dismissed: false });
+          } catch {
+            // A local preference failure must not turn a completed sync into an error.
+          }
+          if (!isCurrentSetup()) return;
+          setShowReviewInvitation(true);
+        }
+      }
 
       // Complete setup
       setState('setup_complete');
-      await clearSetupState();
       setIsSetupInProgress(false);
     } catch (err) {
-      const errorMsg = sanitizeError(
-        err instanceof Error ? err.message : '',
-        'Discovery failed'
-      );
-      setError(errorMsg);
-      setState('setup_error');
-      await setSetupState({ step: 'error', error: errorMsg });
+      if (!isCurrentSetup()) return;
+      const apiRequestError = requestError(err);
+      setApiError(apiRequestError);
+      setError(setupErrorMessage('discovery', apiRequestError));
+      setDiscoveryResult(apiRequestError.timedOut ? 'unknown' : 'not_run');
+      setState(apiRequestError.timedOut ? 'setup_unknown' : 'setup_error');
       setIsSetupInProgress(false);
     }
   };
 
   const refreshStatus = async () => {
+    const refreshingUserId = userId;
+    const refreshingGeneration = accountGenerationRef.current;
+    const isCurrentRefresh = () =>
+      popupActiveRef.current &&
+      currentUserIdRef.current === refreshingUserId &&
+      accountGenerationRef.current === refreshingGeneration;
     setIsRefreshing(true);
     setError(null);
+    setDiagnosticStage('status');
+    setApiError(null);
 
     if (!isLoaded || !isSignedIn) {
       setState('ready');
@@ -513,7 +681,19 @@ export default function Popup() {
       return;
     }
 
-    const espnCreds = await getEspnCredentials();
+    let espnCreds: Awaited<ReturnType<typeof getEspnCredentials>>;
+    try {
+      espnCreds = await getEspnCredentials();
+    } catch (err) {
+      if (!isCurrentRefresh()) return;
+      setHasEspnCookies(null);
+      setApiError(requestError(err));
+      setError('We could not check ESPN sign-in in this Chrome profile. Please try again.');
+      setState('ready');
+      setIsRefreshing(false);
+      return;
+    }
+    if (!isCurrentRefresh()) return;
     if (!espnCreds || !validateCredentials(espnCreds)) {
       setHasEspnCookies(false);
       setState('no_espn');
@@ -524,22 +704,33 @@ export default function Popup() {
 
     try {
       const token = await getToken();
+      if (!isCurrentRefresh()) return;
       if (token) {
         const status = await checkStatus(token);
+        if (!isCurrentRefresh()) return;
         setHasCredentials(status.hasCredentials);
         setLastSync(status.lastSync ?? null);
         const history = await getEspnHistoryStatus(token);
+        if (!isCurrentRefresh()) return;
         espnHistoryOwnerRef.current = userId;
         setEspnHistory(history);
         setEspnHistoryStatusNeedsRetry(false);
-        await setEspnHistoryState(userId, history);
+        try {
+          await setEspnHistoryState(userId, history);
+        } catch {
+          // History is a local cache; refresh can still report current status.
+        }
+        if (!isCurrentRefresh()) return;
       }
       setState('ready');
     } catch (err) {
-      setError(sanitizeError(err instanceof Error ? err.message : '', 'Unable to reach Flaim'));
+      if (!isCurrentRefresh()) return;
+      setHasCredentials(null);
+      setApiError(requestError(err));
+      setError('We could not check your Flaim connection. You can try again or sync now.');
       setState('ready');
     } finally {
-      setIsRefreshing(false);
+      if (isCurrentRefresh()) setIsRefreshing(false);
     }
   };
 
@@ -547,6 +738,47 @@ export default function Popup() {
   const openFlaim = async (path: string = '/') => {
     const baseUrl = await getSiteBase();
     chrome.tabs.create({ url: `${baseUrl}${path}` });
+  };
+
+  const openReview = () => {
+    chrome.tabs.create({ url: CHROME_WEB_STORE_REVIEW_URL });
+  };
+
+  const dismissReviewInvitation = async () => {
+    const dismissingUserId = userId;
+    const dismissingGeneration = accountGenerationRef.current;
+    try {
+      await setReviewInvitationState(dismissingUserId, { shown: true, dismissed: true });
+    } catch {
+      // The optional invitation can close even if the local preference cannot persist.
+    }
+    if (
+      popupActiveRef.current &&
+      currentUserIdRef.current === dismissingUserId &&
+      accountGenerationRef.current === dismissingGeneration
+    ) {
+      setShowReviewInvitation(false);
+    }
+  };
+
+  const copySupportInfo = async () => {
+    const copyingUserId = userId;
+    const copyingGeneration = accountGenerationRef.current;
+    const isCurrentCopy = () =>
+      popupActiveRef.current &&
+      currentUserIdRef.current === copyingUserId &&
+      accountGenerationRef.current === copyingGeneration;
+    try {
+      await navigator.clipboard.writeText(supportInfo);
+      if (!isCurrentCopy()) return;
+      setSupportCopied(true);
+      window.setTimeout(() => {
+        if (isCurrentCopy()) setSupportCopied(false);
+      }, 1500);
+    } catch {
+      if (!isCurrentCopy()) return;
+      setError('Failed to copy support info');
+    }
   };
 
   // Loading state while Clerk initializes
@@ -604,6 +836,10 @@ export default function Popup() {
           <span className="link" onClick={() => openFlaim('/')}>
             Learn more about Flaim
           </span>
+          <span className="footer-separator" aria-hidden="true">·</span>
+          <button className="link-button" onClick={() => openFlaim(ESPN_SETUP_PATH)}>
+            ESPN setup help
+          </button>
         </div>
       </SignedOut>
 
@@ -647,18 +883,18 @@ export default function Popup() {
             </div>
             <button
               className="button secondary full-width"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(supportInfo);
-                  setSupportCopied(true);
-                  setTimeout(() => setSupportCopied(false), 1500);
-                } catch {
-                  setError('Failed to copy support info');
-                }
-              }}
+              onClick={copySupportInfo}
             >
               {supportCopied ? 'Copied' : 'Copy support info'}
             </button>
+            <div className="diagnostic-links">
+              <button className="link-button" onClick={() => openFlaim(ESPN_SETUP_PATH)}>
+                ESPN setup help
+              </button>
+              <button className="link-button" onClick={openReview}>
+                <span aria-hidden="true">★</span> Rate Flaim
+              </button>
+            </div>
           </div>
         )}
 
@@ -674,7 +910,7 @@ export default function Popup() {
           <div className="content">
             {error && <div className="message error">{error}</div>}
             <div className="message warning">
-              Please log into ESPN.com first, then come back here to sync your credentials.
+              Sign in to ESPN Fantasy in this same Chrome profile, then return here to sync.
             </div>
             <button
               className="button primary full-width"
@@ -688,6 +924,9 @@ export default function Popup() {
               disabled={isRefreshing}
             >
               {isRefreshing ? 'Refreshing...' : "I'm Logged In - Refresh"}
+            </button>
+            <button className="link-button" onClick={() => openFlaim(ESPN_SETUP_PATH)}>
+              ESPN setup help
             </button>
           </div>
         )}
@@ -711,8 +950,12 @@ export default function Popup() {
                 </span>
               </div>
             </div>
-            {hasCredentials ? (
+            {hasCredentials === true ? (
               <div className="message success">Your ESPN credentials are synced!</div>
+            ) : hasCredentials === null ? (
+              <div className="message info">
+                Flaim connection status is unknown. You can still sync ESPN access again.
+              </div>
             ) : (
               <div className="message info">Ready to sync your ESPN credentials to Flaim.</div>
             )}
@@ -722,7 +965,7 @@ export default function Popup() {
               onClick={handleFullSetup}
               disabled={isSetupInProgress}
             >
-              {hasCredentials ? 'Re-sync & Discover New ESPN Leagues/Seasons' : 'Sync to Flaim'}
+              {hasCredentials === true ? 'Re-sync & Discover New ESPN Leagues/Seasons' : 'Sync to Flaim'}
             </button>
             <button className="button secondary full-width" onClick={() => openFlaim('/leagues')}>
               Your Leagues
@@ -743,6 +986,7 @@ export default function Popup() {
                 <span>Discovering leagues</span>
               </div>
             </div>
+            <div className="message info">Keep this popup open until your league result appears.</div>
           </div>
         )}
 
@@ -758,17 +1002,28 @@ export default function Popup() {
                 <span>Discovering leagues...</span>
               </div>
             </div>
+            <div className="message info">Keep this popup open until your league result appears.</div>
           </div>
         )}
 
         {state === 'setup_complete' && (
           <div className="content">
-            {currentEspnHistory && <div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
+            {discoveryResult === 'confirmed' && (
+              <div className="setup-step completed">
+                <span className="step-icon check">✓</span>
+                <span>Sync successful</span>
+              </div>
+            )}
+            {currentEspnHistory &&<div className="message info">{getHistoryMessage(currentEspnHistory)}</div>}
+            {discoveryCounts.currentSeason.found === 0 ? (
+              <div className="message warning">
+                No current-season ESPN leagues were found. Confirm this Chrome profile has the intended ESPN account and that the league opens in ESPN Fantasy, then try again.
+              </div>
+            ) : (
+              <div className="message info">{getDiscoveryMessage(discoveryCounts)}</div>
+            )}
             {discoveredLeagues.length > 0 && (
               <>
-                <div className="message info">
-                  {getDiscoveryMessage(discoveryCounts)}
-                </div>
                 <div className="league-list">
                   {discoveredLeagues.map((league) => (
                     <div
@@ -789,10 +1044,28 @@ export default function Popup() {
             <button className="button primary full-width" onClick={() => openFlaim('/leagues')}>
               Your Leagues
             </button>
+            {showReviewInvitation && discoveryResult === 'confirmed' && (
+              <>
+                <p className="review-note">Flaim is free. A quick rating really helps.</p>
+                <button className="button secondary full-width" onClick={openReview}>
+                  <span aria-hidden="true">★</span> Rate Flaim
+                </button>
+              </>
+            )}
+            {discoveryResult === 'none' && (
+              <>
+                <button className="button secondary full-width" onClick={handleFullSetup}>
+                  Try Again
+                </button>
+                <button className="link-button" onClick={() => openFlaim(ESPN_SETUP_PATH)}>
+                  ESPN setup help
+                </button>
+              </>
+            )}
             <button
               className="button secondary full-width"
-              onClick={async () => {
-                await clearSetupState();
+              onClick={() => {
+                if (showReviewInvitation) void dismissReviewInvitation();
                 setState('ready');
               }}
             >
@@ -801,16 +1074,46 @@ export default function Popup() {
           </div>
         )}
 
+        {state === 'setup_unknown' && (
+          <div className="content">
+            <div className="message warning">
+              {error || 'ESPN access was saved, but the league check did not finish.'}
+            </div>
+            <div className="message info">
+              Your league result is unknown. Check Your Leagues for any saved result, then retry when you are ready.
+            </div>
+            <button className="button primary full-width" onClick={() => openFlaim('/leagues')}>
+              Your Leagues
+            </button>
+            <button className="button secondary full-width" onClick={handleFullSetup}>
+              Try Again
+            </button>
+            <button className="link-button" onClick={() => openFlaim(ESPN_SETUP_PATH)}>
+              ESPN setup help
+            </button>
+          </div>
+        )}
+
         {state === 'setup_error' && (
           <div className="content">
             <div className="message error">{error || 'Setup failed'}</div>
+            {apiError?.code === 'espn_auth_failed' && (
+              <button
+                className="button secondary full-width"
+                onClick={() => chrome.tabs.create({ url: 'https://www.espn.com/fantasy/' })}
+              >
+                Open ESPN Fantasy
+              </button>
+            )}
             <button className="button primary full-width" onClick={handleFullSetup}>
               Try Again
             </button>
+            <button className="link-button" onClick={() => openFlaim(ESPN_SETUP_PATH)}>
+              ESPN setup help
+            </button>
             <button
               className="button secondary full-width"
-              onClick={async () => {
-                await clearSetupState();
+              onClick={() => {
                 setState('ready');
               }}
             >

@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockedFunction } 
 import type { z } from 'zod';
 import { getUnifiedTools, hasRequiredScope, mcpAuthError, mcpInsufficientScopeError } from '../mcp/tools';
 import { buildMcpAuthErrorResponse } from '../auth-response';
-import type { Env } from '../types';
-import { routeToClient } from '../router';
+import { normalizeFreeAgentsResult } from '../mcp/free-agent-normalizer';
+import type { Env, ToolParams } from '../types';
+import { routeToClient, type RouteResult } from '../router';
 import {
   classifyRefreshResult,
   LEGACY_USER_SESSION_WIDGET_HTML,
@@ -11,6 +12,8 @@ import {
   USER_SESSION_WIDGET_HTML,
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
+  V3_USER_SESSION_WIDGET_HTML,
+  V3_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import {
   INTERNAL_SERVICE_TOKEN_HEADER,
@@ -75,7 +78,7 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('do not repeat this call merely because a new user message arrived');
     expect(tool!.description).toContain('switching to another league already in allLeagues');
     expect(tool!.description).toContain('when the user confirms account, connection, league-list, or default changes');
-    expect(tool!.description).toContain('when the needed session context is missing');
+    expect(tool!.description).toContain('when the earlier session call failed, or when its result is no longer visible in the conversation');
     expect(tool!.description).toContain('A new chat needs its own session lookup');
     expect(tool!.description).toContain('Follow the error guidance if a call fails');
     expect(tool!.description).toContain('Session reuse does not replace fresh roster, score, or player reads');
@@ -106,6 +109,91 @@ describe('fantasy-mcp tools', () => {
     expect(history).toContain('established session context (call get_user_session only if needed)');
     expect(history).toContain('This is the historical branch');
     expect(history).not.toContain('get_league_info');
+  });
+
+  // FLA-374: draft, keeper, and matchup-detail mechanics live in the tool
+  // descriptions (the only surface every MCP client reads), not only in the
+  // shipped skill. Each claim below is checked against a provider handler.
+  it('states per-provider draft-ownership reach on get_draft', () => {
+    const description = getUnifiedTools().find((tool) => tool.name === 'get_draft')!.description;
+
+    expect(description).toContain(
+      'current ownership comes only from ownership.picks[].currentOwnerTeamId'
+    );
+    expect(description).toContain(
+      'ESPN and Yahoo expose confirmed draft results but no current pick-ownership ledger, so their responses carry no ownership block at all'
+    );
+    expect(description).toContain(
+      'only Sleeper can report current or future pick ownership, and an exact board placement only when Sleeper supplies enough draft-order evidence'
+    );
+    expect(description).toContain(
+      'An ownership.scope of changed_picks_only lists only picks known to have changed hands and is not a complete pick inventory'
+    );
+    expect(description).toContain(
+      'selectionInRound is the round slot rendered in a value such as 12.15, while draftColumn is the stable draft-board column'
+    );
+  });
+
+  it('inventories the platform-dependent keeper fields on the tools that return them', () => {
+    const tools = new Map(getUnifiedTools().map((tool) => [tool.name, tool]));
+
+    const leagueInfo = tools.get('get_league_info')!.description;
+    expect(leagueInfo).toContain(
+      'ESPN adds keeperSettings (keeperCount, keeperCountFuture, keeperOrderType, keeperDeadlineDate) and isKeeperLeague'
+    );
+    expect(leagueInfo).toContain(
+      'per-team keeperPlayerIds and futureKeeperPlayerIds as raw ESPN player IDs with no name resolution'
+    );
+    expect(leagueInfo).toContain(
+      'whose typeRaw is an undocumented Sleeper convention that must not be read on its own as a redraft, keeper, dynasty, or guillotine signal'
+    );
+    expect(leagueInfo).toContain(
+      "Yahoo adds draftType, isAuctionDraft, and canTradeDraftPicks when Yahoo's settings fetch succeeds (omitted, with a warning, when it fails), but exposes no keeper-cost rule"
+    );
+
+    const roster = tools.get('get_roster')!.description;
+    expect(roster).toContain(
+      'ESPN adds per-player keeperValue and keeperValueFuture plus one response-level keeperValueUnit of auction_dollars or draft_round'
+    );
+    expect(roster).toContain(
+      'a historical snapshot withholds keeperValueFuture and flags keeperValueFutureAvailable false'
+    );
+    expect(roster).toContain(
+      'Sleeper resolves keepers to player entries on the current roster only, passing the list through as Sleeper sends it; an empty or null list does not show that the league has no keepers'
+    );
+
+    // Yahoo has only ever been observed sending cost:false on is_keeper, so no
+    // tool that surfaces isKeeper may imply a numeric keeper cost is available.
+    for (const name of ['get_free_agents', 'get_players']) {
+      expect(tools.get(name)!.description).toContain(
+        'Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo'
+      );
+    }
+    expect(roster).toContain(
+      'Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo'
+    );
+  });
+
+  it('bounds get_matchups player detail to ESPN football from 2018 in its own metadata', () => {
+    const tool = getUnifiedTools().find((candidate) => candidate.name === 'get_matchups')!;
+
+    expect(tool.description).toContain(
+      'this is currently ESPN football only and only for season_year 2018 or later'
+    );
+    expect(tool.description).toContain(
+      'Any other platform, sport, or earlier season returns MATCHUP_DETAIL_UNSUPPORTED'
+    );
+    expect(asZod(tool.inputSchema.detail).description).toContain('season_year 2018 or later only');
+  });
+
+  it('carries the per-sport season-year convention on every season_year parameter', () => {
+    for (const tool of getUnifiedTools()) {
+      const seasonYear = tool.inputSchema.season_year;
+      if (!seasonYear) continue;
+      expect(asZod(seasonYear).description).toContain(
+        'Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).'
+      );
+    }
   });
 
   it('describes refresh_leagues as explicit, registry-only, and provider-write incapable', () => {
@@ -167,7 +255,7 @@ describe('fantasy-mcp tools', () => {
     // structuredContent mirrors the text payload
     expect(result.structuredContent).toBeDefined();
     expect((result.structuredContent as Record<string, unknown>).totalLeaguesFound).toBe(0);
-    // Template linkage belongs to the frozen tool descriptor. Returning it
+    // Template linkage belongs to the stable tool descriptor. Returning it
     // here could override the descriptor used by a published client.
     expect(result._meta?.ui).toBeUndefined();
     expect(result._meta?.['openai/outputTemplate']).toBeUndefined();
@@ -207,15 +295,17 @@ describe('fantasy-mcp tools', () => {
 
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
-    // Published URIs are stable cache keys with frozen resource metadata. The
-    // descriptor points at v3, the only URI whose published widget CSP allows
-    // the Yahoo Fantasy attribution link.
+    // Published URIs are stable cache keys with stable resource metadata. The
+    // descriptor points at the newest URI, the only one whose published widget
+    // CSP allows all three provider attribution links.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
     expect(V2_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
-    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
+    expect(V3_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
+    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v4.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
+    expect(tool?.widgetUri).not.toBe(V3_USER_SESSION_WIDGET_URI);
   });
 
   it('keeps every downstream data tool and refresh free of widget attachments', () => {
@@ -223,24 +313,60 @@ describe('fantasy-mcp tools', () => {
       .toEqual(['get_user_session']);
   });
 
-  it('serves exactly one body per link permission, differing only by the Yahoo link', () => {
-    // The v1/v2 widget CSP allows only https://flaim.app as a redirect
-    // domain, so those URIs cannot carry the Yahoo Fantasy link. Everything
-    // else about the two bodies must be identical, or the two URIs would
-    // drift into separate widgets to maintain.
+  it('serves exactly one body per link permission, differing only by the provider credits', () => {
+    // A body carries a provider credit link only where that URI's published
+    // widget CSP allows the provider's redirect domain: v1/v2 allow only
+    // https://flaim.app, v3 adds Yahoo, v4 adds ESPN and Sleeper. Everything
+    // else about the bodies must be identical, or the URIs would drift into
+    // separate widgets to maintain.
     const yahooLink =
       '<a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>';
-    expect(USER_SESSION_WIDGET_HTML).toContain(yahooLink);
-    expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(yahooLink);
+    const espnLink =
+      '<a class="credit" href="https://www.espn.com/fantasy/" target="_blank" rel="noopener noreferrer" id="espn-link">ESPN</a>';
+    const sleeperLink =
+      '<a class="credit" href="https://sleeper.com/" target="_blank" rel="noopener noreferrer" id="sleeper-link">Sleeper</a>';
+
+    // v1/v2: every credit is plain text.
     expect(LEGACY_USER_SESSION_WIDGET_HTML).toContain(
       'Fantasy data provided by Yahoo Fantasy, ESPN, and Sleeper.'
     );
-    // ESPN and Sleeper stay plain text on every body: no published widget CSP
-    // allows their domains.
-    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
-      expect(body).not.toContain('espn.com');
-      expect(body).not.toContain('sleeper.com');
+    for (const link of [yahooLink, espnLink, sleeperLink]) {
+      expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(link);
     }
+
+    // v3: the Yahoo credit only.
+    expect(V3_USER_SESSION_WIDGET_HTML).toContain(yahooLink);
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain(espnLink);
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain(sleeperLink);
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain('espn.com');
+    expect(V3_USER_SESSION_WIDGET_HTML).not.toContain('sleeper.com');
+
+    // v4: all three credits are links.
+    for (const link of [yahooLink, espnLink, sleeperLink]) {
+      expect(USER_SESSION_WIDGET_HTML).toContain(link);
+    }
+    expect(USER_SESSION_WIDGET_HTML).toContain(
+      `Fantasy data provided by ${yahooLink}, ${espnLink}, and ${sleeperLink}.`
+    );
+    // Each linked credit gets openExternal click handling on the body that
+    // carries it. The Yahoo handler is emitted on every body (its guard no-ops
+    // where the anchor is absent) so the pre-v4 bodies keep their exact script.
+    const bodies = [
+      LEGACY_USER_SESSION_WIDGET_HTML,
+      V3_USER_SESSION_WIDGET_HTML,
+      USER_SESSION_WIDGET_HTML,
+    ];
+    for (const body of bodies) {
+      expect(body).toContain("document.getElementById('yahoo-link')");
+      expect(body).toContain('host.openExternal({ href: yahooLink.href })');
+    }
+    for (const id of ['espn-link', 'sleeper-link']) {
+      expect(USER_SESSION_WIDGET_HTML).toContain(`document.getElementById('${id}')`);
+      expect(V3_USER_SESSION_WIDGET_HTML).not.toContain(`document.getElementById('${id}')`);
+      expect(LEGACY_USER_SESSION_WIDGET_HTML).not.toContain(`document.getElementById('${id}')`);
+    }
+    expect(USER_SESSION_WIDGET_HTML).toContain('host.openExternal({ href: espnLink.href })');
+    expect(USER_SESSION_WIDGET_HTML).toContain('host.openExternal({ href: sleeperLink.href })');
   });
 
   it('keeps every URL in each body inside that URI\'s published redirect domains', () => {
@@ -262,15 +388,26 @@ describe('fantasy-mcp tools', () => {
       "' + LEAGUES_URL + '",
       'https://flaim.app/leagues?from=widget',
     ]);
-    expect(referencesIn(USER_SESSION_WIDGET_HTML)).toEqual([
+    expect(referencesIn(V3_USER_SESSION_WIDGET_HTML)).toEqual([
       "' + LEAGUES_URL + '",
       'https://flaim.app/leagues?from=widget',
       'https://sports.yahoo.com/fantasy/',
     ]);
+    expect(referencesIn(USER_SESSION_WIDGET_HTML)).toEqual([
+      "' + LEAGUES_URL + '",
+      'https://flaim.app/leagues?from=widget',
+      'https://sleeper.com/',
+      'https://sports.yahoo.com/fantasy/',
+      'https://www.espn.com/fantasy/',
+    ]);
   });
 
-  it('keeps both bodies self-contained: no external scripts, fonts, images, or styles', () => {
-    for (const body of [LEGACY_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
+  it('keeps every body self-contained: no external scripts, fonts, images, or styles', () => {
+    for (const body of [
+      LEGACY_USER_SESSION_WIDGET_HTML,
+      V3_USER_SESSION_WIDGET_HTML,
+      USER_SESSION_WIDGET_HTML,
+    ]) {
       expect(body).not.toMatch(/<script[^>]+src=/i);
       expect(body).not.toMatch(/<link\b/i);
       expect(body).not.toMatch(/<img\b/i);
@@ -2127,7 +2264,213 @@ describe('fantasy-mcp tools', () => {
     expect(result.structuredContent).toEqual(payload);
   });
 
-  it('get_players schema remains unchanged and includes ownership guardrails in description', () => {
+  describe('get_free_agents serialized-byte guard (FLA-132)', () => {
+    const freeAgentsTool = () => getUnifiedTools().find((t) => t.name === 'get_free_agents')!;
+
+    function serializedToolResultBytes(response: unknown): number {
+      return new TextEncoder().encode(JSON.stringify(response)).byteLength;
+    }
+
+    function espnEntry(i: number, padLen = 0): Record<string, unknown> {
+      const teams = ['BUF', 'KC', 'SF', 'DAL', 'PHI', 'MIA', 'GB', 'NYJ', 'LAR', 'DEN'];
+      const positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST'];
+      const entry: Record<string, unknown> = {
+        playerId: 4_000_000 + i,
+        name: `Free Agent Player ${i}`,
+        position: positions[i % positions.length],
+        proTeam: teams[i % teams.length],
+        percentOwned: Number(((i % 100) + 0.3).toFixed(1)),
+        percentStarted: Number(((i % 80) + 0.1).toFixed(1)),
+        status: i % 3 === 0 ? 'WAIVERS' : 'FREEAGENT',
+        seasonPoints: Number((100 + i * 1.3).toFixed(1)),
+        pointsPerGame: Number((10 + (i % 20) * 0.5).toFixed(2)),
+        projectedSeasonPoints: Number((150 + i * 1.1).toFixed(1)),
+      };
+      if (padLen > 0) entry.notes = 'x'.repeat(padLen);
+      return entry;
+    }
+
+    function sleeperEntry(i: number, padLen = 0): Record<string, unknown> {
+      const entry: Record<string, unknown> = {
+        id: String(5000 + i),
+        name: `Sleeper Player ${i}`,
+        position: ['QB', 'RB', 'WR', 'TE'][i % 4],
+        team: ['DAL', 'SEA', 'NYG', 'CHI'][i % 4],
+      };
+      if (padLen > 0) entry.notes = 'x'.repeat(padLen);
+      return entry;
+    }
+
+    function yahooEntry(i: number, padLen = 0): Record<string, unknown> {
+      const entry: Record<string, unknown> = {
+        playerKey: `449.p.${6000 + i}`,
+        playerId: String(6000 + i),
+        name: `Yahoo Player ${i}`,
+        team: ['LAR', 'GB', 'KC', 'BUF'][i % 4],
+        percentOwned: Number(((i % 100) + 0.5).toFixed(1)),
+      };
+      if (padLen > 0) entry.notes = 'x'.repeat(padLen);
+      return entry;
+    }
+
+    async function callFreeAgents(args: Record<string, unknown>) {
+      return freeAgentsTool().handler(args, {} as Env, 'Bearer token', 'corr-free-agents-guard');
+    }
+
+    it('passes a normal 100-entry ESPN result through untouched, with no truncated key anywhere', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const entries = Array.from({ length: 100 }, (_, i) => espnEntry(i));
+      routeToClientMock.mockResolvedValue({ success: true, data: { leagueId: '336777', freeAgents: entries } });
+
+      const result = await callFreeAgents({
+        platform: 'espn', sport: 'football', league_id: '336777', season_year: 2025,
+      });
+
+      expect(result.isError).toBeUndefined();
+      const payload = result.structuredContent as { success: boolean; data: Record<string, unknown> };
+      expect(payload.success).toBe(true);
+      expect((payload.data.freeAgents as unknown[]).length).toBe(100);
+      expect(payload.data.count).toBe(100);
+      expect('truncated' in payload.data).toBe(false);
+      expect(JSON.stringify(result)).not.toContain('truncated');
+      expect(serializedToolResultBytes(result)).toBeLessThan(200_000);
+    });
+
+    it('truncates an oversized ESPN result to a tight leading prefix instead of erroring', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const rawEntries = Array.from({ length: 300 }, (_, i) => espnEntry(i, 300));
+      const routeResult: RouteResult = { success: true, data: { leagueId: '336777', freeAgents: rawEntries } };
+      routeToClientMock.mockResolvedValue(routeResult);
+
+      const args = { platform: 'espn', sport: 'football', league_id: '336777', season_year: 2025 };
+      const result = await callFreeAgents(args);
+
+      expect(result.isError).not.toBe(true);
+      const bytes = serializedToolResultBytes(result);
+      expect(bytes).toBeLessThanOrEqual(200_000);
+
+      const payload = result.structuredContent as { success: boolean; data: Record<string, unknown> };
+      const kept = payload.data.freeAgents as Array<Record<string, unknown>>;
+      expect(kept.length).toBeGreaterThan(0);
+      expect(kept.length).toBeLessThan(rawEntries.length);
+      expect(payload.data.count).toBe(kept.length);
+      expect(payload.data.truncated).toBe(true);
+
+      const params: ToolParams = { platform: 'espn', sport: 'football', league_id: '336777', season_year: 2025 };
+      const fullNormalized = normalizeFreeAgentsResult(routeResult, params);
+      expect(fullNormalized.success).toBe(true);
+      const fullData = (fullNormalized as { data: Record<string, unknown> }).data;
+      const fullEntries = fullData.freeAgents as Array<Record<string, unknown>>;
+
+      expect(kept[0]).toEqual(fullEntries[0]);
+      expect(kept).toEqual(fullEntries.slice(0, kept.length));
+
+      const oneMoreData = {
+        ...fullData,
+        freeAgents: fullEntries.slice(0, kept.length + 1),
+        count: kept.length + 1,
+        truncated: true,
+      };
+      const oneMorePayload = { success: true, data: oneMoreData };
+      const oneMoreResponse = {
+        content: [{ type: 'text', text: JSON.stringify(oneMorePayload, null, 2) }],
+        structuredContent: oneMorePayload,
+      };
+      expect(serializedToolResultBytes(oneMoreResponse)).toBeGreaterThan(200_000);
+    });
+
+    it.each([
+      { platform: 'sleeper' as const, key: 'players', build: sleeperEntry, league_id: 'slp-1' },
+      { platform: 'yahoo' as const, key: 'freeAgents', build: yahooEntry, league_id: '449.l.123' },
+    ])('truncates an oversized $platform result under its own entry-array key ($key)', async ({ platform, key, build, league_id }) => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const rawEntries = Array.from({ length: 300 }, (_, i) => build(i, 300));
+      const data: Record<string, unknown> = platform === 'yahoo'
+        ? { leagueKey: league_id, [key]: rawEntries }
+        : { league_id, [key]: rawEntries };
+      routeToClientMock.mockResolvedValue({ success: true, data });
+
+      const result = await callFreeAgents({ platform, sport: 'football', league_id, season_year: 2025 });
+
+      expect(result.isError).not.toBe(true);
+      expect(serializedToolResultBytes(result)).toBeLessThanOrEqual(200_000);
+
+      const payload = result.structuredContent as { success: boolean; data: Record<string, unknown> };
+      const kept = payload.data[key] as Array<Record<string, unknown>>;
+      expect(kept.length).toBeGreaterThan(0);
+      expect(kept.length).toBeLessThan(rawEntries.length);
+      expect(payload.data.count).toBe(kept.length);
+      expect(payload.data.truncated).toBe(true);
+      expect(kept[0].id).toBe(String(platform === 'yahoo' ? 6000 : 5000));
+    });
+
+    it('recomputes Yahoo capabilities.rosteredRate after truncation drops the only rated entry', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const league_id = '449.l.123';
+      // Every leading entry has no rate; only the last (trailing) entry does.
+      // A byte-size truncation keeps a leading prefix, so the rated entry is
+      // dropped — the post-truncation capabilities must reflect that.
+      const rawEntries = Array.from({ length: 300 }, (_, i) => {
+        const entry = yahooEntry(i, 300);
+        entry.percentOwned = i === 299 ? 42 : null;
+        return entry;
+      });
+      routeToClientMock.mockResolvedValue({ success: true, data: { leagueKey: league_id, freeAgents: rawEntries } });
+
+      const result = await callFreeAgents({ platform: 'yahoo', sport: 'football', league_id, season_year: 2025 });
+
+      expect(result.isError).not.toBe(true);
+      const payload = result.structuredContent as { success: boolean; data: Record<string, unknown> };
+      expect(payload.data.truncated).toBe(true);
+      const kept = payload.data.freeAgents as Array<Record<string, unknown>>;
+      expect(kept.length).toBeLessThan(rawEntries.length);
+      expect(kept.every((entry) => entry.percentOwned === null)).toBe(true);
+      expect((payload.data.capabilities as Record<string, unknown>).rosteredRate).toBe(false);
+    });
+
+    it('keeps Yahoo capabilities.rosteredRate true when a rated entry survives truncation', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      const league_id = '449.l.123';
+      const rawEntries = Array.from({ length: 300 }, (_, i) => yahooEntry(i, 300));
+
+      routeToClientMock.mockResolvedValue({ success: true, data: { leagueKey: league_id, freeAgents: rawEntries } });
+
+      const result = await callFreeAgents({ platform: 'yahoo', sport: 'football', league_id, season_year: 2025 });
+
+      expect(result.isError).not.toBe(true);
+      const payload = result.structuredContent as { success: boolean; data: Record<string, unknown> };
+      expect(payload.data.truncated).toBe(true);
+      expect((payload.data.capabilities as Record<string, unknown>).rosteredRate).toBe(true);
+    });
+
+    it('passes a failed route result through unchanged, with no truncated key added', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: false, code: 'ESPN_TIMEOUT', error: 'upstream timeout' });
+
+      const result = await callFreeAgents({
+        platform: 'espn', sport: 'football', league_id: '336777', season_year: 2025,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({ success: false, code: 'ESPN_TIMEOUT' });
+      expect('truncated' in (result.structuredContent as Record<string, unknown>)).toBe(false);
+    });
+
+    it('passes a MALFORMED_PROVIDER_RESPONSE normalizer error through unchanged, with no truncated key added', async () => {
+      const routeToClientMock = routeToClient as MockedFunction<typeof routeToClient>;
+      routeToClientMock.mockResolvedValue({ success: true, data: { leagueId: '336777', freeAgents: 'corrupted' } });
+
+      const result = await callFreeAgents({
+        platform: 'espn', sport: 'football', league_id: '336777', season_year: 2025,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({ success: false, code: 'MALFORMED_PROVIDER_RESPONSE' });
+      expect('truncated' in (result.structuredContent as Record<string, unknown>)).toBe(false);
+    });
+  });
+
+  it('get_players input schema is unchanged and description covers ownership guardrails plus the Sleeper-only league_team_id field', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_players');
     expect(tool).toBeTruthy();
 
@@ -2146,6 +2489,11 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('league_owner_name');
     expect(tool!.description).toContain('get_league_info');
     expect(tool!.description).toContain('get_roster');
+    expect(tool!.description).toContain('Sleeper always evaluates league ownership against every current roster');
+    expect(tool!.description).toContain('except during an active draft');
+    expect(tool!.description).toContain('league_team_id');
+    expect(tool!.description).toContain('Sleeper-only');
+    expect(tool!.description).toContain('Fall back to get_roster only when league_status itself is absent or null');
   });
 
   // FLA-277 Mechanism B: get_user_session surfaces widget.hidden from the

@@ -498,6 +498,18 @@ insert into public.archived_leagues (
   'historical'
 );
 
+-- The rollups below bucket events by UTC day, and the ET history lane closes
+-- ET days, so all three events must land inside today's UTC day and today's ET
+-- day. Offsets from now() alone cross a day boundary whenever the seed runs
+-- shortly after 00:00 UTC (or ET) and splits the events across two days. Clamp
+-- each event to the later of the two day starts; it can never be in the future.
+with seed_day as (
+  select greatest(
+    (now() at time zone 'UTC')::date::timestamp at time zone 'UTC',
+    date_trunc('day', now() at time zone 'America/New_York')
+      at time zone 'America/New_York'
+  ) as starts_at
+)
 insert into public.mcp_tool_events (
   ts,
   env,
@@ -511,49 +523,26 @@ insert into public.mcp_tool_events (
   error_code,
   latency_ms,
   league_hash
-) values
-  (
-    now() - interval '30 minutes',
-    'prod',
-    'seed-user-001',
-    'oauth',
-    'Synthetic Client',
-    'get_league_info',
-    'espn',
-    'football',
-    'ok',
-    null,
-    125,
-    'synthetic-league-hash'
-  ),
-  (
-    now() - interval '20 minutes',
-    'prod',
-    'seed-user-001',
-    'oauth',
-    'Synthetic Client',
-    'refresh_leagues',
-    'espn',
-    'football',
-    'ok',
-    null,
-    250,
-    'synthetic-league-hash'
-  ),
-  (
-    now() - interval '10 minutes',
-    'prod',
-    'seed-user-001',
-    'oauth',
-    'Synthetic Client',
-    'get_roster',
-    'espn',
-    'football',
-    'error',
-    'SYNTHETIC_SEED_ERROR',
-    175,
-    'synthetic-league-hash'
-  );
+)
+select
+  greatest(now() - seed_event.age, seed_day.starts_at),
+  'prod',
+  'seed-user-001',
+  'oauth',
+  'Synthetic Client',
+  seed_event.tool_name,
+  'espn',
+  'football',
+  seed_event.status,
+  seed_event.error_code,
+  seed_event.latency_ms,
+  'synthetic-league-hash'
+from seed_day
+cross join (values
+  (interval '30 minutes', 'get_league_info', 'ok', null, 125),
+  (interval '20 minutes', 'refresh_leagues', 'ok', null, 250),
+  (interval '10 minutes', 'get_roster', 'error', 'SYNTHETIC_SEED_ERROR', 175)
+) as seed_event(age, tool_name, status, error_code, latency_ms);
 
 insert into public.provider_sync_state (
   clerk_user_id,
@@ -607,7 +596,7 @@ insert into public.provider_sync_state (
   now() - interval '5 minutes'
 );
 
-select public.rollup_mcp_usage(current_date);
+select public.rollup_mcp_usage((now() at time zone 'UTC')::date);
 
 -- Initialize the permanent ET history lane through the most recently closed
 -- day before the canonical dashboard reader is first materialized. Events on

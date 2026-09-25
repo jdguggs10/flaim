@@ -2598,6 +2598,12 @@ function LeaguesPageContent() {
                           ? 'Manage ESPN leagues, seasons, accounts, and credentials with the Flaim Chrome extension.'
                           : 'Add ESPN credentials with the Flaim Chrome extension.'}
                       </p>
+                      <Link
+                        href="/docs/espn"
+                        className="inline-flex text-sm font-medium text-primary underline hover:no-underline"
+                      >
+                        Get ESPN setup help
+                      </Link>
                       {displayEspnLastUpdated && (
                         <p className="text-xs text-muted-foreground">
                           Credentials updated: {formatLastUpdated(displayEspnLastUpdated)}
@@ -2616,7 +2622,7 @@ function LeaguesPageContent() {
                             rel="noopener noreferrer"
                           >
                             <Chrome className="h-4 w-4 mr-2" />
-                            Open Extension
+                            View in Chrome Web Store
                           </a>
                         </Button>
                       )}

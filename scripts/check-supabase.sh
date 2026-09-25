@@ -25,6 +25,8 @@ readonly PROVIDER_FLAGS_PROOF_SQL="supabase/tests/provider_flags.sql"
 readonly DASHBOARD_SINGLE_REFRESH_PROOF_SQL="supabase/tests/dashboard_single_refresh.sql"
 readonly ESPN_HISTORY_JOBS_PROOF_SQL="supabase/tests/espn_history_jobs.sql"
 readonly ACCOUNT_DELETIONS_PROOF_SQL="supabase/tests/account_deletions.sql"
+readonly MCP_ROLLUP_CATCHUP_PROOF_SQL="supabase/tests/mcp_rollup_catchup.sql"
+readonly SIGNUP_LOG_PROOF_SQL="supabase/tests/signup_log.sql"
 readonly RAW_DASHBOARD_MIGRATION_SQL="supabase/migrations/20260802131749_add_sync_recent_dashboard_payload.sql"
 readonly CONTAINER_RAW_DASHBOARD_MIGRATION_SQL="/tmp/analytics_dashboard_raw_reference.sql"
 readonly CRON_PRODUCTION_SQL="supabase/cron/production.sql"
@@ -34,8 +36,8 @@ readonly PROVIDER_FLAGS_JOB_BODY='$job$'"${PROVIDER_FLAGS_COMMAND}"'$job$'
 readonly DASHBOARD_COMMAND='select analytics.refresh_dashboard_snapshot();'
 readonly DASHBOARD_JOB_BODY='$job$'"${DASHBOARD_COMMAND}"'$job$'
 
-# Both analytics jobs stay at five-minute cadence. The dashboard function now
-# computes one inclusive payload per call; provider flags remain independent.
+# Provider health stays at five-minute cadence while the human dashboard runs
+# every fifteen minutes. The dashboard computes one inclusive payload per call.
 if ! rg --multiline --quiet \
   "cron\.schedule\(\s*'provider-flags-snapshot',\s*'\*/5 \* \* \* \*'" \
   "${CRON_PRODUCTION_SQL}"; then
@@ -45,16 +47,16 @@ if ! rg --multiline --quiet \
 fi
 
 if ! rg --multiline --quiet \
-  "cron\.schedule\(\s*'dashboard-snapshot',\s*'\*/5 \* \* \* \*'" \
+  "cron\.schedule\(\s*'dashboard-snapshot',\s*'\*/15 \* \* \* \*'" \
   "${CRON_PRODUCTION_SQL}"; then
-  printf '%s must schedule dashboard-snapshot at */5.\n' \
+  printf '%s must schedule dashboard-snapshot at */15.\n' \
     "${CRON_PRODUCTION_SQL}" >&2
   exit 1
 fi
 
 if rg --quiet "dashboard-snapshot-internal|refresh_dashboard_snapshot\(true\)" \
   "${CRON_PRODUCTION_SQL}"; then
-  printf '%s must keep one no-argument dashboard refresh at five-minute cadence.\n' \
+  printf '%s must keep one no-argument dashboard refresh at fifteen-minute cadence.\n' \
     "${CRON_PRODUCTION_SQL}" >&2
   exit 1
 fi
@@ -69,6 +71,26 @@ fi
 if ! rg --fixed-strings --quiet "${DASHBOARD_JOB_BODY}" \
   "${CRON_PRODUCTION_SQL}"; then
   printf '%s must schedule dashboard-snapshot with the canonical no-argument command.\n' \
+    "${CRON_PRODUCTION_SQL}" >&2
+  exit 1
+fi
+
+if ! node - "${CRON_PRODUCTION_SQL}" <<'NODE'
+const fs = require('node:fs');
+const sql = fs.readFileSync(process.argv[2], 'utf8').replace(/\s+/g, ' ');
+const expected = [
+  "cron.schedule( 'mcp-rollup', '15 5 * * *', $job$",
+  'select public.rollup_mcp_usage(day::date)',
+  "from generate_series( (now() at time zone 'UTC')::date - 7,",
+  "(now() at time zone 'UTC')::date - 1, interval '1 day' )",
+  'as completed_days(day); $job$ )',
+].join(' ');
+const matches = sql.split(expected).length - 1;
+const namedJobs = (sql.match(/'mcp-rollup'/g) || []).length;
+process.exit(matches === 1 && namedJobs === 1 ? 0 : 1);
+NODE
+then
+  printf '%s must re-roll the trailing seven completed UTC days at 05:15.\n' \
     "${CRON_PRODUCTION_SQL}" >&2
   exit 1
 fi
@@ -158,6 +180,8 @@ for reset_number in 1 2; do
 
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ESPN_HISTORY_JOBS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
   docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${ACCOUNT_DELETIONS_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
+  docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${MCP_ROLLUP_CATCHUP_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
+  docker exec -i "${DB_CONTAINER}" psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f - < "${SIGNUP_LOG_PROOF_SQL}" >> "${tmp_dir}/snapshot-${reset_number}.txt"
   docker cp \
     "${RAW_DASHBOARD_MIGRATION_SQL}" \
     "${DB_CONTAINER}:${CONTAINER_RAW_DASHBOARD_MIGRATION_SQL}" \
@@ -174,6 +198,7 @@ fi
 
 bash supabase/tests/token_rpc_concurrency.sh
 bash supabase/tests/account_deletions_concurrency.sh
+bash supabase/tests/signup_log_concurrency.sh
 bash supabase/tests/analytics_history_concurrency.sh
 bash supabase/tests/analytics_history_guard.sh
 bash supabase/tests/analytics_history_dimensions_guard.sh

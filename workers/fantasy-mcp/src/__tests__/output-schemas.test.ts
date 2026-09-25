@@ -332,12 +332,31 @@ describe('get_standings output schema', () => {
           percentage: '.800',
           pointsFor: '612.5',
           pointsAgainst: '540.1',
+          waiverPriority: 3,
+          faabBalance: null,
           playoffSeed: null,
           madePlayoffs: null,
           finalRank: null,
           championshipWon: null,
           playoffOutcome: null,
           outcomeConfidence: null,
+        },
+      ],
+    }));
+  });
+
+  it('accepts a Yahoo FAAB league reporting a spent-out balance alongside a tie-break priority', () => {
+    expectValid('get_standings', routed({
+      leagueKey: '449.l.123',
+      seasonPhase: 'regular_season',
+      seasonComplete: false,
+      standings: [
+        {
+          rank: '1',
+          teamKey: '449.l.123.t.1',
+          name: 'Yahoo Team',
+          waiverPriority: 4,
+          faabBalance: 0,
         },
       ],
     }));
@@ -361,6 +380,8 @@ describe('get_standings output schema', () => {
           playoffOutcome: 'in_progress',
           outcomeConfidence: null,
           madePlayoffs: true,
+          waiverPriority: 2,
+          faabBalance: 125,
         },
       ],
     }));
@@ -441,7 +462,56 @@ describe('get_matchups output schema', () => {
       leagueName: 'Car Ramrod',
       currentWeek: '5',
       matchupWeek: 5,
-      matchups: [{ week: '5', teams: [] }],
+      scoringType: 'points',
+      scoringTypeRaw: 'headpoint',
+      matchups: [{
+        matchupId: 1,
+        week: '5',
+        home: { teamKey: '449.l.123.t.1', teamId: '1', teamName: 'Team A', points: 120.5 },
+        away: { teamKey: '449.l.123.t.2', teamId: '2', teamName: 'Team B', points: 105.3 },
+        winner: 'home',
+      }],
+    }));
+  });
+
+  it('accepts the Yahoo H2H-categories envelope with category rows and a null categoryScore', () => {
+    expectValid('get_matchups', routed({
+      leagueKey: '449.l.777',
+      leagueName: 'Category League',
+      currentWeek: 5,
+      matchupWeek: 5,
+      scoringType: 'categories',
+      scoringTypeRaw: 'head',
+      categoryNamesAvailable: false,
+      warning: 'MATCHUP_CATEGORY_NAMES_UNAVAILABLE: could not fetch league stat categories; categories are labeled by stat id only.',
+      matchups: [{
+        matchupId: 1,
+        week: 5,
+        statWinnersAvailable: false,
+        home: {
+          teamKey: '449.l.777.t.1',
+          teamId: '1',
+          teamName: 'Team A',
+          points: 7,
+          categories: [
+            { statId: '1', name: null, displayName: null, value: '45', result: null, isDisplayOnly: false },
+          ],
+          categoryScore: null,
+          categoriesWon: 7,
+        },
+        away: {
+          teamKey: '449.l.777.t.2',
+          teamId: '2',
+          teamName: 'Team B',
+          points: 2,
+          categories: [
+            { statId: '1', name: null, displayName: null, value: '38', result: null, isDisplayOnly: false },
+          ],
+          categoryScore: null,
+          categoriesWon: 2,
+        },
+        winner: 'home',
+      }],
     }));
   });
 
@@ -566,6 +636,33 @@ describe('get_roster output schema', () => {
       ownerName: 'Gerry',
       snapshot: { type: 'date', date: '2026-07-10' },
       players: [{ playerId: '201', name: 'Aaron Judge', position: 'OF' }],
+    }));
+  });
+
+  it('accepts the Yahoo football roster with weekly per-player points and pointsCoverage', () => {
+    expectValid('get_roster', routed({
+      teamKey: '449.l.123.t.1',
+      teamName: 'Yahoo Team',
+      ownerName: 'Gerry',
+      snapshot: { type: 'week', week: 1 },
+      pointsCoverage: { type: 'week', week: 1 },
+      limitations: { playerProTeamAvailable: false },
+      players: [
+        { playerId: 'p101', name: 'Synthetic Quarterback', position: 'QB', selectedPosition: 'QB', points: 12.5 },
+        { playerId: 'p102', name: 'Synthetic Running Back', position: 'RB', selectedPosition: 'RB', points: 0 },
+        { playerId: 'p103', name: 'Synthetic Wide Receiver', position: 'WR', selectedPosition: 'BN' },
+      ],
+    }));
+  });
+
+  it('accepts the Yahoo football roster with no usable weekly points (playerPointsAvailable false)', () => {
+    expectValid('get_roster', routed({
+      teamKey: '449.l.123.t.1',
+      teamName: 'Yahoo Team',
+      ownerName: 'Gerry',
+      snapshot: { type: 'current' },
+      limitations: { playerPointsAvailable: false },
+      players: [{ playerId: 'p101', name: 'Synthetic Quarterback', team: 'BUF', position: 'QB', selectedPosition: 'QB', status: 'healthy' }],
     }));
   });
 
@@ -781,6 +878,75 @@ describe('get_players output schema', () => {
           market_percent_owned: null,
           ownership_scope: 'unavailable',
           league_status: null,
+          league_team_name: null,
+          league_owner_name: null,
+        },
+      ],
+    }));
+  });
+
+  it('accepts a Sleeper ROSTERED entry with resolved league ownership and no market ownership', () => {
+    expectValid('get_players', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      query: 'allen',
+      count: 1,
+      players: [
+        {
+          id: '4034',
+          name: 'Josh Allen',
+          position: 'QB',
+          team: 'BUF',
+          market_percent_owned: null,
+          ownership_scope: 'unavailable',
+          league_status: 'ROSTERED',
+          league_team_id: '3',
+          league_team_name: 'Diamond Dogs',
+          league_owner_name: 'Alice',
+        },
+      ],
+    }));
+  });
+
+  it('accepts a Sleeper FREE_AGENT entry with resolved league ownership and null league team fields', () => {
+    expectValid('get_players', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      query: 'allen',
+      count: 1,
+      players: [
+        {
+          id: '5849',
+          name: 'Cordarrelle Patterson',
+          position: 'RB',
+          team: 'PIT',
+          market_percent_owned: null,
+          ownership_scope: 'unavailable',
+          league_status: 'FREE_AGENT',
+          league_team_id: null,
+          league_team_name: null,
+          league_owner_name: null,
+        },
+      ],
+    }));
+  });
+
+  it('accepts a Sleeper entry with null league_status for ambiguous cross-roster ownership', () => {
+    expectValid('get_players', routed({
+      platform: 'sleeper',
+      sport: 'football',
+      query: 'allen',
+      count: 1,
+      players: [
+        {
+          id: '4034',
+          name: 'Josh Allen',
+          position: 'QB',
+          team: 'BUF',
+          market_percent_owned: null,
+          ownership_scope: 'unavailable',
+          league_status: null,
+          league_team_id: null,
           league_team_name: null,
           league_owner_name: null,
         },

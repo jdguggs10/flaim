@@ -13,7 +13,7 @@ migrations.
 The [reconciliation manifest](./reconciliation.md) records the live objects
 represented by this baseline and its one intentional omission.
 
-The current forward contract has 26 public tables and 78 public indexes. Its
+The current forward contract has 27 public tables and 78 public indexes. Its
 FLA-308 migration adds service-role-only `espn_history_jobs` and the
 `advance_espn_history_job(...)`, `finish_espn_history_job(...)`, and
 `persist_espn_league_with_lease(...)` RPCs. The FLA-311 migration adds the
@@ -88,6 +88,9 @@ docker cp supabase/tests/dashboard_single_refresh.sql supabase_db_flaim:/tmp/das
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/dashboard_single_refresh.sql
 docker cp supabase/tests/espn_history_jobs.sql supabase_db_flaim:/tmp/espn_history_jobs.sql
 docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/espn_history_jobs.sql
+docker cp supabase/tests/signup_log.sql supabase_db_flaim:/tmp/signup_log.sql
+docker exec supabase_db_flaim psql -v ON_ERROR_STOP=1 -U postgres -d postgres -f /tmp/signup_log.sql
+bash supabase/tests/signup_log_concurrency.sh
 corepack pnpm exec supabase db lint --local --schema public,analytics --level warning --fail-on error
 corepack pnpm exec supabase db advisors --local --type security --level warn --fail-on error
 corepack pnpm exec supabase db diff --local --schema public,analytics
@@ -151,7 +154,13 @@ implementation behind the canonical `analytics.dashboard_payload(boolean)`
 wrapper. Once history is initialized, it reads the
 ET aggregate through the marker and raw ET days strictly after it. It fails
 closed when history is uninitialized or too stale to bridge from retained raw
-events. Existing raw recent-use windows, UTC `client_mix`, seven-day health,
+events. Its 60-day stale guard deliberately fails while the 90-day raw source
+still leaves roughly 30 days to recover. If the daily close stalls, inspect the
+failed `mcp-et-history-close` run, resolve its cause, then call
+`public.close_mcp_user_daily_et()` as `postgres`; the initialized function
+resumes at the day after the marker and catches up through yesterday. Confirm
+the marker advanced before refreshing or trusting the dashboard again.
+Existing raw recent-use windows, UTC `client_mix`, seven-day health,
 provider state, connector state, and league summaries keep their current
 sources. The historical `health_summary` and `tool_health` keys use exact
 trailing 30-day raw data and add `health_window_days: 30` to disclose that
@@ -192,6 +201,39 @@ raw bridge intentionally tolerates missed closes, so a fresh snapshot alone
 does not prove preservation is running. Failed jobs and a marker that has not
 advanced by the next scheduled close require timely operator notification.
 Activating a job and inspecting one successful run is not ongoing monitoring.
+
+The production `mcp-rollup` job reprocesses the trailing seven completed UTC
+days on every 05:15 run. `public.rollup_mcp_usage(date)` replaces one day's
+aggregate in the same transaction, and its raw-event bounds are explicitly
+UTC. This bounded replay repairs a short missed run before raw-event pruning
+without changing completed-day results. It is scheduled fifteen minutes before
+the 05:30 prune job; a longer outage needs explicit operator recovery.
+
+The FLA-378 optimization keeps this payload contract unchanged while removing
+two growth-sensitive query shapes. Raw rows after the close marker are selected
+with an indexed `ts` lower bound derived from the next America/New_York
+midnight, rather than applying an ET-date expression to every retained event.
+User concentration computes each user's call-weighted client mode in one
+grouped pass, rather than rescanning materialized history once per user. The
+call-count descending and client-name lexical tie-break remains unchanged, and
+NULL clients remain excluded from mode selection.
+
+The FLA-412 optimization likewise keeps the payload's keys, value types,
+values, rounding, windows, and ordering expressions unchanged while
+consolidating raw-event reads. The order of tool rows tied on `calls` was
+unspecified before and remains unspecified. `rolling` reads the trailing 30
+days once, grouped by user, instead of scanning every retained event four
+times; a user counts toward a trailing window exactly when that user's latest
+event falls inside it, and its `user_id is not null` filters defensively
+mirror the predecessor's `count(distinct user_id)`. The four raw health keys
+share one `grouping sets ((tool_name), ())` pass over the 30-day window, with
+seven-day values as filtered aggregates of the same rows; `tool_health_7d`
+still lists only tools with a seven-day call. The migration refuses to run
+unless the digest of the exact deployed function body is the reviewed FLA-378
+body with the 60-day stale guard,
+`md5(prosrc) = '3bf5ed96d09f081c91ac4d42e96b3301'`, and refuses to commit
+unless the body it installed has
+`md5(prosrc) = 'b022a8d9c651d372e6ef9be8b5192bc2'`.
 
 The reviewed scheduling artifact lives outside the migration path:
 `cron/analytics-history.sql` schedules history preservation only after an
@@ -238,10 +280,12 @@ boolean overload can still rebuild either row explicitly for comparison or
 rollback. The migration does not change function ownership, privileges, the
 provider-flags path, or cron.
 
-`cron/production.sql` keeps both `dashboard-snapshot` and
-`provider-flags-snapshot` at `*/5`. The provider consumer receives its rows and
-freshness timestamp only from `provider_flags_snapshot`; the dashboard is not
-an alerting fallback.
+`cron/production.sql` runs `dashboard-snapshot` at `*/15` and keeps
+`provider-flags-snapshot` at `*/5`. The human dashboard can therefore be up to
+fifteen minutes behind live activity. The provider consumer receives its rows
+and freshness timestamp only from `provider_flags_snapshot`; the dashboard is
+not an alerting fallback and its slower cadence does not delay provider-health
+signals.
 
 `supabase/tests/provider_flags.sql` proves, in a rolled-back transaction, that
 the dedicated payload equals the dashboard payload's `sync_recent` key for both
@@ -361,6 +405,135 @@ pre-migration column list (returning `hideLeagueWidget: false` and preserving
 every other saved preference) so migration order and deploy order never have
 to be coordinated.
 
+## Signup log
+
+`20260915120000_add_signup_log.sql` adds `public.signup_log`, the
+`public.record_signup(...)` write RPC, and three aggregate `analytics` views,
+and adds one redaction statement to `public.purge_account_data(text)`.
+`20260924200000_add_signups_hourly_paths.sql` (FLA-413) adds a fourth
+aggregate view, `analytics.signups_hourly_paths`, and nothing else.
+
+`signup_log` holds exactly four columns — `clerk_user_id` (the natural key and
+the only dedupe that matters), `created_at` (Clerk's own signup instant, never
+the observation time), nullable `first_touch`, and a `source` constrained to
+`webhook` or `backfill`. There is no email column here or in any view over it,
+and no index on `created_at`: the table holds roughly one row per account ever
+created and every view over it scans it whole.
+
+The grants are the boundary. Both baseline default-privilege traps apply and
+`GRANT` is additive, so the migration revokes the table and the function from
+`public`, `anon`, `authenticated`, and `service_role` before granting
+`service_role` `INSERT`, `UPDATE (first_touch)`, and
+`SELECT (clerk_user_id, first_touch)` on the table and `EXECUTE` on the RPC.
+`select *` by `service_role` therefore fails. RLS is enabled with no policies
+as a second layer; it blocks the browser roles and does not bind
+`service_role`, which carries `BYPASSRLS`. The four `analytics` views are
+owned by `postgres` and so bypass the table's RLS by design, exactly as
+`analytics.funnel_snapshot` does; their boundary is the explicit view ACL plus
+`analytics` not being exposed on the Data API.
+
+`record_signup` is a contract and a place for the conflict logic, not a
+privilege boundary: it is `security invoker` with an empty search path, like
+`purge_account_data`. It validates its arguments, takes the same per-user
+advisory lock through `account_deletion_lock_key(text)`, and performs one
+upsert. `created_at` and `source` are never overwritten; `first_touch` is
+fill-if-null, so a later delivery can supply attribution an earlier one lacked
+but nothing replaces attribution already captured. When a tombstone exists,
+`first_touch` is written as NULL on both the insert and the conflict path and
+nothing is raised — the signup fact is still recorded, so counts stay right.
+The anti-resurrection guard trigger is deliberately not attached, because a
+late `user.created` retry would otherwise raise and burn every webhook retry on
+an event that is correct to record.
+
+`analytics.signups_daily` is one row per Eastern calendar day with `signups`
+(deleted accounts excluded) and `signups_including_deleted`.
+`analytics.signup_rollups` is a single row of the seven window counts, the live
+total, and the `now_at` they were all computed from, so a reader samples one
+clock with the data. `analytics.signup_sources_daily` is one row per ET day and
+bounded first-touch dimension, lower-cased in SQL, with a `has_campaign_fields`
+flag; it exposes attributed, non-deleted rows only. None of the three exposes
+`clerk_user_id`, raw `first_touch` jsonb, or `landing_path`, and
+`analytics_readonly` receives `SELECT` on them and nothing else.
+
+`analytics.signups_hourly_paths` serves an internal hourly acquisition monitor.
+It is zero-filled: exactly one row per America/New_York wall-clock hour for the
+trailing 21 days plus the open current hour (505 rows), so an hour with no
+signups is a real row of zeros rather than a missing key. `hour_et` is a local
+`timestamp`, so the same hour on an earlier day is plain wall-clock
+subtraction; at the autumn DST change the local 01:00 bucket holds two real
+hours, and at the spring change the local 02:00 bucket is always empty. Each
+row carries `total` and five path counts: `card_flow` (attributed, no referrer
+host, first landing on the OAuth consent page — the connector install flow),
+`ref_chatgpt`, `ref_google`, `ref_claude`, and `noref_site` (attributed, no
+referrer host, any other landing). Referrer hosts are lower-cased and a NULL or
+empty host counts as none; the categories are not exhaustive, so another
+referrer counts toward `total` only. Deleted accounts are excluded with the
+same `account_deletions` anti-join the daily views use. Hourly buckets are
+finer-grained than the daily views but remain identifier-free aggregates: the
+landing path is read only inside a predicate, and no identifier, raw jsonb, or
+free-text referrer column is exposed. It has the same owner and exact ACL as
+the other three.
+
+`purge_account_data` gains one statement — set `first_touch` to NULL for that
+identifier — placed after the tombstone insert and inside the lock. The table
+is deliberately not added to the delete list: the row survives and only the
+attribution goes, which is what the published retention promise requires. The
+statement reads `clerk_user_id`, so the column-scoped `SELECT` grant is
+load-bearing for the entire purge transaction.
+
+`supabase/tests/signup_log.sql` proves every grant by execution rather than by
+inspecting an ACL, plus replay, fill-if-null, update-before-create,
+tombstone-before-write, write-before-purge, a full purge run, and the view
+semantics including ET-versus-UTC day placement. For the hourly view it also
+pins the exact column list and proves the 505-row zero-filled span, ET-hour
+placement, each path classification, deleted-account exclusion, and the scan
+bound, with fixtures placed relative to the transaction's fixed `now()`.
+`supabase/tests/signup_log_concurrency.sh` races two live sessions in both
+orders and requires the advisory lock to serialize them, with the
+tombstone-aware result in each case and no deadlock.
+
+### Rollback artifacts
+
+`supabase/rollback/` holds reviewed, shipped-but-not-applied reversal scripts.
+Like `supabase/cron/`, it sits outside the migration path on purpose: a local
+`supabase db reset` applies every timestamped file in `supabase/migrations`, so
+a rollback stored there would undo its own migration on every reset. Applying
+one is a separate, explicitly approved operation.
+
+`supabase/rollback/20260915_rollback_signup_log.sql` reverses the signup log in
+a fixed order — restore `purge_account_data` to its pre-FLA-396 definition
+first, then drop the four views over the table, then the RPC, then the table.
+The restored function body is reproduced verbatim rather than referenced.
+Reversing that order would leave the live purge referencing a table that no
+longer exists, and the next real account deletion would fail outright. The table
+drop has no `CASCADE`, so any later view over `signup_log` must be added to the
+view-drop step or the whole rollback fails.
+
+`supabase/rollback/20260924_rollback_signups_hourly_paths.sql` drops only
+`analytics.signups_hourly_paths`. It loses no data, since the view is computed
+from `signup_log`. Pause the internal hourly acquisition monitor that reads it
+first; otherwise the monitor sees repeated read failures and reports its data
+source as unusable.
+
+`supabase/rollback/20260924_rollback_consolidate_dashboard_raw_scans.sql`
+restores `analytics.dashboard_payload_history(boolean)` to its pre-FLA-412
+body, reproduced verbatim, with the same owner and ACL. It refuses to run
+unless the digest of the exact live function body is the FLA-412 body,
+`md5(prosrc) = 'b022a8d9c651d372e6ef9be8b5192bc2'`, and commits only if the
+restored body's digest is the reviewed predecessor,
+`md5(prosrc) = '3bf5ed96d09f081c91ac4d42e96b3301'`. The change was
+performance-only, so rolling it back restores query cost, not payload values.
+
+`supabase/rollback/20260925_rollback_drop_duplicate_demo_refresh_runs_index.sql`
+recreates `public.idx_public_demo_refresh_runs_preset_sport_created` with its
+exact baseline definition. It is the one rollback artifact without a
+`begin`/`commit` wrapper: it uses `create index concurrently if not exists` so
+the rebuild does not block writes to `demo_refresh_runs`, and `CONCURRENTLY`
+cannot run inside a transaction block. A failed or cancelled concurrent build
+leaves an invalid index under that name, which `if not exists` would then
+silently skip, so drop the invalid index before retrying.
+
+
 ## Demo platform contract
 
 The forward migration `20260805112500_add_platform_to_demo_tables.sql` makes
@@ -377,6 +550,44 @@ column defaults, and no existing index is touched. `demo_target_state`
 matches the `demo_antigravity_cache` posture: RLS enabled with no policies
 and table privileges granted only to `service_role`. Applying this migration
 to any hosted database remains a separate approval gate.
+
+## Duplicate demo index removal
+
+`20260925013000_drop_duplicate_demo_refresh_runs_index.sql` (FLA-231) drops
+`public.idx_public_demo_refresh_runs_preset_sport_created`, the exact
+duplicate that the baseline reproduces from the before-state. The survivor,
+`public.public_demo_refresh_runs_preset_sport_created_at_idx`, has the same
+`btree (preset_id, sport, created_at desc)` definition on
+`public.demo_refresh_runs`. In production the dropped index had recorded no
+scans since the last statistics reset while the survivor served the queries.
+Nothing else changes: no table, grant, policy, or other index.
+
+A `do` preflight raises unless both indexes exist on that table, the survivor
+is valid, the two are structurally identical by the same `pg_index`
+comparison the reproducibility proof used for the before-state (plus
+uniqueness), and no constraint or dependency other than the index's automatic
+dependency on its table references the candidate. The drop has no
+`if exists`, so applying the migration twice, or to a database that never had
+the duplicate, fails loudly instead of doing nothing. A postcheck refuses to
+commit unless the candidate is gone and the survivor is still present and
+valid.
+
+It is a plain `drop index`, not `drop index concurrently`, because Supabase
+runs each migration in a transaction, where `CONCURRENTLY` is not allowed. The
+plain drop holds an `ACCESS EXCLUSIVE` lock on `demo_refresh_runs` only while
+it removes a roughly 1 MB index, and `set local lock_timeout = '5s'` makes the
+migration fail fast rather than queue demo traffic behind a long-running
+transaction. The file has no `begin`/`commit` of its own: it relies on the
+migration runner's transaction, which also covers the runner's ledger insert,
+so the drop and its ledger row commit together, and which is what makes
+`set local` apply. The CLI sends that transaction as one implicit batch rather
+than an explicit `BEGIN`, so it prints a harmless 25P01 "SET LOCAL can only be
+used in transaction blocks" warning; the timeout still applies. A manual test
+apply must run as one transaction, for example `psql -1 -f`.
+`supabase/tests/reproducibility.sql` now requires the candidate to be absent
+and the survivor to keep its exact definition. The rollback artifact is
+described under [Rollback artifacts](#rollback-artifacts). Applying this
+migration to any hosted database remains a separate approval gate.
 
 ## Token-matching RPCs
 

@@ -233,7 +233,7 @@ function buildMatchupsResponse(): unknown {
   return {
     fantasy_content: {
       league: [
-        { league_key: '449.l.123', name: 'Test League', current_week: 5 },
+        { league_key: '449.l.123', name: 'Test League', current_week: 5, scoring_type: 'headpoint' },
         {
           scoreboard: {
             '0': {
@@ -269,6 +269,15 @@ function buildMatchupsResponse(): unknown {
   };
 }
 
+// `ownership` and `percent_owned` are sibling sub-resources on the player
+// array (never nested), and `percent_owned` is itself an array of
+// single-key objects where `value` has no fixed position.
+function yahooPercentOwned(value: number | string, coverage: 'week' | 'date' = 'week'): unknown[] {
+  return coverage === 'week'
+    ? [{ coverage_type: 'week' }, { week: '3' }, { value }, { delta: '1.5' }]
+    : [{ coverage_type: 'date' }, { date: '2026-09-16' }, { value }, { delta: '1.5' }];
+}
+
 function buildFreeAgentsResponse(): unknown {
   return {
     fantasy_content: {
@@ -279,7 +288,8 @@ function buildFreeAgentsResponse(): unknown {
             '0': {
               player: [
                 [{ player_key: 'fa101', player_id: '201', name: { full: 'Free Agent' }, editorial_team_abbr: 'BOS', display_position: 'OF', status: undefined }],
-                { ownership: { percent_owned: '12.5' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned('12.5') },
               ],
             },
             count: 1,
@@ -308,7 +318,8 @@ function buildFreeAgentsResponseWithKeeper(): unknown {
                   display_position: 'OF',
                   is_keeper: { status: true, cost: false, kept: true },
                 }],
-                { ownership: { percent_owned: '12.5' } },
+                { ownership: { ownership_type: 'freeagents' } },
+                { percent_owned: yahooPercentOwned('12.5') },
               ],
             },
             count: 1,
@@ -325,11 +336,15 @@ function buildFreeAgentsPageResponse(players: Array<{
   full_name: string;
   team: string;
   position: string;
-  percent_owned?: string;
+  percent_owned?: string | number;
 }>): unknown {
   const playersObj: Record<string, unknown> = {};
 
   players.forEach((player, index) => {
+    const subResources: unknown[] = [{ ownership: { ownership_type: 'freeagents' } }];
+    if (player.percent_owned != null) {
+      subResources.push({ percent_owned: yahooPercentOwned(player.percent_owned) });
+    }
     playersObj[String(index)] = {
       player: [
         [{
@@ -339,7 +354,7 @@ function buildFreeAgentsPageResponse(players: Array<{
           editorial_team_abbr: player.team,
           display_position: player.position,
         }],
-        player.percent_owned == null ? {} : { ownership: { percent_owned: player.percent_owned } },
+        ...subResources,
       ],
     };
   });
@@ -1285,16 +1300,33 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it.each(scenarios)('$label current roster omits both selectors from the URL', async ({ sport, handlers }) => {
+    it.each(dailySports)('%s current roster omits both selectors from the URL', async (sport) => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
-      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
 
       expect(result.success).toBe(true);
       const path = fetchMock.mock.calls[0][0] as string;
       expect(path).not.toContain(';week=');
       expect(path).not.toContain(';date=');
+      expect(path).not.toContain('/players/stats');
+      const data = result.data as { snapshot: Record<string, unknown> };
+      expect(data.snapshot).toEqual({ type: 'current' });
+    });
+
+    // Football is the one sport with a points-capable `week` selector: the
+    // current roster now fetches the stats-augmented URL with the literal
+    // `;week=current` selector, which the daily sports above must never see.
+    it('football current roster fetches the ;week=current stats-augmented URL', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const path = fetchMock.mock.calls[0][0] as string;
+      expect(path).toBe('/team/449.l.123.t.1/roster;week=current/players/stats');
       const data = result.data as { snapshot: Record<string, unknown> };
       expect(data.snapshot).toEqual({ type: 'current' });
     });
@@ -1304,7 +1336,10 @@ describe('yahoo cross-sport handler characterization tests', () => {
     // relabel that present-day state as true-as-of-then, so `team`/`status`
     // are omitted entirely and `limitations.playerProTeamAvailable: false` is
     // added — mirroring the same rule already applied to ESPN and Sleeper.
-    it('football week snapshot omits team/status and flags playerProTeamAvailable', async () => {
+    // This fixture also carries no player_stats/player_points sub-resource,
+    // so the football-only stats-augmented request also yields
+    // `playerPointsAvailable: false` alongside it.
+    it('football week snapshot omits team/status and flags playerProTeamAvailable (and playerPointsAvailable, no stats in this fixture)', async () => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1', week: 5 };
@@ -1314,7 +1349,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const data = result.data as { players: Array<Record<string, unknown>>; limitations?: Record<string, unknown> };
       expect(data.players[0]).not.toHaveProperty('team');
       expect(data.players[0]).not.toHaveProperty('status');
-      expect(data.limitations).toEqual({ playerProTeamAvailable: false });
+      expect(data.limitations).toEqual({ playerProTeamAvailable: false, playerPointsAvailable: false });
     });
 
     it.each(dailySports)('%s date snapshot omits team/status and flags playerProTeamAvailable', async (sport) => {
@@ -1333,17 +1368,36 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.limitations).toEqual({ playerProTeamAvailable: false });
     });
 
-    it.each(scenarios)('$label current roster keeps team/status and has no limitations', async ({ sport, handlers }) => {
+    it.each(dailySports)('%s current roster keeps team/status and has no limitations', async (sport) => {
       fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
-      const result = await handlers.get_roster({} as never, params, 'Bearer x', 'cid');
+      const result = await handlersBySport[sport].get_roster({} as never, params, 'Bearer x', 'cid');
 
       expect(result.success).toBe(true);
       const data = result.data as { players: Array<Record<string, unknown>>; limitations?: unknown };
       expect(data.players[0].team).toBe('NYY');
       expect(data.players[0].status).toBe('healthy');
       expect(data.limitations).toBeUndefined();
+    });
+
+    // Football's current-roster fixture here carries no player_stats/
+    // player_points sub-resource (buildRosterResponse has none), so the
+    // stats-augmented request succeeds but yields no usable points — team/
+    // status still show (not a historical snapshot) but
+    // limitations.playerPointsAvailable is now set, unlike the daily sports
+    // above which never request stats at all.
+    it('football current roster keeps team/status but flags playerPointsAvailable false when Yahoo returns no stats', async () => {
+      fetchMock.mockResolvedValue(jsonResponse(buildRosterResponse()));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, team_id: '449.l.123.t.1' };
+      const result = await footballHandlers.get_roster({} as never, params, 'Bearer x', 'cid');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { players: Array<Record<string, unknown>>; limitations?: Record<string, boolean> };
+      expect(data.players[0].team).toBe('NYY');
+      expect(data.players[0].status).toBe('healthy');
+      expect(data.limitations).toEqual({ playerPointsAvailable: false });
     });
   });
 
@@ -1355,13 +1409,24 @@ describe('yahoo cross-sport handler characterization tests', () => {
       const result = await handlers.get_matchups({} as never, params, 'Bearer x', `cid-${sport}`);
 
       expect(result.success).toBe(true);
-      const data = result.data as { matchups: Array<Record<string, unknown>>; currentWeek: number };
+      const data = result.data as {
+        matchups: Array<Record<string, unknown>>;
+        currentWeek: number;
+        scoringType: string;
+        scoringTypeRaw: string;
+      };
       expect(data.currentWeek).toBe(5);
       expect(data.matchups).toHaveLength(1);
+      // FLA-404: a headpoint league is ordinary fantasy-points scoring, not
+      // categories — no category fields, even though this fixture (like a
+      // verified real headpoint capture) carries no team_stats either.
+      expect(data.scoringType).toBe('points');
+      expect(data.scoringTypeRaw).toBe('headpoint');
       const matchup = data.matchups[0] as { home: Record<string, unknown>; away: Record<string, unknown>; winner: string };
       expect(matchup.home).toMatchObject({ teamName: 'Team A', points: 120.5 });
       expect(matchup.away).toMatchObject({ teamName: 'Team B', points: 105.3 });
       expect(matchup.winner).toBe('home');
+      expect(matchup.home.categories).toBeUndefined();
     });
 
     it.each(scenarios)('$label returns error when league_id is missing', async ({ sport, handlers }) => {
@@ -1376,7 +1441,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
   describe('get_free_agents', () => {
     it.each(scenarios)('$label returns free agents with ownership data', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1411,7 +1478,8 @@ describe('yahoo cross-sport handler characterization tests', () => {
                 '0': {
                   player: [
                     [{ player_key: 'fa101', player_id: '201', name: { full: 'Zero Owned' }, editorial_team_abbr: 'BOS', display_position: 'OF' }],
-                    { ownership: { percent_owned: '0' } },
+                    { ownership: { ownership_type: 'freeagents' } },
+                    { percent_owned: yahooPercentOwned('0', 'date') },
                   ],
                 },
                 count: 1,
@@ -1420,7 +1488,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
           ],
         },
       };
-      fetchMock.mockResolvedValue(jsonResponse(response));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(response))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1431,8 +1501,12 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(data.freeAgents[0].percentOwned).toBe(0);
     });
 
+    // FLA-9: Yahoo caps the `players` collection at 25 entries per response
+    // regardless of the requested `;count=`, so a fake page here is 25 long
+    // (not the requested count) and pagination must advance by what came
+    // back, not by an assumed page size.
     it.each(scenarios)('$label paginates available players, requests ownership, and returns globally ownership-sorted results', async ({ sport, handlers }) => {
-      const firstPagePlayers = Array.from({ length: 100 }, (_unused, index) => ({
+      const firstPagePlayers = Array.from({ length: 25 }, (_unused, index) => ({
         player_key: `fa${index + 1}`,
         player_id: String(index + 1),
         full_name: `Player ${String(index + 1).padStart(3, '0')}`,
@@ -1443,7 +1517,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       const secondPagePlayers = [
         { player_key: 'fa201', player_id: '201', full_name: 'Aaron Ace', team: 'NYY', position: 'OF', percent_owned: '99' },
-        { player_key: 'fa202', player_id: '202', full_name: 'Ben Bat', team: 'LAD', position: 'OF', percent_owned: '99' },
+        { player_key: 'fa202', player_id: '202', full_name: 'Ben Bat', team: 'LAD', position: 'OF', percent_owned: 99 },
         { player_key: 'fa203', player_id: '203', full_name: 'Carl Curve', team: 'ATL', position: 'OF', percent_owned: '88.5' },
         { player_key: 'fa204', player_id: '204', full_name: 'Null Guy', team: 'SEA', position: 'OF' },
       ];
@@ -1456,7 +1530,7 @@ describe('yahoo cross-sport handler characterization tests', () => {
         sport,
         league_id: '449.l.123',
         season_year: 2025,
-        count: 3,
+        count: 27,
         position: FREE_AGENT_POSITION_FILTER[sport],
       };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1469,23 +1543,227 @@ describe('yahoo cross-sport handler characterization tests', () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock.mock.calls[0]?.[0]).toContain(
-        `/league/449.l.123/players;status=A;count=100;sort=OR;start=0;position=${FREE_AGENT_POSITION_FILTER[sport]}/ownership`
+        `/league/449.l.123/players;status=A;count=25;sort=OR;start=0;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
       );
       expect(fetchMock.mock.calls[1]?.[0]).toContain(
-        `/league/449.l.123/players;status=A;count=100;sort=OR;start=100;position=${FREE_AGENT_POSITION_FILTER[sport]}/ownership`
+        `/league/449.l.123/players;status=A;count=25;sort=OR;start=25;position=${FREE_AGENT_POSITION_FILTER[sport]};out=ownership,percent_owned`
       );
 
-      expect(data.count).toBe(3);
-      expect(data.freeAgents).toEqual([
+      // 25 + 4 = 29 collected, sliced to the requested 27.
+      expect(data.count).toBe(27);
+      expect(data.freeAgents.slice(0, 3)).toEqual([
         expect.objectContaining({ playerId: '201', name: 'Aaron Ace', percentOwned: 99 }),
         expect.objectContaining({ playerId: '202', name: 'Ben Bat', percentOwned: 99 }),
         expect.objectContaining({ playerId: '203', name: 'Carl Curve', percentOwned: 88.5 }),
       ]);
     });
 
+    function buildFullPage(offset: number, size = 25) {
+      return Array.from({ length: size }, (_unused, index) => ({
+        player_key: `fa${offset + index + 1}`,
+        player_id: String(offset + index + 1),
+        full_name: `Player ${offset + index + 1}`,
+        team: 'BOS',
+        position: 'OF',
+        percent_owned: String(index % 5),
+      }));
+    }
+
+    it('issues three requests advancing start 0 -> 25 -> 50 and returns 60 entries when count=60 and Yahoo returns full 25-entry pages', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(0))))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(25))))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(50))));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 60 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-count-60');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { count: number; freeAgents: unknown[] };
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain('start=0');
+      expect(fetchMock.mock.calls[1]?.[0]).toContain('start=25');
+      expect(fetchMock.mock.calls[2]?.[0]).toContain('start=50');
+      expect(data.count).toBe(60);
+      expect(data.freeAgents).toHaveLength(60);
+    });
+
+    it.each([
+      { label: 'no count (defaults to 25)', count: undefined },
+      { label: 'count=25', count: 25 },
+      { label: 'count=10', count: 10 },
+    ])('issues exactly one upstream request for $label so the common path stays cheap', async ({ count }) => {
+      fetchMock.mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(buildFullPage(0))));
+
+      const params: ToolParams = {
+        sport: 'football',
+        league_id: '449.l.123',
+        season_year: 2025,
+        ...(count !== undefined ? { count } : {}),
+      };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-single-page');
+
+      expect(result.success).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    // FLA-9 regression guard: the bug was breaking out of the loop the
+    // moment a page came back shorter than requested. A page with 1-24
+    // entries must not be mistaken for the end of the collection.
+    it('does not stop on a page shorter than 25 as long as it is non-empty, and only stops on a truly empty page', async () => {
+      const shortFirstPage = buildFullPage(0, 10); // 10 entries: short, but not empty
+      const shortSecondPage = [
+        { player_key: 'fa900', player_id: '900', full_name: 'Late Arrival', team: 'SEA', position: 'OF', percent_owned: '77' },
+      ]; // 1 entry: also short, but not empty
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(shortFirstPage)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(shortSecondPage)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse([]))); // empty: this is what actually ends it
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 100 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-short-pages');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<{ playerId: string }> };
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain('start=0');
+      expect(fetchMock.mock.calls[1]?.[0]).toContain('start=10');
+      expect(fetchMock.mock.calls[2]?.[0]).toContain('start=11');
+      expect(data.freeAgents.some((p) => p.playerId === '900')).toBe(true);
+    });
+
+    it('stops after the page-count safety bound instead of looping forever when Yahoo always returns a short, non-empty page', async () => {
+      let callCount = 0;
+      fetchMock.mockImplementation(async () => {
+        callCount += 1;
+        return jsonResponse(buildFreeAgentsPageResponse([
+          {
+            player_key: `fa${callCount}`,
+            player_id: String(callCount),
+            full_name: `Player ${callCount}`,
+            team: 'BOS',
+            position: 'OF',
+            percent_owned: String(callCount % 5),
+          },
+        ]));
+      });
+
+      // count=100 (the declared max) would need 100 one-entry pages to ever
+      // satisfy `limit` on its own — every page is non-empty, so neither the
+      // empty-page nor the limit-reached condition can end this loop. Only
+      // the page-count safety bound can, and it must return what was
+      // collected rather than erroring or hanging.
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 100 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-safety-bound');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { count: number; freeAgents: unknown[] };
+      expect(fetchMock).toHaveBeenCalledTimes(20);
+      expect(data.freeAgents).toHaveLength(20);
+      expect(data.count).toBe(20);
+    });
+
+    it('sorts across page boundaries so a higher rate on a later page still surfaces first', async () => {
+      const page1 = buildFullPage(0).map((player) => ({ ...player, percent_owned: String(10 + (Number(player.player_id) % 5)) }));
+      const page2 = buildFullPage(25).map((player) => ({ ...player, percent_owned: String(10 + (Number(player.player_id) % 5)) }));
+      const page3 = [
+        { player_key: 'fc999', player_id: '999', full_name: 'Late Standout', team: 'SEA', position: 'OF', percent_owned: '95' },
+      ];
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page1)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page2)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page3)));
+
+      // 25 + 25 = 50 < 51, so page 3 must be fetched before `limit` is
+      // satisfied — this is what puts the page-3 standout in the same sort
+      // as pages 1-2.
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 51 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-sort-across-pages');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<{ playerId: string; percentOwned: number | null }> };
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(data.freeAgents[0]).toMatchObject({ playerId: '999', percentOwned: 95 });
+    });
+
+    // Yahoo's start/count paging is not guaranteed stable across requests —
+    // if a player's availability changes between page fetches, pages can
+    // overlap and the same player is returned twice. Sorting/slicing alone
+    // doesn't dedupe, so the duplicate would otherwise consume a limit slot.
+    it('deduplicates a player repeated across overlapping pages and does not let it consume a limit slot', async () => {
+      const page1 = buildFullPage(0); // fa1..fa25, unique
+      const page2 = [
+        // Repeats page 1's 5th entry (player_key fa5, player_id 5).
+        { player_key: 'fa5', player_id: '5', full_name: 'Player 5', team: 'BOS', position: 'OF', percent_owned: '4' },
+        { player_key: 'fa100', player_id: '100', full_name: 'New Guy 100', team: 'SEA', position: 'OF', percent_owned: '50' },
+        { player_key: 'fa101', player_id: '101', full_name: 'New Guy 101', team: 'SEA', position: 'OF', percent_owned: '51' },
+        { player_key: 'fa102', player_id: '102', full_name: 'New Guy 102', team: 'SEA', position: 'OF', percent_owned: '52' },
+        { player_key: 'fa103', player_id: '103', full_name: 'New Guy 103', team: 'SEA', position: 'OF', percent_owned: '53' },
+        { player_key: 'fa104', player_id: '104', full_name: 'New Guy 104', team: 'SEA', position: 'OF', percent_owned: '54' },
+      ];
+
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page1)))
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(page2)));
+
+      // 25 unique from page 1 + 5 new unique from page 2 (the 6th entry is a
+      // duplicate) = 30, which exactly satisfies count=30 after dedup.
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, count: 30 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-dedupe');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { count: number; freeAgents: Array<{ playerId: string }> };
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(data.freeAgents.filter((p) => p.playerId === '5')).toHaveLength(1);
+      expect(data.count).toBe(30);
+      expect(new Set(data.freeAgents.map((p) => p.playerId)).size).toBe(30);
+    });
+
+    // A terminal empty page's response can omit league metadata entirely
+    // (`{ fantasy_content: { league: [{}, { players: { count: 0 } }] } }`);
+    // that must not erase the metadata a real earlier page already provided.
+    it('keeps league metadata from the first page even when the terminal empty page omits it', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValueOnce(
+          jsonResponse({ fantasy_content: { league: [{}, { players: { count: 0 } }] } })
+        );
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025 };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-empty-terminal-metadata');
+
+      expect(result.success).toBe(true);
+      const data = result.data as { leagueKey: string; leagueName: string };
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(data.leagueKey).toBe('449.l.123');
+      expect(data.leagueName).toBe('Test League');
+    });
+
+    // Regression: IDP (individual defensive player) leagues show defensive
+    // positions like LB/DB on the roster, but FA_POSITION_FILTER previously
+    // had no entries for them, so getPositionFilter silently fell back to "no
+    // filter" and the request came back with unfiltered (offensive) players.
+    it('football forwards an IDP position filter instead of dropping it', async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
+
+      const params: ToolParams = { sport: 'football', league_id: '449.l.123', season_year: 2025, position: 'LB' };
+      const result = await footballHandlers.get_free_agents({} as never, params, 'Bearer x', 'cid-idp');
+
+      expect(result.success).toBe(true);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain(
+        '/league/449.l.123/players;status=A;count=25;sort=OR;start=0;position=LB;out=ownership,percent_owned'
+      );
+    });
+
     // FLA-284: same is_keeper passthrough as get_roster.
     it.each(scenarios)('$label includes normalized isKeeper when a free agent has is_keeper', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponseWithKeeper()));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponseWithKeeper()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1496,7 +1774,9 @@ describe('yahoo cross-sport handler characterization tests', () => {
     });
 
     it.each(scenarios)('$label omits isKeeper when a free agent has no is_keeper field', async ({ sport, handlers }) => {
-      fetchMock.mockResolvedValue(jsonResponse(buildFreeAgentsResponse()));
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsResponse()))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
 
       const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
       const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
@@ -1504,6 +1784,25 @@ describe('yahoo cross-sport handler characterization tests', () => {
       expect(result.success).toBe(true);
       const data = result.data as { freeAgents: Array<Record<string, unknown>> };
       expect(data.freeAgents[0]).not.toHaveProperty('isKeeper');
+    });
+
+    it.each(scenarios)('$label preserves Yahoo\'s original order when no player in the page has percent_owned', async ({ sport, handlers }) => {
+      const players = [
+        { player_key: 'fa301', player_id: '301', full_name: 'Zeb Zander', team: 'BOS', position: 'OF' },
+        { player_key: 'fa302', player_id: '302', full_name: 'Mia Mid', team: 'NYY', position: 'OF' },
+        { player_key: 'fa303', player_id: '303', full_name: 'Aaron Ace', team: 'LAD', position: 'OF' },
+      ];
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse(buildFreeAgentsPageResponse(players)))
+        .mockResolvedValue(jsonResponse(buildFreeAgentsPageResponse([])));
+
+      const params: ToolParams = { sport, league_id: '449.l.123', season_year: 2025 };
+      const result = await handlers.get_free_agents({} as never, params, 'Bearer x', `cid-${sport}`);
+
+      expect(result.success).toBe(true);
+      const data = result.data as { freeAgents: Array<{ name: string; percentOwned: number | null }> };
+      expect(data.freeAgents.map((p) => p.name)).toEqual(['Zeb Zander', 'Mia Mid', 'Aaron Ace']);
+      expect(data.freeAgents.every((p) => p.percentOwned === null)).toBe(true);
     });
   });
 });

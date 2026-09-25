@@ -658,6 +658,37 @@ export class YahooStorage {
     return legacy.id;
   }
 
+  /**
+   * Support recovery must never fall back to a row without its resolved
+   * recurring root. Ordinary discovery remains schema-tolerant for staged
+   * migrations; this narrowly scoped write is intentionally not.
+   */
+  async upsertYahooLeagueWithRecurringId(
+    params: SaveLeagueParams & { recurringLeagueId: string }
+  ): Promise<string> {
+    if (!params.recurringLeagueId) throw new Error('Yahoo recurring league id is required');
+    const result = await this.upsertYahooLeagueRow({
+      clerk_user_id: params.clerkUserId,
+      sport: params.sport,
+      season_year: params.seasonYear,
+      league_key: params.leagueKey,
+      league_name: params.leagueName,
+      team_id: params.teamId || null,
+      team_key: params.teamKey || null,
+      team_name: params.teamName || null,
+      recurring_league_id: params.recurringLeagueId,
+      updated_at: new Date().toISOString(),
+    });
+    if (result.error) {
+      console.error(
+        `[yahoo-storage] Failed strict Yahoo recovery upsert for user ${maskUserId(params.clerkUserId)}: code=${result.error.code || 'unknown'}`
+      );
+      throw new Error('Failed to upsert Yahoo league with recurring root');
+    }
+    this.recurringLeagueIdColumnStatus = 'available';
+    return result.id;
+  }
+
   private async upsertYahooLeagueRow(
     payload: Record<string, unknown>
   ): Promise<{ id: string; error: null } | { id: ''; error: SupabaseErrorLike }> {
@@ -720,13 +751,37 @@ export class YahooStorage {
    * Mirrors getSleeperLeagues.
    */
   async getYahooLeagues(clerkUserId: string, archived: ArchivedFilter = 'include-all'): Promise<YahooLeague[]> {
+    return this.readYahooLeagues(clerkUserId, archived, false);
+  }
+
+  /**
+   * Recovery readback shares the exact archive-filter behavior of normal reads,
+   * but its errors may occur while processing an arbitrary support target. Log
+   * only a closed database code instead of the raw PostgREST error object.
+   */
+  async getYahooLeaguesForSupportReadback(
+    clerkUserId: string,
+    archived: ArchivedFilter = 'include-all'
+  ): Promise<YahooLeague[]> {
+    return this.readYahooLeagues(clerkUserId, archived, true);
+  }
+
+  private async readYahooLeagues(
+    clerkUserId: string,
+    archived: ArchivedFilter,
+    closedErrorLog: boolean
+  ): Promise<YahooLeague[]> {
     const { data, error } = await this.supabase
       .from('yahoo_leagues')
       .select('*')
       .eq('clerk_user_id', clerkUserId);
 
     if (error) {
-      console.error('[yahoo-storage] Failed to get Yahoo leagues:', error);
+      if (closedErrorLog) {
+        console.error(`[yahoo-storage] Support visibility readback failed: code=${(error as SupabaseErrorLike).code || 'unknown'}`);
+      } else {
+        console.error('[yahoo-storage] Failed to get Yahoo leagues:', error);
+      }
       throw new Error('Failed to get Yahoo leagues');
     }
 

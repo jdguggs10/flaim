@@ -2,15 +2,15 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![MCP Tools](https://img.shields.io/badge/MCP_Tools-11-green.svg)](https://api.flaim.app/mcp)
-[![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.5.2-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome_Extension-v1.6.0-yellow.svg)](https://chromewebstore.google.com/detail/flaim-espn-fantasy-connec/mbnokejgglkfgkeeenolgdpcnfakpbkn)
 
-Connect your ESPN, Yahoo, and Sleeper leagues, then use Flaim Fantasy in ChatGPT or Claude for read-only analysis grounded in your real league. Advanced users can also add Flaim manually as a custom connector in compatible AI platforms.
+Flaim Fantasy, at [flaim.app](https://flaim.app), is an app in [ChatGPT](https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36) and a connector in [Claude](https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754) that reads your real ESPN, Yahoo, and Sleeper fantasy leagues so you can ask about your actual team. Advanced users can also add Flaim manually as a custom connector in compatible AI platforms.
 
 Analysis tools are read-only by design. No trades, no drops, no roster changes — just advice. League refresh can update Flaim's connected-league records so newly available seasons show up.
 
 ## How It Works
 
-The **Flaim skill** teaches your AI assistant how to behave like a fantasy analyst — which data to pull, how to interpret it, and how to turn it into useful advice. The **MCP tools** feed it your actual league data. Together, they give a general-purpose AI enough structure to answer like it knows your specific league.
+The **Flaim skill** is an analyst playbook: how to reason about a start/sit call, a waiver claim, a trade, a keeper, or a matchup preview, and what context to gather in what order. The **MCP tools** feed it your actual league data and carry their own mechanics (parameters, response fields, platform differences) in their descriptions. Together, they give a general-purpose AI enough structure to answer like it knows your specific league.
 
 ## Get Started
 
@@ -22,7 +22,7 @@ You are done. Ask questions such as "Who should I start this week?" or "What's o
 
 ## The Skill
 
-The Flaim skill teaches your AI assistant how to behave like a fantasy analyst — when to use which tools, how to interpret league data, and how to turn that context into useful advice.
+The Flaim skill is the judgment layer. It covers what Flaim is and cannot do, how to gather league context in order, and a playbook per decision type: start/sit, waivers and pickups, trades, keepers and dynasty, matchup previews, draft picks, season history, and multi-league comparisons. Tool mechanics stay in the tool descriptions and the server instructions, which every MCP client reads live, so the skill does not restate them.
 
 **Install for Claude Code (or any Agent Skills-compatible tool):**
 
@@ -48,7 +48,7 @@ The AI will detect and activate the skill automatically when you ask fantasy que
 | `get_matchups` | Weekly matchups and scores |
 | `get_standings` | League standings and rankings |
 | `get_free_agents` | Available players with a normalized envelope; ESPN/Yahoo include platform-wide ownership percentages, Sleeper returns identities only |
-| `get_players` | Player lookup; ESPN and Yahoo can add league ownership, Sleeper ownership is unavailable |
+| `get_players` | Player lookup; ESPN and Yahoo can add league ownership when available, Sleeper evaluates league ownership against current rosters outside live drafts |
 | `get_transactions` | Recent adds, drops, waivers, and trades |
 
 All tools connect through a single MCP endpoint: `https://api.flaim.app/mcp`

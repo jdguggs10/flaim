@@ -22,7 +22,7 @@ preview creation, and production DDL require separate approval and verification.
 Cloudflare Workers and server-side web paths use the Data API as
 `service_role`. Browser clients do not query Supabase directly.
 
-All 26 public tables in the forward contract have RLS enabled and no policies. The baseline
+All 27 public tables in the forward contract have RLS enabled and no policies. The baseline
 also reproduces the existing broad object grants and future-object defaults so
 permission hardening can be performed later as an isolated, reversible
 forward-only migration. Those before-state grants are not the desired final
@@ -120,6 +120,46 @@ tables (`mcp_tool_events`, `mcp_user_daily`, `mcp_tool_daily`,
 `analytics.history_rollup_state` progress marker are explicitly out of scope
 for this purge and its anti-resurrection guards.
 
+## Signup log
+
+`signup_log` is a permanent, service-role-only record of one row per Clerk
+account: the Clerk user id, Clerk's own `created_at`, a nullable validated
+first-touch acquisition object, and whether the row came from the live webhook
+or the one-time backfill. It is written by the `record_signup(...)` RPC from
+the verified Clerk `user.created` and `user.updated` events, so signup history
+survives account deletion instead of being reconstructed from the accounts that
+still exist.
+
+`service_role` holds `INSERT`, `UPDATE` on `first_touch`, and `SELECT` on
+`clerk_user_id` and `first_touch` only; `select *` fails. The RPC is a security
+invoker with an empty search path, so those column grants are the boundary
+rather than the function. `created_at` and `source` are never overwritten and
+`first_touch` is fill-if-null, which makes a webhook replay idempotent and lets
+a later delivery supply attribution an earlier one lacked. The RPC takes the
+same per-user advisory lock as `purge_account_data(text)`, and when a tombstone
+already exists it records the signup with no attribution rather than failing,
+so a late retry after a deletion is recorded rather than retried forever.
+
+`purge_account_data(text)` nulls `first_touch` for the deleted account. The
+table is deliberately not on its delete list: a deleted account's signup is
+still a signup that happened, so the row is retained and only the attribution
+is erased, which is what the published retention commitment requires.
+
+The `analytics` schema exposes the log as four aggregate views and no
+per-user relation: `signups_daily` (one row per America/New_York day, with and
+without deleted accounts), `signup_rollups` (a single row of window counts
+computed from one clock reading, which the row also carries),
+`signup_sources_daily` (one row per ET day and lower-cased first-touch
+dimension, attributed and non-deleted rows only), and `signups_hourly_paths`
+(for an internal hourly acquisition monitor: one zero-filled row per ET
+wall-clock hour for the trailing 21 days plus the current hour, with the total
+and counts for the connector install flow, ChatGPT, Google, and Claude
+referrers, and referrer-less site visits, deleted accounts excluded). Hourly
+buckets are finer-grained than the daily views but remain identifier-free
+aggregates. None exposes a user identifier, the raw first-touch object, or the
+landing path. `analytics_readonly` receives `SELECT` on the four views and
+nothing else.
+
 ## Analytics
 
 The `analytics` schema contains the `internal_users` exclusion list, two
@@ -146,8 +186,8 @@ the close function and relations grant no access to Data API roles,
 `dashboard_payload_history(boolean)` is the owner-only implementation behind
 the canonical `dashboard_payload(boolean)` wrapper. After initialization, it
 combines aggregate rows through the marker with raw rows after the marker. It fails closed before that
-initialization or when the marker is too stale for the raw 90-day window to
-bridge safely. Its historical health summary and per-tool health use an exact
+initialization or after 60 stale days, while the 90-day raw window still leaves
+roughly 30 days to recover. Its historical health summary and per-tool health use an exact
 30-day raw window, disclosed as `health_window_days: 30`; recent rolling usage,
 seven-day health, UTC client mix, and operational keys keep their current
 sources. Snapshot refresh functions keep their existing signatures and now
@@ -172,7 +212,7 @@ The reviewed production schedule defines six database-native jobs:
 - daily MCP raw-event pruning
 - daily OAuth token cleanup
 - daily ephemeral OAuth cleanup
-- five-minute dashboard snapshot refresh
+- fifteen-minute dashboard snapshot refresh
 - five-minute provider flags snapshot refresh
 
 Their definitions live in `supabase/cron/production.sql`, outside the

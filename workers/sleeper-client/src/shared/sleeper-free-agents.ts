@@ -33,6 +33,17 @@ export function buildSleeperPlayerSearch(
   return Array.from(players.values())
     .filter((player) => player.full_name.toLowerCase().includes(normalizedQuery))
     .filter((player) => !normalizedPosition || player.position?.toUpperCase() === normalizedPosition)
+    .sort((a, b) => {
+      // Deterministic ordering so an exact-name match always survives the
+      // count cap instead of depending on Map iteration order: exact match
+      // first, then alphabetical, then player_id as a final tiebreak.
+      const aExact = a.full_name.toLowerCase() === normalizedQuery ? 0 : 1;
+      const bExact = b.full_name.toLowerCase() === normalizedQuery ? 0 : 1;
+      if (aExact !== bExact) return aExact - bExact;
+      const nameCmp = a.full_name.localeCompare(b.full_name);
+      if (nameCmp !== 0) return nameCmp;
+      return a.player_id.localeCompare(b.player_id);
+    })
     .slice(0, maxCount)
     .map((player) => ({
       id: player.player_id,

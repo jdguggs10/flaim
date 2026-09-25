@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const isDev = mode === 'development';
   const isPreview = mode === 'preview';
+  const isTestBuild = isDev || isPreview;
 
   const getOrigin = (value: string | undefined, name: string) => {
     if (!value) return null;
@@ -50,7 +51,8 @@ export default defineConfig(({ mode }) => {
   // Strip localhost from manifest in production builds
   const manifest = {
     ...baseManifest,
-    ...(isDev && env.VITE_EXTENSION_DEV_KEY ? { key: env.VITE_EXTENSION_DEV_KEY } : {}),
+    ...(isPreview ? { name: `${baseManifest.name} (Preview)` } : {}),
+    ...(isTestBuild && env.VITE_EXTENSION_DEV_KEY ? { key: env.VITE_EXTENSION_DEV_KEY } : {}),
     host_permissions: hostPermissions.filter(
       (permission, index, self) =>
         // Dedupe and filter localhost in prod

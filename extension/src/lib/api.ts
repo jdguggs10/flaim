@@ -12,6 +12,55 @@ let cachedApiBasePromise: Promise<string> | null = null;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DISCOVER_TIMEOUT_MS = 60_000;
 
+export class ApiRequestError extends Error {
+  readonly status: number | null;
+  readonly code: string | null;
+  readonly retryAfter: number | null;
+  readonly timedOut: boolean;
+
+  constructor(
+    message: string,
+    options: {
+      status?: number | null;
+      code?: string | null;
+      retryAfter?: number | null;
+      timedOut?: boolean;
+    } = {}
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = options.status ?? null;
+    this.code = options.code ?? null;
+    this.retryAfter = options.retryAfter ?? null;
+    this.timedOut = options.timedOut ?? false;
+  }
+}
+
+function sanitizeStatus(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599
+    ? value
+    : null;
+}
+
+function sanitizeCode(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-z0-9_:-]{1,64}$/i.test(value) ? value : null;
+}
+
+function sanitizeRetryAfter(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 86_400
+    ? Math.floor(value)
+    : null;
+}
+
+async function toApiRequestError(response: Response, fallback: string): Promise<ApiRequestError> {
+  const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+  return new ApiRequestError(fallback, {
+    status: sanitizeStatus(response.status),
+    code: sanitizeCode(payload?.error),
+    retryAfter: sanitizeRetryAfter(payload?.retry_after),
+  });
+}
+
 /**
  * Detect API base URL.
  * Priority:
@@ -64,9 +113,19 @@ async function fetchWithTimeout(
   timeoutMs = DEFAULT_TIMEOUT_MS
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (timedOut) {
+      throw new ApiRequestError('Request timed out', { timedOut: true });
+    }
+    if (error instanceof ApiRequestError) throw error;
+    throw new ApiRequestError('Network request failed', { code: 'network_error' });
   } finally {
     clearTimeout(timeout);
   }
@@ -97,11 +156,6 @@ export interface StatusResponse {
   lastSync: string | null;
 }
 
-export interface ApiError {
-  error: string;
-  error_description?: string;
-}
-
 /**
  * Sync ESPN credentials to Flaim
  * @param token - Clerk JWT from useAuth().getToken()
@@ -121,8 +175,7 @@ export async function syncCredentials(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
-    throw new Error(error.error_description || error.error || 'Sync failed');
+    throw await toApiRequestError(response, 'Unable to save ESPN access');
   }
 
   return response.json() as Promise<SyncResponse>;
@@ -143,8 +196,7 @@ export async function checkStatus(token: string): Promise<StatusResponse> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
-    throw new Error(error.error_description || error.error || 'Status check failed');
+    throw await toApiRequestError(response, 'Unable to check connection status');
   }
 
   return response.json() as Promise<StatusResponse>;
@@ -191,6 +243,61 @@ export interface EspnHistoryStatus {
   retryable: boolean;
 }
 
+function normalizeSeasonCounts(value: unknown): SeasonCounts | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const counts = value as Record<string, unknown>;
+  const normalizeCount = (count: unknown) => {
+    if (typeof count !== 'number' || !Number.isFinite(count) || count < 0) return null;
+    return Math.floor(count);
+  };
+  const found = normalizeCount(counts.found);
+  const added = normalizeCount(counts.added);
+  const alreadySaved = normalizeCount(counts.alreadySaved);
+  if (found === null || added === null || alreadySaved === null) return null;
+  return {
+    found,
+    added,
+    alreadySaved,
+  };
+}
+
+function normalizeDiscoveredLeagues(value: unknown): DiscoveredLeague[] | null {
+  if (!Array.isArray(value)) return null;
+  const isValid = value.every((league): league is DiscoveredLeague => {
+    if (!league || typeof league !== 'object') return false;
+    const candidate = league as Record<string, unknown>;
+    return (
+      typeof candidate.sport === 'string' &&
+      typeof candidate.leagueId === 'string' &&
+      typeof candidate.leagueName === 'string' &&
+      typeof candidate.teamId === 'string' &&
+      typeof candidate.teamName === 'string' &&
+      typeof candidate.seasonYear === 'number' &&
+      Number.isFinite(candidate.seasonYear)
+    );
+  });
+  return isValid ? value : null;
+}
+
+function normalizeDiscoverResponse(value: unknown): DiscoverResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ApiRequestError('Invalid discovery response', { code: 'invalid_response' });
+  }
+  const response = value as Record<string, unknown>;
+  const discovered = normalizeDiscoveredLeagues(response.discovered);
+  const currentSeason = normalizeSeasonCounts(response.currentSeason);
+  const pastSeasons = normalizeSeasonCounts(response.pastSeasons);
+  if (!discovered || !currentSeason || !pastSeasons) {
+    throw new ApiRequestError('Invalid discovery response', { code: 'invalid_response' });
+  }
+  return {
+    discovered,
+    currentSeason,
+    pastSeasons,
+    ...(response.history !== undefined ? { history: response.history as EspnHistoryStatus | null } : {}),
+  };
+}
+
 /**
  * Discover and save all ESPN leagues for the user
  * @param token - Clerk JWT from useAuth().getToken()
@@ -206,11 +313,16 @@ export async function discoverLeagues(token: string): Promise<DiscoverResponse> 
   }, DISCOVER_TIMEOUT_MS);
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
-    throw new Error(error.error_description || error.error || 'Discovery failed');
+    throw await toApiRequestError(response, 'Unable to check ESPN leagues');
   }
 
-  return response.json() as Promise<DiscoverResponse>;
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ApiRequestError('Invalid discovery response', { code: 'invalid_response' });
+  }
+  return normalizeDiscoverResponse(payload);
 }
 
 /** Caller-owned status for a durable ESPN history refresh. */
@@ -222,8 +334,7 @@ export async function getEspnHistoryStatus(token: string): Promise<EspnHistorySt
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as ApiError;
-    throw new Error(error.error_description || error.error || 'History status check failed');
+    throw await toApiRequestError(response, 'Unable to check ESPN history status');
   }
 
   const data = await response.json() as { history?: EspnHistoryStatus | null };

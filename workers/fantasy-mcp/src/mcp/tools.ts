@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { ZodRawShapeCompat } from '@modelcontextprotocol/sdk/server/zod-compat.js';
 import type { Env, Platform, Sport, ToolParams } from '../types';
 import { routeToClient, type RouteResult } from '../router';
-import { normalizeFreeAgentsResult } from './free-agent-normalizer';
+import { deriveFreeAgentCapabilities, freeAgentEntryArrayKey, normalizeFreeAgentsResult } from './free-agent-normalizer';
 import {
   ErrorCode,
   getDefaultSeasonYear,
@@ -21,6 +21,9 @@ import { USER_SESSION_WIDGET_URI } from '../widgets/user-session-widget';
 
 const AUTH_WORKER_REFRESH_TIMEOUT_MS = 60_000;
 const MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT = 24_000;
+// Ceiling for anomalies, not a routine trimmer: a full 100-player ESPN response
+// measures ~105 KB typical and ~152 KB with maximally verbose entries.
+const FREE_AGENTS_SERIALIZED_TOOL_RESULT_BYTE_LIMIT = 200_000;
 
 // =============================================================================
 // MCP RESPONSE TYPES
@@ -122,6 +125,17 @@ const REFRESH_TOOL_ANNOTATIONS: ToolAnnotations = {
   // updating Flaim's registry, so this crosses the external-system boundary.
   openWorldHint: true,
 };
+
+// Season years are canonical START years everywhere in this contract (see
+// workers/shared/src/season.ts). Basketball and hockey are the cross-year
+// sports, so their start year names a two-calendar-year season; football and
+// baseball do not. One constant so the convention cannot drift between the
+// seven tools that take a required season_year.
+const SEASON_YEAR_CONVENTION =
+  'Basketball and hockey use the start year of a cross-year season (2024 = the 2024-25 season); football and baseball use the single season year (2025 = the 2025 season).';
+
+const SEASON_YEAR_DESCRIPTION =
+  `Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season. ${SEASON_YEAR_CONVENTION}`;
 
 // =============================================================================
 // OUTPUT SCHEMAS (FLA-177)
@@ -286,6 +300,16 @@ const standingsEntrySchema = looseObject({
   playoffOutcome: z.string().nullable().optional(),
   outcomeConfidence: z.string().nullable().optional().describe('explicit or derived; null when unknown'),
   madePlayoffs: z.boolean().nullable().optional(),
+  waiverPriority: z
+    .number()
+    .nullable()
+    .optional()
+    .describe("Yahoo and Sleeper: the team's current waiver-claim priority, 1 = first. Present for rolling-priority leagues and for FAAB leagues that use priority as their bid tie-breaker. Null when priority does not apply or the platform did not report a usable value. Absent (not null) on ESPN. Distinct from get_transactions' waiver_priority, which is a past claim's priority."),
+  faabBalance: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('Yahoo and Sleeper: remaining FAAB (free-agent budget) balance; 0 is a real spent-out balance, not unknown. On Sleeper the value already nets out FAAB traded between teams, so it can exceed the league starting budget. Null for leagues that do not use FAAB or when the platform did not report a usable value, so null alone does not prove the league lacks FAAB. Absent (not null) on ESPN.'),
 });
 
 const GET_STANDINGS_OUTPUT_SCHEMA = routedOutputSchema({
@@ -478,7 +502,8 @@ const searchPlayerEntrySchema = looseObject({
   position: z.string().nullable().optional(),
   market_percent_owned: z.number().nullable().optional(),
   ownership_scope: z.string().optional(),
-  league_status: z.string().nullable().optional().describe('ROSTERED, FREE_AGENT, or null when unavailable'),
+  league_status: z.string().nullable().optional().describe('ROSTERED, FREE_AGENT, or null when ownership could not be resolved, for example because credentials or rosters were unavailable, the player result carried no usable id, or Sleeper rostering was ambiguous'),
+  league_team_id: z.string().nullable().optional().describe('Sleeper only: the roster id owning the player; null when no single owner was resolved, which includes both a free agent and ownership that could not be resolved uniquely. league_status is the confirmation: FREE_AGENT means unrostered, null means unresolved'),
   league_team_name: z.string().nullable().optional(),
   league_owner_name: z.string().nullable().optional(),
 });
@@ -1021,12 +1046,69 @@ function mcpError(message: string, code: string = 'ERROR'): McpToolResponse {
   };
 }
 
+// The tool result carries the same payload twice: pretty JSON in content and
+// structuredContent. This stable measurement deliberately excludes the outer
+// JSON-RPC envelope (including its variable request id) and SSE framing.
+function serializedToolResultByteLength(response: McpToolResponse): number {
+  return new TextEncoder().encode(JSON.stringify(response)).byteLength;
+}
+
 function exceedsMatchupPlayerDetailSerializedToolResultLimit(response: McpToolResponse): boolean {
-  // The tool result carries the same payload twice: pretty JSON in content and
-  // structuredContent. This stable limit deliberately excludes the outer
-  // JSON-RPC envelope (including its variable request id) and SSE framing.
-  return new TextEncoder().encode(JSON.stringify(response)).byteLength
-    > MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT;
+  return serializedToolResultByteLength(response) > MATCHUP_PLAYER_DETAIL_SERIALIZED_TOOL_RESULT_BYTE_LIMIT;
+}
+
+/**
+ * Bound the get_free_agents tool result (FLA-132). Every platform returns its
+ * list already ranked or ordered, so dropping trailing entries preserves the
+ * caller's intent; the kept entries are reported through the existing count and
+ * flagged with truncated so a shortened list is never read as the whole pool.
+ */
+function boundFreeAgentsResponse(result: RouteResult, params: ToolParams): McpToolResponse {
+  const response = routeResultToMcp(result);
+  if (!result.success || response.isError) return response;
+  if (serializedToolResultByteLength(response) <= FREE_AGENTS_SERIALIZED_TOOL_RESULT_BYTE_LIMIT) return response;
+
+  const data = result.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return response;
+
+  const record = data as Record<string, unknown>;
+  const entryArrayKey = freeAgentEntryArrayKey(params.platform);
+  const entries = record[entryArrayKey];
+  if (!Array.isArray(entries) || entries.length === 0) return response;
+
+  const truncateTo = (keep: number): McpToolResponse => {
+    const kept = entries.slice(0, keep) as Record<string, unknown>[];
+    return routeResultToMcp({
+      ...result,
+      data: {
+        ...record,
+        [entryArrayKey]: kept,
+        count: keep,
+        truncated: true,
+        // Truncation can drop the only entries that carried a rate, so
+        // `capabilities` must reflect the kept entries, not the full set
+        // the pre-truncation normalizer saw.
+        capabilities: deriveFreeAgentCapabilities(params.platform, kept),
+      },
+    });
+  };
+
+  // Serialized size grows monotonically with entry count, so binary-search the
+  // longest prefix that fits instead of re-serializing once per dropped entry.
+  let low = 0;
+  let high = entries.length - 1;
+  let best = 0;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    if (serializedToolResultByteLength(truncateTo(mid)) <= FREE_AGENTS_SERIALIZED_TOOL_RESULT_BYTE_LIMIT) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return truncateTo(best);
 }
 
 function didRefreshBatchFail(payload: unknown): boolean {
@@ -1258,7 +1340,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       openaiMeta: { invoking: 'Loading your leagues\u2026', invoked: 'Leagues loaded' },
       widgetUri: USER_SESSION_WIDGET_URI,
       description:
-        "Use this alone for user-specific connection, league, or account-status questions. For analysis, reuse successful session context already available in this chat instead of calling again. Do not call for Flaim capability, permission, or generic setup how-to questions, and do not call for generic coding, scraping, weather, travel, betting, sports news, or other requests that do not need connected league data. For selected-league analysis, call this only when no usable successful session result is available in this chat. Reuse its league IDs, teams, seasons, and defaults on ordinary follow-ups, including switching to another league already in allLeagues; do not repeat this call merely because a new user message arrived. Reload when the user confirms account, connection, league-list, or default changes, or when the needed session context is missing. A new chat needs its own session lookup. Follow the error guidance if a call fails. Session reuse does not replace fresh roster, score, or player reads when needed. For an explicit refresh request, call refresh_leagues first and then call this tool after success; call it again even if it ran earlier in the chat. Returns the user's full league landscape: allLeagues (all active leagues), defaultLeagues (per-sport defaults), and defaultLeague (populated only when a single league exists or defaultSport matches). For vague singular prompts, use defaultLeague when present; otherwise use the relevant sport entry in defaultLeagues. For explicit plural or comparative prompts (each, all, compare, across leagues/platforms), enumerate every matching league in allLeagues and call the target tool once per league. With session context established, call get_league_info for the selected active league before the requested league-specific data tool. Skip get_league_info only when answering from session data alone or branching to get_ancient_history. season_year always represents the start year of the season. Read-only.",
+        "Use this alone for user-specific connection, league, or account-status questions. For analysis, reuse successful session context already available in this chat instead of calling again. Do not call for Flaim capability, permission, or generic setup how-to questions, and do not call for generic coding, scraping, weather, travel, betting, sports news, or other requests that do not need connected league data. For selected-league analysis, call this only when no usable successful session result is available in this chat. Reuse its league IDs, teams, seasons, and defaults on ordinary follow-ups, including switching to another league already in allLeagues; do not repeat this call merely because a new user message arrived. Reload when the user confirms account, connection, league-list, or default changes, when the earlier session call failed, or when its result is no longer visible in the conversation. A new chat needs its own session lookup. Follow the error guidance if a call fails. Session reuse does not replace fresh roster, score, or player reads when needed. For an explicit refresh request, call refresh_leagues first and then call this tool after success; call it again even if it ran earlier in the chat. Returns the user's full league landscape: allLeagues (all active leagues), defaultLeagues (per-sport defaults), and defaultLeague (populated only when a single league exists or defaultSport matches). For vague singular prompts, use defaultLeague when present; otherwise use the relevant sport entry in defaultLeagues. For explicit plural or comparative prompts (each, all, compare, across leagues/platforms), enumerate every matching league in allLeagues and call the target tool once per league. With session context established, call get_league_info for the selected active league before the requested league-specific data tool, once per league per chat, then reuse it for later questions about that league. Skip get_league_info only when answering from session data alone or branching to get_ancient_history. season_year always represents the start year of the season. Read-only.",
       inputSchema: {},
       handler: async (_args, env, authHeader, correlationId, evalRunId, evalTraceId, resource = 'https://api.flaim.app/mcp') => {
         return withToolLogging(correlationId, 'get_user_session', 'session', async () => {
@@ -1663,7 +1745,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_LEAGUE_INFO_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching league info\u2026', invoked: 'League info ready' },
-      description: `With session context established, call this for the selected active league before the requested standings, matchup, roster, free-agent, player, transaction, or draft tool. A usable successful get_user_session result from earlier in this chat satisfies that prerequisite; do not repeat it just to satisfy this ordering. Skip it only when answering from session data alone or branching to get_ancient_history. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Keeper and draft-format fields are additive and platform-dependent; never assume one provider's fields exist on another. Sleeper futureDraftRounds describes the configured round count for future drafts; use get_draft.draft.rounds for the selected draft's actual round count. When fanning out across multiple leagues, call this once per league. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
+      description: `With session context established, call this once per league the first time this chat works with that league, before the requested standings, matchup, roster, free-agent, player, transaction, or draft tool, then reuse it for later questions about that league. A usable successful get_user_session result from earlier in this chat satisfies that prerequisite; do not repeat it just to satisfy this ordering. Skip it only when answering from session data alone or branching to get_ancient_history. This provides the baseline league context for analysis: league name, settings, scoring type, roster configuration, and team/owner context, plus schedule or season-window metadata when the platform provides it. Keeper and draft-format fields are additive and platform-dependent; never assume one provider's fields exist on another. ESPN adds keeperSettings (keeperCount, keeperCountFuture, keeperOrderType, keeperDeadlineDate) and isKeeperLeague when ESPN reports a keeper count, plus per-team keeperPlayerIds and futureKeeperPlayerIds as raw ESPN player IDs with no name resolution. Sleeper adds leagueFormat, whose typeRaw is an undocumented Sleeper convention that must not be read on its own as a redraft, keeper, dynasty, or guillotine signal, plus per-team keepers as raw Sleeper player IDs. Yahoo adds draftType, isAuctionDraft, and canTradeDraftPicks when Yahoo's settings fetch succeeds (omitted, with a warning, when it fails), but exposes no keeper-cost rule. Sleeper futureDraftRounds describes the configured round count for future drafts; use get_draft.draft.rounds for the selected draft's actual round count. When fanning out across multiple leagues, call this once per league. The exact team fields vary by platform but all include ownerName. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1672,7 +1754,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
+        season_year: z.number().describe(SEASON_YEAR_DESCRIPTION),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
@@ -1700,7 +1782,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_DRAFT_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching draft results…', invoked: 'Draft results ready' },
-      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; use ownership metadata only for current ownership. For a completed Sleeper draft, an omitted ownership block means no draft picks changed hands. Use round to return one draft round. Use team_id to return completed selections made by that historical team and ownership rows currently owned by that team. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Use established session context (call get_user_session only if needed), then get_league_info for the specified league. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
+      description: `Use this when the user asks about completed draft results, exact draft-board positions, or current draft-pick ownership for a selected league. Returns a common draft summary and ordered picks with explicit confirmed, projected, or unavailable placement provenance. A historical selecting team is not a current pick owner; current ownership comes only from ownership.picks[].currentOwnerTeamId. ESPN and Yahoo expose confirmed draft results but no current pick-ownership ledger, so their responses carry no ownership block at all; only Sleeper can report current or future pick ownership, and an exact board placement only when Sleeper supplies enough draft-order evidence. An ownership.scope of changed_picks_only lists only picks known to have changed hands and is not a complete pick inventory. selectionInRound is the round slot rendered in a value such as 12.15, while draftColumn is the stable draft-board column; they are not interchangeable. For a completed Sleeper draft, an omitted ownership block means no draft picks changed hands. Use round to return one draft round. Use team_id to return completed selections made by that historical team and ownership rows currently owned by that team. Omit draft_id to use the league's associated draft; draft_id is Sleeper-only and should be passed only when Flaim previously returned a provider draft ID. Omit season_year for the current sport season, or pass the season_year returned by get_user_session for a specific league or past draft. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1713,7 +1795,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .number()
           .int()
           .optional()
-          .describe('Season start year. Omit for the current sport season; use the season_year returned by get_user_session for this league or a past draft.'),
+          .describe(`Season start year. Omit for the current sport season; use the season_year returned by get_user_session for this league or a past draft. ${SEASON_YEAR_CONVENTION}`),
         draft_id: z
           .string()
           .min(1)
@@ -1763,7 +1845,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_STANDINGS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching standings\u2026', invoked: 'Standings ready' },
-      description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN and Sleeper it is computed by Flaim from win percentage; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. outcomeConfidence is 'explicit' when the platform reports final ranks, or 'derived' when the champion and runner-up were determined from the final winners-bracket matchup (ESPN historical seasons may omit final ranks); a tied championship game is resolved using the league's playoff tie rule (ESPN's default advances the higher seed). Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Use established session context (call get_user_session only if needed), then get_league_info for the specified league so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only. Current date is ${currentDate}.`,
+      description: `Get season standings and outcome snapshot; includes verified season-outcome fields when available. Returns team records, rankings, and points summaries. The rank field is a standings sort position (1 = best): on ESPN it is computed by Flaim from win percentage, with wins as the tie-breaker; on Sleeper it is computed by Flaim from wins, with points for as the tie-breaker; on Yahoo it is passed through from Yahoo's own standings API. It is NOT a verified postseason finish. For verified postseason outcome, use finalRank and championshipWon instead. Also returns seasonPhase (regular_season/playoffs_in_progress/season_complete), seasonComplete, and per-team outcome fields: finalRank, championshipWon, playoffOutcome, outcomeConfidence, madePlayoffs, playoffSeed. Outcome fields are null when not verifiable — do not infer championship from rank or team name. outcomeConfidence is 'explicit' when the platform reports final ranks, or 'derived' when the champion and runner-up were determined from the final winners-bracket matchup (ESPN historical seasons may omit final ranks); 'derived' only ever appears on ESPN — Yahoo always returns null here, and Sleeper returns 'explicit' for any completed season whose winners bracket names a champion, including when the finish came from the bracket rather than from reported placements; a tied championship game is resolved using the league's playoff tie rule (ESPN's default advances the higher seed). Note: playoffOutcome returns 'in_progress' on Sleeper for teams in active playoffs; ESPN and Yahoo return null for that state. ESPN may also include projected-rank fields. Yahoo and Sleeper leagues also return waiverPriority (the team's current waiver-claim priority, 1 = first — this is the live priority, NOT get_transactions' waiver_priority, which is the priority some past claim used) and faabBalance (remaining free-agent budget; 0 means spent out, not unknown; on Sleeper it already reflects FAAB traded between teams, so it can exceed the league's starting budget). Either can be null (not applicable, or not reported by the platform — do not read null as proof the league lacks FAAB) and they are not mutually exclusive: a FAAB league may also report waiverPriority as its tie-breaker for equal bids. ESPN standings omit both fields entirely rather than returning null. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it, so team names and league context are already established. For multi-league comparisons, call once per league. For historical finish questions, call get_ancient_history first to discover seasons, then call this tool per season for verified outcomes. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1772,7 +1854,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
+        season_year: z.number().describe(SEASON_YEAR_DESCRIPTION),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const params: ToolParams = {
@@ -1800,7 +1882,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_MATCHUPS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching matchups\u2026', invoked: 'Matchups ready' },
-      description: `Get matchups/scoreboard for a specific week or the current week. To request compact player scores for one selected matchup, use detail: "players" with an explicit week and team_id; this is currently ESPN football only. Use established session context (call get_user_session only if needed), then get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
+      description: `Get matchups/scoreboard for a specific week or the current week. Some category leagues (Yahoo, and ESPN baseball) additionally return per-category rows and a categoryScore of wins/losses/ties per side; where they do, the side total is a category count or null rather than fantasy points. A null categoryScore, value, or result means the provider did not report it; never infer one. To request compact player scores for one selected matchup, use detail: "players" with an explicit week and team_id; this is currently ESPN football only and only for season_year 2018 or later. Any other platform, sport, or earlier season returns MATCHUP_DETAIL_UNSUPPORTED. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it, so the model already knows the league's team names, owner/team mapping, and league context before interpreting the matchup. For multi-league comparisons, call once per league. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1809,10 +1891,10 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
+        season_year: z.number().describe(SEASON_YEAR_DESCRIPTION),
         week: z.number().int().min(1).optional().describe('Week number (optional, must be ≥ 1, defaults to current week)'),
         team_id: z.string().optional().describe('Required with detail: "players" to select one matchup; do not provide for summary mode.'),
-        detail: z.literal('players').optional().describe('Opt-in compact player detail for one selected ESPN football matchup; requires week and team_id.'),
+        detail: z.literal('players').optional().describe('Opt-in compact player detail for one selected ESPN football matchup, season_year 2018 or later only; requires week and team_id.'),
       },
       handler: async (args, env, authHeader, correlationId, evalRunId, evalTraceId) => {
         const requestedDetail = args.detail;
@@ -1881,7 +1963,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_ROSTER_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching roster\u2026', invoked: 'Roster ready' },
-      description: `Get roster details for a specific team, current by default and historical on request. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, taxi, and record metadata for the selected roster. Keeper fields are additive and platform-dependent; never assume one provider's keeper fields or units exist on another. Historical snapshots: pass week for football (all platforms) and Sleeper basketball (matchup week), or as_of_date (YYYY-MM-DD) for ESPN/Yahoo baseball, basketball, and hockey, never both. An invalid selector returns a corrective error naming the right one. Every response includes a snapshot block identifying what was returned (current vs week vs date); historical responses may add limitation flags (acquisitionMetadataAvailable, reserveAndTaxiClassificationAvailable) when provider history omits those details. For "roster during matchup week N" questions in daily sports, ask the user for a specific date rather than guessing. One matchup spans several daily rosters. Use established session context (call get_user_session only if needed), then get_league_info for the specified league so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only. Current date is ${currentDate}.`,
+      description: `Get roster details for a specific team, current by default and historical on request. Exact payload varies by platform: ESPN and Yahoo return player entries with lineup/position context, while Sleeper returns starters, bench, reserve, taxi, and record metadata for the selected roster. Keeper fields are additive and platform-dependent; never assume one provider's keeper fields or units exist on another. ESPN adds per-player keeperValue and keeperValueFuture plus one response-level keeperValueUnit of auction_dollars or draft_round, omitted rather than guessed when ESPN's draft type does not determine it; a historical snapshot withholds keeperValueFuture and flags keeperValueFutureAvailable false. Sleeper resolves keepers to player entries on the current roster only, passing the list through as Sleeper sends it; an empty or null list does not show that the league has no keepers. Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo. Historical snapshots: pass week for football (all platforms) and Sleeper basketball (matchup week), or as_of_date (YYYY-MM-DD) for ESPN/Yahoo baseball, basketball, and hockey, never both. An invalid selector returns a corrective error naming the right one. Every response includes a snapshot block identifying what was returned (current vs week vs date); historical responses may add limitation flags (acquisitionMetadataAvailable, reserveAndTaxiClassificationAvailable) when provider history omits those details. For "roster during matchup week N" questions in daily sports, ask the user for a specific date rather than guessing. One matchup spans several daily rosters. Use established session context (call get_user_session only if needed), then get_league_info for the specified league if this chat has not already loaded it, so the model already knows the league's team names, owner/team mapping, league settings, and roster context before interpreting this roster. Requires authentication except on Sleeper's public API. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1890,7 +1972,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
+        season_year: z.number().describe(SEASON_YEAR_DESCRIPTION),
         team_id: z.string().optional().describe('Team ID for the target roster. Recommended for all platforms; required on Yahoo and for historical Sleeper rosters. If omitted, platform behavior varies and may not resolve to the user\'s team.'),
         // Numeric constraints live in shared validation (not zod) so week: 0
         // and fractional weeks get the corrective selector error instead of a
@@ -1941,7 +2023,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_FREE_AGENTS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching available players\u2026', invoked: 'Available players ready' },
-      description: `Get players available to acquire in the specified fantasy league, optionally filtered by position. This is fantasy-league availability, not professional-contract status. Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100. Prefer the canonical fields: every response carries leagueId, seasonYear, position, count, ordering, capabilities, and ownershipScope; entries carry team (real-life club, null when none) and id (platform player id as a string, when supplied) on every platform, and ESPN entries add acquisitionState ("free_agent", "waivers", or null when the platform cannot determine the subtype) plus waiverClearsAt (ISO time); legacy platform fields remain alongside for compatibility and should not be re-explained. ownershipScope "platform_global" means percentOwned/percentStarted cover all leagues on that platform — never ownership within the selected league. An ESPN-wide started rate is never conditional on the player being rostered. Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate. Translate ownership scope silently into that provider-wide wording; never print the ownershipScope key, platform_global enum, or get_free_agents tool name. If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call get_players, or offer a lookup. When acquisitionState is null or not present, call rows "available players," never specifically free agents or waivers, and do not promise an immediate add. A returned player is already confirmed available in that league. Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result. Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language. State acquisition status in plain language from acquisitionState ("a free agent", "on waivers"); never print raw codes — neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim. Use current web evidence before adding analysis or pickup recommendations. Use established session context (call get_user_session only if needed), then get_league_info for the selected league; fan out once per league for comparisons. Requires authentication on ESPN/Yahoo; Sleeper uses the public API. Read-only. Current date is ${currentDate}. Hard stop: after satisfying a returned-list or field-explanation request, end the answer immediately after the requested facts. Remove every closing question or offer to do more work, including roster checks, lineup-fit checks, comparisons, rankings, recommendations, role or health analysis, trends, or outlooks; never append "if you want", "tell me which player", or a similar invitation unless the user's current request explicitly asks for that additional work.`,
+      description: `Get players available to acquire in the specified fantasy league, optionally filtered by position. This is fantasy-league availability, not professional-contract status. Pass a requested count exactly from 1 through 100; for more than 100, state the limit and ask the user to narrow the request or accept 100. Prefer the canonical fields: every response carries leagueId, seasonYear, position, count, ordering, capabilities, and ownershipScope; entries carry team (real-life club, null when none) and id (platform player id as a string, when supplied) on every platform, and ESPN entries add acquisitionState ("free_agent", "waivers", or null when the platform cannot determine the subtype) plus waiverClearsAt (ISO time); legacy platform fields remain alongside for compatibility and should not be re-explained. ownershipScope "platform_global" means percentOwned/percentStarted cover all leagues on that platform — never ownership within the selected league. An ESPN-wide started rate is never conditional on the player being rostered. Label every reported percentage as an ESPN-wide roster/start rate or Yahoo-wide market rate. Translate ownership scope silently into that provider-wide wording; never print the ownershipScope key, platform_global enum, or get_free_agents tool name. If capabilities marks rates unavailable, write "[Provider] market ownership rate: not provided"; do not print a missing response field name or null value, call get_players, or offer a lookup. When acquisitionState is null or not present, call rows "available players," never specifically free agents or waivers, and do not promise an immediate add. A returned player is already confirmed available in that league. Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo. Use get_roster only when the current request separately asks who owns a player; never offer it after an available-player result. Do not include injuryStatus or any injury detail unless the user asks for it; when asked, verify current web evidence and translate provider codes into plain language. State acquisition status in plain language from acquisitionState ("a free agent", "on waivers"); never print raw codes — neither provider codes such as FREEAGENT or WAIVERS nor canonical values like free_agent verbatim. Use current web evidence before adding analysis or pickup recommendations. Use established session context (call get_user_session only if needed), then get_league_info for the selected league if this chat has not already loaded it; fan out once per league for comparisons. Requires authentication on ESPN/Yahoo; Sleeper uses the public API. Read-only. Current date is ${currentDate}. Hard stop: after satisfying a returned-list or field-explanation request, end the answer immediately after the requested facts. Remove every closing question or offer to do more work, including roster checks, lineup-fit checks, comparisons, rankings, recommendations, role or health analysis, trends, or outlooks; never append "if you want", "tell me which player", or a similar invitation unless the user's current request explicitly asks for that additional work.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -1950,7 +2032,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
+        season_year: z.number().describe(SEASON_YEAR_DESCRIPTION),
         position: z
           .string()
           .optional()
@@ -1972,7 +2054,7 @@ export function getUnifiedTools(): UnifiedTool[] {
 
         return withToolLogging(correlationId, 'get_free_agents', `${params.platform} ${params.sport} league=provided pos=${params.position || 'ALL'}`, async () => {
           const result = await routeToClient(env, 'get_free_agents', params, authHeader, correlationId, evalRunId, evalTraceId);
-          return routeResultToMcp(normalizeFreeAgentsResult(result, params));
+          return boundFreeAgentsResponse(normalizeFreeAgentsResult(result, params), params);
         }, evalRunId, evalTraceId);
       },
     },
@@ -1988,7 +2070,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_PLAYERS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching players\u2026', invoked: 'Players ready' },
-      description: `Search for player identity by name. Always returns identity fields, but ownership context varies by platform. ESPN and Yahoo return market/global ownership and can also populate league ownership fields when credentials and league context are available. Sleeper returns identity plus ownership_scope="unavailable" with market_percent_owned=null. For a selected active league, use established session context (call get_user_session only if needed), then get_league_info so league-specific ownership and team names can be resolved. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = available, null = unavailable), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). When those league fields are absent, null, or unavailable, fall back to get_roster to verify manually. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
+      description: `Search for player identity by name. Always returns identity fields, but ownership context varies by platform. ESPN and Yahoo return market/global ownership and can also populate league ownership fields when credentials and league context are available. Sleeper always evaluates league ownership against every current roster in the selected league, except during an active draft, when this tool returns an error instead of an answer, since draft picks aren't yet reflected on rosters; if the league, rosters, or users can't be loaded for another reason, the call still succeeds with every league_* field null plus a SLEEPER_OWNERSHIP_UNAVAILABLE warning. Sleeper adds a Sleeper-only league_team_id (the Sleeper roster id, or null); its market/global ownership stays unavailable regardless (ownership_scope="unavailable", market_percent_owned=null) — league_team_id is league ownership, not market data. For a selected active league, use established session context (call get_user_session only if needed), then get_league_info, if this chat has not already loaded it for that league, so league-specific ownership and team names can be resolved. League ownership fields: league_status ("ROSTERED" = on a team, "FREE_AGENT" = unrostered in this league, null = ownership could not be resolved, for example because credentials or rosters were unavailable, the player result carried no usable id, or Sleeper rostering was ambiguous), league_team_name (fantasy team name if rostered), league_owner_name (team owner if rostered). FREE_AGENT is an ownership fact from a roster scan, not an acquisition guarantee — it says nothing about waiver state, so never turn it into pickup advice; get_free_agents is what reports players available to acquire. Trust a non-null league_status directly — null team/owner fields alongside FREE_AGENT are expected, not a signal to verify. Fall back to get_roster only when league_status itself is absent or null. Yahoo entries may add isKeeper as status, cost, and kept when Yahoo sends it; Yahoo has only been observed returning cost as false, so no numeric keeper cost is available from Yahoo. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         query: z
           .string()
@@ -2001,7 +2083,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
+        season_year: z.number().describe(SEASON_YEAR_DESCRIPTION),
         position: z
           .string()
           .optional()
@@ -2040,7 +2122,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: PROVIDER_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_TRANSACTIONS_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Fetching transactions\u2026', invoked: 'Transactions ready' },
-      description: `Get recent league transactions including adds, drops, waivers, and completed trades. Use established session context (call get_user_session only if needed), then usually get_league_info so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes a date field (YYYY-MM-DD), type, status, week, and optional team_ids. The response contains at most count rows, newest first; if the row count equals count, older transactions inside the window may be missing. Raise count up to 100 before claiming completeness. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN week always means matchup period, including daily sports where one matchup spans several provider scoring periods; week 0 is ESPN preseason, and omitting week selects the current and previous matchup periods. Sleeper accepts positive matchup weeks starting at 1; omit week for its current and previous week. Yahoo uses a recent 14-day timestamp window and ignores explicit week. ESPN serves rows from its structured transaction source (source mTransactions2) with FAAB bid amounts, directional trade_sides, and full trade-lifecycle and failed-bid coverage; trades missing directional detail are filled from the activity feed (source mTransactions2_with_activity_trade_details). If the structured source is unavailable, ESPN falls back to its completed-activity feed (source activity_feed) where failed-bid and trade-lifecycle filters are unavailable. Inspect source/limitations/window metadata before claiming completeness. ESPN responses include a teams map (team ID to display name) to resolve numeric team_ids. Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
+      description: `Get recent league transactions including adds, drops, waivers, and completed trades. Use established session context (call get_user_session only if needed), then get_league_info, if this chat has not already loaded it, so the model already knows the league's team names and owner/team mapping before summarizing activity. Each normalized transaction includes type, status, week (null on Yahoo, and on Sleeper rows that carry no week), and optional team_ids. ESPN and Sleeper rows always include date (YYYY-MM-DD) and timestamp. Yahoo rows include them once Yahoo stamps the transaction: a still-unstamped row is returned without date and timestamp only for type=waiver or type=pending_trade requests, and on every other Yahoo request it is left out and counted in dropped_invalid_timestamp_count. The response contains at most count rows, newest first; if the row count equals count, older transactions inside the window may be missing. Raise count up to 100 before claiming completeness. When presenting results, organize by time period (today, yesterday, this week, older) AND by team within each period so the user can see both when moves happened and what each team did. Week handling is platform-specific: ESPN week always means matchup period, including daily sports where one matchup spans several provider scoring periods; week 0 is ESPN preseason, and omitting week selects the current and previous matchup periods. Sleeper accepts positive matchup weeks starting at 1; omit week for its current and previous week. Yahoo uses a recent 14-day timestamp window and ignores explicit week, except that type=waiver and type=pending_trade return the authenticated user's own pending items with no timestamp window. ESPN serves rows from its structured transaction source (source mTransactions2) with FAAB bid amounts, directional trade_sides, and full trade-lifecycle and failed-bid coverage; trades missing directional detail are filled from the activity feed (source mTransactions2_with_activity_trade_details). If the structured source is unavailable, ESPN falls back to its completed-activity feed (source activity_feed) where failed-bid and trade-lifecycle filters are unavailable. Inspect source/limitations/window metadata before claiming completeness. ESPN responses include a teams map (team ID to display name) to resolve numeric team_ids. Yahoo and Sleeper generally rely on get_league_info for team-name resolution. Use values from get_user_session. Read-only. Current date is ${currentDate}.`,
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])
@@ -2049,7 +2131,7 @@ export function getUnifiedTools(): UnifiedTool[] {
           .enum(['football', 'baseball', 'basketball', 'hockey'])
           .describe('Sport type (e.g., "football", "baseball")'),
         league_id: z.string().describe('League ID (get from get_user_session)'),
-        season_year: z.number().describe('Season start year — use the season_year returned by get_user_session for this league; only pass an older year when the user explicitly asks about a past season'),
+        season_year: z.number().describe(SEASON_YEAR_DESCRIPTION),
         week: z.number().int().min(0).optional().describe('Optional public week selector. ESPN accepts matchup period 0 or later (0 = preseason), including baseball, basketball, and hockey; omit it for the current and previous matchup periods. Sleeper accepts matchup week 1 or later; omit it for the current and previous week. Yahoo ignores week and uses a recent 14-day timestamp window'),
         type: z
           .enum(['add', 'drop', 'trade', 'waiver', 'pending_trade', 'trade_proposal', 'trade_decline', 'trade_veto', 'trade_uphold', 'failed_bid'])

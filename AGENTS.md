@@ -75,17 +75,17 @@ Prefer `corepack pnpm ...` from the repo root unless a package README says other
 - Worker-to-worker calls must use `.workers.dev` URLs, not custom domains.
 - Be explicit about repo-local limits. If a task appears to depend on sibling repos, private workspace context, or broader Flaim decisions that are not present here, say so instead of guessing.
 
-## Release Lanes (Directory-Review Gates)
+## Release Lanes (OpenAI Continuous Review)
 
-This repo ships two ways: continuous deploy to production on merge to `main`, and periodic frozen submission packets for AI app directories whose reviews freeze the advertised MCP contract.
+This repo ships one way: continuous deploy to production on merge to `main`. OpenAI's plugin directory re-scans the live MCP server periodically and updates published tool definitions after automated checks, so tool-level metadata needs no reviewed version. Anthropic's connector directory reads the live server and pins nothing.
 
-Before opening a PR, classify the change. It is **gated** (do not merge while a directory review is in flight; track it against the active review-freeze issue) if it touches any of: tool count; tool names, `description:` strings, annotations, or server instructions; declared input/output schemas in `workers/fantasy-mcp/src/mcp/tools.ts`; shipped skill text under `.agents/skills/`; or a plugin manifest. Everything else — worker internals, additive fields inside passthrough response payloads, web, docs — merges normally, with `docs/CHANGELOG.md` updated in the same PR.
+Two surfaces still require a new OpenAI version and human review: shipped skill text under `.agents/skills/`, and the portal listing fields kept in the private distribution packet. Treat adding a tool the same way until one has been observed passing a scan. These changes get their own Linear issue and bundle with the next reviewed version.
 
-A published widget resource body may change in place when the update is backward compatible; each published URI's resource read-result `_meta` (widget CSP, description, redirect domains) is part of the frozen surface and must stay byte-identical, so a body needing metadata its URI does not already declare needs a new URI instead.
+Everything else merges normally with `docs/CHANGELOG.md` updated in the same PR, including tool names, `description:` strings, annotations, declared schemas in `workers/fantasy-mcp/src/mcp/tools.ts`, tool and resource `_meta`, widget CSP, and server instructions. After a deploy that touches any of those, confirm on the OpenAI plugin portal that the scan passed with nothing held, and say so in the PR.
 
-When unsure whether a change touches the frozen surface, treat it as gated and say so in the PR description.
+Three constraints replace the old freeze. Keep input schemas backward compatible. Keep every published widget resource URI serving a compatible body. Keep descriptions and annotations true to real behavior, because a mismatch holds the update and leaves the old definition live. If a deploy breaks the live contract, roll back rather than wait for review.
 
-The gate is driven by OpenAI's versioned review model only. Anthropic's connector directory reads the live server and does not pin an approved contract — tools, schemas, descriptions, and scopes may change without resubmission there; only renaming the published listing or moving the endpoint URL is a directory-side event (see claude.com/docs/connectors/verification and /building/managing-your-listing).
+While a version is in OpenAI review, skill text and portal fields stay unchanged until the decision. Nothing else freezes.
 
 ## Verification
 
@@ -97,6 +97,7 @@ Common examples:
 - web typecheck: `corepack pnpm --dir web exec tsc --noEmit`
 - UI token check: `corepack pnpm run ui:check`
 - affected worker tests/typecheck: run the package-local test and typecheck commands in the changed worker directory
+- tool description or declared schema text: check each changed claim against the provider code behind the tool, since tests and CI don't read wording
 
 Do not claim success if you did not run the relevant checks.
 

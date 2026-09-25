@@ -53,7 +53,10 @@ describe('normalizeFreeAgentsResult — canonical envelope', () => {
     expect(espn.capabilities).toEqual({ acquisitionState: true, rosteredRate: true, startedRate: true });
     expect(espn.ownershipScope).toBe('platform_global');
 
-    const yahoo = normalizedData(ok({ leagueKey: '449.l.123', freeAgents: [] }), params('yahoo', { league_id: '449.l.123' }));
+    const yahoo = normalizedData(
+      ok({ leagueKey: '449.l.123', freeAgents: [{ playerId: '201', percentOwned: 42 }] }),
+      params('yahoo', { league_id: '449.l.123' })
+    );
     expect(yahoo.ordering).toBe('platform_rostered_rate_desc');
     expect(yahoo.capabilities).toEqual({ acquisitionState: false, rosteredRate: true, startedRate: false });
     expect(yahoo.ownershipScope).toBe('platform_global');
@@ -65,6 +68,49 @@ describe('normalizeFreeAgentsResult — canonical envelope', () => {
     expect(sleeper.capabilities).toEqual({ acquisitionState: false, rosteredRate: false, startedRate: false });
     expect(sleeper.ownershipScope).toBe('unavailable');
     expect(sleeper.leagueId).toBe('slp-1');
+  });
+
+  it('reports Yahoo rosteredRate from the entries, not the platform constant', () => {
+    const withRates = normalizedData(
+      ok({
+        leagueKey: '449.l.123',
+        freeAgents: [{ playerId: '201', percentOwned: null }, { playerId: '202', percentOwned: 0 }],
+      }),
+      params('yahoo', { league_id: '449.l.123' })
+    );
+    expect((withRates.capabilities as Record<string, unknown>).rosteredRate).toBe(true);
+
+    const noRates = normalizedData(
+      ok({
+        leagueKey: '449.l.123',
+        freeAgents: [
+          { playerId: '201', name: 'Zeb Zander', percentOwned: null },
+          { playerId: '202', name: 'Aaron Ace', percentOwned: null },
+        ],
+      }),
+      params('yahoo', { league_id: '449.l.123' })
+    );
+    expect((noRates.capabilities as Record<string, unknown>).rosteredRate).toBe(false);
+    expect((noRates.capabilities as Record<string, unknown>).acquisitionState).toBe(false);
+    // The gateway never reorders; a rate-less list keeps the provider's order.
+    expect((noRates.freeAgents as Array<{ name: string }>).map((e) => e.name)).toEqual([
+      'Zeb Zander',
+      'Aaron Ace',
+    ]);
+  });
+
+  it('leaves ESPN and Sleeper capability flags untouched when rates are missing', () => {
+    const espn = normalizedData(
+      ok({ leagueId: '336777', freeAgents: [{ playerId: 1, percentOwned: null }] }),
+      params('espn')
+    );
+    expect((espn.capabilities as Record<string, unknown>).rosteredRate).toBe(true);
+
+    const sleeper = normalizedData(
+      ok({ league_id: 'slp-1', players: [{ id: 'p1' }] }),
+      params('sleeper', { league_id: 'slp-1' })
+    );
+    expect((sleeper.capabilities as Record<string, unknown>).rosteredRate).toBe(false);
   });
 
   it('derives request echoes from validated params, not provider claims', () => {

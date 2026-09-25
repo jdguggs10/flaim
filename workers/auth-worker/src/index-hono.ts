@@ -23,7 +23,13 @@
 
 import { Hono, Context } from 'hono';
 import { EspnSupabaseStorage } from './supabase-storage';
-import { EspnCredentials, EspnLeague, AutomaticLeagueDiscoveryFailed } from './espn-types';
+import {
+  EspnCredentials,
+  EspnLeague,
+  AutomaticLeagueDiscoveryFailed,
+  EspnAuthenticationFailed,
+  NoFantasyLeaguesFound,
+} from './espn-types';
 import {
   handleMetadataDiscovery,
   handleClientRegistration,
@@ -93,11 +99,19 @@ import { runSleeperRecurringBackfill, parseSleeperRecurringBackfillRequest } fro
 import { runEspnHistoryBackfill } from './espn-history-backfill';
 import {
   parseYahooSupportLeagueRequest,
+  parseYahooSupportLeagueMembershipRequest,
+  parseYahooSupportLeagueRecoveryRequest,
+  parseYahooSupportTeamNameLeagueLocationRequest,
+  parseYahooSupportGameRawCaptureRequest,
   parseYahooSupportRequest,
   runYahooSupportDiagnose,
   runYahooSupportInspect,
   runYahooSupportProbeLeague,
+  runYahooSupportRecoverLeague,
+  runYahooSupportLocateLeagueByTeamName,
+  runYahooSupportGameRawCapture,
   runYahooSupportRefresh,
+  runYahooSupportVerifyLeagueMembership,
   type YahooSupportEnv,
 } from './yahoo-support-diagnostics';
 import { handleClerkAccountDeletionWebhook, type ClerkWebhookEnv } from './clerk-webhook';
@@ -197,7 +211,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
 }
 
 /**
- * Bounds diagnose/refresh/probe-league to 15 calls/60s per action, deliberately
+ * Bounds support actions that reach Yahoo to 15 calls/60s per action, deliberately
  * keyed on the action alone rather than `${action}:${userId}` — a per-target
  * key would let repeated calls across rotating target ids evade the limit
  * entirely, which defeats the point for a route whose target id is
@@ -205,7 +219,7 @@ async function enforceLeagueRefreshRateLimit(c: Context<{ Bindings: Env }>, user
  */
 async function enforceSupportRateLimit(
   c: Context<{ Bindings: Env }>,
-  action: 'diagnose' | 'refresh' | 'probe-league'
+  action: 'diagnose' | 'refresh' | 'probe-league' | 'verify-league-membership' | 'recover-league' | 'locate-league' | 'capture-game-raw'
 ) {
   const { success } = await c.env.CREDENTIALS_RATE_LIMITER.limit({ key: `support:${action}` });
   if (success) return null;
@@ -1102,8 +1116,9 @@ api.post('/internal/usage-event', async (c) => {
 // Inspect is strictly read-only. Diagnose reaches Yahoo — capped at two
 // discovery calls, plus one credential-renewal call outside that budget when
 // the token needs it — but never persists league or sync-state data. Refresh
-// is the only one that writes, and it writes only through the ordinary
-// refreshLeaguesForUser path. diagnose/refresh (not inspect) are also
+// writes only through the ordinary refreshLeaguesForUser path. Recover-league
+// writes one exact ownership-proven current Yahoo row and must never call
+// discovery or touch sync state. diagnose/refresh/recover (not inspect) are also
 // rate-limited per action, independent of which account is targeted.
 // =============================================================================
 
@@ -1153,6 +1168,100 @@ api.post('/internal/support/yahoo/probe-league', async (c) => {
   }
 
   const report = await runYahooSupportProbeLeague(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+// A strict full-key, read-only sibling of probe-league. The direct league
+// response can be public, so this also asks Yahoo's user-scoped game teams
+// collection whether the authorized identity owns the reported league.
+api.post('/internal/support/yahoo/verify-league-membership', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'verify-league-membership');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportLeagueMembershipRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportVerifyLeagueMembership(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, report.outcome === 'failed' ? 500 : 200);
+});
+
+// One read-only, game-key-scoped attempt to locate a league from an exact team
+// name digest. A unique key remains only a lead: existing membership
+// verification and guarded recovery are mandatory before any persistence.
+api.post('/internal/support/yahoo/locate-league', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'locate-league');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportTeamNameLeagueLocationRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportLocateLeagueByTeamName(c.env as YahooSupportEnv, validation.request);
+  return c.json(report, 200);
+});
+
+// Bounded, operator-only incident capture for one fixed game collection, the
+// exact broad discovery resource, or one direct full-key league teams resource.
+// The closed parser permits no caller-chosen Yahoo path or response mode. A
+// successful capture intentionally preserves Yahoo's response status in a
+// header while returning the raw bytes with 200.
+api.post('/internal/support/yahoo/capture-game-raw', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'capture-game-raw');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportGameRawCaptureRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportGameRawCapture(c.env as YahooSupportEnv, validation.request);
+  if (report.outcome !== 'captured') {
+    return c.json({ error: report.error }, report.httpStatus);
+  }
+
+  return new Response(report.capture.body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Flaim-Support-Capture': 'yahoo-game-raw-v1',
+      'X-Flaim-Upstream-Status': String(report.capture.upstreamStatus),
+      'X-Flaim-Capture-Bytes': String(report.capture.byteLength),
+      'X-Flaim-Capture-SHA256': report.capture.sha256,
+      'X-Flaim-Correlation-Id': report.correlationId,
+    },
+  });
+});
+
+// Explicit, one-key repair for an account whose Yahoo user-scoped discovery
+// result is incomplete. The core function validates all persisted metadata and
+// ownership itself; this route provides only the same two gates and fixed body.
+api.post('/internal/support/yahoo/recover-league', async (c) => {
+  const gate = await requireSupportRoute(c);
+  if (gate) return gate;
+
+  const rateLimited = await enforceSupportRateLimit(c, 'recover-league');
+  if (rateLimited) return rateLimited;
+
+  const validation = await parseYahooSupportLeagueRecoveryRequest(c.req.raw);
+  if ('error' in validation) {
+    return c.json(validation.error.body, validation.error.status);
+  }
+
+  const report = await runYahooSupportRecoverLeague(c.env as YahooSupportEnv, validation.request);
   return c.json(report, report.outcome === 'failed' ? 500 : 200);
 });
 
@@ -1484,8 +1593,8 @@ api.post('/extension/discover', async (c) => {
     });
 
   } catch (error) {
-    if (error instanceof AutomaticLeagueDiscoveryFailed) {
-      console.log('No new leagues found from ESPN - checking saved leagues');
+    if (error instanceof NoFantasyLeaguesFound) {
+      console.log('ESPN returned a valid empty league list');
 
       const currentSeasonLeagues = await storage.getCurrentSeasonLeagues(userId);
       const savedCount = currentSeasonLeagues.length;
@@ -1498,24 +1607,15 @@ api.post('/extension/discover', async (c) => {
         seasonYear: l.seasonYear || 0,
       }));
 
-      const discovered: DiscoveredLeague[] = currentSeasonWithDefault.map(l => ({
-        sport: l.sport,
-        leagueId: l.leagueId,
-        leagueName: l.leagueName,
-        teamId: l.teamId,
-        teamName: l.teamName,
-        seasonYear: l.seasonYear,
-      }));
-
       await settleDiscover('success', { leagueCount: savedCount });
 
       return c.json({
-        discovered,
+        discovered: [],
         currentSeasonLeagues: currentSeasonWithDefault,
-        currentSeason: { found: savedCount, added: 0, alreadySaved: savedCount, refreshed: 0 },
+        currentSeason: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
         pastSeasons: { found: 0, added: 0, alreadySaved: 0, refreshed: 0 },
         added: 0,
-        skipped: savedCount,
+        skipped: 0,
         refreshed: 0,
         historical: 0,
         historicalRefreshed: 0,
@@ -1525,28 +1625,45 @@ api.post('/extension/discover', async (c) => {
     console.error('Discovery failed:', error);
 
     const errorMessage = error instanceof Error ? error.message : 'Discovery failed';
-    const isAuthError = errorMessage.includes('authentication') ||
-      errorMessage.includes('expired') ||
-      errorMessage.includes('invalid');
+    const isTypedDiscoveryFailure = error instanceof AutomaticLeagueDiscoveryFailed;
+    const isAuthError = error instanceof EspnAuthenticationFailed ||
+      (!isTypedDiscoveryFailure && (
+        errorMessage.includes('authentication') ||
+        errorMessage.includes('expired') ||
+        errorMessage.includes('invalid')
+      ));
+    const upstreamStatus = error instanceof AutomaticLeagueDiscoveryFailed
+      ? error.statusCode
+      : undefined;
+    const httpStatus = isAuthError
+      ? 401
+      : upstreamStatus === 429 || upstreamStatus === 504
+        ? upstreamStatus
+        : 500;
     logAuthWorkerFailure(c.req.raw, c.env, 'onboarding_failed', {
       component: 'espn-extension',
       stage: 'league_discovery',
       failure_kind: isAuthError ? 'auth' : 'upstream',
       error_code: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
-      http_status: isAuthError ? 401 : 500,
+      http_status: httpStatus,
       platform: 'espn',
       auth_type: 'clerk',
     });
 
+    // Same value settleDiscover writes as the cooldown, so the retry hint the
+    // popup shows matches when the next attempt is actually allowed.
+    const cooldownSeconds = cooldownSecondsForResult({
+      platform: 'espn',
+      status: 'error',
+      httpStatus,
+      error_description: errorMessage,
+    });
+    const isUpstreamBackoff = httpStatus === 429 || httpStatus === 504;
+
     if (transferredHistoryOwner) {
       await syncState.settle(userId, 'espn', transferredHistoryOwner, {
         status: 'error',
-        cooldownSeconds: cooldownSecondsForResult({
-          platform: 'espn',
-          status: 'error',
-          httpStatus: isAuthError ? 401 : 500,
-          error_description: errorMessage,
-        }),
+        cooldownSeconds,
         syncSource: 'extension',
         errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
         errorMessage,
@@ -1556,13 +1673,21 @@ api.post('/extension/discover', async (c) => {
     await settleDiscover('error', {
       errorCode: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
       errorMessage,
-      httpStatus: isAuthError ? 401 : 500,
+      httpStatus,
     });
+
+    if (isUpstreamBackoff) {
+      return c.json({
+        error: 'discovery_failed',
+        error_description: errorMessage,
+        retry_after: cooldownSeconds,
+      }, httpStatus, { 'Retry-After': String(cooldownSeconds) });
+    }
 
     return c.json({
       error: isAuthError ? 'espn_auth_failed' : 'discovery_failed',
       error_description: errorMessage,
-    }, isAuthError ? 401 : 500);
+    }, httpStatus);
   }
 });
 
@@ -2959,6 +3084,10 @@ api.notFound((c) => {
       '/internal/support/yahoo/inspect': 'POST - Operator support snapshot for one Yahoo account (two service secrets)',
       '/internal/support/yahoo/diagnose': 'POST - Operator support diagnosis of Yahoo league discovery (two service secrets)',
       '/internal/support/yahoo/probe-league': 'POST - Operator support probe of one live Yahoo per-league fetch (two service secrets)',
+      '/internal/support/yahoo/verify-league-membership': 'POST - Operator support verification of Yahoo ownership for one full league key (two service secrets)',
+      '/internal/support/yahoo/locate-league': 'POST - Operator read-only Yahoo league lookup by game key and team-name digest (two service secrets)',
+      '/internal/support/yahoo/capture-game-raw': 'POST - Operator bounded raw Yahoo capture for a fixed game, discovery, or direct league-teams target (two service secrets)',
+      '/internal/support/yahoo/recover-league': 'POST - Operator recovery of one ownership-proven Yahoo league (two service secrets)',
       '/internal/support/yahoo/refresh': 'POST - Operator-triggered Yahoo league refresh for one account (two service secrets)',
       '/user/preferences': 'GET - Get user preferences (default sport, per-sport defaults, hideLeagueWidget)',
       '/internal/user/preferences': 'GET - Get user preferences for internal workers',
