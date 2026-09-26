@@ -185,8 +185,13 @@ function loadEmbeddedRender() {
       postedMessages.push(message);
     },
   };
+  // Record window listeners so tests can play the host's side of the
+  // ui/initialize handshake against the real message handler.
+  const windowListeners: Record<string, Array<(event: unknown) => unknown>> = Object.create(null);
   context.window = {
-    addEventListener() {},
+    addEventListener(type: string, handler: (event: unknown) => unknown) {
+      (windowListeners[type] = windowListeners[type] || []).push(handler);
+    },
     parent: parentWindow,
   };
 
@@ -197,6 +202,8 @@ function loadEmbeddedRender() {
     postedMessages,
     widgetEl,
     contentEl,
+    windowListeners,
+    parentWindow,
   };
 }
 
@@ -855,6 +862,53 @@ describe('user session widget script', () => {
   // FLA-277 Mechanism B: when widget.hidden is true, the widget must render
   // no league rows and report a zero size instead of the 353px fallback.
   describe('hidden widget render (FLA-277)', () => {
+    // A host may ignore size messages that arrive before it answers
+    // ui/initialize, and a hidden result can render before that answer.
+    it('repeats the zero size once the host answers ui/initialize', () => {
+      const { render, postedMessages, windowListeners, parentWindow } = loadEmbeddedRender();
+      render({ allLeagues: [], widget: { hidden: true } });
+
+      const init = postedMessages.find((message) => message.method === 'ui/initialize');
+      expect(init).toBeDefined();
+      windowListeners.message[0]({
+        source: parentWindow,
+        origin: 'null',
+        data: { jsonrpc: '2.0', id: init!.id, result: {} },
+      });
+
+      const initializedAt = postedMessages.findIndex(
+        (message) => message.method === 'ui/notifications/initialized',
+      );
+      expect(initializedAt).toBeGreaterThan(-1);
+      const sizesAfterInit = postedMessages
+        .slice(initializedAt + 1)
+        .filter((message) => message.method === 'ui/notifications/size-changed');
+      expect(sizesAfterInit).toHaveLength(1);
+      expect(sizesAfterInit[0].params).toEqual({ width: 0, height: 0 });
+    });
+
+    it('posts no extra size on the ui/initialize answer when the widget is visible', () => {
+      const { render, postedMessages, windowListeners, parentWindow } = loadEmbeddedRender();
+      render({ allLeagues: [], defaultLeagues: {}, defaultSport: null });
+
+      const init = postedMessages.find((message) => message.method === 'ui/initialize');
+      windowListeners.message[0]({
+        source: parentWindow,
+        origin: 'null',
+        data: { jsonrpc: '2.0', id: init!.id, result: {} },
+      });
+
+      const initializedAt = postedMessages.findIndex(
+        (message) => message.method === 'ui/notifications/initialized',
+      );
+      expect(initializedAt).toBeGreaterThan(-1);
+      expect(
+        postedMessages
+          .slice(initializedAt + 1)
+          .filter((message) => message.method === 'ui/notifications/size-changed'),
+      ).toHaveLength(0);
+    });
+
     it('renders no league rows and posts a zero-size notification when widget.hidden is true', () => {
       const { render, postedMessages, widgetEl, contentEl } = loadEmbeddedRender();
 

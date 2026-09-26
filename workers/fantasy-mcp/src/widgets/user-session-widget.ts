@@ -1162,6 +1162,10 @@ ${creditLinkHandlers}
 
     if (msg.jsonrpc === '2.0' && msg.id === initId) {
       sendInitialized();
+      // FLA-277: a hidden result can post its zero size before the host has
+      // answered ui/initialize. Repeat it once the handshake completes, in
+      // case the host ignored size messages sent before initialization.
+      if (widgetHidden) sendZeroSize();
       return;
     }
 
