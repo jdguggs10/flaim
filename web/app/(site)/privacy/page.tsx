@@ -29,7 +29,9 @@ export default function PrivacyPage() {
                 <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
                   <Lock className="h-5 w-5 text-primary" />
                 </div>
-                <h3 className="font-semibold mb-1">Credentials Stay Here</h3>
+                <h3 className="font-semibold mb-1">
+                  Credentials Never Go to the AI
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   ESPN/Yahoo credentials and Sleeper connection data are stored
                   securely and never sent to the AI.
@@ -146,7 +148,7 @@ export default function PrivacyPage() {
               newly supported sports, and service notices. Every
               product-update email includes an unsubscribe link, and
               unsubscribing does not affect your account. We never sell your
-              email address.
+              email address to advertisers or data brokers.
             </p>
           </section>
 
@@ -288,17 +290,17 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Business Transfers</h2>
             <p className="text-muted-foreground">
-              If Flaim is ever merged with, acquired by, or sold to another
-              company, or its assets are transferred, your account
-              information and platform connection data may transfer to the
-              new owner as part of that transaction. The new owner would have
-              to keep protecting that data under the commitments in this
-              policy, including never sending your credentials to the AI and
-              using your connection data only to provide the service. If the
-              new owner wanted to use your information under a different
-              privacy policy, we would tell you by email and on this page
-              first, so you could delete your account before that change
-              applied.
+              If Flaim is ever involved in a merger, acquisition, or sale of
+              all or part of its business or assets, including in a
+              bankruptcy or similar proceeding, your account information and
+              platform connection data may transfer to the new owner as part
+              of that transaction. Before a deal closes, we may share
+              information with a prospective buyer only as needed for them to
+              evaluate it, under a confidentiality agreement. The new owner
+              would have to keep honoring this policy for the information it
+              receives. If it wanted to use your information in a materially
+              different way, it would need your consent first, and we would
+              tell you by email and on this page.
             </p>
           </section>
 

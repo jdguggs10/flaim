@@ -217,8 +217,8 @@ export default function TermsPage() {
             <p className="text-muted-foreground">
               We may transfer these Terms, and our rights and obligations
               under them, to a successor in a merger, acquisition, or sale of
-              Flaim&apos;s assets. You may not transfer your account or these
-              Terms to anyone else.
+              all or part of Flaim&apos;s business or assets. You may not
+              transfer your account or these Terms to anyone else.
             </p>
           </section>
 
