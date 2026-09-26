@@ -46,6 +46,11 @@ Connected-provider state:
 - Sleeper: `sleeper_connections`, `sleeper_leagues`
 - Shared: `archived_leagues`, `user_preferences`, `provider_sync_state`
 
+`user_preferences` also carries `hide_league_widget` (boolean, default
+`false`): when true, the fantasy-mcp gateway's `get_user_session` tool tells
+the ChatGPT/Claude league widget to render nothing, without changing what
+league data is returned to the model.
+
 MCP OAuth and telemetry:
 
 - OAuth: `oauth_states`, `oauth_codes`, `oauth_tokens`

@@ -168,6 +168,30 @@ describe('gateway-owned output schemas', () => {
     });
   });
 
+  it('get_user_session accepts the hidden-widget flag (FLA-277)', () => {
+    // Emitted only when the user's hide_league_widget preference is true; a
+    // declared-schema mismatch here would fail every session call for them.
+    expectValid('get_user_session', {
+      success: true,
+      currentDate: '2026-03-05T17:00:00.000Z',
+      currentSeasons: {
+        football: { year: 2025, label: '2025' },
+        baseball: { year: 2026, label: '2026' },
+        basketball: { year: 2025, label: '2025-26' },
+        hockey: { year: 2025, label: '2025-26' },
+      },
+      timezone: 'America/New_York',
+      totalLeaguesFound: 0,
+      leaguesBySport: {},
+      defaultSport: null,
+      defaultLeague: null,
+      defaultLeagues: {},
+      allLeagues: [],
+      instructions: 'No leagues configured. Ask the user to open https://flaim.app/leagues ...',
+      widget: { hidden: true },
+    });
+  });
+
   it('refresh_leagues accepts the auth-worker batch response', () => {
     expectValid('refresh_leagues', {
       success: true,

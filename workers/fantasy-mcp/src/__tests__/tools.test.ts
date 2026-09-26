@@ -483,6 +483,23 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain(
       "applyTheme(globals && globals.theme !== undefined ? globals.theme : readHostTheme());\n    if (hasRendered) return;"
     );
+    // Hide-widget support (FLA-277) applies uniformly to every published
+    // URI's body (v1/v2 legacy, v3, v4), since all three bodies are produced
+    // by the same buildUserSessionWidgetHtml template.
+    for (const html of [
+      USER_SESSION_WIDGET_HTML,
+      V3_USER_SESSION_WIDGET_HTML,
+      LEGACY_USER_SESSION_WIDGET_HTML,
+    ]) {
+      expect(html).toContain('var widgetHidden = false;');
+      expect(html).toContain('function sendZeroSize() {');
+      expect(html).toContain(
+        "  function sendSizeChanged() {\n    if (widgetHidden) {\n      sendZeroSize();\n      return;\n    }",
+      );
+      expect(html).toContain(
+        "widgetHidden = !!(data && data.widget && data.widget.hidden === true);",
+      );
+    }
   });
 
   it('user session widget declares the MCP Apps lifecycle messages', () => {
@@ -2480,6 +2497,108 @@ describe('fantasy-mcp tools', () => {
     expect(tool!.description).toContain('league_team_id');
     expect(tool!.description).toContain('Sleeper-only');
     expect(tool!.description).toContain('Fall back to get_roster only when league_status itself is absent or null');
+  });
+
+  // FLA-277 Mechanism B: get_user_session surfaces widget.hidden from the
+  // user's hide_league_widget preference, without changing which leagues are
+  // returned to the model.
+  it('get_user_session: hideLeagueWidget preference true → structuredContent.widget.hidden is true', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const oneLeague = [
+      { platform: 'espn', sport: 'football', leagueId: 'fb1', leagueName: 'Gridiron', teamId: 't1', seasonYear: 2025 },
+    ];
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/leagues') {
+            return new Response(JSON.stringify({ leagues: oneLeague }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify({ defaultSport: null, hideLeagueWidget: true }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as {
+      widget?: { hidden?: boolean };
+      allLeagues: unknown[];
+    };
+    // Leagues themselves are still returned to the model — only the visual
+    // widget is suppressed.
+    expect(payload.allLeagues.length).toBe(1);
+    expect(payload.widget).toEqual({ hidden: true });
+    expect((result.structuredContent as { widget?: { hidden?: boolean } }).widget).toEqual({ hidden: true });
+  });
+
+  it('get_user_session: hideLeagueWidget preference false → no widget key in the payload', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async (req: Request) => {
+          const url = new URL(req.url);
+          if (url.pathname === '/internal/user/preferences') {
+            return new Response(JSON.stringify({ defaultSport: null, hideLeagueWidget: false }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        },
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect('widget' in payload).toBe(false);
+    expect(result.structuredContent).toBeDefined();
+    // A conditional spread must omit the property entirely — not merely set
+    // it to `undefined`, which would still satisfy the `in` operator even
+    // though JSON.stringify happens to drop it from the text payload.
+    expect('widget' in (result.structuredContent as Record<string, unknown>)).toBe(false);
+  });
+
+  it('get_user_session: hideLeagueWidget absent from preferences → no widget key in the payload', async () => {
+    const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
+    expect(tool).toBeTruthy();
+
+    const env = {
+      INTERNAL_SERVICE_TOKEN: 'internal-secret',
+      AUTH_WORKER: {
+        fetch: async () =>
+          new Response(JSON.stringify({ leagues: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      },
+    } as unknown as Env;
+
+    const result = await tool!.handler({}, env, 'Bearer test-token');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect('widget' in payload).toBe(false);
+    expect('widget' in (result.structuredContent as Record<string, unknown>)).toBe(false);
   });
 
   // Test A: multi-league, no defaultSport pref → defaultLeague should be null

@@ -21,6 +21,7 @@ import {
   RefreshCw,
   Archive,
   ArchiveRestore,
+  Eye,
   EyeOff,
   CheckCircle2,
 } from 'lucide-react';
@@ -97,6 +98,7 @@ interface UserPreferencesState {
   defaultBaseball: LeagueDefault | null;
   defaultBasketball: LeagueDefault | null;
   defaultHockey: LeagueDefault | null;
+  hideLeagueWidget: boolean;
 }
 
 interface LeagueRefreshProviderResult {
@@ -175,6 +177,7 @@ const EMPTY_USER_PREFERENCES: UserPreferencesState = {
   defaultBaseball: null,
   defaultBasketball: null,
   defaultHockey: null,
+  hideLeagueWidget: false,
 };
 const YAHOO_STATUS_RECHECK_FALLBACK_SECONDS = 60;
 const YAHOO_STATUS_RECHECK_MAX_SECONDS = 15 * 60;
@@ -530,6 +533,8 @@ function LeaguesPageContent() {
   const [preferences, setPreferences] = useState<UserPreferencesState>(() => createEmptyPreferences());
   const [accountScopedUserId, setAccountScopedUserId] = useState<string | null>(null);
   const [settingSportDefault, setSettingSportDefault] = useState<string | null>(null);
+  const [isSavingHideLeagueWidget, setIsSavingHideLeagueWidget] = useState(false);
+  const [isLoadingPreferences, setIsLoadingPreferences] = useState(true);
   const currentUserIdRef = useRef<string | null>(null);
   const espnHistoryWasActiveRef = useRef(false);
   // Device class resolves after mount so SSR and hydration render identically.
@@ -645,6 +650,8 @@ function LeaguesPageContent() {
     setIsRefreshingLeagues(false);
     setIsSleeperDisconnecting(false);
     setDeletingSleeperKey(null);
+    setSettingSportDefault(null);
+    setIsSavingHideLeagueWidget(false);
   }, [clearSleeperConnectionState, clearYahooConnectionState]);
 
   // Helper to determine if a league is "old" (no seasons in last 2 years)
@@ -1319,18 +1326,19 @@ function LeaguesPageContent() {
     };
   }, [clearAccountScopedState, isLoaded, isSignedIn, loadLeagues, userId]);
 
+  // Load user preferences (default sport, hide-widget) once per signed-in
+  // identity, independent of the Yahoo-callback effect below. Yahoo connect
+  // params never change these preferences, so keying this on searchParams
+  // would re-run the GET on every ?yahoo=/?error= navigation and could land
+  // a stale read after an in-flight optimistic toggle (FLA-277).
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !userId) return;
 
     let isActive = true;
     const shouldApply = () => isActive;
 
-    setIsCheckingYahoo(true);
-    setIsCheckingSleeper(true);
-    setIsLoadingYahooLeagues(true);
-    setIsLoadingSleeperLeagues(true);
+    setIsLoadingPreferences(true);
 
-    // Fetch user preferences
     const loadPreferences = async () => {
       try {
         const res = await fetch('/api/user/preferences');
@@ -1343,13 +1351,34 @@ function LeaguesPageContent() {
             defaultBaseball: data.defaultBaseball || null,
             defaultBasketball: data.defaultBasketball || null,
             defaultHockey: data.defaultHockey || null,
+            hideLeagueWidget: data.hideLeagueWidget === true,
           });
         }
       } catch (err) {
         console.error('Failed to load preferences:', err);
+      } finally {
+        if (shouldApply()) {
+          setIsLoadingPreferences(false);
+        }
       }
     };
     loadPreferences();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isLoaded, isSignedIn, userId]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !userId) return;
+
+    let isActive = true;
+    const shouldApply = () => isActive;
+
+    setIsCheckingYahoo(true);
+    setIsCheckingSleeper(true);
+    setIsLoadingYahooLeagues(true);
+    setIsLoadingSleeperLeagues(true);
 
     const yahooError = searchParams.get('error');
     if (yahooError) {
@@ -1469,7 +1498,12 @@ function LeaguesPageContent() {
 
       const data = await res.json() as { preferences?: UserPreferencesState };
       if (data.preferences) {
-        setPreferences(data.preferences);
+        const serverPreferences = data.preferences;
+        // The hide-widget toggle is the only writer of hideLeagueWidget on this
+        // page, so local state stays authoritative for it: a set-default
+        // response read before an in-flight toggle's write must not revert the
+        // optimistic value (FLA-277).
+        setPreferences(prev => ({ ...serverPreferences, hideLeagueWidget: prev.hideLeagueWidget }));
       }
 
       // Auto-set sport as default if no sport default exists
@@ -1505,6 +1539,42 @@ function LeaguesPageContent() {
       console.error('Failed to set default sport:', err);
     } finally {
       setSettingSportDefault(null);
+    }
+  };
+
+  // Toggle whether the get_user_session league widget renders in ChatGPT/Claude.
+  // Optimistic update: flip immediately, revert if the request fails.
+  // Account-scoped like the other handlers here (createAccountGuard /
+  // shouldApply) so a rejected request that resolves after the user has
+  // switched accounts can't clobber the newly loaded account's state.
+  const handleToggleHideLeagueWidget = async () => {
+    if (isLoadingPreferences) return;
+    const shouldApply = createAccountGuard();
+    if (!shouldApply()) return;
+
+    const previous = displayPreferences.hideLeagueWidget;
+    const next = !previous;
+    setIsSavingHideLeagueWidget(true);
+    setPreferences(prev => ({ ...prev, hideLeagueWidget: next }));
+    try {
+      const res = await fetch('/api/user/preferences/hide-league-widget', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hideLeagueWidget: next }),
+      });
+      if (!shouldApply()) return;
+      if (!res.ok) {
+        throw new Error('Failed to update preference');
+      }
+    } catch (err) {
+      console.error('Failed to set hide_league_widget:', err);
+      if (shouldApply()) {
+        setPreferences(prev => ({ ...prev, hideLeagueWidget: previous }));
+      }
+    } finally {
+      if (shouldApply()) {
+        setIsSavingHideLeagueWidget(false);
+      }
     }
   };
 
@@ -1783,12 +1853,40 @@ function LeaguesPageContent() {
             </div>
           </CardHeader>
           {isAiSectionOpen ? (
-            <CardContent id="ai-card-content" className="pt-0">
+            <CardContent id="ai-card-content" className="pt-0 space-y-4">
               <StepConnectAI
                 showStepNumber={false}
                 renderCard={false}
                 showHeader={false}
               />
+              <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
+                <div className="min-w-0 space-y-1">
+                  <p className="text-sm font-medium">Hide the league widget in ChatGPT and Claude</p>
+                  <p className="text-xs text-muted-foreground">
+                    Flaim still returns your leagues to the assistant; only the visual card is hidden.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-shrink-0 gap-1.5"
+                  onClick={handleToggleHideLeagueWidget}
+                  disabled={isSavingHideLeagueWidget || isLoadingPreferences}
+                  aria-pressed={displayPreferences.hideLeagueWidget}
+                  aria-label="Hide the league widget in ChatGPT and Claude"
+                  title={displayPreferences.hideLeagueWidget ? 'Widget hidden (click to show)' : 'Widget shown (click to hide)'}
+                >
+                  {isSavingHideLeagueWidget ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : displayPreferences.hideLeagueWidget ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
+                  {displayPreferences.hideLeagueWidget ? 'Hidden' : 'Shown'}
+                </Button>
+              </div>
             </CardContent>
           ) : null}
         </Card>

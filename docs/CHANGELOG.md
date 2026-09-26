@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Hide League Widget Preference (FLA-277)
+
+- **Added**: a per-user `hide_league_widget` preference in `user_preferences` (boolean, default off), set from a "Hide the league widget in ChatGPT and Claude" toggle in the `/leagues` AI Apps card through a new Clerk-authenticated `POST /user/preferences/hide-league-widget` auth-worker route that accepts only a strict boolean. The preference is returned as `hideLeagueWidget` by the existing preference reads.
+- **Changed**: when the preference is on, `get_user_session` adds `widget: { hidden: true }` to its `structuredContent`; the key is absent otherwise, so default responses are unchanged. The declared output schema gains that optional `widget` property. Every published league widget URI (v1 through v4) honors it: the widget renders nothing and reports a zero size, and a later session result without the flag shows the card again. Leagues are still returned to the model; only the card is suppressed. The auth-worker treats a database without the column as the preference being off. Production already has the column, so the migration's `add column if not exists` changes nothing there; a reviewed rollback lives in `supabase/rollback/`.
+
 ### Public Pages Say ChatGPT and Claude (FLA-414)
 
 - **Changed**: the ESPN docs page is now titled and led by the outcome, "Connect ESPN Fantasy to ChatGPT and Claude", with the Chrome extension as the how; it says plainly that ESPN needs the extension once on a computer and Yahoo and Sleeper do not, adds a sixth step for adding Flaim to ChatGPT or Claude, and opens its FAQ with "How do I connect my ESPN fantasy league to ChatGPT?". The AI docs page, the fantasy football page, and the platforms page now name ChatGPT and Claude in their titles, headings, and first sentences instead of a generic "AI", and the football page gains a four-question FAQ with matching FAQPage data. The home page gains one FAQ entry, "Is there a ChatGPT app for my fantasy league?"; the hero is unchanged. No new routes.
