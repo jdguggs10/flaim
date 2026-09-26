@@ -15,7 +15,7 @@ export default function TermsPage() {
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
         <p className="text-muted-foreground mb-8">
-          Effective date: February 20, 2026
+          Effective date: September 26, 2026
         </p>
 
         <div className="max-w-none space-y-8">
@@ -91,9 +91,14 @@ export default function TermsPage() {
             </ul>
             <p className="text-muted-foreground mt-2">
               You are responsible for ensuring you are the authorized holder of
-              any credentials you provide to Flaim. Credentials are used only to
-              fetch data at your explicit request and are never shared with
-              third parties.
+              any credentials you provide to Flaim. Credentials are used only
+              to fetch data at your explicit request and are not shared with
+              third parties, except as described in the Assignment section
+              below and our{" "}
+              <a href="/privacy" className="text-primary hover:underline">
+                Privacy Policy
+              </a>
+              .
             </p>
           </section>
 
@@ -204,6 +209,16 @@ export default function TermsPage() {
                 Privacy Policy
               </a>
               .
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold mb-3">Assignment</h2>
+            <p className="text-muted-foreground">
+              We may transfer these Terms, and our rights and obligations
+              under them, to a successor in a merger, acquisition, or sale of
+              Flaim&apos;s assets. You may not transfer your account or these
+              Terms to anyone else.
             </p>
           </section>
 
