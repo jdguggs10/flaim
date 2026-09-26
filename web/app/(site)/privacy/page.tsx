@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-muted-foreground mb-8">
-          Last updated: August 29, 2026
+          Last updated: September 26, 2026
         </p>
 
         <div className="max-w-none space-y-8">
@@ -29,7 +29,9 @@ export default function PrivacyPage() {
                 <div className="w-12 h-12 rounded-full bg-background border flex items-center justify-center mx-auto mb-3">
                   <Lock className="h-5 w-5 text-primary" />
                 </div>
-                <h3 className="font-semibold mb-1">Credentials Stay Here</h3>
+                <h3 className="font-semibold mb-1">
+                  Credentials Never Go to the AI
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   ESPN/Yahoo credentials and Sleeper connection data are stored
                   securely and never sent to the AI.
@@ -137,6 +139,16 @@ export default function PrivacyPage() {
               If you connect Sleeper, we store your Sleeper username so we can
               look up your public league data through Sleeper&apos;s public API.
               We do not store a Sleeper password or token.
+            </p>
+
+            <h3 className="text-lg font-medium mt-4 mb-2">Email</h3>
+            <p className="text-muted-foreground">
+              We use your email address to run your account and, from time to
+              time, to send product updates about Flaim, such as new features,
+              newly supported sports, and service notices. Every
+              product-update email includes an unsubscribe link, and
+              unsubscribing does not affect your account. We never sell your
+              email address to advertisers or data brokers.
             </p>
           </section>
 
@@ -263,14 +275,32 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Third-Party Sharing</h2>
             <p className="text-muted-foreground">
-              We do not sell, rent, or share your personal information or
-              platform credentials with any third parties. Your data is used
-              exclusively to provide Flaim&apos;s services to you. Our service
-              providers (Clerk for authentication and account email, Supabase
-              for data storage, Resend for transactional product email, Plunk
-              for product-update subscriptions and email, and Fastmail for
-              human correspondence) process data only as necessary to operate
-              the service.
+              We do not sell or rent your personal information or platform
+              credentials, and we do not share them with third parties for
+              their own marketing. Your data is used to provide Flaim&apos;s
+              services to you. Our service providers (Clerk for authentication
+              and account email, Supabase for data storage, Resend for
+              transactional product email, Plunk for product-update email, and
+              Fastmail for human correspondence) process data only as
+              necessary to operate the service. The one exception is a
+              business transfer, described below.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold mb-3">Business Transfers</h2>
+            <p className="text-muted-foreground">
+              If Flaim is ever involved in a merger, acquisition, or sale of
+              all or part of its business or assets, including in a
+              bankruptcy or similar proceeding, your account information and
+              platform connection data may transfer to the new owner as part
+              of that transaction. Before a deal closes, we may share
+              information with a prospective buyer only as needed for them to
+              evaluate it, under a confidentiality agreement. The new owner
+              would have to keep honoring this policy for the information it
+              receives. If it wanted to use your information in a materially
+              different way, it would need your consent first, and we would
+              tell you by email and on this page.
             </p>
           </section>
 
@@ -355,8 +385,9 @@ export default function PrivacyPage() {
             </h2>
             <p className="text-muted-foreground">
               We may update this privacy policy from time to time. We will
-              notify you of any significant changes by posting the new policy on
-              this page and updating the &quot;Last updated&quot; date.
+              post the new policy on this page and update the &quot;Last
+              updated&quot; date. For significant changes, we will also let
+              account holders know by email.
             </p>
           </section>
 
