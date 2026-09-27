@@ -45,18 +45,27 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     });
   }
 
-  // Only auth-worker's genuine credential-rejection codes get reconnect
-  // guidance. `refresh_failed` covers Yahoo's permanent OAuth refresh
-  // failures (the invalid_grant family: an expired or revoked Yahoo grant),
-  // and `app_fingerprint_mismatch` covers stored tokens minted by a
-  // different Yahoo app -- both need the same fix. Anything else reaching
-  // this branch (auth-worker's own `server_error` exceptions, an
-  // internal-auth/config failure such as `unauthorized`, or an unrecognized
-  // code) is not something a Yahoo reconnect can fix, so it gets a plain
-  // "couldn't load, try later" message instead of false reconnect guidance.
+  // `refresh_failed` alone is not a reliable signal: auth-worker also
+  // returns it for missing Yahoo client configuration on Flaim's side
+  // (yahoo-connect-handlers.ts ~985) and for an unusable Yahoo token
+  // response shape (~1182), neither of which carries an `upstream_status`
+  // because neither is a real Yahoo HTTP response. Only the genuine-rejection
+  // producer (~1163) sets `upstream_status` to Yahoo's own token-endpoint
+  // status, and Yahoo returns 400 or 401 when it rejects the grant itself
+  // (the invalid_grant family: an expired or revoked Yahoo grant). So
+  // `refresh_failed` only counts as a credential rejection when
+  // `upstream_status` shows that. `app_fingerprint_mismatch` (stored tokens
+  // minted by a different Yahoo app) always counts. Anything else reaching
+  // this branch -- auth-worker's own `server_error` exceptions, an
+  // internal-auth/config failure such as `unauthorized`, `refresh_failed`
+  // without a rejecting upstream status, or an unrecognized code -- is not
+  // something a Yahoo reconnect can fix, so it gets a plain "couldn't load,
+  // try later" message instead of false reconnect guidance.
+  const yahooRejectedTheGrant =
+    errorData.upstream_status === 400 || errorData.upstream_status === 401;
   const isCredentialRejection =
-    errorData.error === 'refresh_failed' ||
-    errorData.error === YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH;
+    errorData.error === YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH ||
+    (errorData.error === 'refresh_failed' && yahooRejectedTheGrant);
 
   // error_description is free-form upstream text and must not be logged
   // (FLA-363); the error code alone is the diagnostic signal here.

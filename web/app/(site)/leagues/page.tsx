@@ -47,6 +47,7 @@ import {
 } from '@/lib/yahoo-auth-errors';
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { shouldProbeEspnHistoryAfterRefreshFailure } from '@/lib/espn-history-refresh';
+import { resolveLeagueSyncNotice } from '@/lib/league-sync-notice';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 import { SportIcon } from '@/components/site/sport-icon';
 import { getPreviousSeasonYear } from '@/lib/season-utils';
@@ -1080,13 +1081,17 @@ function LeaguesPageContent() {
       ]);
 
       if (shouldApply()) {
-        // A Yahoo sync that came back empty wins over the ESPN history
-        // notice: otherwise an ESPN details.history entry (present on most
-        // ESPN sync attempts, success or not) always takes the branch below
-        // and silently drops the Yahoo empty-sync notice.
-        const yahooEmpty = yahooEmptySyncNotice(data);
+        // A Yahoo sync that came back empty must not be silently dropped by
+        // an ESPN details.history entry (present on most ESPN sync attempts,
+        // success or not), but an ESPN history failure/partial notice must
+        // stay visible too -- resolveLeagueSyncNotice decides which wins (or
+        // combines both) instead of one branch unconditionally hiding the other.
         setLeagueNotice(
-          yahooEmpty ?? (history ? getEspnHistoryNotice(history) : summarizeLeagueRefresh(data))
+          resolveLeagueSyncNotice(
+            history ? { state: history.state, notice: getEspnHistoryNotice(history) } : null,
+            yahooEmptySyncNotice(data),
+            summarizeLeagueRefresh(data)
+          )
         );
       }
     } catch (err) {
