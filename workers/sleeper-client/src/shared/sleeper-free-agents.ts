@@ -74,7 +74,11 @@ export function buildSleeperFreeAgents(
   const freeAgents = Array.from(players.values())
     .filter((player) => player.active)
     .filter((player) => !rosteredPlayerIds.has(player.player_id))
-    .filter((player) => !!player.team)
+    // A teamless player is normally not a plausible add, but a released
+    // veteran can spike in adds on pure speculation before signing anywhere
+    // (e.g. the #1 trending add after a camp cut) — keep them only when
+    // they're actually trending; teamless and not trending stays excluded.
+    .filter((player) => !!player.team || trendingAdds.has(player.player_id))
     .filter((player) => !normalizedPosition || player.position?.toUpperCase() === normalizedPosition)
     .sort((a, b) => {
       // 1) Sleeper trending adds (last 24h), higher count first; players

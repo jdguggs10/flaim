@@ -119,7 +119,7 @@ Sleeper stores no per-player keeper *cost* anywhere in its API. A keeper's cost 
 
 `get_free_agents`, `get_transactions`, `get_roster`, and `get_matchups` enrichment all use a shared KV-backed player index (`SLEEPER_PLAYERS_CACHE`):
 - Fetches `GET /v1/players/{sport}` (NFL or NBA) on cache miss.
-- Caches every player Sleeper returns (active and inactive, with an `active` flag and Sleeper's optional `search_rank`) for 24 hours; only `get_free_agents` filters to active players on a team, so rostered IR/retired players still resolve to names.
+- Caches every player Sleeper returns (active and inactive, with an `active` flag and Sleeper's optional `search_rank`) for 24 hours; only `get_free_agents` filters to active players who either have a team or are currently on Sleeper's trending-adds leaderboard (FLA-422 — keeps a released veteran being picked up on speculation), so rostered IR/retired players still resolve to names.
 - Cache key format: `players:{sport}:v2`.
 - Falls back to in-memory cache if the KV binding is unavailable.
 - Gracefully degrades: if the player index fails, `get_transactions` still returns player IDs, `get_free_agents` returns an empty list, and `get_roster`/`get_matchups` return `{ id }`-only entries — every one of these now adds a top-level `warnings: string[]` explaining the degradation (see below) rather than degrading silently.

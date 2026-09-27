@@ -41,7 +41,7 @@ describe('sleeper-free-agents', () => {
     expect(result.map((player) => player.id)).toEqual(['p1']);
   });
 
-  it('excludes players with no team', () => {
+  it('excludes players with no team who are not trending', () => {
     const players = new Map<string, SleeperPlayerRecord>([
       ['p1', { player_id: 'p1', full_name: 'Has Team', active: true, team: 'BUF' }],
       ['p2', { player_id: 'p2', full_name: 'No Team A', active: true, team: '' }],
@@ -51,6 +51,22 @@ describe('sleeper-free-agents', () => {
     const result = buildSleeperFreeAgents(players, new Set(), undefined, 25);
 
     expect(result.map((player) => player.id)).toEqual(['p1']);
+  });
+
+  it('keeps a teamless player who is trending (e.g. a released veteran picked up on speculation) and ranks them by trend', () => {
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['has-team', { player_id: 'has-team', full_name: 'Has Team', active: true, team: 'BUF', search_rank: 1 }],
+      ['teamless-trending', { player_id: 'teamless-trending', full_name: 'Cut Veteran', active: true, search_rank: 9999 }],
+      ['teamless-not-trending', { player_id: 'teamless-not-trending', full_name: 'Long Retired', active: true, search_rank: 2 }],
+    ]);
+    const trendingAdds = new Map([['teamless-trending', 500]]);
+
+    const result = buildSleeperFreeAgents(players, new Set(), undefined, 25, trendingAdds);
+
+    // The teamless-but-trending player is kept and, per the trending-first
+    // ranking, outranks the rostered-elsewhere-eligible player with the
+    // better search_rank; the teamless, non-trending player stays excluded.
+    expect(result.map((player) => player.id)).toEqual(['teamless-trending', 'has-team']);
   });
 
   it('ranks trending adds first, higher count winning, ahead of search_rank', () => {
@@ -83,19 +99,21 @@ describe('sleeper-free-agents', () => {
     expect(result.map((player) => player.id)).toEqual(['rank-1', 'rank-5', 'no-rank']);
   });
 
-  it('ignores trending entries for players already filtered out (rostered, inactive, wrong position, no team)', () => {
+  it('ignores trending entries for players already filtered out (rostered, inactive, wrong position)', () => {
+    // Trending never overrides the rostered/active/position filters — only
+    // the no-team filter has a trending exception (see the dedicated test
+    // above), because a rostered/inactive/wrong-position player is filtered
+    // for reasons unrelated to whether they're teamless.
     const players = new Map<string, SleeperPlayerRecord>([
       ['rostered', { player_id: 'rostered', full_name: 'Rostered Trending', active: true, team: 'BUF', position: 'RB' }],
       ['inactive', { player_id: 'inactive', full_name: 'Inactive Trending', active: false, team: 'KC', position: 'RB' }],
       ['wrong-pos', { player_id: 'wrong-pos', full_name: 'Wrong Position Trending', active: true, team: 'PHI', position: 'QB' }],
-      ['no-team', { player_id: 'no-team', full_name: 'No Team Trending', active: true, position: 'RB' }],
       ['eligible', { player_id: 'eligible', full_name: 'Eligible', active: true, team: 'NYJ', position: 'RB' }],
     ]);
     const trendingAdds = new Map([
       ['rostered', 100],
       ['inactive', 100],
       ['wrong-pos', 100],
-      ['no-team', 100],
     ]);
 
     const result = buildSleeperFreeAgents(players, new Set(['rostered']), 'RB', 25, trendingAdds);
