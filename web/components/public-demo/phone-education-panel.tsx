@@ -98,12 +98,12 @@ function AboutPanel() {
         <div className="mt-2 divide-y divide-[var(--phone-border)] overflow-hidden rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)]">
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
             <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
-              ESPN · Football, Baseball, and Hockey
+              ESPN · Football and Baseball
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
             <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
-              Yahoo · Football, Baseball, and Hockey
+              Yahoo · Football and Baseball
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
@@ -179,7 +179,7 @@ function SportsPanel({
       </div>
 
       <p className="mt-3 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
-        The basketball demo is not available yet.
+        Basketball and hockey demos are not available yet.
       </p>
     </>
   );

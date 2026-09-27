@@ -415,6 +415,39 @@ describe("GET /api/public-chat/cache", () => {
     },
   );
 
+  it("rejects platform-less hockey so the ungated legacy lane never reads it", async () => {
+    // Even with hockey live, the no-platform lane skips the capabilities gate
+    // and would read an ungated legacy key, so it stays football/baseball.
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "hockey"),
+    ]);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=hockey"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported sport for the public demo" });
+    expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+    expect(mocks.getLatestPublicDemoRefreshFailure).not.toHaveBeenCalled();
+  });
+
+  it("keeps platform-less football on the legacy lane", async () => {
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=football"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(
+      mocks.getCachedPublicDemoAnswer.mock.calls[0][0].platform,
+    ).toBeUndefined();
+  });
+
   it("passes a live selectable hockey target through to the reader", async () => {
     mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
       selectableTarget("yahoo", "hockey"),
