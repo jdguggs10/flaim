@@ -36,7 +36,7 @@ interface PlatformFreeAgentConfig {
    * hard-coded `true` told clients to expect rates that were not there.
    */
   deriveRosteredRate: boolean;
-  ordering: 'platform_rostered_rate_desc' | 'alphabetical';
+  ordering: 'platform_rostered_rate_desc' | 'platform_trending_then_rank';
   ownershipScope: 'platform_global' | 'unavailable';
   entryArrayKey: 'freeAgents' | 'players';
   normalizeEntry: (entry: Record<string, unknown>) => Record<string, unknown>;
@@ -66,7 +66,9 @@ const PLATFORM_CONFIG: Record<Platform, PlatformFreeAgentConfig> = {
   sleeper: {
     capabilities: { acquisitionState: false, rosteredRate: false, startedRate: false },
     deriveRosteredRate: false,
-    ordering: 'alphabetical',
+    // FLA-422: Sleeper trending-adds first, then Sleeper's own search_rank,
+    // then name/id — replaces the old plain alphabetical order.
+    ordering: 'platform_trending_then_rank',
     ownershipScope: 'unavailable',
     entryArrayKey: 'players',
     normalizeEntry: normalizeSleeperEntry,

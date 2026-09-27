@@ -18,11 +18,11 @@ describe('sleeper-free-agents', () => {
     ]);
   });
 
-  it('sorts deterministically by active then name then id', () => {
+  it('falls back to name then id when no trending or search_rank data distinguishes players', () => {
     const players = new Map<string, SleeperPlayerRecord>([
-      ['z2', { player_id: 'z2', full_name: 'Zeta', active: true }],
-      ['a2', { player_id: 'a2', full_name: 'Alpha', active: true }],
-      ['a1', { player_id: 'a1', full_name: 'Alpha', active: true }],
+      ['z2', { player_id: 'z2', full_name: 'Zeta', active: true, team: 'BUF' }],
+      ['a2', { player_id: 'a2', full_name: 'Alpha', active: true, team: 'KC' }],
+      ['a1', { player_id: 'a1', full_name: 'Alpha', active: true, team: 'PHI' }],
     ]);
 
     const result = buildSleeperFreeAgents(players, new Set(), undefined, 25);
@@ -30,11 +30,84 @@ describe('sleeper-free-agents', () => {
     expect(result.map((player) => player.id)).toEqual(['a1', 'a2', 'z2']);
   });
 
+  it('excludes inactive players', () => {
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['p1', { player_id: 'p1', full_name: 'Active Guy', active: true, team: 'BUF' }],
+      ['p2', { player_id: 'p2', full_name: 'Inactive Guy', active: false, team: 'KC' }],
+    ]);
+
+    const result = buildSleeperFreeAgents(players, new Set(), undefined, 25);
+
+    expect(result.map((player) => player.id)).toEqual(['p1']);
+  });
+
+  it('excludes players with no team', () => {
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['p1', { player_id: 'p1', full_name: 'Has Team', active: true, team: 'BUF' }],
+      ['p2', { player_id: 'p2', full_name: 'No Team A', active: true, team: '' }],
+      ['p3', { player_id: 'p3', full_name: 'No Team B', active: true }],
+    ]);
+
+    const result = buildSleeperFreeAgents(players, new Set(), undefined, 25);
+
+    expect(result.map((player) => player.id)).toEqual(['p1']);
+  });
+
+  it('ranks trending adds first, higher count winning, ahead of search_rank', () => {
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['low-rank', { player_id: 'low-rank', full_name: 'Best Search Rank', active: true, team: 'BUF', search_rank: 1 }],
+      ['trend-low', { player_id: 'trend-low', full_name: 'Trending Low', active: true, team: 'KC', search_rank: 9999 }],
+      ['trend-high', { player_id: 'trend-high', full_name: 'Trending High', active: true, team: 'PHI', search_rank: 9999 }],
+    ]);
+    const trendingAdds = new Map([
+      ['trend-low', 10],
+      ['trend-high', 50],
+    ]);
+
+    const result = buildSleeperFreeAgents(players, new Set(), undefined, 25, trendingAdds);
+
+    // Both trending players outrank the non-trending player with the better
+    // search_rank; between the two trending players, higher count wins.
+    expect(result.map((player) => player.id)).toEqual(['trend-high', 'trend-low', 'low-rank']);
+  });
+
+  it('orders by search_rank ascending among non-trending players, with missing/null last', () => {
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['no-rank', { player_id: 'no-rank', full_name: 'No Rank', active: true, team: 'BUF' }],
+      ['rank-5', { player_id: 'rank-5', full_name: 'Rank Five', active: true, team: 'KC', search_rank: 5 }],
+      ['rank-1', { player_id: 'rank-1', full_name: 'Rank One', active: true, team: 'PHI', search_rank: 1 }],
+    ]);
+
+    const result = buildSleeperFreeAgents(players, new Set(), undefined, 25);
+
+    expect(result.map((player) => player.id)).toEqual(['rank-1', 'rank-5', 'no-rank']);
+  });
+
+  it('ignores trending entries for players already filtered out (rostered, inactive, wrong position, no team)', () => {
+    const players = new Map<string, SleeperPlayerRecord>([
+      ['rostered', { player_id: 'rostered', full_name: 'Rostered Trending', active: true, team: 'BUF', position: 'RB' }],
+      ['inactive', { player_id: 'inactive', full_name: 'Inactive Trending', active: false, team: 'KC', position: 'RB' }],
+      ['wrong-pos', { player_id: 'wrong-pos', full_name: 'Wrong Position Trending', active: true, team: 'PHI', position: 'QB' }],
+      ['no-team', { player_id: 'no-team', full_name: 'No Team Trending', active: true, position: 'RB' }],
+      ['eligible', { player_id: 'eligible', full_name: 'Eligible', active: true, team: 'NYJ', position: 'RB' }],
+    ]);
+    const trendingAdds = new Map([
+      ['rostered', 100],
+      ['inactive', 100],
+      ['wrong-pos', 100],
+      ['no-team', 100],
+    ]);
+
+    const result = buildSleeperFreeAgents(players, new Set(['rostered']), 'RB', 25, trendingAdds);
+
+    expect(result.map((player) => player.id)).toEqual(['eligible']);
+  });
+
   it('clamps count to the 1..100 range', () => {
     const players = new Map<string, SleeperPlayerRecord>();
     for (let i = 0; i < 150; i += 1) {
       const id = `p${String(i).padStart(3, '0')}`;
-      players.set(id, { player_id: id, full_name: `Player ${i}`, active: true });
+      players.set(id, { player_id: id, full_name: `Player ${i}`, active: true, team: 'BUF' });
     }
 
     const maxResult = buildSleeperFreeAgents(players, new Set(), undefined, 200);

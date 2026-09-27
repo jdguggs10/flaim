@@ -64,7 +64,7 @@ describe('normalizeFreeAgentsResult — canonical envelope', () => {
     expect(yahoo.seasonYear).toBe(2025);
 
     const sleeper = normalizedData(ok({ league_id: 'slp-1', players: [] }), params('sleeper', { league_id: 'slp-1' }));
-    expect(sleeper.ordering).toBe('alphabetical');
+    expect(sleeper.ordering).toBe('platform_trending_then_rank');
     expect(sleeper.capabilities).toEqual({ acquisitionState: false, rosteredRate: false, startedRate: false });
     expect(sleeper.ownershipScope).toBe('unavailable');
     expect(sleeper.leagueId).toBe('slp-1');

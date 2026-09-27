@@ -473,8 +473,8 @@ const GET_FREE_AGENTS_OUTPUT_SCHEMA = routedOutputSchema({
   position: z.string().describe('Echoed position filter, ALL when unfiltered'),
   count: z.number(),
   ordering: z
-    .enum(['platform_rostered_rate_desc', 'alphabetical'])
-    .describe('List ranking: "platform_rostered_rate_desc" (ESPN provider-side with draft-rank tiebreak; Yahoo locally, nulls last, name/id tiebreak) or "alphabetical" (Sleeper, name then id)'),
+    .enum(['platform_rostered_rate_desc', 'alphabetical', 'platform_trending_then_rank'])
+    .describe('List ranking: "platform_rostered_rate_desc" (ESPN provider-side with draft-rank tiebreak; Yahoo locally, nulls last, name/id tiebreak), "platform_trending_then_rank" (Sleeper: players most added across Sleeper in the last 24 hours first, then Sleeper\'s search rank, name/id tiebreak), or "alphabetical" (retained for compatibility; not currently emitted)'),
   capabilities: looseObject({
     acquisitionState: z.boolean(),
     rosteredRate: z.boolean(),

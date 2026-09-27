@@ -10,6 +10,7 @@ vi.mock('../../../shared/sleeper-api', () => ({
   handleSleeperError: vi.fn((response: Response) => {
     throw new Error(`SLEEPER_API_ERROR: Sleeper returned ${response.status}`);
   }),
+  flaimSportToSleeper: vi.fn((sport: string) => (sport === 'football' ? 'nfl' : 'nba')),
 }));
 
 vi.mock('../../../shared/sleeper-players-cache', () => ({
@@ -69,11 +70,14 @@ describe('sleeper basketball get_free_agents handler', () => {
 
     expect(sleeperFetchMock).toHaveBeenCalledWith('/league/league_nba/rosters');
     expect(getPlayersIndexMock).toHaveBeenCalledWith(env, 'basketball');
+    // Trending fetch is unmocked here (no second sleeperFetchMock response
+    // queued) so it fails closed to an empty map.
     expect(buildFreeAgentsMock).toHaveBeenCalledWith(
       playersIndex,
       new Set(['501', '502']),
       'PG',
       8,
+      new Map(),
     );
 
     expect(result.success).toBe(true);
@@ -102,7 +106,37 @@ describe('sleeper basketball get_free_agents handler', () => {
 
     await basketballHandlers.get_free_agents({ SLEEPER_PLAYERS_CACHE: {} as KVNamespace } as Env, params);
 
-    expect(buildFreeAgentsMock).toHaveBeenCalledWith(expect.any(Map), new Set(), undefined, 1);
+    expect(buildFreeAgentsMock).toHaveBeenCalledWith(expect.any(Map), new Set(), undefined, 1, expect.any(Map));
+  });
+
+  it('falls back to an empty trending map (no warning) when the trending fetch fails', async () => {
+    sleeperFetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ players: ['501'] }]), { status: 200 }))
+      .mockRejectedValueOnce(new Error('network error'));
+
+    const playersIndex = new Map();
+    getPlayersIndexMock.mockResolvedValue(playersIndex as never);
+    buildFreeAgentsMock.mockReturnValue([
+      { id: '700', name: 'NBA FA', position: 'PG', team: 'BOS' },
+    ]);
+
+    const params: ToolParams = {
+      sport: 'basketball',
+      league_id: 'league_nba',
+      season_year: 2025,
+      position: 'PG',
+      count: 8,
+    };
+
+    const env = { SLEEPER_PLAYERS_CACHE: {} as KVNamespace } as Env;
+    const result = await basketballHandlers.get_free_agents(env, params);
+
+    expect(buildFreeAgentsMock).toHaveBeenCalledWith(playersIndex, new Set(['501']), 'PG', 8, new Map());
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as { warning?: string; warnings?: string[] };
+    expect(data.warning).toBeUndefined();
+    expect(data.warnings).toBeUndefined();
   });
 
   it('returns success with warning and empty players when index load fails', async () => {

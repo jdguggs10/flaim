@@ -26,6 +26,13 @@ export interface SleeperPlayerRecord {
   position?: string;
   team?: string;
   active: boolean;
+  /**
+   * Sleeper's own relevance ranking (lower = better); omitted (never null)
+   * when Sleeper doesn't supply a finite number for this player (~2% of the
+   * index, observed live for both NFL and NBA). Free-agent ranking treats a
+   * missing value as the worst possible rank (+Infinity), never zero.
+   */
+  search_rank?: number;
 }
 
 type SleeperPlayerCacheSport = 'football' | 'basketball';
@@ -38,7 +45,13 @@ type SleeperPlayersApiRecord = {
   position?: unknown;
   team?: unknown;
   active?: unknown;
+  search_rank?: unknown;
 };
+
+/** Strict: only a finite number is kept; anything else (null, NaN, string) is omitted, never coerced. */
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
 
 function toCacheSportPath(sport: SleeperPlayerCacheSport): '/players/nfl' | '/players/nba' {
   return sport === 'football' ? '/players/nfl' : '/players/nba';
@@ -57,6 +70,8 @@ function parsePlayerRecord(raw: SleeperPlayersApiRecord, fallbackId?: string): S
   const derivedName = [firstName, lastName].filter(Boolean).join(' ').trim();
   const fullName = asNonEmptyString(raw.full_name) ?? (derivedName || id);
 
+  const searchRank = asFiniteNumber(raw.search_rank);
+
   return {
     player_id: id,
     full_name: fullName,
@@ -65,6 +80,7 @@ function parsePlayerRecord(raw: SleeperPlayersApiRecord, fallbackId?: string): S
     position: asNonEmptyString(raw.position),
     team: asNonEmptyString(raw.team),
     active: raw.active === true,
+    ...(searchRank !== undefined ? { search_rank: searchRank } : {}),
   };
 }
 
@@ -135,7 +151,10 @@ function toPlayerIndex(players: SleeperPlayerRecord[]): Map<string, SleeperPlaye
 }
 
 export function cacheKeyForSport(sport: SleeperPlayerCacheSport): string {
-  return `players:${sport}:v1`;
+  // v2 (FLA-422): SleeperPlayerRecord gained search_rank, changing the cached
+  // shape — bump the key so a stale v1 KV entry (recorded before this field
+  // existed) is never served in place of a fresh fetch.
+  return `players:${sport}:v2`;
 }
 
 export async function getSleeperPlayersIndex(
