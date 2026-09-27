@@ -45,18 +45,28 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     });
   }
 
-  // errorDetail (e.g. "refresh_failed: Invalid refresh token") is the raw
-  // auth-worker detail. It is useful in logs, but an AI client reads a bare
-  // "auth error" as a Flaim connector problem and has the user reconnect the
-  // Flaim app in the AI client, which never touches Yahoo tokens and does
-  // nothing for a revoked or invalid Yahoo grant. Log the detail, then
-  // surface a message that names the actual fix.
-  console.error(`[yahoo-auth] non-transient auth-worker failure: ${errorDetail}`);
+  // Only auth-worker's genuine credential-rejection codes get reconnect
+  // guidance. `refresh_failed` covers Yahoo's permanent OAuth refresh
+  // failures (the invalid_grant family: an expired or revoked Yahoo grant),
+  // and `app_fingerprint_mismatch` covers stored tokens minted by a
+  // different Yahoo app -- both need the same fix. Anything else reaching
+  // this branch (auth-worker's own `server_error` exceptions, an
+  // internal-auth/config failure such as `unauthorized`, or an unrecognized
+  // code) is not something a Yahoo reconnect can fix, so it gets a plain
+  // "couldn't load, try later" message instead of false reconnect guidance.
+  const isCredentialRejection =
+    errorData.error === 'refresh_failed' ||
+    errorData.error === YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH;
+
+  // error_description is free-form upstream text and must not be logged
+  // (FLA-363); the error code alone is the diagnostic signal here.
+  console.error(`[yahoo-auth] non-transient auth-worker failure: ${errorData.error || 'unknown_error'}`);
 
   throw new YahooClientError({
     code: 'YAHOO_AUTH_ERROR',
-    message:
-      'Yahoo access for this account expired or was revoked. Ask the user to open https://flaim.app/leagues and click Reconnect Yahoo. Reconnecting the Flaim app in the AI client will not fix this.',
+    message: isCredentialRejection
+      ? 'Yahoo access for this account expired or was revoked. Ask the user to open https://flaim.app/leagues and click Reconnect Yahoo. Reconnecting the Flaim app in the AI client will not fix this.'
+      : "Flaim couldn't load the Yahoo connection right now. Try again later.",
     status: response.status,
   });
 }

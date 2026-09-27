@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { authWorkerFetch } from '@flaim/worker-shared';
+import { authWorkerFetch, YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
 import type { Env } from '../../types';
 import { getYahooCredentials, resolveUserTeamKey } from '../auth';
 import type { YahooClientError } from '../errors';
@@ -22,6 +22,10 @@ describe('getYahooCredentials', () => {
   });
 
   it('tells the AI to reconnect Yahoo at flaim.app/leagues on a permanent auth failure, not the raw provider detail', async () => {
+    // A single mocked Response body can only be read once; asserting twice
+    // against the same rejected promise call would re-read an already-
+    // consumed body on the second call and silently fall through to the
+    // generic error path, so capture the rejection once instead.
     mockAuthWorkerFetch.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -32,13 +36,80 @@ describe('getYahooCredentials', () => {
       )
     );
 
+    const error = await getYahooCredentials(env, 'Bearer token').catch((e) => e) as YahooClientError;
+    expect(error).toMatchObject({ code: 'YAHOO_AUTH_ERROR' } satisfies Partial<YahooClientError>);
+    expect(error.message).toContain('https://flaim.app/leagues');
+    expect(error.message).toContain('Reconnecting the Flaim app in the AI client will not fix this');
+  });
+
+  it('also sends the reconnect message on an app fingerprint mismatch', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH,
+          error_description: 'Stored Yahoo tokens were issued by a different Yahoo app.',
+        }),
+        { status: 401 }
+      )
+    );
+
     await expect(getYahooCredentials(env, 'Bearer token')).rejects.toMatchObject({
       code: 'YAHOO_AUTH_ERROR',
-      message: expect.stringContaining('https://flaim.app/leagues'),
+      message: expect.stringContaining('Reconnect Yahoo'),
     } satisfies Partial<YahooClientError>);
-    await expect(getYahooCredentials(env, 'Bearer token')).rejects.toThrow(
-      /Reconnecting the Flaim app in the AI client will not fix this/
+  });
+
+  it('does not send reconnect guidance for a server-side auth-worker exception', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'server_error',
+          error_description: 'Failed to retrieve credentials',
+        }),
+        { status: 500 }
+      )
     );
+
+    const error = await getYahooCredentials(env, 'Bearer token').catch((e) => e) as YahooClientError;
+    expect(error).toMatchObject({ code: 'YAHOO_AUTH_ERROR', status: 500 } satisfies Partial<YahooClientError>);
+    expect(error.message).toBe("YAHOO_AUTH_ERROR: Flaim couldn't load the Yahoo connection right now. Try again later.");
+  });
+
+  it('does not send reconnect guidance for an internal-auth failure between workers', async () => {
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'unauthorized',
+          error_description: 'Authentication required',
+        }),
+        { status: 401 }
+      )
+    );
+
+    const error = await getYahooCredentials(env, 'Bearer token').catch((e) => e) as YahooClientError;
+    expect(error).toMatchObject({ code: 'YAHOO_AUTH_ERROR', status: 401 } satisfies Partial<YahooClientError>);
+    expect(error.message).toBe("YAHOO_AUTH_ERROR: Flaim couldn't load the Yahoo connection right now. Try again later.");
+  });
+
+  it('logs only the auth-worker error code, never the free-form upstream description (FLA-363)', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockAuthWorkerFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'refresh_failed',
+          error_description: 'super secret upstream detail that must not be logged',
+        }),
+        { status: 401 }
+      )
+    );
+
+    await expect(getYahooCredentials(env, 'Bearer token')).rejects.toBeTruthy();
+
+    for (const call of errorSpy.mock.calls) {
+      expect(call.join(' ')).not.toContain('super secret upstream detail');
+    }
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('refresh_failed'));
+    errorSpy.mockRestore();
   });
 
   it('classifies auth-worker failures while resolving Yahoo team keys', async () => {

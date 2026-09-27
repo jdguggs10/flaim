@@ -37,6 +37,7 @@ import {
 import {
   YAHOO_EMPTY_SYNC_MESSAGE,
   getYahooConnectErrorMessage,
+  getYahooEmptySyncNotice,
   isYahooDiscoveryEmpty,
   isYahooReconnectRequired,
   isYahooTransientAuthError,
@@ -110,7 +111,8 @@ interface LeagueRefreshProviderResult {
   retryAfter?: string;
   details?: {
     history?: EspnHistoryStatus | null;
-    // Yahoo-only: the number of current-season leagues discovery found.
+    // Yahoo-only: the number of leagues discovery found (all-history merged
+    // result, not filtered to the current season).
     count?: number;
   };
 }
@@ -252,6 +254,13 @@ function canApplyState(shouldApply?: () => boolean): boolean {
   return shouldApply ? shouldApply() : true;
 }
 
+// Shared by summarizeLeagueRefresh and the "Sync all" ESPN-history notice
+// path, so a Yahoo sync that came back empty is flagged the same way
+// wherever the refresh result is summarized.
+function yahooEmptySyncNotice(data: LeagueRefreshResponse): string | null {
+  return getYahooEmptySyncNotice(data.results?.yahoo);
+}
+
 function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
   const results = data.results ? Object.entries(data.results) : [];
   const successful = results.filter(([, result]) => result?.status === 'success').length;
@@ -264,9 +273,9 @@ function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
   const retryAfter = failedResult?.retryAfter;
 
   if (successful > 0 && failed === 0) {
-    const yahooResult = data.results?.yahoo;
-    if (yahooResult?.status === 'success' && isYahooDiscoveryEmpty(yahooResult.details?.count)) {
-      return YAHOO_EMPTY_SYNC_MESSAGE;
+    const yahooEmpty = yahooEmptySyncNotice(data);
+    if (yahooEmpty) {
+      return yahooEmpty;
     }
     return skipped > 0
       ? 'Synced connected platforms. Some platforms are not connected yet.'
@@ -1071,7 +1080,14 @@ function LeaguesPageContent() {
       ]);
 
       if (shouldApply()) {
-        setLeagueNotice(history ? getEspnHistoryNotice(history) : summarizeLeagueRefresh(data));
+        // A Yahoo sync that came back empty wins over the ESPN history
+        // notice: otherwise an ESPN details.history entry (present on most
+        // ESPN sync attempts, success or not) always takes the branch below
+        // and silently drops the Yahoo empty-sync notice.
+        const yahooEmpty = yahooEmptySyncNotice(data);
+        setLeagueNotice(
+          yahooEmpty ?? (history ? getEspnHistoryNotice(history) : summarizeLeagueRefresh(data))
+        );
       }
     } catch (err) {
       if (shouldApply()) {

@@ -4,6 +4,7 @@ import {
   YAHOO_EMPTY_SYNC_MESSAGE,
   formatYahooRetryAfter,
   getYahooConnectErrorMessage,
+  getYahooEmptySyncNotice,
   getYahooTransientAuthMessage,
   isYahooDiscoveryEmpty,
   isYahooReconnectRequired,
@@ -146,9 +147,25 @@ describe('Yahoo auth error helpers', () => {
     expect(isYahooDiscoveryEmpty(null)).toBe(false);
   });
 
-  it('names the Yahoo login as the fix for an empty-but-successful sync', () => {
+  it('names the Yahoo login as the fix for an empty-but-successful sync, without claiming current-season', () => {
     expect(YAHOO_EMPTY_SYNC_MESSAGE).toContain('Yahoo is connected');
     expect(YAHOO_EMPTY_SYNC_MESSAGE).toContain('different Yahoo account');
+    // `count` is the all-history merged result length, not a current-season
+    // count, so the copy must not claim "current-season."
+    expect(YAHOO_EMPTY_SYNC_MESSAGE).not.toContain('current-season');
     expect(YAHOO_EMPTY_SYNC_MESSAGE).not.toContain('—');
+  });
+
+  it('only notices an empty sync on a successful Yahoo result with a zero count', () => {
+    expect(getYahooEmptySyncNotice({ status: 'success', details: { count: 0 } })).toBe(
+      YAHOO_EMPTY_SYNC_MESSAGE
+    );
+    expect(getYahooEmptySyncNotice({ status: 'success', details: { count: 3 } })).toBeNull();
+    // A skipped or errored Yahoo result is not "empty on success" -- those
+    // paths have their own messaging and must not be overridden here.
+    expect(getYahooEmptySyncNotice({ status: 'skipped', details: { count: 0 } })).toBeNull();
+    expect(getYahooEmptySyncNotice({ status: 'error', details: { count: 0 } })).toBeNull();
+    expect(getYahooEmptySyncNotice(undefined)).toBeNull();
+    expect(getYahooEmptySyncNotice({ status: 'success' })).toBeNull();
   });
 });

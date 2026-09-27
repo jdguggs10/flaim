@@ -25,19 +25,37 @@ const YAHOO_GENERIC_RETRY_COPY = 'Try again in a few minutes.';
 const YAHOO_TRANSIENT_AUTH_BASE = 'Yahoo is temporarily unavailable.';
 
 // Shown when a Yahoo sync succeeds (auth-worker's discover endpoint returns
-// success:true) but finds zero current-season leagues on the connected
-// login. Without this, the generic "Synced connected platforms." message
-// reads as success while the leagues list still says "No leagues added yet,"
-// which is exactly the confusion a support email described (the leagues are
-// on a different Yahoo account than the one currently connected).
+// success:true) but finds zero leagues on the connected login. `count` is
+// the length of the all-history merged discovery result, not a current-
+// season count, so this message must not claim "current-season." Without
+// it, the generic "Synced connected platforms." message reads as success
+// while the leagues list still says "No leagues added yet," which is
+// exactly the confusion a support email described (the leagues are on a
+// different Yahoo account than the one currently connected).
 export const YAHOO_EMPTY_SYNC_MESSAGE =
-  "Yahoo is connected, but we didn't find any current-season leagues on this Yahoo login. If your league is on a different Yahoo account, reconnect with that one.";
+  "Yahoo is connected, but we didn't find any leagues on this Yahoo login. If your league is on a different Yahoo account, reconnect with that one.";
 
 // True when a Yahoo discovery response reports zero leagues found. `count`
 // arrives as `unknown` from parsed JSON, so this only fires on an actual
 // number rather than assuming the shape.
 export function isYahooDiscoveryEmpty(count: unknown): boolean {
   return typeof count === 'number' && count === 0;
+}
+
+export interface YahooRefreshResultLike {
+  status?: string;
+  details?: { count?: unknown };
+}
+
+// The single place that decides whether a "Sync all" or dedicated Yahoo
+// sync should show the empty-sync notice. Both /leagues call sites
+// (summarizeLeagueRefresh's generic-success branch and the ESPN-history
+// notice branch, which otherwise always wins when ESPN's details.history
+// is present) route through this so the Yahoo-empty case always wins.
+export function getYahooEmptySyncNotice(yahooResult: YahooRefreshResultLike | undefined): string | null {
+  return yahooResult?.status === 'success' && isYahooDiscoveryEmpty(yahooResult.details?.count)
+    ? YAHOO_EMPTY_SYNC_MESSAGE
+    : null;
 }
 
 export function formatYahooRetryAfter(retryAfterSeconds?: number): string | null {
