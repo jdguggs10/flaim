@@ -55,11 +55,18 @@ export function buildSleeperPlayerSearch(
     }));
 }
 
+/** Missing search_rank sinks to the bottom rather than winning ties. */
+function searchRankOf(player: SleeperPlayerRecord): number {
+  return player.search_rank ?? Number.POSITIVE_INFINITY;
+}
+
 export function buildSleeperFreeAgents(
   players: Map<string, SleeperPlayerRecord>,
   rosteredPlayerIds: Set<string>,
   position?: string,
   count = 25,
+  // FLA-422: 24h trending-add counts, passed in so this builder stays pure.
+  trendingAdds: Map<string, number> = new Map(),
 ): SleeperFreeAgent[] {
   const normalizedPosition = position?.trim().toUpperCase();
   const maxCount = clampCount(count);
@@ -67,8 +74,27 @@ export function buildSleeperFreeAgents(
   const freeAgents = Array.from(players.values())
     .filter((player) => player.active)
     .filter((player) => !rosteredPlayerIds.has(player.player_id))
+    // A teamless player is normally not a plausible add, but a released
+    // veteran can spike in adds on pure speculation before signing anywhere
+    // (e.g. the #1 trending add after a camp cut) — keep them only when
+    // they're actually trending; teamless and not trending stays excluded.
+    .filter((player) => !!player.team || trendingAdds.has(player.player_id))
     .filter((player) => !normalizedPosition || player.position?.toUpperCase() === normalizedPosition)
     .sort((a, b) => {
+      // 1) Sleeper trending adds (last 24h), higher count first; players
+      //    absent from the trending list rank behind every trending player.
+      const aTrend = trendingAdds.get(a.player_id) ?? -1;
+      const bTrend = trendingAdds.get(b.player_id) ?? -1;
+      if (aTrend !== bTrend) return bTrend - aTrend;
+      // 2) Sleeper's own search_rank, ascending (lower = better); missing
+      //    values sink to the bottom rather than winning on a null/0 sort.
+      // Compared with === first because Infinity - Infinity is NaN, which
+      // Array#sort treats as "equal" but is not a safe general comparator
+      // result.
+      const aRank = searchRankOf(a);
+      const bRank = searchRankOf(b);
+      if (aRank !== bRank) return aRank - bRank;
+      // 3) Name, then id, as a final deterministic tiebreak.
       const nameCmp = a.full_name.localeCompare(b.full_name);
       if (nameCmp !== 0) return nameCmp;
       return a.player_id.localeCompare(b.player_id);
