@@ -45,9 +45,37 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     });
   }
 
+  // `refresh_failed` alone is not a reliable signal: auth-worker also
+  // returns it for missing Yahoo client configuration on Flaim's side
+  // (yahoo-connect-handlers.ts ~985) and for an unusable Yahoo token
+  // response shape (~1182), neither of which carries an `upstream_status`
+  // because neither is a real Yahoo HTTP response. Only the genuine-rejection
+  // producer (~1163) sets `upstream_status` to Yahoo's own token-endpoint
+  // status, and Yahoo returns 400 or 401 when it rejects the grant itself
+  // (the invalid_grant family: an expired or revoked Yahoo grant). So
+  // `refresh_failed` only counts as a credential rejection when
+  // `upstream_status` shows that. `app_fingerprint_mismatch` (stored tokens
+  // minted by a different Yahoo app) always counts. Anything else reaching
+  // this branch -- auth-worker's own `server_error` exceptions, an
+  // internal-auth/config failure such as `unauthorized`, `refresh_failed`
+  // without a rejecting upstream status, or an unrecognized code -- is not
+  // something a Yahoo reconnect can fix, so it gets a plain "couldn't load,
+  // try later" message instead of false reconnect guidance.
+  const yahooRejectedTheGrant =
+    errorData.upstream_status === 400 || errorData.upstream_status === 401;
+  const isCredentialRejection =
+    errorData.error === YahooAuthWorkerErrorCode.APP_FINGERPRINT_MISMATCH ||
+    (errorData.error === 'refresh_failed' && yahooRejectedTheGrant);
+
+  // error_description is free-form upstream text and must not be logged
+  // (FLA-363); the error code alone is the diagnostic signal here.
+  console.error(`[yahoo-auth] non-transient auth-worker failure: ${errorData.error || 'unknown_error'}`);
+
   throw new YahooClientError({
     code: 'YAHOO_AUTH_ERROR',
-    message: errorDetail,
+    message: isCredentialRejection
+      ? 'Yahoo access for this account expired or was revoked. Ask the user to open https://flaim.app/leagues and click Reconnect Yahoo. Reconnecting the Flaim app in the AI client will not fix this.'
+      : "Flaim couldn't load the Yahoo connection right now. Try again later.",
     status: response.status,
   });
 }
