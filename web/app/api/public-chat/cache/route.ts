@@ -2,8 +2,8 @@ import {
   getPublicChatPreset,
   getPublicChatTarget,
   isPublicChatDemoPlatform,
+  isPublicChatDemoSport,
   type PublicChatDemoPlatform,
-  type PublicChatDemoSport,
 } from "@/lib/public-chat";
 import {
   getCachedPublicDemoAnswer,
@@ -15,10 +15,6 @@ import {
   sanitizePublicDemoToolTraceSummary,
 } from "@/lib/server/public-demo-cache-response";
 import { NextRequest, NextResponse } from "next/server";
-
-function isPublicChatDemoSport(value: string | null): value is PublicChatDemoSport {
-  return value === "football" || value === "baseball";
-}
 
 export async function GET(request: NextRequest) {
   const presetId = request.nextUrl.searchParams.get("presetId");
@@ -33,7 +29,7 @@ export async function GET(request: NextRequest) {
 
   if (!isPublicChatDemoSport(sport)) {
     return NextResponse.json(
-      { error: "Sport must be football or baseball" },
+      { error: "Unsupported sport for the public demo" },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }

@@ -18,7 +18,7 @@ export const PUBLIC_CHAT_ALLOWED_TOOLS = [
 
 export type PublicChatAllowedTool = (typeof PUBLIC_CHAT_ALLOWED_TOOLS)[number];
 export type PublicChatPresetRail = "top" | "bottom";
-export type PublicChatDemoSport = "football" | "baseball";
+export type PublicChatDemoSport = "football" | "baseball" | "hockey";
 
 /** Metadata for cached demo answers: labels, tool chips, and ticker layout only. */
 export interface PublicChatPreset {
@@ -44,7 +44,7 @@ export function isPublicChatDemoPlatform(
 export function isPublicChatDemoSport(
   value: unknown,
 ): value is PublicChatDemoSport {
-  return value === "football" || value === "baseball";
+  return value === "football" || value === "baseball" || value === "hockey";
 }
 
 /**
@@ -87,7 +87,8 @@ export interface PublicChatTarget {
  * selectable and falls back through the football lanes before baseball.
  * Revisit this ordering at the FLA-253 season rollover. Default sports per
  * platform during football season: espn football, sleeper football, yahoo
- * baseball (until FLA-237 restores Yahoo access).
+ * baseball (until FLA-237 restores Yahoo access). ESPN and Yahoo hockey sit
+ * last and are never a platform's default sport; Sleeper has no hockey.
  */
 export const PUBLIC_CHAT_TARGET_MATRIX: readonly PublicChatTarget[] = [
   {
@@ -117,6 +118,18 @@ export const PUBLIC_CHAT_TARGET_MATRIX: readonly PublicChatTarget[] = [
   {
     platform: "yahoo",
     sport: "football",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: false,
+  },
+  {
+    platform: "espn",
+    sport: "hockey",
+    presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
+    isDefaultSport: false,
+  },
+  {
+    platform: "yahoo",
+    sport: "hockey",
     presetIds: PUBLIC_CHAT_TARGET_PRESET_IDS,
     isDefaultSport: false,
   },

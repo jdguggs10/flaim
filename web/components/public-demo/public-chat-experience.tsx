@@ -86,6 +86,7 @@ const PUBLIC_SPORT_COPY: Record<
 > = {
   baseball: { icon: <SportIcon sport="baseball" className="h-5 w-5" /> },
   football: { icon: <SportIcon sport="football" className="h-5 w-5" /> },
+  hockey: { icon: <SportIcon sport="hockey" className="h-5 w-5" /> },
 };
 
 function formatRelativeUpdateTime(value: string) {

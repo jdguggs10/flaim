@@ -51,11 +51,13 @@ export const PUBLIC_DEMO_PLATFORM_LABELS: Record<
 export const PUBLIC_DEMO_SPORT_ORDER = [
   "baseball",
   "football",
+  "hockey",
 ] as const satisfies readonly PublicChatDemoSport[];
 
 export const PUBLIC_DEMO_SPORT_LABELS: Record<PublicChatDemoSport, string> = {
   baseball: "Baseball",
   football: "Football",
+  hockey: "Hockey",
 };
 
 /**

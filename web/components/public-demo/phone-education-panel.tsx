@@ -52,21 +52,19 @@ interface PhoneEducationPanelProps {
 const SPORT_CHOOSER_ICONS: Record<PublicChatDemoSport, React.ReactNode> = {
   football: <SportIcon sport="football" className="h-5 w-5" />,
   baseball: <SportIcon sport="baseball" className="h-5 w-5" />,
+  hockey: <SportIcon sport="hockey" className="h-5 w-5" />,
 };
 
-// Basketball and hockey aren't real demo sports yet (see
-// PublicChatDemoSport), so they're rendered as permanently-disabled tiles
-// rather than driven by `sportOptions`.
+// Basketball isn't a real demo sport yet (see PublicChatDemoSport), so it's
+// rendered as a permanently-disabled tile rather than driven by
+// `sportOptions`. Real demo sports the current platform doesn't advertise
+// (for example hockey before its targets go live) render from `sportOptions`
+// as disabled tiles instead.
 const SPORTS_PANEL_COMING_SOON = [
   {
     key: "basketball",
     label: "Basketball",
     icon: <SportIcon sport="basketball" className="h-5 w-5" />,
-  },
-  {
-    key: "hockey",
-    label: "Hockey",
-    icon: <SportIcon sport="hockey" className="h-5 w-5" />,
   },
 ] as const;
 
@@ -100,12 +98,12 @@ function AboutPanel() {
         <div className="mt-2 divide-y divide-[var(--phone-border)] overflow-hidden rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)]">
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
             <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
-              ESPN · Football and Baseball
+              ESPN · Football, Baseball, and Hockey
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
             <span className="text-[length:var(--phone-type-caption)] font-medium text-[var(--phone-text)]">
-              Yahoo · Football and Baseball
+              Yahoo · Football, Baseball, and Hockey
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
@@ -181,7 +179,7 @@ function SportsPanel({
       </div>
 
       <p className="mt-3 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
-        Basketball and hockey demos are not available yet.
+        The basketball demo is not available yet.
       </p>
     </>
   );
