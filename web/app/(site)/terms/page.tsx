@@ -3,7 +3,7 @@ import { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
-    "Terms of Service for Flaim: read-only fantasy league analysis for ESPN, Yahoo, and Sleeper",
+    "Terms of Service for Flaim: fantasy league analysis for ESPN, Yahoo, and Sleeper",
   alternates: {
     canonical: "https://flaim.app/terms",
   },
@@ -15,19 +15,20 @@ export default function TermsPage() {
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Terms of Service</h1>
         <p className="text-muted-foreground mb-8">
-          Effective date: September 26, 2026
+          Effective date: September 27, 2026
         </p>
 
         <div className="max-w-none space-y-8">
           <section>
             <h2 className="text-xl font-semibold mb-3">What Flaim Is</h2>
             <p className="text-muted-foreground">
-              Flaim is a read-only fantasy analysis service. It retrieves your
-              ESPN, Yahoo, and Sleeper fantasy league data and makes it
-              available to AI assistants (such as Claude, ChatGPT, and
-              Perplexity) via the Model Context Protocol (MCP). Flaim does not
-              place trades, add or drop players, or modify your league in any
-              way.
+              Flaim reads your ESPN, Yahoo, and Sleeper fantasy league data
+              and makes it available to AI assistants (such as Claude,
+              ChatGPT, and Perplexity) that you connect. The only thing Flaim
+              writes is its own list of your leagues, when you ask it to
+              refresh; it never places trades, adds or drops players, changes
+              your lineup or league settings, or otherwise modifies your
+              league on ESPN, Yahoo, or Sleeper.
             </p>
             <p className="text-muted-foreground mt-2">
               Flaim is an independent project and is not affiliated with,
@@ -105,7 +106,9 @@ export default function TermsPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Acceptable Use</h2>
             <p className="text-muted-foreground">
-              Flaim is a personal, read-only data tool. You agree not to:
+              Flaim is a personal fantasy-data tool: it reads your leagues,
+              and its only write action refreshes Flaim&apos;s own list of
+              them. You agree not to:
             </p>
             <ul className="list-disc list-inside text-muted-foreground mt-2 space-y-1">
               <li>
@@ -195,20 +198,21 @@ export default function TermsPage() {
             <p className="text-muted-foreground">
               We may suspend or terminate your access to Flaim at any time if we
               believe you have violated these terms or are using the service in
-              a way that harms other users or third parties. You may close your
-              account at any time by contacting us at{" "}
+              a way that harms other users or third parties. You may delete
+              your own account at any time from your account settings. Deletion
+              is permanent and normally finishes within seconds, consistent
+              with our{" "}
+              <a href="/privacy" className="text-primary hover:underline">
+                Privacy Policy
+              </a>
+              . If you can&apos;t access that menu, contact us at{" "}
               <a
                 href="mailto:privacy@flaim.app"
                 className="text-primary hover:underline"
               >
                 privacy@flaim.app
-              </a>
-              . Upon closure, stored credentials and league data are removed
-              within 30 days, consistent with our{" "}
-              <a href="/privacy" className="text-primary hover:underline">
-                Privacy Policy
-              </a>
-              .
+              </a>{" "}
+              and we will process the deletion within 30 days.
             </p>
           </section>
 

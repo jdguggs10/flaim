@@ -4,6 +4,14 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Privacy and Terms Describe the AI App Data Flow (FLA-268)
+
+- **Added**: a new "Your AI App" section on the privacy policy explains what league data Flaim sends to a connected AI app (roster, matchups, standings, available players, recent moves, league rules, and history), that it only happens in response to the user's own prompts, and that Flaim never sends the AI app ESPN session credentials, Yahoo tokens, Flaim account details, or the Sleeper connection username.
+- **Added**: the privacy policy now says Flaim keeps a connection record for each AI app a user connects (which app, when connected, when last renewed) and a record of each tool call a connected app makes (tool, timestamp, app, success, latency), and states plainly that it does not log the question asked or the AI's answer.
+- **Changed**: the privacy policy's list of service providers now includes Cloudflare and Vercel for hosting and compute, matching the terms of service, which already listed both.
+- **Changed**: the terms of service's termination section now matches the privacy policy and the actual account-deletion flow: self-serve account deletion from account settings is the primary path and normally finishes within seconds; contacting privacy@flaim.app is the fallback for someone who can't reach that menu, with deletion processed within 30 days.
+- **Changed**: dropped "read-only" from both pages' meta descriptions and body copy. Flaim reads a user's leagues and its only write action refreshes Flaim's own list of them; it never changes anything on ESPN, Yahoo, or Sleeper. Copy and metadata only, no behavior change.
+
 ### Accurate Labels, Working Claude Code Install
 
 - **Fixed**: "read-only" claims in `server.json`, `docs/CONNECTOR-DOCS.md`, and the `/docs/ai` FAQ. Flaim reads your leagues and never changes them; its one write, `refresh_leagues`, updates Flaim's own list of your leagues. The Codex manifest's tool count now says ten read tools plus `refresh_leagues`. `server.json` moves to 1.0.2.
