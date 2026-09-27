@@ -352,6 +352,31 @@ export class YahooStorage {
   }
 
   /**
+   * Get the stored Yahoo login GUID for a user, or null when there is no
+   * credential row, the GUID was never recorded, or the read failed. Callers
+   * treat null as "unknown" and must never act destructively on it (FLA-418).
+   * Does not select access_token or refresh_token.
+   */
+  async getStoredYahooGuid(clerkUserId: string): Promise<string | null> {
+    const { data, error } = await this.supabase
+      .from('yahoo_credentials')
+      .select('yahoo_guid')
+      .eq('clerk_user_id', clerkUserId)
+      .maybeSingle();
+
+    if (error) {
+      console.error(
+        `[yahoo-storage] Failed to read stored Yahoo GUID for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+      );
+      return null;
+    }
+
+    return typeof data?.yahoo_guid === 'string' && data.yahoo_guid.length > 0
+      ? data.yahoo_guid
+      : null;
+  }
+
+  /**
    * Get non-secret Yahoo credential health for diagnostics.
    * Does not select access_token or refresh_token.
    */
@@ -883,7 +908,9 @@ export class YahooStorage {
       .eq('clerk_user_id', clerkUserId);
 
     if (error) {
-      console.error('[yahoo-storage] Failed to delete all Yahoo leagues:', error);
+      console.error(
+        `[yahoo-storage] Failed to delete all Yahoo leagues for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+      );
       throw new Error('Failed to delete all Yahoo leagues');
     }
 

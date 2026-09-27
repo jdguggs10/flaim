@@ -514,6 +514,41 @@ describe('YahooStorage', () => {
     });
   });
 
+  describe('getStoredYahooGuid', () => {
+    it('selects only yahoo_guid and returns the stored value', async () => {
+      mockMaybeSingle.mockResolvedValue({ data: { yahoo_guid: 'STOREDGUID' }, error: null });
+
+      const result = await storage.getStoredYahooGuid('user_123');
+
+      expect(mockFrom).toHaveBeenCalledWith('yahoo_credentials');
+      expect(mockSelect).toHaveBeenCalledWith('yahoo_guid');
+      expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
+      expect(result).toBe('STOREDGUID');
+    });
+
+    it('returns null when there is no row or no stored GUID', async () => {
+      mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+      expect(await storage.getStoredYahooGuid('user_123')).toBeNull();
+
+      mockMaybeSingle.mockResolvedValueOnce({ data: { yahoo_guid: null }, error: null });
+      expect(await storage.getStoredYahooGuid('user_123')).toBeNull();
+    });
+
+    it('returns null and logs only the error code when the read fails', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockMaybeSingle.mockResolvedValue({
+        data: null,
+        error: { code: '57014', message: 'raw driver detail' },
+      });
+
+      expect(await storage.getStoredYahooGuid('user_abc123')).toBeNull();
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[yahoo-storage] Failed to read stored Yahoo GUID for user user_abc...: code=57014'
+      );
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('raw driver detail');
+    });
+  });
+
   describe('getYahooCredentialHealth', () => {
     it('selects only non-secret fields and maps credential health', async () => {
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000);

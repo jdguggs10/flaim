@@ -80,6 +80,7 @@ describe('Yahoo display copy', () => {
       retryAfterSeconds: 30,
     })).toContain('Try syncing leagues again in 30 seconds.');
     expect(getYahooStatusCopy('connected', null)).toContain('Sync leagues');
+    expect(getYahooStatusCopy('connected', null)).toContain('come from the Yahoo account you connected');
     expect(getYahooStatusCopy('not_connected', null)).toContain('Connect your Yahoo account');
     expect(getYahooStatusCopy('checking', null)).toContain('Checking Yahoo connection');
     expect(getYahooBadgeCopy('reconnect_needed').label).toBe('Reconnect needed');

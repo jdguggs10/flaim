@@ -137,6 +137,7 @@ describe('yahoo-connect-handlers', () => {
     saveYahooCredentials: ReturnType<typeof vi.fn>;
     getYahooCredentials: ReturnType<typeof vi.fn>;
     getYahooCredentialHealth: ReturnType<typeof vi.fn>;
+    getStoredYahooGuid: ReturnType<typeof vi.fn>;
     updateYahooCredentials: ReturnType<typeof vi.fn>;
     updateYahooCredentialsIfRefreshTokenMatches: ReturnType<typeof vi.fn>;
     markRefreshCooldown: ReturnType<typeof vi.fn>;
@@ -158,6 +159,7 @@ describe('yahoo-connect-handlers', () => {
       saveYahooCredentials: vi.fn().mockResolvedValue(undefined),
       getYahooCredentials: vi.fn(),
       getYahooCredentialHealth: vi.fn(),
+      getStoredYahooGuid: vi.fn().mockResolvedValue(null),
       updateYahooCredentials: vi.fn().mockResolvedValue(true),
       updateYahooCredentialsIfRefreshTokenMatches: vi.fn().mockResolvedValue(false),
       markRefreshCooldown: vi.fn().mockResolvedValue(true),
@@ -378,40 +380,195 @@ describe('yahoo-connect-handlers', () => {
       );
     });
 
-    it('saves credentials when token exchange omits the optional Yahoo GUID', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-      mockStorage.consumePlatformOAuthState.mockResolvedValue({
-        clerkUserId: 'user_abc123',
-        platform: 'yahoo',
-        redirectAfter: undefined,
-      });
+    // FLA-418: one Yahoo login per Flaim account. A login switch (known,
+    // differing GUIDs) clears the previous login's leagues; anything else
+    // keeps them.
+    describe('Yahoo login switch detection', () => {
+      const callbackRequest = () =>
+        new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
 
-      mockFetch.mockResolvedValueOnce(
+      const tokenExchangeResponse = (guid?: string) =>
         new Response(
           JSON.stringify({
             access_token: 'yahoo-access-token',
             refresh_token: 'yahoo-refresh-token',
             expires_in: 3600,
+            ...(guid ? { xoauth_yahoo_guid: guid } : {}),
           }),
           { status: 200 }
-        )
-      );
+        );
 
-      const request = new Request('https://api.flaim.app/connect/yahoo/callback?code=auth_code&state=user_abc123:nonce');
+      const useLoginResponse = (guid: string) =>
+        new Response(
+          JSON.stringify({
+            fantasy_content: {
+              users: { 0: { user: [{ guid }] }, count: 1 },
+            },
+          }),
+          { status: 200 }
+        );
 
-      const response = await handleYahooCallback(request, env, corsHeaders);
-
-      expect(response.status).toBe(302);
-      expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
-        expect.objectContaining({
+      beforeEach(() => {
+        mockStorage.consumePlatformOAuthState.mockResolvedValue({
           clerkUserId: 'user_abc123',
-          accessToken: 'yahoo-access-token',
-          refreshToken: 'yahoo-refresh-token',
-          yahooGuid: undefined,
-        })
-      );
-      expect(warnSpy).toHaveBeenCalledWith('[yahoo-connect] Yahoo token exchange omitted GUID for user user_abc...');
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+          platform: 'yahoo',
+          redirectAfter: undefined,
+        });
+      });
+
+      it('deletes the previous login leagues before saving when the token GUID differs from the stored GUID', async () => {
+        vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockFetch.mockResolvedValueOnce(tokenExchangeResponse('NEWLOGINGUID'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockStorage.getStoredYahooGuid).toHaveBeenCalledWith('user_abc123');
+        expect(mockStorage.deleteAllYahooLeagues).toHaveBeenCalledWith('user_abc123');
+        expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
+          expect.objectContaining({ clerkUserId: 'user_abc123', yahooGuid: 'NEWLOGINGUID' })
+        );
+        expect(mockStorage.deleteAllYahooLeagues.mock.invocationCallOrder[0])
+          .toBeLessThan(mockStorage.saveYahooCredentials.mock.invocationCallOrder[0]);
+        // The token carried the GUID, so no extra identity lookup.
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('deletes the previous login leagues when the use_login GUID differs from the stored GUID', async () => {
+        vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockFetch
+          .mockResolvedValueOnce(tokenExchangeResponse())
+          .mockResolvedValueOnce(useLoginResponse('NEWLOGINGUID'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        expect(String(mockFetch.mock.calls[1][0])).toContain('/users;use_login=1?format=json');
+        expect((mockFetch.mock.calls[1][1] as RequestInit).headers).toEqual({
+          Authorization: 'Bearer yahoo-access-token',
+        });
+        expect(mockStorage.deleteAllYahooLeagues).toHaveBeenCalledWith('user_abc123');
+        expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
+          expect.objectContaining({ yahooGuid: 'NEWLOGINGUID' })
+        );
+      });
+
+      it('keeps leagues on a same-login reconnect', async () => {
+        mockStorage.getStoredYahooGuid.mockResolvedValue('SAMELOGINGUID');
+        mockFetch.mockResolvedValueOnce(tokenExchangeResponse('SAMELOGINGUID'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+        expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
+          expect.objectContaining({ yahooGuid: 'SAMELOGINGUID' })
+        );
+      });
+
+      it('treats GUIDs that differ only in letter case as the same login', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue('SAMELOGINGUID');
+        mockFetch
+          .mockResolvedValueOnce(tokenExchangeResponse())
+          .mockResolvedValueOnce(useLoginResponse('sameloginguid'));
+
+        await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+      });
+
+      it('backfills the GUID without deleting when no GUID was stored', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue(null);
+        mockFetch
+          .mockResolvedValueOnce(tokenExchangeResponse())
+          .mockResolvedValueOnce(useLoginResponse('NEWLOGINGUID'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(warnSpy).toHaveBeenCalledWith('[yahoo-connect] Yahoo token exchange omitted GUID for user user_abc...');
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+        expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
+          expect.objectContaining({
+            clerkUserId: 'user_abc123',
+            accessToken: 'yahoo-access-token',
+            refreshToken: 'yahoo-refresh-token',
+            yahooGuid: 'NEWLOGINGUID',
+          })
+        );
+      });
+
+      it('connects without deleting when the GUID lookup returns an error status', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockFetch
+          .mockResolvedValueOnce(tokenExchangeResponse())
+          .mockResolvedValueOnce(new Response('upstream body with secrets', { status: 500 }));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockStorage.getStoredYahooGuid).not.toHaveBeenCalled();
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+        expect(mockStorage.saveYahooCredentials).toHaveBeenCalledWith(
+          expect.objectContaining({ yahooGuid: undefined })
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[yahoo-connect] Yahoo login GUID lookup failed for user user_abc...: reason=http_500'
+        );
+        expect(JSON.stringify(warnSpy.mock.calls)).not.toContain('upstream body');
+      });
+
+      it('connects without deleting when the GUID lookup request throws', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockFetch
+          .mockResolvedValueOnce(tokenExchangeResponse())
+          .mockRejectedValueOnce(new TypeError('network down'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+        expect(mockStorage.saveYahooCredentials).toHaveBeenCalledTimes(1);
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[yahoo-connect] Yahoo login GUID lookup failed for user user_abc...: reason=fetch_error'
+        );
+      });
+
+      it('connects without deleting when the GUID lookup body is not a single user', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockFetch
+          .mockResolvedValueOnce(tokenExchangeResponse())
+          .mockResolvedValueOnce(new Response(JSON.stringify({ fantasy_content: {} }), { status: 200 }));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+        expect(warnSpy).toHaveBeenCalledWith(
+          '[yahoo-connect] Yahoo login GUID lookup failed for user user_abc...: reason=guid_unparseable'
+        );
+      });
+
+      it('fails the connect without saving when deleting the previous login leagues fails', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockStorage.deleteAllYahooLeagues.mockRejectedValue(new Error('Failed to delete all Yahoo leagues'));
+        mockFetch.mockResolvedValueOnce(tokenExchangeResponse('NEWLOGINGUID'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('error=callback_error');
+        expect(mockStorage.saveYahooCredentials).not.toHaveBeenCalled();
+      });
     });
 
     it('does not save credentials when token exchange omits a refresh token', async () => {

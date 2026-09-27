@@ -198,6 +198,9 @@ const LEASE_TTL_MS       = 30_000;
 // Used for both OAuth exchange and refresh token requests; must stay below LEASE_TTL_MS.
 const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 const YAHOO_REQUEST_LEASE_SAFETY_MS = 1_000;
+// Connect-time `/users;use_login=1` lookup when the token exchange omits the
+// GUID. Best effort: a slow or failed lookup never blocks the connect.
+const YAHOO_LOGIN_GUID_TIMEOUT_MS = 8_000;
 // Yahoo token refresh 429s often omit Retry-After. Keep our own no-Yahoo
 // window modest so interactive users are not blocked for 15 minutes while
 // still preventing rapid retry pile-ons.
@@ -1453,6 +1456,36 @@ export async function handleYahooAuthorize(
   }
 }
 
+type YahooLoginGuidLookup =
+  | { guid: string }
+  | { failure: 'timeout' | 'fetch_error' | `http_${number}` | 'invalid_json' | 'guid_unparseable' };
+
+/**
+ * Identify the Yahoo login behind a freshly minted access token via
+ * `/users;use_login=1`. Never throws; failures return a code-only reason so
+ * callers can log without upstream bodies (FLA-363/368).
+ */
+async function fetchYahooLoginGuid(accessToken: string): Promise<YahooLoginGuidLookup> {
+  let response: Response;
+  try {
+    response = await fetch(`${YAHOO_FANTASY_API_URL}/users;use_login=1?format=json`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(YAHOO_LOGIN_GUID_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return { failure: isAbortError(error) || (error instanceof Error && error.name === 'TimeoutError') ? 'timeout' : 'fetch_error' };
+  }
+  if (!response.ok) return { failure: `http_${response.status}` };
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    return { failure: 'invalid_json' };
+  }
+  const guid = parseYahooRecoveryLoggedInGuid(data);
+  return guid ? { guid } : { failure: 'guid_unparseable' };
+}
+
 /**
  * GET /connect/yahoo/callback?code=xxx&state=xxx
  *
@@ -1661,9 +1694,36 @@ export async function handleYahooCallback(
       ...requestDiagnosticFields,
     });
 
-    const yahooGuid = tokenResponse.xoauth_yahoo_guid;
+    let yahooGuid = nonBlankYahooString(tokenResponse.xoauth_yahoo_guid) ?? undefined;
     if (!yahooGuid) {
       console.warn(`[yahoo-connect] Yahoo token exchange omitted GUID for user ${maskUserId(clerkUserId)}`);
+      const lookup = await fetchYahooLoginGuid(tokenResponse.access_token);
+      if ('guid' in lookup) {
+        yahooGuid = lookup.guid;
+      } else {
+        console.warn(
+          `[yahoo-connect] Yahoo login GUID lookup failed for user ${maskUserId(clerkUserId)}: reason=${lookup.failure}`
+        );
+      }
+    }
+
+    // Flaim supports one Yahoo login per account (FLA-418). When a different
+    // Yahoo login connects, the previous login's leagues can't be managed by
+    // the new token, so remove them before saving; discovery repopulates from
+    // the new login. Only act when both GUIDs are known and differ: an unknown
+    // GUID on either side keeps the existing leagues untouched. The delete runs
+    // before the credential save: if it throws, the connect fails with the old
+    // credential and GUID intact, so a retry still detects the switch.
+    if (yahooGuid) {
+      const storedGuid = await storage.getStoredYahooGuid(clerkUserId);
+      // GUIDs are opaque; compare case-insensitively so a formatting difference
+      // between the token exchange and use_login=1 can never delete leagues.
+      if (storedGuid && storedGuid.toUpperCase() !== yahooGuid.toUpperCase()) {
+        await storage.deleteAllYahooLeagues(clerkUserId);
+        console.log(
+          `[yahoo-connect] Yahoo login changed for user ${maskUserId(clerkUserId)}; removed the previous login's Yahoo leagues`
+        );
+      }
     }
 
     const expiresAt = computeYahooExpiresAt(tokenResponse.expires_in);
