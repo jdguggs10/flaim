@@ -18,10 +18,12 @@ import {
   selectPublicDemoPlatformOptions,
   selectPublicDemoRequestPlatform,
   selectPublicDemoSportOptions,
+  selectNextAvailableSportOption,
   selectPublicDemoVisiblePresets,
   type PublicDemoAction,
   type PublicDemoAnswerMeta,
   type PublicDemoCapabilityTarget,
+  type PublicDemoSportOption,
   type PublicDemoState,
 } from "../public-demo-client";
 
@@ -79,6 +81,8 @@ const ESPN_BASEBALL = capabilityDto("espn", "baseball", { default: true });
 const ESPN_FOOTBALL = capabilityDto("espn", "football");
 const SLEEPER_FOOTBALL = capabilityDto("sleeper", "football");
 const YAHOO_BASEBALL = capabilityDto("yahoo", "baseball");
+const ESPN_HOCKEY = capabilityDto("espn", "hockey");
+const YAHOO_HOCKEY = capabilityDto("yahoo", "hockey");
 
 describe("parsePublicDemoCapabilities", () => {
   it("parses an advertised target from the allowlisted DTO", () => {
@@ -108,6 +112,19 @@ describe("parsePublicDemoCapabilities", () => {
     ]);
   });
 
+  it("accepts ESPN and Yahoo hockey and orders them after the other targets", () => {
+    const targets = parsePublicDemoCapabilities({
+      targets: [YAHOO_HOCKEY, ESPN_HOCKEY, YAHOO_BASEBALL, ESPN_FOOTBALL],
+    });
+
+    expect(targets.map((target) => [target.platform, target.sport])).toEqual([
+      ["espn", "football"],
+      ["yahoo", "baseball"],
+      ["espn", "hockey"],
+      ["yahoo", "hockey"],
+    ]);
+  });
+
   it("returns an empty list for empty, malformed, or error payloads", () => {
     expect(parsePublicDemoCapabilities({ targets: [] })).toEqual([]);
     expect(parsePublicDemoCapabilities({})).toEqual([]);
@@ -123,9 +140,10 @@ describe("parsePublicDemoCapabilities", () => {
     const targets = parsePublicDemoCapabilities({
       targets: [
         capabilityDto("draftkings", "baseball"),
-        capabilityDto("espn", "hockey"),
-        // sleeper-baseball is not in the matrix.
+        capabilityDto("espn", "basketball"),
+        // sleeper-baseball and sleeper-hockey are not in the matrix.
         capabilityDto("sleeper", "baseball"),
+        capabilityDto("sleeper", "hockey"),
         null,
         "espn",
         ESPN_BASEBALL,
@@ -919,7 +937,34 @@ describe("platform and sport selection", () => {
         available: true,
         selected: false,
       },
+      // Hockey stays listed but unavailable until its target is advertised.
+      { sport: "hockey", label: "Hockey", available: false, selected: false },
     ]);
+  });
+
+  it("offers hockey only on platforms that advertise it", () => {
+    const state = withCapabilities(
+      parsePublicDemoCapabilities({
+        targets: [ESPN_BASEBALL, ESPN_HOCKEY, SLEEPER_FOOTBALL],
+      }),
+    );
+
+    expect(
+      selectPublicDemoSportOptions(state)
+        .filter((option) => option.available)
+        .map((option) => option.sport),
+    ).toEqual(["baseball", "hockey"]);
+
+    const sleeper = publicDemoReducer(state, {
+      type: "platform_selected",
+      platform: "sleeper",
+      token: 2,
+    });
+    expect(
+      selectPublicDemoSportOptions(sleeper)
+        .filter((option) => option.available)
+        .map((option) => option.sport),
+    ).toEqual(["football"]);
   });
 
   it("offers only the legacy ESPN baseball option in legacy mode", () => {
@@ -954,7 +999,7 @@ describe("resolveSportForPlatform", () => {
   });
 
   it("prefers the platform's last sport over its matrix default", () => {
-    expect(resolveSportForPlatform(TARGETS, "espn", "hockey" as never, "football")).toBe(
+    expect(resolveSportForPlatform(TARGETS, "espn", "hockey", "football")).toBe(
       "football",
     );
   });
@@ -962,12 +1007,114 @@ describe("resolveSportForPlatform", () => {
   it("falls back to the matrix default sport", () => {
     // espn's default sport is football for the 2026 NFL season.
     expect(
-      resolveSportForPlatform(TARGETS, "espn", "hockey" as never, undefined),
+      resolveSportForPlatform(TARGETS, "espn", "hockey", undefined),
     ).toBe("football");
   });
 
   it("returns null for a platform with nothing advertised", () => {
     expect(resolveSportForPlatform(TARGETS, "yahoo", "baseball", undefined)).toBeNull();
+  });
+
+  it("never lands on hockey as a platform's default sport", () => {
+    const withHockey = parsePublicDemoCapabilities({
+      targets: [YAHOO_HOCKEY, YAHOO_BASEBALL],
+    });
+
+    expect(
+      resolveSportForPlatform(withHockey, "yahoo", "football", undefined),
+    ).toBe("baseball");
+  });
+});
+
+describe("selectNextAvailableSportOption", () => {
+  function options(
+    selected: string,
+    available: readonly string[],
+  ): PublicDemoSportOption[] {
+    return (["baseball", "football", "hockey"] as const).map((sport) => ({
+      sport,
+      label: sport,
+      available: available.includes(sport),
+      selected: sport === selected,
+    }));
+  }
+
+  it("moves to the next available sport in display order", () => {
+    expect(
+      selectNextAvailableSportOption(
+        options("baseball", ["baseball", "football", "hockey"]),
+      )?.sport,
+    ).toBe("football");
+    expect(
+      selectNextAvailableSportOption(
+        options("football", ["baseball", "football", "hockey"]),
+      )?.sport,
+    ).toBe("hockey");
+  });
+
+  it("wraps from the last sport back to the first available one", () => {
+    expect(
+      selectNextAvailableSportOption(
+        options("hockey", ["baseball", "football", "hockey"]),
+      )?.sport,
+    ).toBe("baseball");
+  });
+
+  it("skips sports the platform does not offer", () => {
+    // ESPN with football and hockey but no baseball: football <-> hockey.
+    expect(
+      selectNextAvailableSportOption(options("football", ["football", "hockey"]))
+        ?.sport,
+    ).toBe("hockey");
+    expect(
+      selectNextAvailableSportOption(options("hockey", ["football", "hockey"]))
+        ?.sport,
+    ).toBe("football");
+    // Two sports where the unavailable one sits between them.
+    expect(
+      selectNextAvailableSportOption(options("baseball", ["baseball", "hockey"]))
+        ?.sport,
+    ).toBe("hockey");
+  });
+
+  it("returns null when the current sport is the only one available", () => {
+    expect(
+      selectNextAvailableSportOption(options("football", ["football"])),
+    ).toBeNull();
+  });
+
+  it("returns null in legacy mode, where only ESPN baseball is offered", () => {
+    const legacy = publicDemoReducer(INITIAL_PUBLIC_DEMO_STATE, {
+      type: "capabilities_unavailable",
+    });
+
+    expect(
+      selectNextAvailableSportOption(selectPublicDemoSportOptions(legacy)),
+    ).toBeNull();
+  });
+
+  it("drives a full cycle through the reducer for a three-sport platform", () => {
+    let state = withCapabilities(
+      parsePublicDemoCapabilities({
+        targets: [ESPN_BASEBALL, ESPN_FOOTBALL, ESPN_HOCKEY],
+      }),
+    );
+    const visited: string[] = [state.sport];
+
+    for (let token = 2; token <= 4; token += 1) {
+      const next = selectNextAvailableSportOption(
+        selectPublicDemoSportOptions(state),
+      );
+      expect(next).not.toBeNull();
+      state = publicDemoReducer(state, {
+        type: "sport_selected",
+        sport: next!.sport,
+        token,
+      });
+      visited.push(state.sport);
+    }
+
+    expect(visited).toEqual(["baseball", "football", "hockey", "baseball"]);
   });
 });
 

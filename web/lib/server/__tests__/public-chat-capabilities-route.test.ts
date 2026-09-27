@@ -427,6 +427,101 @@ describe("GET /api/public-chat/capabilities", () => {
     ]);
   });
 
+  it("keeps hockey unadvertised without a gate row, even when fully warmed", async () => {
+    // The CHECK widening lets a hockey gate row exist, but nothing is public
+    // until one is inserted: warm cache rows alone must not advertise it.
+    stubPostgrest({
+      targetState: [enabledTargetState("espn", "football")],
+      answerCache: [
+        ...readyCacheRows("espn", "football"),
+        ...readyCacheRows("espn", "hockey"),
+        ...readyCacheRows("yahoo", "hockey"),
+      ],
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(
+      body.targets.map((target: { platform: string; sport: string }) => [
+        target.platform,
+        target.sport,
+      ]),
+    ).toEqual([["espn", "football"]]);
+  });
+
+  it("advertises ESPN and Yahoo hockey once gated and all eight presets are ready", async () => {
+    stubPostgrest({
+      targetState: [
+        enabledTargetState("espn", "football"),
+        enabledTargetState("espn", "hockey"),
+        enabledTargetState("yahoo", "hockey"),
+      ],
+      answerCache: [
+        ...readyCacheRows("espn", "football"),
+        ...readyCacheRows("espn", "hockey"),
+        ...readyCacheRows("yahoo", "hockey"),
+      ],
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    // Hockey sits after the existing targets in matrix order, so it never
+    // takes the overall default from an already-live lane.
+    expect(body.targets).toEqual([
+      {
+        platform: "espn",
+        sport: "football",
+        presets: EXPECTED_PRESET_IDS,
+        default: true,
+        freshness: "fresh",
+      },
+      {
+        platform: "espn",
+        sport: "hockey",
+        presets: EXPECTED_PRESET_IDS,
+        default: false,
+        freshness: "fresh",
+      },
+      {
+        platform: "yahoo",
+        sport: "hockey",
+        presets: EXPECTED_PRESET_IDS,
+        default: false,
+        freshness: "fresh",
+      },
+    ]);
+  });
+
+  it("does not advertise a gated hockey target with only seven ready presets", async () => {
+    stubPostgrest({
+      targetState: [enabledTargetState("yahoo", "hockey")],
+      answerCache: readyCacheRows("yahoo", "hockey").slice(0, 7),
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ targets: [] });
+  });
+
+  it("never advertises sleeper hockey, which is not in the matrix", async () => {
+    stubPostgrest({
+      targetState: [enabledTargetState("sleeper", "hockey")],
+      answerCache: readyCacheRows("sleeper", "hockey"),
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toEqual({ targets: [] });
+  });
+
   it("returns a generic 500 body when PostgREST fails", async () => {
     const fetchMock = vi.fn(async () => new Response("boom", { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);

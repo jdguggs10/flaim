@@ -397,6 +397,72 @@ describe("GET /api/public-chat/cache", () => {
     expect(mocks.getLatestPublicDemoRefreshFailure).not.toHaveBeenCalled();
   });
 
+  it.each([["basketball"], ["curling"], [""]])(
+    "rejects an unsupported sport %j without echoing it",
+    async (sport) => {
+      const response = await GET(
+        publicCacheRequest(`presetId=wire-watch&sport=${sport}&platform=espn`),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(body).toEqual({ error: "Unsupported sport for the public demo" });
+      if (sport) {
+        expect(JSON.stringify(body)).not.toContain(sport);
+      }
+      expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+      expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+    },
+  );
+
+  it("passes a live selectable hockey target through to the reader", async () => {
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("yahoo", "hockey"),
+    ]);
+    mocks.getCachedPublicDemoAnswer.mockResolvedValue(null);
+    mocks.getLatestPublicDemoRefreshFailure.mockResolvedValue(null);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=hockey&platform=yahoo"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mocks.getCachedPublicDemoAnswer).toHaveBeenCalledWith({
+      presetId: "wire-watch",
+      sport: "hockey",
+      platform: "yahoo",
+    });
+  });
+
+  it("rejects a hockey target that has no live gate row", async () => {
+    // Other lanes are live; hockey is in the matrix but not selectable until
+    // its gate row exists, so it gets the generic unknown-combo rejection.
+    mocks.evaluatePublicDemoCapabilities.mockResolvedValue([
+      selectableTarget("espn", "football"),
+    ]);
+
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=hockey&platform=espn"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+  });
+
+  it("rejects sleeper hockey, which the target matrix does not include", async () => {
+    const response = await GET(
+      publicCacheRequest("presetId=wire-watch&sport=hockey&platform=sleeper"),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Unsupported platform for the public demo" });
+    expect(mocks.evaluatePublicDemoCapabilities).not.toHaveBeenCalled();
+    expect(mocks.getCachedPublicDemoAnswer).not.toHaveBeenCalled();
+  });
+
   it("rejects a platform-bearing request for a preset outside the eight-target set", async () => {
     const response = await GET(
       publicCacheRequest("presetId=trade-grades&sport=baseball&platform=espn"),

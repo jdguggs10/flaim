@@ -130,6 +130,25 @@ describe("getCachedPublicDemoAnswer with a platform", () => {
     expect(answer).toBeNull();
   });
 
+  it("reads espn hockey from its v8 key without the legacy fallback", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const answer = await getCachedPublicDemoAnswer({
+      presetId: "wire-watch",
+      sport: "hockey",
+      platform: "espn",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = requestedUrl(fetchMock, 0);
+    expect(url.searchParams.get("cache_key")).toBe(
+      "eq.public-demo-answer:wire-watch:espn:hockey:v8:v3",
+    );
+    expect(url.searchParams.get("platform")).toBe("eq.espn");
+    expect(answer).toBeNull();
+  });
+
   it("does not fall back for non-espn platforms", async () => {
     const fetchMock = vi.fn(async () => jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
