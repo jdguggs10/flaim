@@ -198,6 +198,9 @@ const LEASE_TTL_MS       = 30_000;
 // Used for both OAuth exchange and refresh token requests; must stay below LEASE_TTL_MS.
 const YAHOO_TOKEN_REQUEST_TIMEOUT_MS = 20_000;
 const YAHOO_REQUEST_LEASE_SAFETY_MS = 1_000;
+// Connect-time `/users;use_login=1` lookup when the token exchange omits the
+// GUID. Best effort: a slow or failed lookup never blocks the connect.
+const YAHOO_LOGIN_GUID_TIMEOUT_MS = 8_000;
 // Yahoo token refresh 429s often omit Retry-After. Keep our own no-Yahoo
 // window modest so interactive users are not blocked for 15 minutes while
 // still preventing rapid retry pile-ons.
@@ -1454,6 +1457,45 @@ export async function handleYahooAuthorize(
 }
 
 /**
+ * GUIDs are opaque identifiers. Compare trimmed and case-insensitively so a
+ * formatting difference (legacy whitespace, token exchange vs use_login=1
+ * casing) can never be mistaken for a login switch and delete leagues.
+ */
+function sameYahooGuid(a: string, b: string): boolean {
+  return a.trim().toUpperCase() === b.trim().toUpperCase();
+}
+
+type YahooLoginGuidLookup =
+  | { guid: string }
+  | { failure: 'timeout' | 'fetch_error' | `http_${number}` | 'invalid_json' | 'guid_unparseable' };
+
+/**
+ * Identify the Yahoo login behind a freshly minted access token via
+ * `/users;use_login=1`. Never throws; failures return a code-only reason so
+ * callers can log without upstream bodies (FLA-363/368).
+ */
+async function fetchYahooLoginGuid(accessToken: string): Promise<YahooLoginGuidLookup> {
+  let response: Response;
+  try {
+    response = await fetch(`${YAHOO_FANTASY_API_URL}/users;use_login=1?format=json`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(YAHOO_LOGIN_GUID_TIMEOUT_MS),
+    });
+  } catch (error) {
+    return { failure: isAbortError(error) || (error instanceof Error && error.name === 'TimeoutError') ? 'timeout' : 'fetch_error' };
+  }
+  if (!response.ok) return { failure: `http_${response.status}` };
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    return { failure: 'invalid_json' };
+  }
+  const guid = parseYahooRecoveryLoggedInGuid(data);
+  return guid ? { guid } : { failure: 'guid_unparseable' };
+}
+
+/**
  * GET /connect/yahoo/callback?code=xxx&state=xxx
  *
  * Handles the redirect from Yahoo after user grants/denies consent.
@@ -1661,9 +1703,48 @@ export async function handleYahooCallback(
       ...requestDiagnosticFields,
     });
 
-    const yahooGuid = tokenResponse.xoauth_yahoo_guid;
-    if (!yahooGuid) {
+    let newGuid = nonBlankYahooString(tokenResponse.xoauth_yahoo_guid);
+    if (!newGuid) {
       console.warn(`[yahoo-connect] Yahoo token exchange omitted GUID for user ${maskUserId(clerkUserId)}`);
+      const lookup = await fetchYahooLoginGuid(tokenResponse.access_token);
+      if ('guid' in lookup) {
+        newGuid = lookup.guid;
+      } else {
+        console.warn(
+          `[yahoo-connect] Yahoo login GUID lookup failed for user ${maskUserId(clerkUserId)}: reason=${lookup.failure}`
+        );
+      }
+    }
+
+    // Flaim supports one Yahoo login per account (FLA-418). When a different
+    // Yahoo login connects, the previous login's leagues can't be managed by
+    // the new token, so remove the Yahoo league rows and Yahoo defaults before
+    // saving; discovery repopulates from the new login.
+    //
+    // Fail safe toward keeping data and keeping the switch detectable:
+    // - Delete only when both GUIDs are known and differ.
+    // - Write the GUID only when the new GUID is known AND the stored read
+    //   succeeded. Otherwise the column is left as-is, so a known GUID is never
+    //   replaced with NULL or silently replaced after a failed read.
+    // The delete runs before the credential save: if it throws, the connect
+    // fails with the old credential and GUID intact, so a retry still detects
+    // the switch.
+    let guidToSave: string | undefined;
+    if (newGuid) {
+      const stored = await storage.getStoredYahooGuid(clerkUserId);
+      if (stored.status === 'ok') {
+        guidToSave = newGuid;
+        if (stored.guid && !sameYahooGuid(stored.guid, newGuid)) {
+          await storage.deleteAllYahooLeagues(clerkUserId);
+          console.log(
+            `[yahoo-connect] Yahoo login changed for user ${maskUserId(clerkUserId)}; removed the previous login's Yahoo leagues`
+          );
+        }
+      } else {
+        console.warn(
+          `[yahoo-connect] Stored Yahoo GUID unreadable for user ${maskUserId(clerkUserId)}; leaving leagues and stored GUID unchanged`
+        );
+      }
     }
 
     const expiresAt = computeYahooExpiresAt(tokenResponse.expires_in);
@@ -1675,7 +1756,7 @@ export async function handleYahooCallback(
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
       expiresAt,
-      yahooGuid,
+      yahooGuid: guidToSave,
       appFingerprint: await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID),
     });
 

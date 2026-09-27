@@ -87,7 +87,7 @@ export function getYahooStatusCopy(state: YahooDisplayState, health: YahooConnec
 
   switch (state) {
     case 'connected':
-      return 'Sync leagues pulls your latest Yahoo leagues using your current Yahoo connection. Reconnect Yahoo opens Yahoo sign-in again to repair the connection if it stops working.';
+      return 'Your Yahoo leagues come from the Yahoo account you connected. Sync leagues pulls your latest ones. Reconnect Yahoo opens Yahoo sign-in again to repair the connection; signing in with a different Yahoo account replaces these leagues.';
     case 'cooldown':
       return `Yahoo is temporarily unavailable. ${retryAfter ? `Try syncing leagues again in ${retryAfter}.` : 'Try syncing leagues again in a few minutes.'} If this keeps happening, reconnect Yahoo.`;
     case 'in_progress':

@@ -64,7 +64,7 @@ These endpoints manage the OAuth 2.0 client flow with Yahoo Fantasy.
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
 | `GET /connect/yahoo/authorize` | Clerk JWT | Start Yahoo OAuth flow |
-| `GET /connect/yahoo/callback` | None (state param) | Handle Yahoo redirect |
+| `GET /connect/yahoo/callback` | None (state param) | Handle Yahoo redirect; one Yahoo login per account, so a different login (known, differing GUID) clears the previous login's Yahoo leagues |
 | `GET /internal/connect/yahoo/credentials` | Internal + Clerk JWT / OAuth / Eval key | Get Yahoo tokens (auto-refreshes) for internal workers |
 | `GET /internal/connect/yahoo/credential-health` | Internal + Clerk JWT / OAuth | Non-secret Yahoo credential/refresh health for diagnostics |
 | `GET /connect/yahoo/status` | Clerk JWT | Check Yahoo connection status |
