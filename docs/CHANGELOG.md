@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Yahoo Error Messages Say the Next Step (FLA-417)
+
+- **Changed**: a permanent (non-retryable) `YAHOO_AUTH_ERROR` from a revoked or invalid Yahoo grant now tells the AI to send the user to `https://flaim.app/leagues` and click Reconnect Yahoo, and that reconnecting the Flaim app in the AI client will not fix it, instead of surfacing Yahoo's raw refresh-failure detail. The error code is unchanged; the raw detail is still logged. A Yahoo 400 whose body says the connected login is not a manager of the requested team (seen after a user switches Yahoo logins) now maps to `YAHOO_ACCESS_DENIED` with the same "reconnect with the account that owns it" guidance, instead of a bare "Yahoo rejected the request (400)."
+- **Changed**: on `/leagues`, when a Yahoo sync succeeds but finds zero current-season leagues on the connected login, the page now says "Yahoo is connected, but we didn't find any current-season leagues on this Yahoo login. If your league is on a different Yahoo account, reconnect with that one." instead of the generic "Synced connected platforms.", for both the "Sync all" refresh and the dedicated Yahoo sync.
+
 ### Hide League Widget Preference (FLA-277)
 
 - **Added**: a per-user `hide_league_widget` preference in `user_preferences` (boolean, default off), set from a "Hide the league widget in ChatGPT and Claude" toggle in the `/leagues` AI Apps card through a new Clerk-authenticated `POST /user/preferences/hide-league-widget` auth-worker route that accepts only a strict boolean. The preference is returned as `hideLeagueWidget` by the existing preference reads.

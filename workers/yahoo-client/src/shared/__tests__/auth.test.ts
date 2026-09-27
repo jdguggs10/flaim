@@ -21,7 +21,7 @@ describe('getYahooCredentials', () => {
     vi.clearAllMocks();
   });
 
-  it('includes auth-worker error descriptions in thrown errors', async () => {
+  it('tells the AI to reconnect Yahoo at flaim.app/leagues on a permanent auth failure, not the raw provider detail', async () => {
     mockAuthWorkerFetch.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -32,8 +32,12 @@ describe('getYahooCredentials', () => {
       )
     );
 
+    await expect(getYahooCredentials(env, 'Bearer token')).rejects.toMatchObject({
+      code: 'YAHOO_AUTH_ERROR',
+      message: expect.stringContaining('https://flaim.app/leagues'),
+    } satisfies Partial<YahooClientError>);
     await expect(getYahooCredentials(env, 'Bearer token')).rejects.toThrow(
-      'YAHOO_AUTH_ERROR: refresh_failed: Refresh token expired'
+      /Reconnecting the Flaim app in the AI client will not fix this/
     );
   });
 
@@ -48,9 +52,10 @@ describe('getYahooCredentials', () => {
       )
     );
 
-    await expect(resolveUserTeamKey(env, '461.l.12345', 'Bearer token')).rejects.toThrow(
-      'YAHOO_AUTH_ERROR: refresh_failed: Refresh token expired'
-    );
+    await expect(resolveUserTeamKey(env, '461.l.12345', 'Bearer token')).rejects.toMatchObject({
+      code: 'YAHOO_AUTH_ERROR',
+      message: expect.stringContaining('Reconnect Yahoo'),
+    } satisfies Partial<YahooClientError>);
   });
 
   it('classifies 503 auth-worker failures as temporarily unavailable', async () => {

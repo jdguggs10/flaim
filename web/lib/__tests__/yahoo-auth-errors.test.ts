@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { YahooAuthWorkerErrorCode } from '@flaim/worker-shared';
 import {
+  YAHOO_EMPTY_SYNC_MESSAGE,
   formatYahooRetryAfter,
   getYahooConnectErrorMessage,
   getYahooTransientAuthMessage,
+  isYahooDiscoveryEmpty,
   isYahooReconnectRequired,
   isYahooTransientAuthResponse,
   parseYahooDiscoverErrorResponse,
@@ -134,5 +136,19 @@ describe('Yahoo auth error helpers', () => {
     });
 
     expect(parseYahooDiscoverErrorResponse(null)).toEqual({});
+  });
+
+  it('recognizes a zero-league Yahoo discovery result and only that', () => {
+    expect(isYahooDiscoveryEmpty(0)).toBe(true);
+    expect(isYahooDiscoveryEmpty(1)).toBe(false);
+    expect(isYahooDiscoveryEmpty('0')).toBe(false);
+    expect(isYahooDiscoveryEmpty(undefined)).toBe(false);
+    expect(isYahooDiscoveryEmpty(null)).toBe(false);
+  });
+
+  it('names the Yahoo login as the fix for an empty-but-successful sync', () => {
+    expect(YAHOO_EMPTY_SYNC_MESSAGE).toContain('Yahoo is connected');
+    expect(YAHOO_EMPTY_SYNC_MESSAGE).toContain('different Yahoo account');
+    expect(YAHOO_EMPTY_SYNC_MESSAGE).not.toContain('—');
   });
 });

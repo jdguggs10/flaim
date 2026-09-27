@@ -5,6 +5,7 @@ import {
   YAHOO_DEFAULT_TRANSIENT_RETRY_AFTER_SECONDS,
   classifyYahooApiFailure,
   isYahooAppLevelDenialBody,
+  isYahooNotTeamManagerBody,
 } from '@flaim/worker-shared';
 import { YahooClientError } from './errors';
 
@@ -120,8 +121,22 @@ export async function handleYahooError(response: Response): Promise<never> {
         retryable: classification.retryable,
         retryAfter: classification.retryAfter,
       });
-    case 'bad_request':
-      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${await readErrorBody()}`);
+    case 'bad_request': {
+      const badRequestBody = await readErrorBody();
+      console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${badRequestBody}`);
+      // Yahoo returns this specific 400 after a user switches Yahoo logins and
+      // the newly connected login does not manage the requested team. Tell the
+      // AI which Yahoo account to reconnect with instead of a bare 400.
+      if (isYahooNotTeamManagerBody(badRequestBody)) {
+        throw new YahooClientError({
+          code: 'YAHOO_ACCESS_DENIED',
+          message:
+            "The Yahoo login connected to Flaim doesn't manage this team. Reconnect Yahoo at https://flaim.app/leagues with the account that owns it.",
+          status: classification.status,
+          upstreamStatus: classification.upstreamStatus,
+          retryable: false,
+        });
+      }
       throw new YahooClientError({
         code: ErrorCode.YAHOO_BAD_REQUEST,
         message: 'Yahoo rejected the request (400).',
@@ -129,6 +144,7 @@ export async function handleYahooError(response: Response): Promise<never> {
         upstreamStatus: classification.upstreamStatus,
         retryable: false,
       });
+    }
     default:
       console.error(`[yahoo-api] Unexpected Yahoo status: ${classification.upstreamStatus}`);
       console.error(`[yahoo-api] Yahoo ${classification.upstreamStatus} body: ${await readErrorBody()}`);

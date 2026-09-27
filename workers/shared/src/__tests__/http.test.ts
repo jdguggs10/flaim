@@ -4,6 +4,7 @@ import {
   classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
   isYahooAppLevelDenialBody,
+  isYahooNotTeamManagerBody,
   isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,
@@ -80,6 +81,18 @@ describe('HTTP helpers', () => {
       isYahooAppLevelDenialBody('{"error":{"description":"You are not allowed to view this league."}}')
     ).toBe(false);
     expect(isYahooAppLevelDenialBody('')).toBe(false);
+  });
+
+  it('tells a not-a-manager 400 body from other Yahoo bad-request bodies', () => {
+    expect(
+      isYahooNotTeamManagerBody('{"error":{"description":"You are not a manager of this team."}}')
+    ).toBe(true);
+    // Case-insensitive: Yahoo's exact casing here is not guaranteed.
+    expect(
+      isYahooNotTeamManagerBody('{"error":{"description":"YOU ARE NOT A MANAGER OF THIS TEAM."}}')
+    ).toBe(true);
+    expect(isYahooNotTeamManagerBody('{"error":{"description":"Invalid week"}}')).toBe(false);
+    expect(isYahooNotTeamManagerBody('')).toBe(false);
   });
 
   it('keeps the two outage messages telling one story', () => {

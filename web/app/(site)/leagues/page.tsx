@@ -35,7 +35,9 @@ import {
   type YahooConnectionHealth,
 } from '@/lib/yahoo-connection-display';
 import {
+  YAHOO_EMPTY_SYNC_MESSAGE,
   getYahooConnectErrorMessage,
+  isYahooDiscoveryEmpty,
   isYahooReconnectRequired,
   isYahooTransientAuthError,
   isYahooTransientAuthResponse,
@@ -108,6 +110,8 @@ interface LeagueRefreshProviderResult {
   retryAfter?: string;
   details?: {
     history?: EspnHistoryStatus | null;
+    // Yahoo-only: the number of current-season leagues discovery found.
+    count?: number;
   };
 }
 
@@ -260,6 +264,10 @@ function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
   const retryAfter = failedResult?.retryAfter;
 
   if (successful > 0 && failed === 0) {
+    const yahooResult = data.results?.yahoo;
+    if (yahooResult?.status === 'success' && isYahooDiscoveryEmpty(yahooResult.details?.count)) {
+      return YAHOO_EMPTY_SYNC_MESSAGE;
+    }
     return skipped > 0
       ? 'Synced connected platforms. Some platforms are not connected yet.'
       : 'Synced connected platforms.';
@@ -1213,6 +1221,8 @@ function LeaguesPageContent() {
         }
         throw new Error(data.error_description || data.error || 'Failed to sync Yahoo leagues');
       }
+      const discoverData = await res.json().catch(() => null) as { count?: unknown } | null;
+      if (!shouldApply()) return;
       didLoadYahooLeagues = true;
       setYahooHealth({
         accessTokenState: 'fresh',
@@ -1220,6 +1230,9 @@ function LeaguesPageContent() {
       });
       setIsYahooReconnectNeeded(false);
       await loadYahooLeagues(shouldApply);
+      if (shouldApply() && isYahooDiscoveryEmpty(discoverData?.count)) {
+        setLeagueNotice(YAHOO_EMPTY_SYNC_MESSAGE);
+      }
     } catch (err) {
       if (shouldApply()) {
         console.error('Failed to discover Yahoo leagues:', err);

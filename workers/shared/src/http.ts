@@ -115,6 +115,15 @@ export function isYahooAppLevelDenialBody(body: string): boolean {
   return body.includes('application is not authorized');
 }
 
+// Yahoo sends this as a plain 400, not a 403, when the connected identity
+// does not manage the team being requested -- typically after the user
+// switches which Yahoo login is signed in to their Yahoo account (see also
+// FLA-418, the broader multi-login question). Case-insensitive since Yahoo's
+// exact casing here is not guaranteed.
+export function isYahooNotTeamManagerBody(body: string): boolean {
+  return body.toLowerCase().includes('not a manager of this team');
+}
+
 /**
  * What an AI client (or the web app) should relay when Yahoo denies the app
  * itself. Names Yahoo, says it is platform-wide, says it is not the user's

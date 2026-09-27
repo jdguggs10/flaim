@@ -95,6 +95,43 @@ describe('Yahoo API errors', () => {
     );
   });
 
+  it('tells the AI to reconnect Yahoo with the team-owning account on a not-a-manager 400', async () => {
+    const response = new Response(
+      '{"error":{"description":"You are not a manager of this team."}}',
+      { status: 400 }
+    );
+
+    await expect(handleYahooError(response)).rejects.toThrow(
+      expect.objectContaining({
+        code: 'YAHOO_ACCESS_DENIED',
+        status: 400,
+        retryable: false,
+        message: expect.stringContaining('https://flaim.app/leagues'),
+      })
+    );
+  });
+
+  it('matches the not-a-manager 400 body case-insensitively', async () => {
+    const response = new Response(
+      '{"error":{"description":"YOU ARE NOT A MANAGER OF THIS TEAM."}}',
+      { status: 400 }
+    );
+
+    await expect(handleYahooError(response)).rejects.toThrow(
+      expect.objectContaining({ code: 'YAHOO_ACCESS_DENIED' })
+    );
+  });
+
+  it('keeps the generic bad-request mapping for other 400 bodies', async () => {
+    const response = new Response('{"error":{"description":"Invalid week"}}', {
+      status: 400,
+    });
+
+    await expect(handleYahooError(response)).rejects.toThrow(
+      expect.objectContaining({ code: 'YAHOO_BAD_REQUEST' })
+    );
+  });
+
   it('logs the Yahoo response body on a 400 for diagnostics', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const response = new Response('{"error":{"description":"Invalid week"}}', {

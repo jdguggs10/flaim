@@ -38,6 +38,7 @@ export {
   classifyYahooApiFailure,
   defaultYahooRetryAfterSeconds,
   isYahooAppLevelDenialBody,
+  isYahooNotTeamManagerBody,
   isYahooRateLimitStatus,
   isYahooTransientHttpStatus,
   parseRetryAfterSeconds,

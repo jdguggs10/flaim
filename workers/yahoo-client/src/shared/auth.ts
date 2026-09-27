@@ -45,9 +45,18 @@ async function throwYahooAuthWorkerError(response: Response): Promise<never> {
     });
   }
 
+  // errorDetail (e.g. "refresh_failed: Invalid refresh token") is the raw
+  // auth-worker detail. It is useful in logs, but an AI client reads a bare
+  // "auth error" as a Flaim connector problem and has the user reconnect the
+  // Flaim app in the AI client, which never touches Yahoo tokens and does
+  // nothing for a revoked or invalid Yahoo grant. Log the detail, then
+  // surface a message that names the actual fix.
+  console.error(`[yahoo-auth] non-transient auth-worker failure: ${errorDetail}`);
+
   throw new YahooClientError({
     code: 'YAHOO_AUTH_ERROR',
-    message: errorDetail,
+    message:
+      'Yahoo access for this account expired or was revoked. Ask the user to open https://flaim.app/leagues and click Reconnect Yahoo. Reconnecting the Flaim app in the AI client will not fix this.',
     status: response.status,
   });
 }

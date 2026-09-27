@@ -24,6 +24,22 @@ const YAHOO_TRANSIENT_AUTH_ERRORS = new Set<string>([
 const YAHOO_GENERIC_RETRY_COPY = 'Try again in a few minutes.';
 const YAHOO_TRANSIENT_AUTH_BASE = 'Yahoo is temporarily unavailable.';
 
+// Shown when a Yahoo sync succeeds (auth-worker's discover endpoint returns
+// success:true) but finds zero current-season leagues on the connected
+// login. Without this, the generic "Synced connected platforms." message
+// reads as success while the leagues list still says "No leagues added yet,"
+// which is exactly the confusion a support email described (the leagues are
+// on a different Yahoo account than the one currently connected).
+export const YAHOO_EMPTY_SYNC_MESSAGE =
+  "Yahoo is connected, but we didn't find any current-season leagues on this Yahoo login. If your league is on a different Yahoo account, reconnect with that one.";
+
+// True when a Yahoo discovery response reports zero leagues found. `count`
+// arrives as `unknown` from parsed JSON, so this only fires on an actual
+// number rather than assuming the shape.
+export function isYahooDiscoveryEmpty(count: unknown): boolean {
+  return typeof count === 'number' && count === 0;
+}
+
 export function formatYahooRetryAfter(retryAfterSeconds?: number): string | null {
   if (typeof retryAfterSeconds !== 'number' || !Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) {
     return null;
