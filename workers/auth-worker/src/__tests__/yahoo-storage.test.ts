@@ -355,6 +355,39 @@ describe('YahooStorage', () => {
       );
     });
 
+    it.each([
+      ['undefined', undefined],
+      ['blank', '   '],
+    ])('omits yahoo_guid from the upsert when the GUID is %s, leaving the stored value untouched (FLA-418)', async (_label, yahooGuid) => {
+      mockUpsert.mockReturnValue({ error: null });
+
+      await storage.saveYahooCredentials({
+        clerkUserId: 'user_xyz',
+        accessToken: 'yahoo-access-token',
+        refreshToken: 'yahoo-refresh-token',
+        expiresAt: new Date('2026-01-24T12:00:00Z'),
+        yahooGuid,
+      });
+
+      const row = mockUpsert.mock.calls[0][0] as Record<string, unknown>;
+      expect(row).not.toHaveProperty('yahoo_guid');
+      expect(row.access_token).toBe('yahoo-access-token');
+    });
+
+    it('writes a trimmed yahoo_guid when one is provided', async () => {
+      mockUpsert.mockReturnValue({ error: null });
+
+      await storage.saveYahooCredentials({
+        clerkUserId: 'user_xyz',
+        accessToken: 'yahoo-access-token',
+        refreshToken: 'yahoo-refresh-token',
+        expiresAt: new Date('2026-01-24T12:00:00Z'),
+        yahooGuid: ' yahoo-user-guid ',
+      });
+
+      expect(mockUpsert.mock.calls[0][0]).toMatchObject({ yahoo_guid: 'yahoo-user-guid' });
+    });
+
     it('throws on database error', async () => {
       mockUpsert.mockReturnValue({ error: { message: 'Upsert failed' } });
 
@@ -523,29 +556,45 @@ describe('YahooStorage', () => {
       expect(mockFrom).toHaveBeenCalledWith('yahoo_credentials');
       expect(mockSelect).toHaveBeenCalledWith('yahoo_guid');
       expect(mockEq).toHaveBeenCalledWith('clerk_user_id', 'user_123');
-      expect(result).toBe('STOREDGUID');
+      expect(result).toEqual({ status: 'ok', guid: 'STOREDGUID' });
     });
 
-    it('returns null when there is no row or no stored GUID', async () => {
+    it('trims a stored GUID', async () => {
+      mockMaybeSingle.mockResolvedValue({ data: { yahoo_guid: '  STOREDGUID ' }, error: null });
+
+      expect(await storage.getStoredYahooGuid('user_123')).toEqual({ status: 'ok', guid: 'STOREDGUID' });
+    });
+
+    it('reports a successful read with no GUID when there is no row, a null GUID, or a blank GUID', async () => {
       mockMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
-      expect(await storage.getStoredYahooGuid('user_123')).toBeNull();
+      expect(await storage.getStoredYahooGuid('user_123')).toEqual({ status: 'ok', guid: null });
 
       mockMaybeSingle.mockResolvedValueOnce({ data: { yahoo_guid: null }, error: null });
-      expect(await storage.getStoredYahooGuid('user_123')).toBeNull();
+      expect(await storage.getStoredYahooGuid('user_123')).toEqual({ status: 'ok', guid: null });
+
+      mockMaybeSingle.mockResolvedValueOnce({ data: { yahoo_guid: '   ' }, error: null });
+      expect(await storage.getStoredYahooGuid('user_123')).toEqual({ status: 'ok', guid: null });
     });
 
-    it('returns null and logs only the error code when the read fails', async () => {
+    it('reports read_failed and logs only the error code when the read errors', async () => {
       const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       mockMaybeSingle.mockResolvedValue({
         data: null,
         error: { code: '57014', message: 'raw driver detail' },
       });
 
-      expect(await storage.getStoredYahooGuid('user_abc123')).toBeNull();
+      expect(await storage.getStoredYahooGuid('user_abc123')).toEqual({ status: 'read_failed' });
       expect(errorSpy).toHaveBeenCalledWith(
         '[yahoo-storage] Failed to read stored Yahoo GUID for user user_abc...: code=57014'
       );
       expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('raw driver detail');
+    });
+
+    it('reports read_failed when the client throws', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      mockMaybeSingle.mockRejectedValue(new Error('socket hang up'));
+
+      expect(await storage.getStoredYahooGuid('user_abc123')).toEqual({ status: 'read_failed' });
     });
   });
 

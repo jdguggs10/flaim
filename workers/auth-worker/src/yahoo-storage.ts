@@ -83,9 +83,14 @@ export interface SaveCredentialsParams {
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
+  /** Omit when unknown: the stored GUID is then left unchanged. */
   yahooGuid?: string;
   appFingerprint?: string;
 }
+
+export type StoredYahooGuidRead =
+  | { status: 'ok'; guid: string | null }
+  | { status: 'read_failed' };
 
 export interface UpdateCredentialsParams {
   accessToken: string;
@@ -285,16 +290,23 @@ export class YahooStorage {
   // ---------------------------------------------------------------------------
 
   /**
-   * Save or update Yahoo OAuth credentials for a user
+   * Save or update Yahoo OAuth credentials for a user.
+   *
+   * `yahoo_guid` is written only when `yahooGuid` is a nonblank string. When it
+   * is omitted the column is left out of the upsert, so an existing row keeps
+   * its stored GUID and a new row gets the column default (NULL). A known GUID
+   * is never overwritten with NULL, which would hide a later login switch
+   * (FLA-418).
    */
   async saveYahooCredentials(params: SaveCredentialsParams): Promise<void> {
+    const yahooGuid = typeof params.yahooGuid === 'string' ? params.yahooGuid.trim() : '';
     const { error } = await this.supabase.from('yahoo_credentials').upsert(
       {
         clerk_user_id: params.clerkUserId,
         access_token: params.accessToken,
         refresh_token: params.refreshToken,
         expires_at: params.expiresAt.toISOString(),
-        yahoo_guid: params.yahooGuid || null,
+        ...(yahooGuid ? { yahoo_guid: yahooGuid } : {}),
         app_fingerprint: params.appFingerprint || null,
         updated_at: new Date().toISOString(),
         // Reconnect replaces the token set, so any outstanding refresh winner is stale.
@@ -352,28 +364,36 @@ export class YahooStorage {
   }
 
   /**
-   * Get the stored Yahoo login GUID for a user, or null when there is no
-   * credential row, the GUID was never recorded, or the read failed. Callers
-   * treat null as "unknown" and must never act destructively on it (FLA-418).
-   * Does not select access_token or refresh_token.
+   * Read the stored Yahoo login GUID for a user (FLA-418). `guid: null` means
+   * the read succeeded but there is no credential row or no recorded GUID;
+   * `read_failed` means the stored value is unknown. Callers must not delete
+   * data or overwrite the GUID on `read_failed`, or a login switch could be
+   * hidden permanently. Never throws. Does not select access_token or
+   * refresh_token.
    */
-  async getStoredYahooGuid(clerkUserId: string): Promise<string | null> {
-    const { data, error } = await this.supabase
-      .from('yahoo_credentials')
-      .select('yahoo_guid')
-      .eq('clerk_user_id', clerkUserId)
-      .maybeSingle();
+  async getStoredYahooGuid(clerkUserId: string): Promise<StoredYahooGuidRead> {
+    try {
+      const { data, error } = await this.supabase
+        .from('yahoo_credentials')
+        .select('yahoo_guid')
+        .eq('clerk_user_id', clerkUserId)
+        .maybeSingle();
 
-    if (error) {
+      if (error) {
+        console.error(
+          `[yahoo-storage] Failed to read stored Yahoo GUID for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+        );
+        return { status: 'read_failed' };
+      }
+
+      const guid = typeof data?.yahoo_guid === 'string' ? data.yahoo_guid.trim() : '';
+      return { status: 'ok', guid: guid.length > 0 ? guid : null };
+    } catch {
       console.error(
-        `[yahoo-storage] Failed to read stored Yahoo GUID for user ${maskUserId(clerkUserId)}: code=${(error as SupabaseErrorLike).code || 'unknown'}`
+        `[yahoo-storage] Failed to read stored Yahoo GUID for user ${maskUserId(clerkUserId)}: code=exception`
       );
-      return null;
+      return { status: 'read_failed' };
     }
-
-    return typeof data?.yahoo_guid === 'string' && data.yahoo_guid.length > 0
-      ? data.yahoo_guid
-      : null;
   }
 
   /**

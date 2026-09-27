@@ -159,7 +159,7 @@ describe('yahoo-connect-handlers', () => {
       saveYahooCredentials: vi.fn().mockResolvedValue(undefined),
       getYahooCredentials: vi.fn(),
       getYahooCredentialHealth: vi.fn(),
-      getStoredYahooGuid: vi.fn().mockResolvedValue(null),
+      getStoredYahooGuid: vi.fn().mockResolvedValue({ status: 'ok', guid: null }),
       updateYahooCredentials: vi.fn().mockResolvedValue(true),
       updateYahooCredentialsIfRefreshTokenMatches: vi.fn().mockResolvedValue(false),
       markRefreshCooldown: vi.fn().mockResolvedValue(true),
@@ -418,7 +418,7 @@ describe('yahoo-connect-handlers', () => {
 
       it('deletes the previous login leagues before saving when the token GUID differs from the stored GUID', async () => {
         vi.spyOn(console, 'log').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'OLDLOGINGUID' });
         mockFetch.mockResolvedValueOnce(tokenExchangeResponse('NEWLOGINGUID'));
 
         const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
@@ -438,7 +438,7 @@ describe('yahoo-connect-handlers', () => {
       it('deletes the previous login leagues when the use_login GUID differs from the stored GUID', async () => {
         vi.spyOn(console, 'log').mockImplementation(() => undefined);
         vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'OLDLOGINGUID' });
         mockFetch
           .mockResolvedValueOnce(tokenExchangeResponse())
           .mockResolvedValueOnce(useLoginResponse('NEWLOGINGUID'));
@@ -458,7 +458,7 @@ describe('yahoo-connect-handlers', () => {
       });
 
       it('keeps leagues on a same-login reconnect', async () => {
-        mockStorage.getStoredYahooGuid.mockResolvedValue('SAMELOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'SAMELOGINGUID' });
         mockFetch.mockResolvedValueOnce(tokenExchangeResponse('SAMELOGINGUID'));
 
         const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
@@ -472,7 +472,7 @@ describe('yahoo-connect-handlers', () => {
 
       it('treats GUIDs that differ only in letter case as the same login', async () => {
         vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue('SAMELOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'SAMELOGINGUID' });
         mockFetch
           .mockResolvedValueOnce(tokenExchangeResponse())
           .mockResolvedValueOnce(useLoginResponse('sameloginguid'));
@@ -482,9 +482,36 @@ describe('yahoo-connect-handlers', () => {
         expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
       });
 
+      it('treats a stored GUID with surrounding whitespace as the same login', async () => {
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: ' SAMELOGINGUID ' });
+        mockFetch.mockResolvedValueOnce(tokenExchangeResponse('SAMELOGINGUID'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+      });
+
+      it('neither deletes nor overwrites the stored GUID when the stored GUID read fails', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'read_failed' });
+        mockFetch.mockResolvedValueOnce(tokenExchangeResponse('NEWLOGINGUID'));
+
+        const response = await handleYahooCallback(callbackRequest(), env, corsHeaders);
+
+        expect(response.headers.get('Location')).toContain('yahoo=connected');
+        expect(mockStorage.deleteAllYahooLeagues).not.toHaveBeenCalled();
+        const saved = mockStorage.saveYahooCredentials.mock.calls[0][0];
+        expect(saved.yahooGuid).toBeUndefined();
+        expect(saved.accessToken).toBe('yahoo-access-token');
+        expect(warnSpy).toHaveBeenCalledWith(
+          "[yahoo-connect] Stored Yahoo GUID unreadable for user user_abc...; leaving leagues and stored GUID unchanged"
+        );
+      });
+
       it('backfills the GUID without deleting when no GUID was stored', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue(null);
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: null });
         mockFetch
           .mockResolvedValueOnce(tokenExchangeResponse())
           .mockResolvedValueOnce(useLoginResponse('NEWLOGINGUID'));
@@ -506,7 +533,7 @@ describe('yahoo-connect-handlers', () => {
 
       it('connects without deleting when the GUID lookup returns an error status', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'OLDLOGINGUID' });
         mockFetch
           .mockResolvedValueOnce(tokenExchangeResponse())
           .mockResolvedValueOnce(new Response('upstream body with secrets', { status: 500 }));
@@ -527,7 +554,7 @@ describe('yahoo-connect-handlers', () => {
 
       it('connects without deleting when the GUID lookup request throws', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'OLDLOGINGUID' });
         mockFetch
           .mockResolvedValueOnce(tokenExchangeResponse())
           .mockRejectedValueOnce(new TypeError('network down'));
@@ -544,7 +571,7 @@ describe('yahoo-connect-handlers', () => {
 
       it('connects without deleting when the GUID lookup body is not a single user', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'OLDLOGINGUID' });
         mockFetch
           .mockResolvedValueOnce(tokenExchangeResponse())
           .mockResolvedValueOnce(new Response(JSON.stringify({ fantasy_content: {} }), { status: 200 }));
@@ -560,7 +587,7 @@ describe('yahoo-connect-handlers', () => {
 
       it('fails the connect without saving when deleting the previous login leagues fails', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        mockStorage.getStoredYahooGuid.mockResolvedValue('OLDLOGINGUID');
+        mockStorage.getStoredYahooGuid.mockResolvedValue({ status: 'ok', guid: 'OLDLOGINGUID' });
         mockStorage.deleteAllYahooLeagues.mockRejectedValue(new Error('Failed to delete all Yahoo leagues'));
         mockFetch.mockResolvedValueOnce(tokenExchangeResponse('NEWLOGINGUID'));
 

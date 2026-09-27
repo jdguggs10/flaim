@@ -1456,6 +1456,15 @@ export async function handleYahooAuthorize(
   }
 }
 
+/**
+ * GUIDs are opaque identifiers. Compare trimmed and case-insensitively so a
+ * formatting difference (legacy whitespace, token exchange vs use_login=1
+ * casing) can never be mistaken for a login switch and delete leagues.
+ */
+function sameYahooGuid(a: string, b: string): boolean {
+  return a.trim().toUpperCase() === b.trim().toUpperCase();
+}
+
 type YahooLoginGuidLookup =
   | { guid: string }
   | { failure: 'timeout' | 'fetch_error' | `http_${number}` | 'invalid_json' | 'guid_unparseable' };
@@ -1694,12 +1703,12 @@ export async function handleYahooCallback(
       ...requestDiagnosticFields,
     });
 
-    let yahooGuid = nonBlankYahooString(tokenResponse.xoauth_yahoo_guid) ?? undefined;
-    if (!yahooGuid) {
+    let newGuid = nonBlankYahooString(tokenResponse.xoauth_yahoo_guid);
+    if (!newGuid) {
       console.warn(`[yahoo-connect] Yahoo token exchange omitted GUID for user ${maskUserId(clerkUserId)}`);
       const lookup = await fetchYahooLoginGuid(tokenResponse.access_token);
       if ('guid' in lookup) {
-        yahooGuid = lookup.guid;
+        newGuid = lookup.guid;
       } else {
         console.warn(
           `[yahoo-connect] Yahoo login GUID lookup failed for user ${maskUserId(clerkUserId)}: reason=${lookup.failure}`
@@ -1709,19 +1718,31 @@ export async function handleYahooCallback(
 
     // Flaim supports one Yahoo login per account (FLA-418). When a different
     // Yahoo login connects, the previous login's leagues can't be managed by
-    // the new token, so remove them before saving; discovery repopulates from
-    // the new login. Only act when both GUIDs are known and differ: an unknown
-    // GUID on either side keeps the existing leagues untouched. The delete runs
-    // before the credential save: if it throws, the connect fails with the old
-    // credential and GUID intact, so a retry still detects the switch.
-    if (yahooGuid) {
-      const storedGuid = await storage.getStoredYahooGuid(clerkUserId);
-      // GUIDs are opaque; compare case-insensitively so a formatting difference
-      // between the token exchange and use_login=1 can never delete leagues.
-      if (storedGuid && storedGuid.toUpperCase() !== yahooGuid.toUpperCase()) {
-        await storage.deleteAllYahooLeagues(clerkUserId);
-        console.log(
-          `[yahoo-connect] Yahoo login changed for user ${maskUserId(clerkUserId)}; removed the previous login's Yahoo leagues`
+    // the new token, so remove the Yahoo league rows and Yahoo defaults before
+    // saving; discovery repopulates from the new login.
+    //
+    // Fail safe toward keeping data and keeping the switch detectable:
+    // - Delete only when both GUIDs are known and differ.
+    // - Write the GUID only when the new GUID is known AND the stored read
+    //   succeeded. Otherwise the column is left as-is, so a known GUID is never
+    //   replaced with NULL or silently replaced after a failed read.
+    // The delete runs before the credential save: if it throws, the connect
+    // fails with the old credential and GUID intact, so a retry still detects
+    // the switch.
+    let guidToSave: string | undefined;
+    if (newGuid) {
+      const stored = await storage.getStoredYahooGuid(clerkUserId);
+      if (stored.status === 'ok') {
+        guidToSave = newGuid;
+        if (stored.guid && !sameYahooGuid(stored.guid, newGuid)) {
+          await storage.deleteAllYahooLeagues(clerkUserId);
+          console.log(
+            `[yahoo-connect] Yahoo login changed for user ${maskUserId(clerkUserId)}; removed the previous login's Yahoo leagues`
+          );
+        }
+      } else {
+        console.warn(
+          `[yahoo-connect] Stored Yahoo GUID unreadable for user ${maskUserId(clerkUserId)}; leaving leagues and stored GUID unchanged`
         );
       }
     }
@@ -1735,7 +1756,7 @@ export async function handleYahooCallback(
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
       expiresAt,
-      yahooGuid,
+      yahooGuid: guidToSave,
       appFingerprint: await computeYahooAppFingerprint(env.YAHOO_CLIENT_ID),
     });
 
