@@ -1612,7 +1612,7 @@ export function getUnifiedTools(): UnifiedTool[] {
       outputSchema: REFRESH_LEAGUES_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Refreshing leagues\u2026', invoked: 'Refresh complete' },
       description:
-        'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh or after the user presses the widget refresh button. This is non-destructive, but repeated refreshes can update Flaim registry timestamps and provider metadata; it does not change provider lineups or rosters, add or drop players, submit waiver claims or trades, or modify league settings. If this call succeeds, call get_user_session again to show the updated league list. If it fails, follow the error retry guidance and any retry_after value; do not retry in a loop.',
+        'Refresh connected fantasy leagues by asking Flaim to rediscover leagues through connected ESPN, Yahoo, and Sleeper accounts. Use only when the user explicitly asks to refresh, or from the refresh control on the league widget where the client supports it. This is non-destructive, but repeated refreshes can update Flaim registry timestamps and provider metadata; it does not change provider lineups or rosters, add or drop players, submit waiver claims or trades, or modify league settings. If this call succeeds, call get_user_session again to show the updated league list. If it fails, follow the error retry guidance and any retry_after value; do not retry in a loop.',
       inputSchema: {
         platforms: z
           .array(z.enum(['espn', 'yahoo', 'sleeper']))

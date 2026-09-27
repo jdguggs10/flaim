@@ -25,7 +25,7 @@ describe('Flaim MCP initialization instructions', () => {
       'User-specific connection, league, or account status: call get_user_session only'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
-      'Explicit refresh request or widget refresh: call refresh_leagues, then call get_user_session after success'
+      'Explicit refresh request: call refresh_leagues, then call get_user_session after success'
     );
     expect(FLAIM_MCP_INSTRUCTIONS).toContain(
       'Selected-league analysis: call get_user_session only when no usable successful session result is available in this chat'
@@ -40,6 +40,24 @@ describe('Flaim MCP initialization instructions', () => {
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('A new chat needs its own session lookup');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('Reuse session context, not stale roster, score, or player data');
     expect(FLAIM_MCP_INSTRUCTIONS).toContain('With session context established, call get_league_info');
+  });
+
+  // FLA-411: Claude connector clients get no skill, so the instructions carry
+  // the setup pointers, credential rule, web-research steer, and naming rule.
+  it('carries the skill-free parity rules for setup, credentials, research, and naming', () => {
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      'ESPN connects through the Flaim Chrome extension'
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('Yahoo through Yahoo sign-in');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('Sleeper by username');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('Never ask the user for a password, cookie, or token');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain(
+      "Never state a player's current team, role, or health from memory"
+    );
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('then expert consensus; your own judgment comes last');
+    expect(FLAIM_MCP_INSTRUCTIONS).toContain('never show them to the user');
+    expect(FLAIM_MCP_INSTRUCTIONS).not.toContain('available setup guidance');
+    expect(FLAIM_MCP_INSTRUCTIONS).not.toContain('widget refresh');
   });
 
   it('keeps weather and generic coding or scraping outside Flaim tools', () => {
