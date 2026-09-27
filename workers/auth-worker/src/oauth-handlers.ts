@@ -344,7 +344,7 @@ export function handleMetadataDiscovery(env: OAuthEnv, corsHeaders: Record<strin
     scopes_supported: ['mcp:read', 'mcp:write'],
 
     // Service documentation
-    service_documentation: 'https://flaim.app/docs/oauth',
+    service_documentation: 'https://flaim.app/docs',
   };
 
   return new Response(JSON.stringify(metadata), {

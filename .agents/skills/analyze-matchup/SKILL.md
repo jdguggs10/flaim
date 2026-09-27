@@ -2,7 +2,7 @@
 name: analyze-matchup
 description: Analyze the current fantasy matchup with scores, remaining players or games, and a fact-based forecast. Use when the user explicitly wants a matchup-state breakdown or invokes /analyze-matchup.
 argument-hint: "[week-number, default current week]"
-license: Proprietary
+license: MIT
 ---
 
 # Analyze Matchup

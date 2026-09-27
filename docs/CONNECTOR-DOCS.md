@@ -4,9 +4,9 @@ This page is the single user-facing reference for using Flaim Fantasy in ChatGPT
 
 ## What Flaim Is
 
-Flaim is a read-only fantasy analysis service for ESPN, Yahoo, and Sleeper leagues. It provides tools for rosters, standings, matchups, league info, available players, and recent moves with explicit platform and season context.
+Flaim is a fantasy analysis service for ESPN, Yahoo, and Sleeper leagues. It reads your leagues and provides tools for rosters, standings, matchups, league info, available players, and recent moves with explicit platform and season context.
 
-Flaim cannot make trades, add or drop players, edit lineups, or change league settings.
+Flaim cannot make trades, add or drop players, edit lineups, or change league settings. The only write is `refresh_leagues`, which updates Flaim's own list of your leagues.
 
 ## Server + Auth
 
@@ -86,7 +86,7 @@ All tools take explicit parameters: `platform`, `sport`, `league_id`, `season_ye
 
 Analysis tools are read-only. `refresh_leagues` requires `mcp:write` because it can add or update Flaim league records after provider discovery, but it does not make roster moves, trades, drops, or lineup changes.
 
-- `get_user_session` (required first call in a normal chat): your leagues and defaults
+- `get_user_session`: your leagues and defaults
 - `refresh_leagues`: re-discover connected leagues and update Flaim's league records
 - `get_league_info` (usually second): baseline league context for team-name resolution, owner/team mapping, scoring, and roster-slot context before downstream league tools
 - `get_draft`: confirmed draft results and provider-grounded draft-pick ownership (optional `round`, `team_id`, and Sleeper `draft_id`)
@@ -110,18 +110,18 @@ Sleeper supports football and basketball.
 These are intentionally short and easy to copy/paste.
 
 1. **List leagues**
-   - “What fantasy leagues do I have? Show platform, sport, league id, season.”
+   - “What fantasy leagues do I have?”
 
 2. **Standings**
    - “Show me the standings in my default league.”
-   - “Show me the standings for ESPN football league 12345678 in 2025.”
+   - “Show me last season's standings in my ESPN football league.”
 
 3. **Draft picks**
    - “Which picks do I currently own, and where are they projected on the draft board?”
 
 4. **Roster**
    - “Who is on my roster in my default league?”
-   - “Show my roster for Yahoo football league 123.l.456789, season 2025.”
+   - “Show my roster in my Yahoo baseball league.”
 
 5. **Available players**
    - “Who are the best available players in my league right now?”
@@ -133,8 +133,8 @@ These are intentionally short and easy to copy/paste.
 
 7. **Transactions**
    - “Show recent transactions in my default league.”
-   - “Show week 8 transactions for ESPN football league 12345678 in 2025.”
-   - “Show recent Yahoo transactions for league 423.l.193847 in 2025 (adds/drops/trades).”
+   - “What moves happened in my ESPN football league in week 8?”
+   - “Show recent adds, drops, and trades in my Yahoo league.”
 
 For Yahoo, avoid relying on explicit `week` filtering:
 - Yahoo ignores explicit `week` and uses a recent 14-day timestamp window for completed league transactions.

@@ -2,7 +2,7 @@
 name: activity-brief
 description: Give a time-bucketed league activity briefing on recent fantasy moves, including who moved who, when, and why. Use when the user explicitly wants a transaction roundup or invokes /activity-brief.
 argument-hint: "[days-back, default 2]"
-license: Proprietary
+license: MIT
 ---
 
 # Activity Brief
