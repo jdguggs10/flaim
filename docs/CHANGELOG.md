@@ -4,6 +4,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Accurate Labels, Working Claude Code Install
+
+- **Fixed**: "read-only" claims in `server.json`, `docs/CONNECTOR-DOCS.md`, and the `/docs/ai` FAQ. Flaim reads your leagues and never changes them; its one write, `refresh_leagues`, updates Flaim's own list of your leagues. The Codex manifest's tool count now says ten read tools plus `refresh_leagues`. `server.json` moves to 1.0.2.
+- **Fixed**: OAuth authorization server metadata advertised `service_documentation` at `https://flaim.app/docs/oauth`, which returns 404. It now points at `https://flaim.app/docs`.
+- **Fixed**: `.claude-plugin/marketplace.json` used Codex's marketplace format and failed `claude plugin validate`. It now follows the Claude Code marketplace schema, and the Codex-format file moved to `.agents/plugins/marketplace.json`, Codex's own marketplace path. The Claude plugin moves to 1.1.0 (its skills changed on 2026-09-24), and the plugin and the `activity-brief` and `analyze-matchup` skills now say MIT, matching the repo license.
+- **Changed**: `docs/CONNECTOR-DOCS.md` example prompts no longer ask for numeric league IDs, and `get_user_session` is no longer described as a required first call. `/docs/ai` gains a Claude Code block with the `claude mcp add` command, and the README's Claude Code install uses the plugin, since Claude Code doesn't read `~/.agents/skills`.
+
 ### Sleeper Free Agents Ranked by Trending Adds, Not Alphabetically (FLA-422)
 
 - **Fixed**: Sleeper's `get_free_agents` sorted its full filtered player pool alphabetically by name before applying the count cap, so a request for e.g. running backs returned the first 25 active, unrostered RBs A-to-Z — mostly teamless or long-retired players — instead of anyone plausibly startable. The builder now ranks by Sleeper's own public trending-adds leaderboard (`GET /players/{nfl|nba}/trending/add`, last 24 hours) first, then Sleeper's `search_rank` ascending (missing/non-finite treated as worst-possible, never a tie-winner), then name/id as the final deterministic tiebreak. Trending reorders players that already passed the active/unrostered/position filters, and can also pull in a teamless player past the no-team filter below — it never adds a rostered, inactive, or wrong-position player. A trending-fetch failure (non-OK response, network error, or unexpected payload shape) degrades silently to `search_rank`-only ranking — logged, never a user-facing warning or a failed call.

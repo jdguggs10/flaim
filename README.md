@@ -24,12 +24,18 @@ You are done. Ask questions such as "Who should I start this week?" or "What's o
 
 The Flaim skill is the judgment layer. It covers what Flaim is and cannot do, how to gather league context in order, and a playbook per decision type: start/sit, waivers and pickups, trades, keepers and dynasty, matchup previews, draft picks, season history, and multi-league comparisons. Tool mechanics stay in the tool descriptions and the server instructions, which every MCP client reads live, so the skill does not restate them.
 
-**Install for Claude Code (or any Agent Skills-compatible tool):**
-
-Place the skill in your project's `.agents/skills/` directory (cross-platform convention) or in `~/.agents/skills/` for global use:
+**Install for Claude Code:** the plugin bundles the skills and the MCP server.
 
 ```bash
-# Clone or copy the skill directory
+claude plugin marketplace add jdguggs10/flaim
+claude plugin install flaim-fantasy@flaim
+```
+
+Then run `/mcp` in Claude Code and choose the Flaim server to sign in. To add only the MCP server, run `claude mcp add --transport http flaim https://api.flaim.app/mcp`.
+
+**Other Agent Skills-compatible tools:** place the skill in your project's `.agents/skills/` directory or in `~/.agents/skills/` for global use. Claude Code reads `.claude/skills/` instead.
+
+```bash
 cp -r flaim/.agents/skills/flaim-fantasy ~/.agents/skills/flaim-fantasy
 ```
 
