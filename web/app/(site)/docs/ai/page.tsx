@@ -26,6 +26,8 @@ export const metadata: Metadata = {
   },
 };
 
+const CLAUDE_CODE_ADD_COMMAND = `claude mcp add --transport http flaim ${FLAIM_MCP_URL}`;
+
 const CONNECTION_FAQS = [
   {
     question: "Is there a ChatGPT app for my fantasy league?",
@@ -45,7 +47,7 @@ const CONNECTION_FAQS = [
   {
     question: "Can Flaim change my league?",
     answer:
-      "No. Flaim is read-only. It cannot make trades, add or drop players, edit lineups, or change settings in ESPN, Yahoo, or Sleeper.",
+      "No. Flaim reads your leagues. It cannot make trades, add or drop players, edit lineups, or change settings in ESPN, Yahoo, or Sleeper. The only thing it updates is Flaim's own list of your leagues.",
   },
 ] as const;
 
@@ -231,6 +233,22 @@ export default function AiGuidePage() {
                 </p>
               </details>
             </article>
+          </div>
+
+          <div className="mt-5 rounded-2xl border p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              Claude Code
+            </p>
+            <p className="mt-3 leading-7 text-muted-foreground">
+              Run this in your terminal, then type /mcp in Claude Code and
+              choose flaim to sign in to your Flaim account.
+            </p>
+            <div className="mt-4">
+              <CopyableConnectorField
+                label="Command"
+                value={CLAUDE_CODE_ADD_COMMAND}
+              />
+            </div>
           </div>
         </div>
       </section>
