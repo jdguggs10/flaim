@@ -419,6 +419,28 @@ export function selectPublicDemoSportOptions(
 }
 
 /**
+ * The sport a short tap on the phone's sport button moves to: the next
+ * available option after the selected one in display order, wrapping around.
+ * Returns null when no other sport is available for the current platform, so
+ * the tap does nothing and the button can show that it has nowhere to go.
+ */
+export function selectNextAvailableSportOption(
+  options: readonly PublicDemoSportOption[],
+): PublicDemoSportOption | null {
+  const count = options.length;
+  const selectedIndex = options.findIndex((option) => option.selected);
+
+  for (let step = 1; step <= count; step += 1) {
+    const candidate = options[(selectedIndex + step + count) % count];
+    if (candidate.available && !candidate.selected) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Copy announced when switching platforms forces a different sport. Names only
  * user-visible platform and sport labels — never a target ID or gate state.
  */

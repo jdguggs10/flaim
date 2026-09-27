@@ -17,6 +17,7 @@ import {
   canStartPublicDemoRun,
   loadPublicDemoCapabilities,
   publicDemoReducer,
+  selectNextAvailableSportOption,
   selectPublicDemoPlatformOptions,
   selectPublicDemoRequestPlatform,
   selectPublicDemoSportOptions,
@@ -355,16 +356,16 @@ export function PublicChatExperience({
     }),
     [state.platform],
   );
-  // The sport button toggles directly to the other sport on a short tap
-  // (there are only two); press-and-hold (or right-click) opens the full
-  // four-sport sheet, so the button stays enabled even when the platform
-  // only offers one sport — a short tap just does nothing in that case.
+  // A short tap on the sport button cycles to the next sport the current
+  // platform offers, wrapping around; press-and-hold (or right-click) opens
+  // the full all-sports sheet, so the button stays enabled even when the
+  // platform only offers one sport — a short tap just does nothing then.
   const currentSportOption = sportOptions.find((option) => option.selected);
-  const otherSportOption = sportOptions.find((option) => !option.selected);
+  const nextSportOption = selectNextAvailableSportOption(sportOptions);
   const currentSportLabel =
     currentSportOption?.label ?? PUBLIC_DEMO_SPORT_LABELS[demoSport];
-  const sportButtonAriaLabel = otherSportOption?.available
-    ? `Demo sport: ${currentSportLabel}. Tap to switch to ${otherSportOption.label}. Hold to see all sports.`
+  const sportButtonAriaLabel = nextSportOption
+    ? `Demo sport: ${currentSportLabel}. Tap to switch to ${nextSportOption.label}. Hold to see all sports.`
     : `Demo sport: ${currentSportLabel}. Hold to see all sports.`;
 
   const selectedPreset = useMemo(
@@ -651,7 +652,7 @@ export function PublicChatExperience({
   }, []);
 
   // Press-and-hold (or right-click) on the sport button opens the full
-  // four-sport sheet; a short tap keeps toggling between football/baseball.
+  // all-sports sheet; a short tap cycles to the next available sport.
   // The timer set on pointerdown is what tells a hold apart from a tap —
   // when it fires we flag the hold so the click event it also produces gets
   // swallowed instead of re-toggling the sport underneath the open sheet.
@@ -706,10 +707,10 @@ export function PublicChatExperience({
       sportHoldTriggeredRef.current = false;
       return;
     }
-    if (otherSportOption?.available) {
-      handleSelectSport(otherSportOption.sport);
+    if (nextSportOption) {
+      handleSelectSport(nextSportOption.sport);
     }
-  }, [handleSelectSport, otherSportOption]);
+  }, [handleSelectSport, nextSportOption]);
 
   const handleSportContextMenu = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -925,7 +926,7 @@ export function PublicChatExperience({
                 aria-expanded={educationPanel === "sports"}
                 className={cn(
                   "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
-                  otherSportOption?.available ? "" : "opacity-45",
+                  nextSportOption ? "" : "opacity-45",
                 )}
               >
                 {PUBLIC_SPORT_COPY[demoSport].icon}
