@@ -456,6 +456,19 @@ begin
     raise exception 'demo_target_state grants are not service-role only';
   end if;
 
+  if not exists (
+    select 1
+    from pg_constraint con
+    where con.conrelid = 'public.demo_target_state'::regclass
+      and con.conname = 'demo_target_state_sport_check'
+      and con.contype = 'c'
+      and con.convalidated
+      and pg_get_constraintdef(con.oid, true)
+        = 'CHECK (sport = ANY (ARRAY[''baseball''::text, ''football''::text, ''hockey''::text]))'
+  ) then
+    raise exception 'demo_target_state sport check must allow exactly baseball, football, and hockey';
+  end if;
+
   select count(*) into actual_count
   from pg_class c
   join pg_namespace n on n.oid = c.relnamespace
