@@ -835,7 +835,10 @@ export function PublicChatExperience({
                 })}
               </div>
 
-              <DropdownMenuPrimitive.Root>
+              {/* Non-modal so the page can still scroll: the menu always
+                  drops down inside the phone, and on a short viewport its
+                  last rows can sit below the fold. */}
+              <DropdownMenuPrimitive.Root modal={false}>
                 <DropdownMenuPrimitive.Trigger asChild>
                   <button
                     type="button"
@@ -847,8 +850,10 @@ export function PublicChatExperience({
                 </DropdownMenuPrimitive.Trigger>
                 <DropdownMenuPrimitive.Portal container={phonePanelContainer}>
                   <DropdownMenuPrimitive.Content
+                    side="bottom"
                     align="end"
                     sideOffset={8}
+                    avoidCollisions={false}
                     className="z-50 w-max min-w-48 rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5 text-[var(--phone-text)] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1"
                   >
                     {/* A radio group so assistive tech hears which sport is
