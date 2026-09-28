@@ -347,6 +347,18 @@
   }
 }
 
+/* Status-line shimmer: a lighter band sweeps across the muted status text
+   while a simulated run step is in flight. */
+@keyframes public-chat-status-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 /* Prepared-question ticker: the track holds the prompt list twice, so a
    -50% translate lands exactly on the start of the second copy and the loop
    is seamless. */
@@ -427,6 +439,25 @@
     animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) 1;
   }
 
+  /* Solid muted color first, so the text stays readable if background-clip:
+     text is ever unsupported; the gradient below overrides it. */
+  .public-chat-status-shimmer {
+    color: var(--phone-muted);
+    background-image: linear-gradient(
+      90deg,
+      var(--phone-muted) 0%,
+      var(--phone-muted) 38%,
+      var(--phone-text) 50%,
+      var(--phone-muted) 62%,
+      var(--phone-muted) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: public-chat-status-shimmer 1.6s ease-in-out infinite;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .public-chat-send-running,
     .public-chat-idle-rock,
@@ -435,6 +466,15 @@
       animation: none !important;
       transform: none;
       opacity: 1;
+    }
+
+    /* Reduced motion: static muted text, no shimmer sweep. */
+    .public-chat-status-shimmer {
+      animation: none !important;
+      background-image: none;
+      -webkit-background-clip: initial;
+      background-clip: initial;
+      color: var(--phone-muted);
     }
 
     /* Reduced motion: a still, finger-scrollable row of each question once. */

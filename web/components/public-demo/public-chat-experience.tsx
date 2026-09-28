@@ -5,14 +5,17 @@ import {
 } from "@/components/site/phone-demo-frame";
 import { SportIcon } from "@/components/site/sport-icon";
 import {
+  getPublicChatStepStatusLabel,
   type PublicChatDemoPlatform,
   type PublicChatDemoSport,
   type PublicChatPreset,
+  type PublicChatStepName,
 } from "@/lib/public-chat";
 import {
   INITIAL_PUBLIC_DEMO_STATE,
   PUBLIC_DEMO_PLATFORM_LABELS,
   PUBLIC_DEMO_SPORT_LABELS,
+  buildPublicChatStepSequence,
   buildPublicDemoCacheRequestUrl,
   buildPublicDemoSportMenuRows,
   canStartPublicDemoRun,
@@ -23,13 +26,16 @@ import {
   selectPublicDemoSportOptions,
   selectPublicDemoVisiblePresets,
   type PublicDemoAnswerMeta,
+  type PublicDemoToolTraceSummary,
 } from "@/lib/public-demo-client";
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
+  ChevronRight,
   Copy,
+  Globe,
   LoaderCircle,
   Menu,
   MoreHorizontal,
@@ -52,16 +58,6 @@ import {
   type PhoneEducationPanelId,
 } from "./phone-education-panel";
 import { PublicMessage } from "./public-message";
-import { PublicToolCall } from "./public-tool-call";
-
-type PublicDemoToolTraceSummary = {
-  byName?: Record<
-    string,
-    {
-      count?: number;
-    }
-  >;
-};
 
 type PublicDemoRefreshFailure = {
   status?: string;
@@ -69,14 +65,10 @@ type PublicDemoRefreshFailure = {
   errorMessage?: string | null;
 };
 
-const PUBLIC_PRE_TOOL_STEPS = [
-  { label: "Thinking...", durationMs: 1250 },
-  { label: "Reading Flaim Fantasy...", durationMs: 1250 },
-  { label: "Using Flaim tools...", durationMs: 1000 },
-] as const;
-
-const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
-const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
+/** Simulated "thinking" phase before the first status-line step appears. */
+const PUBLIC_CHAT_THINKING_DURATION_MS = 1200;
+/** How long each status-line step (a tool, or web search) stays on screen. */
+const PUBLIC_CHAT_STEP_DURATION_MS = 860;
 /** Seconds of ticker travel per prepared question; ~45px/s at pill width. */
 const PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT = 4;
 
@@ -136,37 +128,6 @@ function getPublicDemoFailureCopy(
         "The latest refresh failed before a new answer could be stored."
       );
   }
-}
-
-function normalizeTraceToolName(name: string) {
-  if (name.startsWith("mcp_fantasy_")) {
-    return name.slice("mcp_fantasy_".length);
-  }
-
-  if (
-    name === "google_web_search" ||
-    name === "web_search" ||
-    name === "web_search_call"
-  ) {
-    return "web_search";
-  }
-
-  return name;
-}
-
-function buildSimulatedToolNames(
-  preset: PublicChatPreset,
-  toolTraceSummary: PublicDemoToolTraceSummary | null | undefined,
-) {
-  const byName = toolTraceSummary?.byName ?? {};
-  const tracedNames = Object.keys(byName)
-    .map(normalizeTraceToolName)
-    .filter((value, index, array) => array.indexOf(value) === index);
-
-  const plannedTools = [...preset.allowedTools];
-  const usedWebSearch = tracedNames.includes("web_search");
-
-  return usedWebSearch ? [...plannedTools, "web_search"] : plannedTools;
 }
 
 async function waitFor(ms: number, signal: AbortSignal) {
@@ -326,7 +287,6 @@ export function PublicChatExperience({
     assistantText,
     capabilitiesStatus,
     error,
-    preToolStatusIndex,
     runStatus,
     selectedPresetId,
     sportSwitchNote,
@@ -353,6 +313,10 @@ export function PublicChatExperience({
     [],
   );
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
+  // The collapsed "Used Flaim Fantasy" disclosure line just above the landed
+  // answer. The scroll effect below targets this instead of the bottom of
+  // the transcript, so a long answer's first line isn't cut off on landing.
+  const answerAnchorRef = useRef<HTMLDivElement | null>(null);
   const activeRunAbortControllerRef = useRef<AbortController | null>(null);
   const autoRunPresetIdRef = useRef<string | null>(null);
 
@@ -394,15 +358,29 @@ export function PublicChatExperience({
     [selectedPresetId, visiblePresets],
   );
   const hasAssistantText = assistantText.trim().length > 0;
-  const showPreToolStatus =
-    runStatus === "running" && !hasAssistantText && toolCalls.length === 0;
-  const preToolStatusCopy =
-    PUBLIC_PRE_TOOL_STEPS[preToolStatusIndex]?.label ?? "Thinking...";
-  // Single polite live region: pre-tool status while running, then the
-  // ready/freshness line on completion. Errors announce via role="alert".
+  // The status line shows while a run is in flight and no answer text has
+  // landed yet: first the simulated "Thinking" phase (no tool call started),
+  // then whichever step is currently `in_progress`.
+  const activeStatusStep = toolCalls.find(
+    (toolCall) => toolCall.status === "in_progress",
+  );
+  const showStatusLine = runStatus === "running" && !hasAssistantText;
+  const isWebSearchStep = activeStatusStep?.name === "web_search";
+  const statusLineLabel = activeStatusStep
+    ? getPublicChatStepStatusLabel(activeStatusStep.name as PublicChatStepName)
+    : "Thinking";
+  // Single polite live region announcing coarse phases only — not every
+  // individual tool step, since the text only changes when the phase does:
+  // "Thinking" while no step has started, "Using Flaim Fantasy" for the
+  // whole run of Flaim tool steps, "Searching the web" for that step, then
+  // the ready/freshness line on completion. Errors announce via role="alert".
   const liveAnnouncement =
     runStatus === "running"
-      ? preToolStatusCopy
+      ? !activeStatusStep
+        ? "Thinking"
+        : isWebSearchStep
+          ? "Searching the web"
+          : "Using Flaim Fantasy"
       : runStatus === "completed"
         ? answerMeta
           ? `Answer ready. ${formatRelativeUpdateTime(answerMeta.generatedAt)}`
@@ -435,14 +413,37 @@ export function PublicChatExperience({
       const prefersReducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
-      const nextBehavior: ScrollBehavior =
-        !prefersReducedMotion &&
-        (assistantText.trim().length > 0 || toolCalls.length > 0)
-          ? "smooth"
-          : "auto";
+      const nextBehavior: ScrollBehavior = prefersReducedMotion
+        ? "auto"
+        : "smooth";
+
+      // Once the answer has landed, scroll so its start — the "Used Flaim
+      // Fantasy" disclosure line directly above it — sits at the top of the
+      // visible transcript. Landing at the bottom instead (the general case
+      // below) cuts off a long answer's first line.
+      const answerAnchor =
+        runStatus === "completed" && assistantText.trim().length > 0
+          ? answerAnchorRef.current
+          : null;
+      if (answerAnchor) {
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const anchorRect = answerAnchor.getBoundingClientRect();
+        const nextScrollTop =
+          scrollContainer.scrollTop + (anchorRect.top - containerRect.top);
+        scrollContainer.scrollTo({
+          top: Math.max(nextScrollTop, 0),
+          behavior: nextBehavior,
+        });
+        return;
+      }
+
       scrollContainer.scrollTo({
         top: scrollContainer.scrollHeight,
-        behavior: nextBehavior,
+        behavior:
+          !prefersReducedMotion &&
+          (assistantText.trim().length > 0 || toolCalls.length > 0)
+            ? "smooth"
+            : "auto",
       });
     });
 
@@ -595,32 +596,31 @@ export function PublicChatExperience({
           failureCode: payload.answer.failure?.errorCode || null,
           failureMessage: payload.answer.failure?.errorMessage || null,
         };
-        const simulatedToolNames = buildSimulatedToolNames(
+        const stepSequence = buildPublicChatStepSequence(
           preset,
           payload.answer.toolTraceSummary,
         );
 
-        for (let index = 0; index < PUBLIC_PRE_TOOL_STEPS.length; index += 1) {
-          dispatch({ type: "pre_tool_step_advanced", index, token });
-          await waitFor(PUBLIC_PRE_TOOL_STEPS[index].durationMs, abortController.signal);
-        }
+        // Simulated "Thinking" phase: no tool call has started yet, so the
+        // status line shows the static "Thinking" copy.
+        dispatch({ type: "pre_tool_step_advanced", index: 0, token });
+        await waitFor(PUBLIC_CHAT_THINKING_DURATION_MS, abortController.signal);
 
-        for (let index = 0; index < simulatedToolNames.length; index += 1) {
-          const toolName = simulatedToolNames[index];
-          const toolCallId = `${toolName}-${index}`;
+        for (let index = 0; index < stepSequence.length; index += 1) {
+          const stepName = stepSequence[index];
+          const toolCallId = `${stepName}-${index}`;
 
           dispatch({
             type: "tool_call_started",
             toolCall: {
               id: toolCallId,
-              name: toolName,
+              name: stepName,
               status: "in_progress",
             },
             token,
           });
-          await waitFor(PUBLIC_TOOL_CARD_IN_PROGRESS_MS, abortController.signal);
+          await waitFor(PUBLIC_CHAT_STEP_DURATION_MS, abortController.signal);
           dispatch({ type: "tool_call_completed", toolCallId, token });
-          await waitFor(PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS, abortController.signal);
         }
 
         dispatch({
@@ -954,29 +954,54 @@ export function PublicChatExperience({
                       />
                     ) : null}
 
-                    {selectedPreset ? (
-                      <div className="flex items-center gap-2 pt-1 text-[length:var(--phone-type-secondary)] font-medium leading-5 text-[var(--phone-muted)]">
-                        <PhoneFlaimMark />
-                        <span>Flaim Fantasy</span>
+                    {/* One plain-text status line, no card: swaps between
+                        "Thinking" and each simulated tool/web-search step in
+                        place, with a shimmer sweep (static under reduced
+                        motion; see .public-chat-status-shimmer). */}
+                    {showStatusLine ? (
+                      <div className="flex items-center gap-2 pt-1 text-[length:var(--phone-type-secondary)] leading-5">
+                        {activeStatusStep ? (
+                          isWebSearchStep ? (
+                            <Globe
+                              className="h-4 w-4 shrink-0 text-[var(--phone-muted)]"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <span
+                              className="inline-flex h-4 w-4 shrink-0 items-center justify-center"
+                              aria-hidden="true"
+                            >
+                              <PhoneFlaimMark size={14} />
+                            </span>
+                          )
+                        ) : null}
+                        <span className="public-chat-status-shimmer">
+                          {statusLineLabel}
+                        </span>
                       </div>
                     ) : null}
 
-                    {showPreToolStatus ? (
-                      <div className="flex items-center gap-2 text-[length:var(--phone-type-secondary)] leading-5 text-[var(--phone-muted)]">
-                        <LoaderCircle className="h-4 w-4 animate-spin" />
-                        <span>{preToolStatusCopy}</span>
-                      </div>
-                    ) : null}
-
-                    {toolCalls.length > 0 ? (
-                      <div className="space-y-2">
-                        {toolCalls.map((toolCall) => (
-                          <PublicToolCall
-                            key={toolCall.id}
-                            name={toolCall.name}
-                            status={toolCall.status}
-                          />
-                        ))}
+                    {/* Once the answer lands, the status line is replaced by
+                        this muted, collapsed disclosure of the raw tool
+                        names that ran. It's also the scroll anchor: see the
+                        transcript-scroll effect above. */}
+                    {assistantText && runStatus === "completed" ? (
+                      <div ref={answerAnchorRef} className="pt-1">
+                        <details className="group w-fit">
+                          <summary className="-mx-1 flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-full px-1 py-0.5 text-[length:var(--phone-type-caption)] text-[var(--phone-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)] [&::-webkit-details-marker]:hidden">
+                            <PhoneFlaimMark size={14} />
+                            <span>Used Flaim Fantasy</span>
+                            <ChevronRight
+                              className="h-3 w-3 shrink-0 transition-transform duration-200 group-open:rotate-90"
+                              aria-hidden="true"
+                            />
+                          </summary>
+                          <ul className="mt-1.5 space-y-0.5 pl-1 font-mono text-[length:var(--phone-type-control)] text-[var(--phone-muted)]">
+                            {toolCalls.map((toolCall) => (
+                              <li key={toolCall.id}>{toolCall.name}</li>
+                            ))}
+                          </ul>
+                        </details>
                       </div>
                     ) : null}
 
@@ -1056,8 +1081,9 @@ export function PublicChatExperience({
               {/* The plus and send controls each open a short "Inside
                   ChatGPT" sheet: a title and a sentence or two, no numbered
                   steps. Connector-active state now shows inline in the
-                  transcript (the "Flaim Fantasy" / "Reading Flaim
-                  Fantasy..." rows), not as a composer badge. */}
+                  transcript (the status line while a run is in flight, then
+                  the collapsed "Used Flaim Fantasy" disclosure), not as a
+                  composer badge. */}
               <div className="mx-2 mb-1 mt-2 flex items-center gap-1.5 rounded-[1.75rem] border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5">
                 <button
                   type="button"
@@ -1090,7 +1116,7 @@ export function PublicChatExperience({
                   aria-expanded={educationPanel === "ask"}
                 >
                   {runStatus === "running" ? (
-                    <LoaderCircle className="h-4.5 w-4.5 animate-spin" />
+                    <LoaderCircle className="h-4.5 w-4.5 motion-safe:animate-spin" />
                   ) : (
                     <ArrowUp className="h-4.5 w-4.5" />
                   )}
