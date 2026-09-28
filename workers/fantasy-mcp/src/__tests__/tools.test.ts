@@ -14,6 +14,7 @@ import {
   V2_USER_SESSION_WIDGET_URI,
   V3_USER_SESSION_WIDGET_HTML,
   V3_USER_SESSION_WIDGET_URI,
+  V4_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import {
   INTERNAL_SERVICE_TOKEN_HEADER,
@@ -296,16 +297,19 @@ describe('fantasy-mcp tools', () => {
   it('get_user_session includes widgetUri in tool definition', () => {
     const tool = getUnifiedTools().find((t) => t.name === 'get_user_session');
     // Published URIs are stable cache keys with stable resource metadata. The
-    // descriptor points at the newest URI, the only one whose published widget
-    // CSP allows all three provider attribution links.
+    // descriptor points at the newest URI (v5, FLA-427), the only one whose
+    // published _meta declares prefersBorder: false; v4 shares v5's body and
+    // provider attribution links but stays without that field.
     expect(LEGACY_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session.html');
     expect(V2_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v2.html');
     expect(V3_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v3.html');
-    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v4.html');
+    expect(V4_USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v4.html');
+    expect(USER_SESSION_WIDGET_URI).toBe('ui://widget/user-session-v5.html');
     expect(tool?.widgetUri).toBe(USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(LEGACY_USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(V2_USER_SESSION_WIDGET_URI);
     expect(tool?.widgetUri).not.toBe(V3_USER_SESSION_WIDGET_URI);
+    expect(tool?.widgetUri).not.toBe(V4_USER_SESSION_WIDGET_URI);
   });
 
   it('keeps every downstream data tool and refresh free of widget attachments', () => {
@@ -1168,7 +1172,7 @@ describe('fantasy-mcp tools', () => {
   });
 
   it('user session widget reports the card size instead of the host frame size', () => {
-    expect(USER_SESSION_WIDGET_HTML).toContain('var WIDGET_WIDTH = 353');
+    expect(USER_SESSION_WIDGET_HTML).toContain('var WIDGET_MAX_WIDTH = 480');
     expect(USER_SESSION_WIDGET_HTML).toContain("document.querySelector('.widget')");
     expect(USER_SESSION_WIDGET_HTML).toContain('Math.ceil(rect.width)');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('document.documentElement.scrollWidth');

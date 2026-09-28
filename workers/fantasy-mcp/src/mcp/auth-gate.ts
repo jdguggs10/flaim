@@ -3,6 +3,7 @@ import {
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
   V3_USER_SESSION_WIDGET_URI,
+  V4_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 
 // Every published widget URI must stay anonymously readable forever:
@@ -12,6 +13,7 @@ const PUBLIC_STATIC_WIDGET_URIS = new Set([
   LEGACY_USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
   V3_USER_SESSION_WIDGET_URI,
+  V4_USER_SESSION_WIDGET_URI,
   USER_SESSION_WIDGET_URI,
 ]);
 

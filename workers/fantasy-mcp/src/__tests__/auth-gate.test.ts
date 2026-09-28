@@ -9,6 +9,7 @@ import {
   USER_SESSION_WIDGET_URI,
   V2_USER_SESSION_WIDGET_URI,
   V3_USER_SESSION_WIDGET_URI,
+  V4_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 
 function buildRequest(method: string, params: Record<string, unknown> = {}): Request {
@@ -64,6 +65,7 @@ describe('mcp auth gate helpers', () => {
       LEGACY_USER_SESSION_WIDGET_URI,
       V2_USER_SESSION_WIDGET_URI,
       V3_USER_SESSION_WIDGET_URI,
+      V4_USER_SESSION_WIDGET_URI,
       USER_SESSION_WIDGET_URI,
     ]) {
       await expect(
