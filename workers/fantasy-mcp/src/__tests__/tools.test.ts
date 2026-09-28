@@ -527,18 +527,6 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).not.toContain('if (rendered) return');
   });
 
-  it('user session widget declares the MCP Apps bridge calls for Claude parity (FLA-426)', () => {
-    // The bridge (Claude, when window.openai is absent) and the ChatGPT path
-    // share the same refresh/link call sites; these strings guard the
-    // protocol methods the bridge half depends on.
-    expect(USER_SESSION_WIDGET_HTML).toContain("bridgeRequest('tools/call'");
-    expect(USER_SESSION_WIDGET_HTML).toContain("bridgeRequest('ui/open-link'");
-    expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/notifications/host-context-changed'");
-    expect(USER_SESSION_WIDGET_HTML).toContain('function hostCapabilityReady(name)');
-    expect(USER_SESSION_WIDGET_HTML).toContain('function canCallServerTools()');
-    expect(USER_SESSION_WIDGET_HTML).toContain('function canOpenLinks()');
-  });
-
   it.each([
     {
       name: 'complete success',

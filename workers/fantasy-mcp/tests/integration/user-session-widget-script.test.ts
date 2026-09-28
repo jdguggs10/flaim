@@ -855,7 +855,7 @@ describe('user session widget script', () => {
           return SAMPLE_SESSION;
         },
       };
-      const { exports, elements, postedMessages, classes } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+      const { exports, elements, postedMessages, classes, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
         openai,
         bridge: {
           initResult: { hostCapabilities: { serverTools: true, openLinks: true }, hostContext: { theme: 'dark' } },
@@ -868,12 +868,34 @@ describe('user session widget script', () => {
       expect(classes.has('theme-light')).toBe(true);
 
       await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+      // Let the queued size-change notification(s) from render()/setRefreshStatus() flush.
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(calls).toEqual(['refresh_leagues', 'get_user_session']);
-      expect(
-        postedMessages.filter((message) => message.method === 'tools/call' || message.method === 'ui/open-link')
-      ).toHaveLength(0);
       expect(elements['refresh-status'].innerHTML).toBe('Leagues refreshed.');
+
+      // This openai stub has no openExternal or openUrl, and the bridge host
+      // advertises openLinks, but window.openai's presence rules the bridge
+      // out entirely for links exactly as it does for tool calls: the edit
+      // link falls back to the native window.open, never ui/open-link.
+      const { state: editState, event: editEvent } = clickEvent();
+      elements['edit-link'].listeners.click[0](editEvent);
+      expect(editState.prevented).toBe(true);
+      expect(openedTabs).toEqual(['https://flaim.app/leagues?from=widget']);
+
+      // The credit link's handler only intercepts via window.openai.openExternal
+      // or the bridge; with neither available here, it leaves the native
+      // anchor alone.
+      const { state: creditState, event: creditEvent } = clickEvent();
+      elements['yahoo-link'].listeners.click[0](creditEvent);
+      expect(creditState.prevented).toBe(false);
+
+      // Only the handshake and the widget's own size notifications were ever
+      // posted: no tools/call for the refresh, no ui/open-link for either
+      // link click above.
+      expect(new Set(postedMessages.map((message) => message.method))).toEqual(
+        new Set(['ui/initialize', 'ui/notifications/initialized', 'ui/notifications/size-changed'])
+      );
     });
 
     describe('links', () => {

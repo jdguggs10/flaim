@@ -289,8 +289,8 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   const espnCredit = options.linkEspn ? ESPN_ATTRIBUTION_LINKED : ESPN_ATTRIBUTION_PLAIN;
   const sleeperCredit = options.linkSleeper ? SLEEPER_ATTRIBUTION_LINKED : SLEEPER_ATTRIBUTION_PLAIN;
   // The Yahoo handler is always emitted (its guard no-ops where the anchor is
-  // absent), so the bodies published before ESPN and Sleeper were linkable keep
-  // their exact script. The other two are emitted only where they can fire.
+  // absent), so every body's script differs only by which of the ESPN and
+  // Sleeper handlers, emitted only where they can fire, are also present.
   const creditLinkHandlers = [
     creditLinkScript('Yahoo', 'yahooLink', 'yahoo-link'),
     ...(options.linkEspn ? [creditLinkScript('ESPN', 'espnLink', 'espn-link')] : []),
