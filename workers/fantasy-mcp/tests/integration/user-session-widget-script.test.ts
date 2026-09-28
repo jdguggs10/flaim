@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -1467,6 +1468,210 @@ describe('user session widget script', () => {
       );
       expect(sizeMessages).toHaveLength(1);
       expect(sizeMessages[0].params).not.toEqual({ width: 0, height: 0 });
+    });
+  });
+
+  // Golden differential (FLA-426 cross-model review follow-up): the targeted
+  // bridge tests above assert specific behaviors one at a time; this suite
+  // instead runs the exact pre-FLA-426 script and the current script through
+  // the same fake ChatGPT-with-a-bridge-host environment and diffs their full
+  // ordered traces, so a change in call order, a duplicate call, or a
+  // regression in an untouched link/failure path would show up even if no
+  // single targeted assertion happens to catch it.
+  //
+  // Fixture choice: fixtures/pre-fla-426-user-session-widget-v4.html is the
+  // exact v4 body origin/main served immediately before FLA-426 (see the
+  // comment in that file for how it was produced). It holds the full HTML,
+  // not just the extracted <script>, so it works with loadWidgetScript()
+  // completely unmodified — the same "build the script body the same way the
+  // tests build it today" extraction every other test in this file already
+  // relies on. Only v4 is needed: none of the cases below (initial render,
+  // refresh, edit link, status link, Yahoo credit link, hidden widget) probe
+  // link-permission variance across widget URIs, which is what v1 vs v4
+  // differ by.
+  describe('golden differential: pre-FLA-426 baseline vs current (ChatGPT + bridge host present)', () => {
+    const OLD_WIDGET_HTML = readFileSync(
+      new URL('./fixtures/pre-fla-426-user-session-widget-v4.html', import.meta.url),
+      'utf8',
+    );
+
+    // Every capability the widget ever checks, plus a hostContext theme that
+    // conflicts with window.openai.theme below. window.openai must win on
+    // both scripts: the old script has no bridge concept at all to prefer it
+    // over, and the new script's hostCapabilityReady() gate must produce that
+    // identical outcome whenever window.openai exists.
+    const BRIDGE_HOST = {
+      initResult: {
+        hostCapabilities: { serverTools: true, openLinks: true },
+        hostContext: { theme: 'dark' as const },
+      },
+    };
+
+    interface CallLogEntry {
+      name: string;
+      args: unknown;
+    }
+
+    interface OpenedEntry {
+      kind: 'window.open' | 'openExternal';
+      url: unknown;
+    }
+
+    interface Trace {
+      calls: CallLogEntry[];
+      posted: Array<{ method: unknown; params: unknown }>;
+      opened: OpenedEntry[];
+      dom: {
+        content: string;
+        status: string;
+        statusClass: string;
+        buttonDisabled: boolean;
+        buttonWord: string;
+      };
+      theme: string[];
+    }
+
+    /** A window.openai stub whose callTool is scenario-specific; openExternal
+     * always succeeds synchronously (a normal ChatGPT host), recording into
+     * `opened` so link scenarios trace through the same host path both
+     * scripts have always used, unaffected by the new bridge branch (which
+     * only fires when window.openai is absent). */
+    function buildOpenai(
+      calls: CallLogEntry[],
+      opened: OpenedEntry[],
+      callTool?: (name: string, args: unknown) => unknown,
+    ) {
+      return {
+        theme: 'light',
+        openExternal(args: unknown) {
+          opened.push({ kind: 'openExternal', url: (args as { href?: unknown } | undefined)?.href });
+          return true;
+        },
+        async callTool(name: string, args: unknown) {
+          calls.push({ name, args });
+          if (!callTool) return SAMPLE_SESSION;
+          return callTool(name, args);
+        },
+      };
+    }
+
+    function captureDom(elements: Record<string, FakeElement>): Trace['dom'] {
+      return {
+        content: elements.content.innerHTML,
+        status: elements['refresh-status'].innerHTML,
+        statusClass: elements['refresh-status'].className,
+        buttonDisabled: !!elements['refresh-button'].disabled,
+        buttonWord: elements['refresh-word'].textContent,
+      };
+    }
+
+    async function runScenario(
+      html: string,
+      callTool: ((name: string, args: unknown) => unknown) | undefined,
+      openaiExtra: Record<string, unknown>,
+      act: (harness: WidgetHarness) => Promise<void> | void,
+    ): Promise<Trace> {
+      const calls: CallLogEntry[] = [];
+      const opened: OpenedEntry[] = [];
+      const openai = { ...buildOpenai(calls, opened, callTool), ...openaiExtra };
+      const harness = loadWidgetScript(html, { openai, bridge: BRIDGE_HOST });
+
+      await act(harness);
+      // Flush any size-changed notification queued via setTimeout(fn, 0) (no
+      // requestAnimationFrame in this harness), so every scenario captures a
+      // settled trace regardless of which internal path queued it.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      for (const url of harness.openedTabs) opened.push({ kind: 'window.open', url });
+
+      return {
+        calls,
+        posted: harness.postedMessages.map((message) => ({ method: message.method, params: message.params })),
+        opened,
+        dom: captureDom(harness.elements),
+        theme: Array.from(harness.classes).sort(),
+      };
+    }
+
+    const REFRESH_SUCCESS_RESULT = {
+      success: true,
+      results: { espn: { platform: 'espn', status: 'success', details: { added: 2 } } },
+    };
+
+    async function refresh(harness: WidgetHarness) {
+      await (harness.exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+    }
+
+    const scenarios: Array<{
+      name: string;
+      callTool?: (name: string, args: unknown) => unknown;
+      openaiExtra?: Record<string, unknown>;
+      act: (harness: WidgetHarness) => Promise<void> | void;
+    }> = [
+      {
+        name: '(a) initial render',
+        openaiExtra: { toolOutput: SAMPLE_SESSION },
+        act: () => {},
+      },
+      {
+        name: '(b) refresh success',
+        callTool: (name) => (name === 'refresh_leagues' ? REFRESH_SUCCESS_RESULT : SAMPLE_SESSION),
+        act: refresh,
+      },
+      {
+        name: '(c) refresh where refresh_leagues returns isError',
+        callTool: (name) => (name === 'refresh_leagues' ? { isError: true } : SAMPLE_SESSION),
+        act: refresh,
+      },
+      {
+        name: '(d) refresh where callTool throws',
+        callTool: () => {
+          throw new Error('transport failure');
+        },
+        act: refresh,
+      },
+      {
+        name: '(e) edit link click',
+        act: (harness) => {
+          const { event } = clickEvent();
+          harness.elements['edit-link'].listeners.click[0](event);
+        },
+      },
+      {
+        name: '(f) status link after a failure',
+        callTool: () => {
+          throw new Error('transport failure');
+        },
+        act: async (harness) => {
+          await refresh(harness);
+          // The old script never attaches a listener here (it relies on the
+          // plain anchor's own navigation); the new script attaches one
+          // unconditionally but no-ops whenever window.openai exists. Either
+          // way there is nothing to invoke-and-observe beyond what the
+          // failed refresh above already set, so a missing listener is
+          // itself part of the identical trace, not a test bug.
+          const { event } = clickEvent();
+          (event as { target?: unknown }).target = { tagName: 'A' };
+          harness.elements['refresh-status'].listeners.click?.[0]?.(event);
+        },
+      },
+      {
+        name: '(g) Yahoo credit link click',
+        act: (harness) => {
+          const { event } = clickEvent();
+          harness.elements['yahoo-link'].listeners.click[0](event);
+        },
+      },
+      {
+        name: '(h) hidden-widget payload',
+        openaiExtra: { toolOutput: { allLeagues: [], widget: { hidden: true } } },
+        act: () => {},
+      },
+    ];
+
+    it.each(scenarios)('$name produces an identical trace on both scripts', async ({ callTool, openaiExtra, act }) => {
+      const oldTrace = await runScenario(OLD_WIDGET_HTML, callTool, openaiExtra ?? {}, act);
+      const newTrace = await runScenario(USER_SESSION_WIDGET_HTML, callTool, openaiExtra ?? {}, act);
+      expect(newTrace).toEqual(oldTrace);
     });
   });
 });

@@ -1,0 +1,1026 @@
+<!--
+Golden fixture (FLA-426 review follow-up): the v4 user-session widget body
+exactly as origin/main served it at commit 8b46457b1f266af5294650d1167a4bb6b98778cf,
+the last commit before the FLA-426 MCP Apps bridge work. This is the
+pre-FLA-426 baseline for the differential test in
+tests/integration/user-session-widget-script.test.ts, which runs this body
+and the current USER_SESSION_WIDGET_HTML through the same fake ChatGPT
+environment and asserts their traces (calls, posted messages, opened URLs,
+rendered DOM, applied theme) are identical.
+
+Generated, not hand-edited: extracted with
+`git show 8b46457b:workers/fantasy-mcp/src/widgets/user-session-widget.ts`,
+then produced by calling that commit's own
+`buildUserSessionWidgetHtml({ linkYahoo: true, linkEspn: true, linkSleeper: true })`
+(esbuild-transpiled and executed, not transcribed by hand) to get its
+USER_SESSION_WIDGET_HTML. Do not hand-edit this file; regenerate it the same
+way only if the baseline itself intentionally moves.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Flaim</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    color-scheme: light;
+    --fg: #171717;
+    --bg: #ffffff;
+    --border: #e5e5e5;
+    --divider: #ededed;
+    --muted: #626262;
+    --hover: #f2f2f2;
+    --focus: #626262;
+    --band-bg: #f3f4f5;
+    --band-fg: #555555;
+    --row-line: #eeeeee;
+    --detail: #656565;
+    --gold: #dfc477;
+    --badge-default-bg: #faf0d2;
+    --badge-default-fg: #7b6223;
+    --badge-espn-bg: #fbeef0;
+    --badge-espn-fg: #a52c40;
+    --badge-yahoo-bg: #f4edf8;
+    --badge-yahoo-fg: #733491;
+    --badge-sleeper-bg: #edf5ef;
+    --badge-sleeper-fg: #34674a;
+    --footer-line: #ececec;
+    --footer-fg: #777777;
+    --credit-hover: #353535;
+    --status-fg: #47664f;
+    --status-error-fg: #b3261e;
+  }
+  @media (prefers-color-scheme: dark) {
+    html:not(.theme-light) {
+      color-scheme: dark;
+      --fg: #ededed;
+      --bg: #202020;
+      --border: #404040;
+      --divider: #363636;
+      --muted: #b7b7b7;
+      --hover: #343434;
+      --focus: #cccccc;
+      --band-bg: #2b2c2e;
+      --band-fg: #c2c2c2;
+      --row-line: #373737;
+      --detail: #b4b4b4;
+      --gold: #9a8142;
+      --badge-default-bg: #42391f;
+      --badge-default-fg: #ecd18b;
+      --badge-espn-bg: #44262d;
+      --badge-espn-fg: #ffb4c1;
+      --badge-yahoo-bg: #392741;
+      --badge-yahoo-fg: #dab4f1;
+      --badge-sleeper-bg: #253b2c;
+      --badge-sleeper-fg: #a4dfbb;
+      --footer-line: #363636;
+      --footer-fg: #a8a8a8;
+      --credit-hover: #e0e0e0;
+      --status-fg: #b7d7bf;
+      --status-error-fg: #f2b8b5;
+    }
+  }
+  html.theme-light { color-scheme: light; }
+  /* Same values as the dark media block above. The host theme global sets
+     this class to override the OS preference; keep both copies in sync. */
+  html.theme-dark {
+    color-scheme: dark;
+    --fg: #ededed;
+    --bg: #202020;
+    --border: #404040;
+    --divider: #363636;
+    --muted: #b7b7b7;
+    --hover: #343434;
+    --focus: #cccccc;
+    --band-bg: #2b2c2e;
+    --band-fg: #c2c2c2;
+    --row-line: #373737;
+    --detail: #b4b4b4;
+    --gold: #9a8142;
+    --badge-default-bg: #42391f;
+    --badge-default-fg: #ecd18b;
+    --badge-espn-bg: #44262d;
+    --badge-espn-fg: #ffb4c1;
+    --badge-yahoo-bg: #392741;
+    --badge-yahoo-fg: #dab4f1;
+    --badge-sleeper-bg: #253b2c;
+    --badge-sleeper-fg: #a4dfbb;
+    --footer-line: #363636;
+    --footer-fg: #a8a8a8;
+    --credit-hover: #e0e0e0;
+    --status-fg: #b7d7bf;
+    --status-error-fg: #f2b8b5;
+  }
+  html,
+  body {
+    width: 100%;
+    max-width: 353px;
+    overflow-x: hidden;
+    background: transparent;
+  }
+  body {
+    font-family: "Geist", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--fg);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .widget {
+    position: relative;
+    width: 100%;
+    max-width: 353px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    overflow: hidden;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 12px 6px 16px;
+    border-bottom: 1px solid var(--divider);
+  }
+  .app-name {
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 500;
+    letter-spacing: -0.4px;
+  }
+  .edit-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    color: inherit;
+    text-decoration: none;
+  }
+  .edit-link:hover { background: var(--hover); }
+  .edit-link svg {
+    width: 18px;
+    height: 18px;
+  }
+  .sport-group + .sport-group { margin-top: 12px; }
+  .sport-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--band-bg);
+    color: var(--band-fg);
+    font-size: 13px;
+    line-height: 22px;
+    font-weight: 500;
+  }
+  .sport-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .sport-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: 22px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    font-size: 11px;
+    line-height: 16px;
+    font-weight: 500;
+    letter-spacing: 0.15px;
+    text-transform: uppercase;
+  }
+  .badge-default {
+    background: var(--badge-default-bg);
+    color: var(--badge-default-fg);
+  }
+  .badge-espn { width: 60px; background: var(--badge-espn-bg); color: var(--badge-espn-fg); }
+  .badge-yahoo { width: 60px; background: var(--badge-yahoo-bg); color: var(--badge-yahoo-fg); }
+  .badge-sleeper { width: 60px; background: var(--badge-sleeper-bg); color: var(--badge-sleeper-fg); }
+  .league-list { list-style: none; }
+  .league-row {
+    position: relative;
+    height: 60px;
+    min-width: 0;
+    padding: 9px 16px;
+    display: grid;
+    grid-template-columns: 60px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 10px;
+  }
+  .league-row:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 86px;
+    right: 16px;
+    height: 1px;
+    background: var(--row-line);
+  }
+  .league-row.is-default::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 3px 0 0 3px;
+    background: var(--gold);
+  }
+  .copy { min-width: 0; }
+  .league-name {
+    font-size: 15px;
+    line-height: 20px;
+    letter-spacing: -0.25px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .league-detail {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+    margin-top: 3px;
+    min-width: 0;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--detail);
+  }
+  .league-year {
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .league-team {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .empty-state {
+    padding: 24px 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .empty-state a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    margin-top: 12px;
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: inherit;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .empty-state a:hover { background: var(--hover); }
+  .loading {
+    padding: 24px 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .footer {
+    padding: 10px 16px 12px;
+    border-top: 1px solid var(--footer-line);
+    text-align: center;
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--footer-fg);
+  }
+  .refresh {
+    display: inline;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .refresh:disabled { cursor: wait; }
+  .refresh-word,
+  .credit {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+  }
+  .refresh:hover .refresh-word,
+  .credit:hover { color: var(--credit-hover); }
+  .status {
+    margin-top: 8px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--status-fg);
+  }
+  .status:empty { margin-top: 0; }
+  .status.is-error { color: var(--status-error-fg); }
+  .status a { color: inherit; text-decoration: underline; }
+  @media (pointer: coarse) {
+    .header { padding-top: 0; padding-bottom: 0; }
+    .edit-link { width: 44px; height: 44px; }
+  }
+</style>
+</head>
+<body>
+<div class="widget">
+  <header class="header">
+    <span class="app-name">Your Leagues</span>
+    <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener" class="edit-link" aria-label="Edit leagues" title="Edit leagues" id="edit-link">
+      <svg class="edit-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+        <path d="M7 7h-1a2 2 0 0 0 -2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2 -2v-1"></path>
+        <path d="M20.385 6.585a2.1 2.1 0 0 0 -2.97 -2.97l-8.415 8.385v3h3l8.385 -8.415z"></path>
+        <path d="M16 5l3 3"></path>
+      </svg>
+    </a>
+  </header>
+  <div id="content">
+    <div class="loading">Loading&hellip;</div>
+  </div>
+  <footer class="footer">
+    <button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button> Fantasy data provided by <a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>, <a class="credit" href="https://www.espn.com/fantasy/" target="_blank" rel="noopener noreferrer" id="espn-link">ESPN</a>, and <a class="credit" href="https://sleeper.com/" target="_blank" rel="noopener noreferrer" id="sleeper-link">Sleeper</a>.
+    <div class="status" id="refresh-status" role="status" aria-live="polite"></div>
+  </footer>
+</div>
+<script>
+(function() {
+  var VALID_PLATFORMS = { espn: true, yahoo: true, sleeper: true };
+  var SPORT_ORDER = { baseball: 0, football: 1, basketball: 2, hockey: 3 };
+  var SPORT_LABELS = { baseball: 'Baseball', football: 'Football', basketball: 'Basketball', hockey: 'Hockey' };
+  var SPORT_ICON_PATHS = {
+    football: '<path d="M15 9l-6 6"></path><path d="M10 12l2 2"></path><path d="M12 10l2 2"></path><path d="M8 21a5 5 0 0 0 -5 -5"></path><path d="M16 3c-7.18 0 -13 5.82 -13 13a5 5 0 0 0 5 5c7.18 0 13 -5.82 13 -13a5 5 0 0 0 -5 -5"></path><path d="M16 3a5 5 0 0 0 5 5"></path>',
+    baseball: '<path d="M5.636 18.364a9 9 0 1 0 12.728 -12.728a9 9 0 0 0 -12.728 12.728"></path><path d="M12.495 3.02a9 9 0 0 1 -9.475 9.475"></path><path d="M20.98 11.505a9 9 0 0 0 -9.475 9.475"></path><path d="M9 9l2 2"></path><path d="M13 13l2 2"></path><path d="M11 7l2 1"></path><path d="M7 11l1 2"></path><path d="M16 11l1 2"></path><path d="M11 16l2 1"></path>',
+    basketball: '<path d="M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0"></path><path d="M5.65 5.65l12.7 12.7"></path><path d="M5.65 18.35l12.7 -12.7"></path><path d="M12 3a9 9 0 0 0 9 9"></path><path d="M3 12a9 9 0 0 1 9 9"></path>',
+    hockey: '<path d="M5.905 5h3.418a1 1 0 0 1 .928 .629l1.143 2.856a3 3 0 0 0 2.207 1.83l4.717 .926a2.084 2.084 0 0 1 1.682 2.045v.714a1 1 0 0 1 -1 1h-13.895a1 1 0 0 1 -1 -1.1l.8 -8a1 1 0 0 1 1 -.9"></path><path d="M3 19h17a1 1 0 0 0 1 -1"></path><path d="M9 15v4"></path><path d="M15 15v4"></path>',
+    other: '<path d="M8 21l8 0"></path><path d="M12 17l0 4"></path><path d="M7 4l10 0"></path><path d="M17 4v8a5 5 0 0 1 -10 0v-8"></path><path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path><path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>'
+  };
+  var LEAGUES_URL = 'https://flaim.app/leagues?from=widget';
+  var WIDGET_WIDTH = 353;
+  var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
+  var initializedSent = false;
+  var hasRendered = false;
+  // Hide-widget support (FLA-277): when get_user_session's structuredContent
+  // carries widget.hidden === true (the user's hide_league_widget
+  // preference), the widget renders nothing and reports a zero size instead
+  // of the 353px fallback. widgetHidden is re-derived on every render() call
+  // (not sticky), so a refresh that flips the preference back off re-shows
+  // the widget and resumes real size reporting.
+  var widgetHidden = false;
+  function sendZeroSize() {
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: {
+        width: 0,
+        height: 0,
+      },
+    });
+  }
+  // Keep this browser implementation static. Serializing the module function
+  // can leak Wrangler-generated module helpers into the iframe.
+  function classifyRefreshResult(payload) {
+    var fallback = { kind: 'failure', message: 'Refresh failed.', reloadSession: false };
+    if (!payload || typeof payload !== 'object') return fallback;
+
+    var batch = payload;
+    if (batch.status === 429) {
+      return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+    }
+    var rawResults = batch.results;
+    if (!rawResults || typeof rawResults !== 'object' || Array.isArray(rawResults)) return fallback;
+
+    var results = Object.values(rawResults).filter(function(value) {
+      return !!value && typeof value === 'object' && !Array.isArray(value);
+    });
+    if (results.length === 0) return fallback;
+
+    var successes = results.filter(function(result) { return result.status === 'success'; });
+    var skipped = results.filter(function(result) { return result.status === 'skipped'; });
+    var failed = results.filter(function(result) { return result.status === 'error'; });
+    function textFor(result) {
+      return (String(result.error || '') + ' ' + String(result.error_description || '')).toLowerCase();
+    }
+    var explicitlyRequiresReconnect = results.some(function(result) {
+      return result.reconnectRequired === true || result.requiresReconnect === true || result.reconnect_required === true;
+    });
+    var reconnectRequired = explicitlyRequiresReconnect || failed.some(function(result) {
+      var text = textFor(result);
+      return result.httpStatus === 401 || result.httpStatus === 403 ||
+        /auth|credential|connect|expired|invalid.token|revoked/.test(text);
+    });
+    var retryRequired = failed.some(function(result) {
+      var text = textFor(result);
+      return result.httpStatus === 429 || !!result.retryAfter || /rate.?limit|too many|try again/.test(text);
+    });
+
+    if (successes.length > 0) {
+      if (batch.success !== true) return fallback;
+      var changeKeys = new Set(['added', 'refreshed', 'created', 'updated', 'saved']);
+      var changed = false;
+      function inspectCounts(value) {
+        var sawChangeCount = false;
+        if (!value || typeof value !== 'object') return false;
+        Object.entries(value).forEach(function(entry) {
+          var key = entry[0];
+          var nested = entry[1];
+          if (changeKeys.has(key) && typeof nested === 'number') {
+            sawChangeCount = true;
+            if (nested > 0) changed = true;
+          } else if (typeof nested === 'object') {
+            sawChangeCount = inspectCounts(nested) || sawChangeCount;
+          }
+        });
+        return sawChangeCount;
+      }
+      var allSuccessesHaveChangeCounts = true;
+      successes.forEach(function(result) {
+        if (result.platform !== 'espn' || !inspectCounts(result.details)) {
+          allSuccessesHaveChangeCounts = false;
+        }
+      });
+
+      if (failed.length > 0 || explicitlyRequiresReconnect) {
+        var partialMessage = changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
+        var message = reconnectRequired
+          ? partialMessage + ' Reconnect a provider.'
+          : retryRequired
+            ? partialMessage + ' Try again later.'
+            : partialMessage;
+        var partial = { kind: 'partial', message: message, reloadSession: true };
+        if (reconnectRequired) partial.showLeaguesLink = true;
+        return partial;
+      }
+
+      if (changed) {
+        return { kind: 'success', message: 'Leagues refreshed.', reloadSession: true };
+      }
+      if (!allSuccessesHaveChangeCounts) {
+        return { kind: 'success', message: 'Refresh complete.', reloadSession: true };
+      }
+      return { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true };
+    }
+
+    if (reconnectRequired) {
+      return { kind: 'reconnect', message: 'Reconnect a league provider.', reloadSession: false };
+    }
+    if (retryRequired) {
+      return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
+    }
+    if (skipped.length === results.length) {
+      return { kind: 'unchanged', message: 'No connected leagues to refresh.', reloadSession: false };
+    }
+    return fallback;
+  }
+
+  function postToParent(message) {
+    try {
+      if (window.parent && window.parent !== window) {
+        // Sandboxed MCP Apps hosts do not always expose a stable target origin.
+        // These lifecycle messages contain no secrets, so '*' is intentional.
+        window.parent.postMessage(message, '*');
+      }
+    } catch (_) {}
+  }
+
+  function isTrustedMessageEvent(event) {
+    if (!event.source || !window.parent || event.source !== window.parent) return false;
+    // Claude Desktop and other sandboxed MCP Apps hosts can emit "null"
+    // origins. Accept them only after the parent-frame source check above.
+    if (!event.origin || event.origin === 'null') return true;
+    try {
+      var url = new URL(event.origin);
+      var host = url.hostname;
+      if (url.protocol !== 'https:') return false;
+      // Extend this allowlist when a new MCP Apps host origin is certified.
+      return host === 'chatgpt.com' ||
+        host === 'chat.openai.com' ||
+        host === 'claude.ai' ||
+        host.endsWith('.claude.ai') ||
+        host.endsWith('.claudemcpcontent.com') ||
+        host.endsWith('.oaiusercontent.com');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function sendInitialized() {
+    if (initializedSent) return;
+    initializedSent = true;
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/initialized',
+      params: {},
+    });
+  }
+
+  function startMcpAppsLifecycle() {
+    postToParent({
+      jsonrpc: '2.0',
+      id: initId,
+      method: 'ui/initialize',
+      params: {
+        protocolVersion: '2026-01-26',
+        appInfo: {
+          name: 'Flaim',
+          version: '1.0.0',
+        },
+        appCapabilities: {},
+      },
+    });
+  }
+
+  function sendSizeChanged() {
+    if (widgetHidden) {
+      sendZeroSize();
+      return;
+    }
+    var widget = document.querySelector('.widget');
+    var rect = widget && widget.getBoundingClientRect ? widget.getBoundingClientRect() : null;
+    postToParent({
+      jsonrpc: '2.0',
+      method: 'ui/notifications/size-changed',
+      params: {
+        width: rect && rect.width ? Math.ceil(rect.width) : WIDGET_WIDTH,
+        height: rect && rect.height ? Math.ceil(rect.height) : document.body.scrollHeight || 0,
+      },
+    });
+  }
+
+  function queueSizeChanged() {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(sendSizeChanged);
+      return;
+    }
+    setTimeout(sendSizeChanged, 0);
+  }
+
+  // Theme: prefer the host global when it exposes one, otherwise leave the
+  // document on its prefers-color-scheme fallback.
+  function readHostTheme() {
+    try {
+      if (window.openai && window.openai.theme !== undefined) return window.openai.theme;
+    } catch (_) {}
+    return null;
+  }
+
+  function applyTheme(value) {
+    var root = document.documentElement;
+    if (!root || !root.classList) return;
+    var theme = value === 'dark' ? 'dark' : (value === 'light' ? 'light' : null);
+    root.classList.remove('theme-dark');
+    root.classList.remove('theme-light');
+    if (theme) root.classList.add('theme-' + theme);
+  }
+
+  function openNewTab(url) {
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (_) {}
+  }
+
+  function openFallbackUrl(url) {
+    try {
+      if (window.openai && typeof window.openai.openUrl === 'function') {
+        window.openai.openUrl(url);
+        return false;
+      }
+    } catch (_) {}
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return false;
+    } catch (_) {}
+    try {
+      window.location.href = url;
+    } catch (_) {}
+    return false;
+  }
+
+  function openExternalUrl(url) {
+    try {
+      if (window.openai && typeof window.openai.openExternal === 'function') {
+        var result = window.openai.openExternal({ href: url });
+        if (result && typeof result.catch === 'function') {
+          // A resolved promise only tells us the host accepted the request;
+          // rejection is the only observable signal where fallback is useful.
+          result.catch(function() { openFallbackUrl(url); });
+        }
+        if (result === false) return openFallbackUrl(url);
+        return false;
+      }
+    } catch (_) {}
+    return openFallbackUrl(url);
+  }
+
+  function openLeagues(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    return openExternalUrl(LEAGUES_URL);
+  }
+
+  function setRefreshStatus(message, kind) {
+    var status = document.getElementById('refresh-status');
+    if (!status) return;
+    status.className = 'status' + (kind ? ' is-' + kind : '');
+    status.innerHTML = message || '';
+    queueSizeChanged();
+  }
+
+  function setRefreshLoading(isLoading) {
+    var button = document.getElementById('refresh-button');
+    if (button) button.disabled = !!isLoading;
+    var word = document.getElementById('refresh-word');
+    if (word) word.textContent = isLoading ? 'Refreshing' : 'Refresh';
+  }
+
+  function render(data) {
+    widgetHidden = !!(data && data.widget && data.widget.hidden === true);
+    if (widgetHidden) {
+      var widgetEl = document.querySelector('.widget');
+      if (widgetEl) widgetEl.style.display = 'none';
+      hasRendered = true;
+      sendZeroSize();
+      return;
+    }
+    var visibleWidgetEl = document.querySelector('.widget');
+    if (visibleWidgetEl) visibleWidgetEl.style.display = '';
+    var container = document.getElementById('content');
+    if (!container) return;
+    if (!data || !data.allLeagues || data.allLeagues.length === 0) {
+      container.innerHTML =
+        '<div class="empty-state">' +
+        'Flaim is connected, but no fantasy leagues are set up yet.<br />' +
+        '<a href="' + LEAGUES_URL + '" target="_blank" rel="noopener" id="connect-league-link">Open My Leagues</a>' +
+        '</div>';
+      var connectLeagueLink = document.getElementById('connect-league-link');
+      if (connectLeagueLink) connectLeagueLink.addEventListener('click', openLeagues);
+      hasRendered = true;
+      queueSizeChanged();
+      return;
+    }
+
+    var leagues = data.allLeagues;
+
+    var defaultKeys = Object.create(null);
+    if (data.defaultLeagues) {
+      Object.keys(data.defaultLeagues).forEach(function(sport) {
+        var dl = data.defaultLeagues[sport];
+        if (dl) defaultKeys[dl.platform + ':' + dl.leagueId + ':' + dl.seasonYear] = true;
+      });
+    }
+
+    var defaultSport = data.defaultSport || null;
+
+    var groups = Object.create(null);
+    var order = [];
+    leagues.forEach(function(league) {
+      var sport = String(league.sport || 'other').toLowerCase();
+      if (!groups[sport]) {
+        groups[sport] = [];
+        order.push(sport);
+      }
+      groups[sport].push(league);
+    });
+
+    order.sort(function(a, b) {
+      // Default sport always sorts first
+      if (a === defaultSport && b !== defaultSport) return -1;
+      if (b === defaultSport && a !== defaultSport) return 1;
+      var oa = Object.prototype.hasOwnProperty.call(SPORT_ORDER, a) ? SPORT_ORDER[a] : 99;
+      var ob = Object.prototype.hasOwnProperty.call(SPORT_ORDER, b) ? SPORT_ORDER[b] : 99;
+      return oa - ob;
+    });
+
+    var html = '';
+    order.forEach(function(sport) {
+      var label = formatSportLabel(sport);
+      html += '<section class="sport-group">';
+      html += '<h2 class="sport-header">';
+      html += '<span class="sport-label">' + renderSportIcon(sport) + '<span>' + esc(label) + '</span></span>';
+      if (sport === defaultSport) {
+        // The badge is decorative; the hidden text carries the same meaning
+        // for assistive technology.
+        html += '<span class="badge badge-default" aria-hidden="true">DEFAULT</span>';
+        html += '<span class="visually-hidden">Default sport</span>';
+      }
+      html += '</h2>';
+      html += '<ul class="league-list">';
+      groups[sport].forEach(function(league) {
+        var key = league.platform + ':' + league.leagueId + ':' + league.seasonYear;
+        var isDefault = Object.prototype.hasOwnProperty.call(defaultKeys, key);
+        var platform = Object.prototype.hasOwnProperty.call(VALID_PLATFORMS, league.platform) ? league.platform : 'espn';
+        var name = String(league.leagueName || league.leagueId || '');
+        var team = league.teamName ? String(league.teamName) : '';
+        var year = league.seasonYear ? String(league.seasonYear) : '';
+        // Truncated names stay available in full to assistive technology, and
+        // the gold default edge gets a text equivalent here.
+        var providerLabel = platform === 'espn' ? 'ESPN' : platform === 'yahoo' ? 'Yahoo' : 'Sleeper';
+        if (league.platform !== platform) providerLabel = String(league.platform || '');
+        var described = [name];
+        if (providerLabel) described.push(providerLabel);
+        if (year) described.push(year);
+        if (team) described.push(team);
+        if (isDefault) described.push('default ' + label.toLowerCase() + ' league');
+        html += '<li class="league-row' + (isDefault ? ' is-default' : '') + '" aria-label="' + escAttr(described.join(', ')) + '">';
+        html += '<span class="badge badge-' + platform + '">' + esc(league.platform || '') + '</span>';
+        html += '<div class="copy">';
+        html += '<div class="league-name" title="' + escAttr(name) + '">' + esc(name) + '</div>';
+        if (year || team) {
+          html += '<div class="league-detail">';
+          if (year) html += '<span class="league-year">' + esc(year) + '</span>';
+          if (year && team) html += '<span aria-hidden="true">·</span>';
+          if (team) html += '<span class="league-team" title="' + escAttr(team) + '">' + esc(team) + '</span>';
+          html += '</div>';
+        }
+        html += '</div></li>';
+      });
+      html += '</ul></section>';
+    });
+
+    container.innerHTML = html;
+    hasRendered = true;
+    queueSizeChanged();
+  }
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+  }
+
+  function escAttr(s) {
+    return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function formatSportLabel(sport) {
+    var key = String(sport || 'other').toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(SPORT_LABELS, key)) return SPORT_LABELS[key];
+    var label = String(sport || 'Other');
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+
+  function renderSportIcon(sport) {
+    var key = String(sport || 'other').toLowerCase();
+    var paths = Object.prototype.hasOwnProperty.call(SPORT_ICON_PATHS, key)
+      ? SPORT_ICON_PATHS[key]
+      : SPORT_ICON_PATHS.other;
+    return '<svg class="sport-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + paths + '</svg>';
+  }
+
+  var editLink = document.getElementById('edit-link');
+  if (editLink) editLink.addEventListener('click', openLeagues);
+  var refreshButton = document.getElementById('refresh-button');
+  if (refreshButton) refreshButton.addEventListener('click', refreshLeagues);
+  // Present only on bodies whose published widget CSP allows the Yahoo
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var yahooLink = document.getElementById('yahoo-link');
+  if (yahooLink) {
+    yahooLink.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: yahooLink.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(yahooLink.href); });
+      }
+      if (opened === false) openNewTab(yahooLink.href);
+    });
+  }
+  // Present only on bodies whose published widget CSP allows the ESPN
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var espnLink = document.getElementById('espn-link');
+  if (espnLink) {
+    espnLink.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: espnLink.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(espnLink.href); });
+      }
+      if (opened === false) openNewTab(espnLink.href);
+    });
+  }
+  // Present only on bodies whose published widget CSP allows the Sleeper
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var sleeperLink = document.getElementById('sleeper-link');
+  if (sleeperLink) {
+    sleeperLink.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: sleeperLink.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(sleeperLink.href); });
+      }
+      if (opened === false) openNewTab(sleeperLink.href);
+    });
+  }
+
+  // Extract payload data from any wrapper format
+  function unwrapPayload(obj) {
+    if (!obj) return null;
+    if (typeof obj === 'string') {
+      try { obj = JSON.parse(obj); } catch(e) { return null; }
+    }
+    if (obj.structuredContent) return unwrapPayload(obj.structuredContent);
+    if (obj.toolOutput) return unwrapPayload(obj.toolOutput);
+    if (obj.result) return unwrapPayload(obj.result);
+    if (obj.output) return unwrapPayload(obj.output);
+    if (obj.params && obj.params.structuredContent) return unwrapPayload(obj.params.structuredContent);
+    if (obj.content && obj.content[0] && obj.content[0].text) return unwrapPayload(obj.content[0].text);
+    return obj;
+  }
+
+  // Extract session data from any wrapper format
+  function extract(obj) {
+    var payload = unwrapPayload(obj);
+    if (payload && payload.allLeagues) return payload;
+    return null;
+  }
+
+  function extractRefreshResult(obj) {
+    var payload = unwrapPayload(obj);
+    if (payload && typeof payload === 'object' && payload.success !== undefined) return payload;
+    return null;
+  }
+
+  function tryToolOutput() {
+    if (hasRendered) return;
+    if (window.openai && window.openai.toolOutput != null) {
+      var data = extract(window.openai.toolOutput);
+      if (data) render(data);
+    }
+  }
+
+  async function refreshLeagues(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!window.openai || typeof window.openai.callTool !== 'function') {
+      setRefreshStatus('Open Flaim to manage leagues.', 'error');
+      openFallbackUrl(LEAGUES_URL);
+      return false;
+    }
+    setRefreshLoading(true);
+    setRefreshStatus('Refreshing leagues...', '');
+    try {
+      var refreshResult = await window.openai.callTool('refresh_leagues', {});
+      var refreshPayload = extractRefreshResult(refreshResult);
+      if (refreshResult && refreshResult.isError) {
+        throw new Error((refreshPayload && (refreshPayload.error_description || refreshPayload.error)) || 'Refresh failed');
+      }
+      var classification = classifyRefreshResult(refreshPayload);
+      if (classification.reloadSession) {
+        var sessionResult = await window.openai.callTool('get_user_session', {});
+        var data = extract(sessionResult);
+        if (!data && window.openai.toolOutput != null) {
+          data = extract(window.openai.toolOutput);
+        }
+        if (!data) {
+          throw new Error('Session data unavailable');
+        }
+        render(data);
+      }
+      if (classification.showLeaguesLink || classification.kind === 'reconnect' || classification.kind === 'failure' ||
+          (classification.kind === 'unchanged' && !classification.reloadSession)) {
+        setRefreshStatus(classification.message + ' <a href="' + LEAGUES_URL + '" target="_blank" rel="noopener">Open leagues</a>.', 'error');
+      } else {
+        var statusKind = classification.kind === 'success' ? 'success' : '';
+        setRefreshStatus(classification.message, statusKind);
+      }
+    } catch (_) {
+      setRefreshStatus('Refresh failed. <a href="' + LEAGUES_URL + '" target="_blank" rel="noopener">Open leagues</a>.', 'error');
+    } finally {
+      setRefreshLoading(false);
+    }
+    return false;
+  }
+
+  // ChatGPT compatibility: listen for openai:set_globals CustomEvent. Theme
+  // updates apply after the first render; tool output does not.
+  window.addEventListener('openai:set_globals', function(event) {
+    var globals = event && event.detail && event.detail.globals;
+    applyTheme(globals && globals.theme !== undefined ? globals.theme : readHostTheme());
+    if (hasRendered) return;
+    if (globals && globals.toolOutput !== undefined) {
+      tryToolOutput();
+    }
+  });
+
+  // ChatGPT compatibility: theme and toolOutput may already be set.
+  applyTheme(readHostTheme());
+  tryToolOutput();
+  document.addEventListener('DOMContentLoaded', tryToolOutput);
+
+  // MCP Apps bridge: receive lifecycle messages and tool-result notifications.
+  window.addEventListener('message', function(event) {
+    if (!event.data) return;
+    if (!isTrustedMessageEvent(event)) return;
+    var msg = event.data;
+
+    if (msg.jsonrpc === '2.0' && msg.id === initId) {
+      sendInitialized();
+      // FLA-277: a hidden result can post its zero size before the host has
+      // answered ui/initialize. Repeat it once the handshake completes, in
+      // case the host ignored size messages sent before initialization.
+      if (widgetHidden) sendZeroSize();
+      return;
+    }
+
+    if (msg.jsonrpc === '2.0' && msg.method === 'ui/resource-teardown') {
+      if (msg.id !== undefined && msg.id !== null) {
+        postToParent({ jsonrpc: '2.0', id: msg.id, result: {} });
+      }
+      return;
+    }
+
+    if (hasRendered) return;
+
+    if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/tool-result') {
+      var data = extract(msg.params);
+      if (data) render(data);
+      return;
+    }
+    // Direct data
+    var data = extract(msg);
+    if (data) render(data);
+  });
+  // Safe in non-MCP hosts: postToParent no-ops when the widget is top-level,
+  // and ChatGPT window.openai data paths remain independent of initialization.
+  startMcpAppsLifecycle();
+})();
+</script>
+<!--
+Tabler Icons v3.41.1
+Copyright (c) 2020-2026 Paweł Kuna
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+</body>
+</html>
