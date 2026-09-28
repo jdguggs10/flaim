@@ -2,6 +2,7 @@ import {
   getPublicChatPreset,
   getPublicChatTarget,
   isPublicChatDemoPlatform,
+  isPublicChatDemoSport,
   type PublicChatDemoPlatform,
   type PublicChatDemoSport,
 } from "@/lib/public-chat";
@@ -16,13 +17,21 @@ import {
 } from "@/lib/server/public-demo-cache-response";
 import { NextRequest, NextResponse } from "next/server";
 
-function isPublicChatDemoSport(value: string | null): value is PublicChatDemoSport {
-  return value === "football" || value === "baseball";
-}
+/**
+ * Sports the legacy no-platform lane may read. That lane skips the live
+ * capabilities gate and reads ungated v7/v2 keys, so it stays limited to the
+ * sports it served before platform-aware targets existed. Newer sports such
+ * as hockey are reachable only through a gated platform-bearing request.
+ */
+const LEGACY_LANE_SPORTS: readonly PublicChatDemoSport[] = [
+  "football",
+  "baseball",
+];
 
 export async function GET(request: NextRequest) {
   const presetId = request.nextUrl.searchParams.get("presetId");
   const sport = request.nextUrl.searchParams.get("sport");
+  const platformParam = request.nextUrl.searchParams.get("platform");
 
   if (!presetId) {
     return NextResponse.json(
@@ -31,9 +40,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!isPublicChatDemoSport(sport)) {
+  if (
+    !isPublicChatDemoSport(sport) ||
+    (platformParam === null && !LEGACY_LANE_SPORTS.includes(sport))
+  ) {
     return NextResponse.json(
-      { error: "Sport must be football or baseball" },
+      { error: "Unsupported sport for the public demo" },
       { status: 400, headers: { "Cache-Control": "no-store" } },
     );
   }
@@ -49,7 +61,6 @@ export async function GET(request: NextRequest) {
   // Optional platform param for the platform-aware demo targets. When absent,
   // the reader keeps the exact legacy single-platform behavior — the
   // one-release compatibility default while clients migrate to sending it.
-  const platformParam = request.nextUrl.searchParams.get("platform");
   let platform: PublicChatDemoPlatform | undefined;
   if (platformParam !== null) {
     if (!isPublicChatDemoPlatform(platformParam)) {

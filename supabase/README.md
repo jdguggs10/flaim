@@ -566,6 +566,19 @@ matches the `demo_antigravity_cache` posture: RLS enabled with no policies
 and table privileges granted only to `service_role`. Applying this migration
 to any hosted database remains a separate approval gate.
 
+`20260927230000_allow_hockey_demo_target_state.sql` (FLA-425) drops and
+re-adds `demo_target_state_sport_check` under the same name so the gate table
+accepts `hockey` alongside `baseball` and `football`. It changes no row,
+column, grant, policy, or index, and the other demo tables have no sport
+constraint. Widening the check enables nothing: a hockey target stays hidden
+until a `public_enabled` gate row exists at the expected versions and all of
+its presets are warmed. `set local lock_timeout = '5s'` keeps the brief
+`ACCESS EXCLUSIVE` lock from queueing capability reads behind a long-running
+transaction. `supabase/tests/reproducibility.sql` pins the exact constraint
+definition. Applying it to any hosted database remains a separate approval
+gate; reverting it means re-adding the two-sport check, which fails while any
+hockey row exists.
+
 ## Duplicate demo index removal
 
 `20260925013000_drop_duplicate_demo_refresh_runs_index.sql` (FLA-231) drops

@@ -17,4 +17,13 @@ describe("public demo answer cache contract", () => {
       buildPublicDemoTargetAnswerCacheKey("wire-watch", "sleeper", "football"),
     ).toBe("public-demo-answer:wire-watch:sleeper:football:v8:v3");
   });
+
+  it("builds hockey target keys on the same v8/v3 contract", () => {
+    expect(
+      buildPublicDemoTargetAnswerCacheKey("best-team", "espn", "hockey"),
+    ).toBe("public-demo-answer:best-team:espn:hockey:v8:v3");
+    expect(
+      buildPublicDemoTargetAnswerCacheKey("best-team", "yahoo", "hockey"),
+    ).toBe("public-demo-answer:best-team:yahoo:hockey:v8:v3");
+  });
 });

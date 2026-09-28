@@ -42,8 +42,8 @@ export async function GET() {
         sport: target.sport,
         presets: [...target.presetIds],
         // Exactly one default overall: the first selectable target in matrix
-        // order. espn-baseball is first in the matrix, so it stays the default
-        // while it is the only enabled lane.
+        // order. PUBLIC_CHAT_TARGET_MATRIX owns that priority, so a target
+        // that is not selectable passes the default to the next one.
         default: index === 0,
         freshness: target.freshness,
       }),
