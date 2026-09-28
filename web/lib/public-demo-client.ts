@@ -316,7 +316,6 @@ export interface PublicDemoState {
   >;
   selectedPresetId: string | null;
   runStatus: PublicDemoRunStatus;
-  preToolStatusIndex: number;
   toolCalls: readonly PublicDemoToolCallState[];
   assistantText: string;
   answerMeta: PublicDemoAnswerMeta | null;
@@ -346,7 +345,6 @@ export const INITIAL_PUBLIC_DEMO_STATE: PublicDemoState = {
   lastSportByPlatform: {},
   selectedPresetId: null,
   runStatus: "idle",
-  preToolStatusIndex: 0,
   toolCalls: [],
   assistantText: "",
   answerMeta: null,
@@ -366,7 +364,6 @@ export type PublicDemoAction =
   | { type: "platform_selected"; platform: PublicChatDemoPlatform; token: number }
   | { type: "sport_selected"; sport: PublicChatDemoSport; token: number }
   | { type: "run_started"; presetId: string; token: number }
-  | { type: "pre_tool_step_advanced"; index: number; token: number }
   | {
       type: "tool_call_started";
       toolCall: PublicDemoToolCallState;
@@ -707,13 +704,211 @@ export async function loadPublicDemoCapabilities(options: {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Cached answer fetch                                                */
+/* ------------------------------------------------------------------ */
+
+/** Shape of a stored refresh failure the cache route can attach to a response. */
+export interface PublicDemoRefreshFailure {
+  status?: string;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+}
+
+/** User-facing copy for a stored refresh failure, or the generic fallback. */
+export function getPublicDemoFailureCopy(
+  failure: PublicDemoRefreshFailure | null | undefined,
+) {
+  if (!failure) {
+    return "The latest refresh failed before a new answer could be stored.";
+  }
+
+  switch (failure.errorCode) {
+    case "missing_mcp_grounding":
+      return "The latest refresh did not successfully use Gerry's league data, so the answer was rejected.";
+    case "empty_answer":
+      return "The latest refresh returned an empty answer, so nothing new was stored.";
+    case "provider_failed":
+      return "The latest refresh failed while talking to the AI provider.";
+    case "cache_write_failed":
+      return "The latest refresh generated an answer but failed while writing it to cache.";
+    default:
+      return (
+        failure.errorMessage ||
+        "The latest refresh failed before a new answer could be stored."
+      );
+  }
+}
+
+/**
+ * How long the client waits for a cached-answer fetch before giving up on it.
+ *
+ * `fetch` has no timeout of its own, so a request that stalls without ever
+ * failing (a slow proxy holding headers open, a body that never finishes)
+ * would leave the phone on the "Thinking" status line forever.
+ */
+export const PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS = 12_000;
+
+export interface PublicDemoCachedAnswer {
+  text: string;
+  meta: PublicDemoAnswerMeta;
+  toolTraceSummary: PublicDemoToolTraceSummary | null;
+}
+
+/** Response shape the public cache route returns for a run's fetch. */
+interface PublicDemoCacheResponsePayload {
+  hit?: boolean;
+  answer?: {
+    text?: string;
+    generatedAt?: string;
+    expiresAt?: string;
+    staleAfter?: string;
+    provider?: string;
+    providerModel?: string;
+    isExpired?: boolean;
+    isStale?: boolean;
+    status?: string;
+    failure?: PublicDemoRefreshFailure | null;
+    toolTraceSummary?: PublicDemoToolTraceSummary | null;
+  } | null;
+  failure?: PublicDemoRefreshFailure | null;
+}
+
+export type PublicDemoCachedAnswerResult =
+  | { outcome: "ok"; answer: PublicDemoCachedAnswer }
+  /** The caller's own signal aborted (a user cancel) — stay silent. */
+  | { outcome: "aborted" }
+  /** A real failure, including the deadline — goes through the failure path. */
+  | { outcome: "failed"; message: string };
+
+/**
+ * Fetches a cached demo answer under a deadline.
+ *
+ * `signal` is the run's own abort signal: switching preset, platform, or
+ * sport mid-run aborts it, and that must stay silent (`"aborted"`). The
+ * deadline uses a separate, internal controller, so a stalled response that
+ * never rejects on its own still gets released and reported as `"failed"` —
+ * the same path a real network or server error takes — rather than being
+ * mistaken for the caller's own silent cancel.
+ */
+export async function fetchPublicDemoCachedAnswer(options: {
+  presetId: string;
+  sport: PublicChatDemoSport;
+  platform: PublicChatDemoPlatform | null;
+  signal: AbortSignal;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}): Promise<PublicDemoCachedAnswerResult> {
+  const {
+    presetId,
+    sport,
+    platform,
+    signal,
+    timeoutMs = PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS,
+    fetchImpl = fetch,
+  } = options;
+
+  if (signal.aborted) {
+    return { outcome: "aborted" };
+  }
+
+  // Internal controller so the deadline and the caller's own abort can both
+  // stop the request while staying distinguishable afterwards: only the
+  // caller's `signal` aborting means "stay silent".
+  const controller = new AbortController();
+  const abortForCaller = () => controller.abort();
+  signal.addEventListener("abort", abortForCaller, { once: true });
+
+  let timedOut = false;
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    const response = await fetchImpl(
+      buildPublicDemoCacheRequestUrl({ presetId, sport, platform }),
+      {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal,
+      },
+    );
+
+    if (!response.ok) {
+      let message = `${response.status} ${response.statusText}`;
+      try {
+        const errorPayload = (await response.json()) as { error?: string };
+        if (errorPayload.error) {
+          message = errorPayload.error;
+        }
+      } catch (jsonError) {
+        console.error("Failed to parse error response JSON:", jsonError);
+      }
+      throw new Error(message);
+    }
+
+    const payload = (await response.json()) as PublicDemoCacheResponsePayload;
+
+    if (!payload.hit || !payload.answer?.text) {
+      throw new Error(
+        payload.failure
+          ? getPublicDemoFailureCopy(payload.failure)
+          : "This prompt does not have a cached answer yet. Try another preset or check back soon.",
+      );
+    }
+
+    return {
+      outcome: "ok",
+      answer: {
+        text: payload.answer.text,
+        toolTraceSummary: payload.answer.toolTraceSummary ?? null,
+        meta: {
+          generatedAt: payload.answer.generatedAt || new Date().toISOString(),
+          expiresAt: payload.answer.expiresAt || new Date().toISOString(),
+          staleAfter: payload.answer.staleAfter || new Date().toISOString(),
+          provider: payload.answer.provider || "unknown",
+          providerModel: payload.answer.providerModel || "unknown",
+          isExpired: Boolean(payload.answer.isExpired),
+          isStale: Boolean(payload.answer.isStale),
+          status: payload.answer.status || "ready",
+          failureCode: payload.answer.failure?.errorCode || null,
+          failureMessage: payload.answer.failure?.errorMessage || null,
+        },
+      },
+    };
+  } catch (fetchError) {
+    if (signal.aborted) {
+      return { outcome: "aborted" };
+    }
+
+    if (timedOut) {
+      return {
+        outcome: "failed",
+        message: `The demo answer took too long to load (over ${Math.round(
+          timeoutMs / 1000,
+        )}s). Please try again.`,
+      };
+    }
+
+    const message =
+      fetchError instanceof Error
+        ? fetchError.message
+        : "Unable to run the public chat demo.";
+    return { outcome: "failed", message };
+  } finally {
+    // Every settled path, including the caller's abort, releases the timer.
+    clearTimeout(timeoutId);
+    signal.removeEventListener("abort", abortForCaller);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Reducer                                                            */
 /* ------------------------------------------------------------------ */
 
 const CLEARED_RUN_STATE = {
   selectedPresetId: null,
   runStatus: "idle",
-  preToolStatusIndex: 0,
   toolCalls: [],
   assistantText: "",
   answerMeta: null,
@@ -920,13 +1115,6 @@ export function publicDemoReducer(
         // idle-block space.
         sportSwitchNote: "",
       };
-    }
-
-    case "pre_tool_step_advanced": {
-      if (!isActiveRun(state, action.token)) {
-        return state;
-      }
-      return { ...state, preToolStatusIndex: action.index };
     }
 
     case "tool_call_started": {

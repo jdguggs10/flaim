@@ -15,17 +15,16 @@ import {
   PUBLIC_DEMO_PLATFORM_LABELS,
   PUBLIC_DEMO_SPORT_LABELS,
   buildPublicChatStepSequence,
-  buildPublicDemoCacheRequestUrl,
   buildPublicDemoSportMenuRows,
   canStartPublicDemoRun,
+  fetchPublicDemoCachedAnswer,
+  getPublicDemoFailureCopy,
   loadPublicDemoCapabilities,
   publicDemoReducer,
   selectPublicDemoPlatformOptions,
   selectPublicDemoRequestPlatform,
   selectPublicDemoSportOptions,
   selectPublicDemoVisiblePresets,
-  type PublicDemoAnswerMeta,
-  type PublicDemoToolTraceSummary,
 } from "@/lib/public-demo-client";
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
@@ -57,12 +56,6 @@ import {
   type PhoneEducationPanelId,
 } from "./phone-education-panel";
 import { PublicMessage } from "./public-message";
-
-type PublicDemoRefreshFailure = {
-  status?: string;
-  errorCode?: string | null;
-  errorMessage?: string | null;
-};
 
 /** Simulated "thinking" phase before the first status-line step appears. */
 const PUBLIC_CHAT_THINKING_DURATION_MS = 1200;
@@ -103,30 +96,6 @@ function formatRelativeUpdateTime(value: string) {
 
   const days = Math.round(hours / 24);
   return `Updated ${days}d ago`;
-}
-
-function getPublicDemoFailureCopy(
-  failure: PublicDemoRefreshFailure | null | undefined,
-) {
-  if (!failure) {
-    return "The latest refresh failed before a new answer could be stored.";
-  }
-
-  switch (failure.errorCode) {
-    case "missing_mcp_grounding":
-      return "The latest refresh did not successfully use Gerry's league data, so the answer was rejected.";
-    case "empty_answer":
-      return "The latest refresh returned an empty answer, so nothing new was stored.";
-    case "provider_failed":
-      return "The latest refresh failed while talking to the AI provider.";
-    case "cache_write_failed":
-      return "The latest refresh generated an answer but failed while writing it to cache.";
-    default:
-      return (
-        failure.errorMessage ||
-        "The latest refresh failed before a new answer could be stored."
-      );
-  }
 }
 
 async function waitFor(ms: number, signal: AbortSignal) {
@@ -531,78 +500,36 @@ export function PublicChatExperience({
       activeRunAbortControllerRef.current = abortController;
 
       try {
-        const response = await fetch(
-          buildPublicDemoCacheRequestUrl({
-            presetId: preset.id,
-            sport: demoSport,
-            platform: requestPlatform,
-          }),
-          {
-            method: "GET",
-            cache: "no-store",
-            signal: abortController.signal,
-          },
-        );
+        // Fetch has its own bounded deadline (see PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS)
+        // so a hung request can't leave the status line on "Thinking" forever.
+        // The result distinguishes a user-initiated cancel (silent) from a real
+        // failure, including that deadline, which goes through the same alert
+        // as any other failed fetch below.
+        const result = await fetchPublicDemoCachedAnswer({
+          presetId: preset.id,
+          sport: demoSport,
+          platform: requestPlatform,
+          signal: abortController.signal,
+        });
 
-        if (!response.ok) {
-          let message = `${response.status} ${response.statusText}`;
-          try {
-            const payload = (await response.json()) as { error?: string };
-            if (payload.error) {
-              message = payload.error;
-            }
-          } catch (jsonError) {
-            console.error("Failed to parse error response JSON:", jsonError);
-          }
-          throw new Error(message);
+        if (result.outcome === "aborted") {
+          dispatch({ type: "run_aborted", token });
+          return;
         }
 
-        const payload = (await response.json()) as {
-          hit?: boolean;
-          answer?: {
-            text?: string;
-            generatedAt?: string;
-            expiresAt?: string;
-            staleAfter?: string;
-            provider?: string;
-            providerModel?: string;
-            isExpired?: boolean;
-            isStale?: boolean;
-            status?: string;
-            failure?: PublicDemoRefreshFailure | null;
-            toolTraceSummary?: PublicDemoToolTraceSummary | null;
-          } | null;
-          failure?: PublicDemoRefreshFailure | null;
-        };
-
-        if (!payload.hit || !payload.answer?.text) {
-          throw new Error(
-            payload.failure
-              ? getPublicDemoFailureCopy(payload.failure)
-              : "This prompt does not have a cached answer yet. Try another preset or check back soon.",
-          );
+        if (result.outcome === "failed") {
+          dispatch({ type: "run_failed", message: result.message, token });
+          return;
         }
 
-        const nextAnswerMeta: PublicDemoAnswerMeta = {
-          generatedAt: payload.answer.generatedAt || new Date().toISOString(),
-          expiresAt: payload.answer.expiresAt || new Date().toISOString(),
-          staleAfter: payload.answer.staleAfter || new Date().toISOString(),
-          provider: payload.answer.provider || "unknown",
-          providerModel: payload.answer.providerModel || "unknown",
-          isExpired: Boolean(payload.answer.isExpired),
-          isStale: Boolean(payload.answer.isStale),
-          status: payload.answer.status || "ready",
-          failureCode: payload.answer.failure?.errorCode || null,
-          failureMessage: payload.answer.failure?.errorMessage || null,
-        };
+        const { answer } = result;
         const stepSequence = buildPublicChatStepSequence(
           preset,
-          payload.answer.toolTraceSummary,
+          answer.toolTraceSummary,
         );
 
         // Simulated "Thinking" phase: no tool call has started yet, so the
         // status line shows the static "Thinking" copy.
-        dispatch({ type: "pre_tool_step_advanced", index: 0, token });
         await waitFor(PUBLIC_CHAT_THINKING_DURATION_MS, abortController.signal);
 
         for (let index = 0; index < stepSequence.length; index += 1) {
@@ -624,11 +551,15 @@ export function PublicChatExperience({
 
         dispatch({
           type: "run_completed",
-          assistantText: payload.answer.text,
-          answerMeta: nextAnswerMeta,
+          assistantText: answer.text,
+          answerMeta: answer.meta,
           token,
         });
       } catch (runError) {
+        // Only the simulated thinking/tool-step animation above can throw
+        // here — the fetch itself never throws, it resolves to a result. So
+        // an abort at this point is always the run's own signal (a user
+        // cancel), never the fetch deadline.
         if (abortController.signal.aborted) {
           dispatch({ type: "run_aborted", token });
           return;
