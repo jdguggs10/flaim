@@ -283,17 +283,37 @@ export function getPublicChatPreset(
   return PUBLIC_CHAT_PRESETS.find((preset) => preset.id === presetId);
 }
 
-export const PUBLIC_CHAT_TOOL_DISPLAY_LABELS: Record<
+/**
+ * Live status-line copy for each Flaim tool, shown while the homepage demo
+ * simulates a run. Copied from the `openaiMeta.invoking` strings in
+ * `workers/fantasy-mcp/src/mcp/tools.ts` — the same text ChatGPT shows while
+ * a tool call is in flight. Keep this map in sync with that file by hand;
+ * there is no shared import between the Worker and the public web app.
+ */
+export const PUBLIC_CHAT_TOOL_STATUS_LABELS: Record<
   PublicChatAllowedTool,
   string
 > = {
-  get_user_session: "Leagues",
-  get_ancient_history: "League History",
-  get_league_info: "League Info",
-  get_standings: "Standings",
-  get_matchups: "Matchups",
-  get_roster: "Roster",
-  get_free_agents: "Available Players",
-  get_players: "Player Lookup",
-  get_transactions: "Transactions",
+  get_user_session: "Loading your leagues…",
+  get_ancient_history: "Searching old seasons…",
+  get_league_info: "Fetching league info…",
+  get_standings: "Fetching standings…",
+  get_matchups: "Fetching matchups…",
+  get_roster: "Fetching roster…",
+  get_free_agents: "Searching available players…",
+  get_players: "Searching players…",
+  get_transactions: "Fetching transactions…",
 };
+
+/** Status-line copy for the simulated web-search step (not a Flaim tool). */
+export const PUBLIC_CHAT_WEB_SEARCH_STATUS_LABEL = "Searching the web…";
+
+/** A step in the simulated status-line sequence: a Flaim tool, or web search. */
+export type PublicChatStepName = PublicChatAllowedTool | "web_search";
+
+/** Friendly status-line copy for one step, Flaim tool or web search. */
+export function getPublicChatStepStatusLabel(step: PublicChatStepName): string {
+  return step === "web_search"
+    ? PUBLIC_CHAT_WEB_SEARCH_STATUS_LABEL
+    : PUBLIC_CHAT_TOOL_STATUS_LABELS[step];
+}

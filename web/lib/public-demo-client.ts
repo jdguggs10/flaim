@@ -27,6 +27,7 @@ import {
   type PublicChatDemoPlatform,
   type PublicChatDemoSport,
   type PublicChatPreset,
+  type PublicChatStepName,
 } from "@/lib/public-chat";
 
 /* ------------------------------------------------------------------ */
@@ -220,6 +221,63 @@ export function resolveDefaultTarget(
   targets: readonly PublicDemoCapabilityTarget[],
 ): PublicDemoCapabilityTarget | null {
   return targets.find((target) => target.isDefault) ?? targets[0] ?? null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Status-line step sequence                                          */
+/* ------------------------------------------------------------------ */
+
+/** Tool-trace shape the public cache route returns: counts keyed by tool name. */
+export interface PublicDemoToolTraceSummary {
+  byName?: Record<string, { count?: number }>;
+}
+
+/**
+ * Normalizes a raw tool-trace name to the bare tool name the status-line map
+ * uses: strips the `mcp_fantasy_` prefix the runner's trace carries, and folds
+ * every web-search variant (`google_web_search`, `web_search`,
+ * `web_search_call`) into `"web_search"`.
+ */
+export function normalizePublicChatTraceToolName(name: string): string {
+  if (name.startsWith("mcp_fantasy_")) {
+    return name.slice("mcp_fantasy_".length);
+  }
+
+  if (
+    name === "google_web_search" ||
+    name === "web_search" ||
+    name === "web_search_call"
+  ) {
+    return "web_search";
+  }
+
+  return name;
+}
+
+/**
+ * Builds the ordered status-line step sequence for a simulated preset run:
+ * always `get_user_session` first — simulated, because the real runner
+ * pre-loads the league before the chat starts, so there is no live session
+ * call to trace — then the preset's own `allowedTools` in order, then
+ * `web_search` only when the cached answer's tool trace shows the runner
+ * actually searched the web.
+ */
+export function buildPublicChatStepSequence(
+  preset: PublicChatPreset,
+  toolTraceSummary: PublicDemoToolTraceSummary | null | undefined,
+): readonly PublicChatStepName[] {
+  const byName = toolTraceSummary?.byName ?? {};
+  const tracedNames = Object.keys(byName)
+    .map(normalizePublicChatTraceToolName)
+    .filter((value, index, array) => array.indexOf(value) === index);
+  const usedWebSearch = tracedNames.includes("web_search");
+
+  const steps: PublicChatStepName[] = [
+    "get_user_session",
+    ...preset.allowedTools,
+  ];
+
+  return usedWebSearch ? [...steps, "web_search"] : steps;
 }
 
 /* ------------------------------------------------------------------ */
