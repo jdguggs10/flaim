@@ -899,24 +899,38 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   // never gated on window.openai. An update with no valid maxWidth --
   // omitted, non-finite, zero, negative, or a fixed width instead -- clears
   // any earlier cap rather than leaving a stale one in place.
+  //
+  // Not every host fires ResizeObserver (or has one at all), so a cap change
+  // applied here can be the only signal a report-worthy size change
+  // happened. Track the last-applied cap (defaulting to '', matching "no
+  // cap") and queue a report only when it actually changes, so a repeated
+  // no-op update doesn't spam duplicate size-changed posts.
+  var appliedContainerMaxWidth = '';
   function applyContainerDimensions(containerDimensions) {
     var root = document.documentElement;
     if (!root || !root.style) return;
     var maxWidth = containerDimensions && containerDimensions.maxWidth;
     var isValid = typeof maxWidth === 'number' && isFinite(maxWidth) && maxWidth > 0;
-    root.style.maxWidth = isValid ? Math.min(maxWidth, WIDGET_MAX_WIDTH) + 'px' : '';
+    var next = isValid ? Math.min(maxWidth, WIDGET_MAX_WIDTH) + 'px' : '';
+    root.style.maxWidth = next;
+    if (next !== appliedContainerMaxWidth) {
+      appliedContainerMaxWidth = next;
+      queueSizeChanged();
+    }
   }
 
   // Safe-area insets (FLA-427): applied as body padding, and folded into
   // sendSizeChanged()'s reported size above. See the safeAreaInsets
-  // declaration for why the default (all zero) is a no-op.
+  // declaration for why the default (all zero) is a no-op. Each side is
+  // clamped to zero -- a negative inset from a misbehaving host must not
+  // shrink the reported size or become negative padding.
   function applySafeAreaInsets(insets) {
     if (!insets || typeof insets !== 'object') return;
     safeAreaInsets = {
-      top: Number(insets.top) || 0,
-      right: Number(insets.right) || 0,
-      bottom: Number(insets.bottom) || 0,
-      left: Number(insets.left) || 0,
+      top: Math.max(0, Number(insets.top) || 0),
+      right: Math.max(0, Number(insets.right) || 0),
+      bottom: Math.max(0, Number(insets.bottom) || 0),
+      left: Math.max(0, Number(insets.left) || 0),
     };
     var body = document.body;
     if (body && body.style) {
