@@ -744,11 +744,6 @@ export function PublicChatExperience({
     );
   };
 
-  const chipActive =
-    runStatus === "running" ||
-    runStatus === "completed" ||
-    Boolean(selectedPreset);
-
   return (
     <section
       id={id}
@@ -1037,8 +1032,11 @@ export function PublicChatExperience({
             <div className="border-t border-[var(--phone-border)] bg-[var(--phone-screen)] px-3 pb-4 pt-3">
               {offPlatformPreview ? null : renderPromptTicker(visiblePresets)}
 
-              {/* Each composer control opens a short "Inside ChatGPT" sheet:
-                  a title and a sentence or two, no numbered steps. */}
+              {/* The plus and send controls each open a short "Inside
+                  ChatGPT" sheet: a title and a sentence or two, no numbered
+                  steps. Connector-active state now shows inline in the
+                  transcript (the "Flaim Fantasy" / "Reading Flaim
+                  Fantasy..." rows), not as a composer badge. */}
               <div className="mx-2 mb-1 mt-2 flex items-center gap-1.5 rounded-[1.75rem] border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5">
                 <button
                   type="button"
@@ -1056,25 +1054,6 @@ export function PublicChatExperience({
                 <span className="min-w-0 flex-1 truncate text-[length:var(--phone-type-body)] leading-5 text-[var(--phone-muted)]">
                   {selectedPreset ? "Follow up" : "Ask Chat…"}
                 </span>
-
-                <button
-                  type="button"
-                  onClick={(event) =>
-                    openEducationPanel("activation", event.currentTarget)
-                  }
-                  aria-label="What the Flaim badge means"
-                  aria-haspopup="dialog"
-                  aria-expanded={educationPanel === "activation"}
-                  className={cn(
-                    "inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[length:var(--phone-type-caption)] font-medium transition-[box-shadow,transform] hover:shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
-                    chipActive
-                      ? "public-chat-chip-active border-[var(--phone-accent)] bg-[var(--phone-accent)] text-[var(--phone-accent-text)]"
-                      : "border-[var(--phone-border)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]",
-                  )}
-                >
-                  <PhoneFlaimMark size={16} />
-                  <span className="hidden min-[370px]:inline">Flaim</span>
-                </button>
 
                 <button
                   type="button"
