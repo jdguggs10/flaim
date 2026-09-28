@@ -200,7 +200,13 @@ async function waitFor(ms: number, signal: AbortSignal) {
 
 const IDLE_ANIM_STYLES = ["rock", "bounce", "spin"] as const;
 
-function IdleState({ platformLabel }: { platformLabel: string }) {
+function IdleState({
+  platformLabel,
+  sportSwitchNote,
+}: {
+  platformLabel: string;
+  sportSwitchNote: string;
+}) {
   const [styleIndex, setStyleIndex] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -243,6 +249,17 @@ function IdleState({ platformLabel }: { platformLabel: string }) {
       <p className="mt-2 max-w-[16rem] text-[length:var(--phone-type-secondary)] leading-[1.4] text-[var(--phone-muted)]">
         Real answers from Gerry&apos;s actual {platformLabel} league
       </p>
+      {/* Visible explanation for an automatic sport switch. The sr-only
+          region elsewhere announces the same event to assistive tech, so
+          this copy is hidden from it to avoid a duplicate announcement. */}
+      {sportSwitchNote ? (
+        <p
+          aria-hidden
+          className="mt-2 max-w-[16rem] text-[length:var(--phone-type-caption)] leading-[1.4] text-[var(--phone-muted)]"
+        >
+          {sportSwitchNote}
+        </p>
+      ) : null}
       {/* Tap logo to cycle animation — easter egg */}
       <button
         onClick={handleTap}
@@ -312,6 +329,7 @@ export function PublicChatExperience({
     preToolStatusIndex,
     runStatus,
     selectedPresetId,
+    sportSwitchNote,
     sportTransitionAnnouncement,
     toolCalls,
   } = state;
@@ -923,7 +941,10 @@ export function PublicChatExperience({
                 ) : (
                   <>
                     {!selectedPreset && runStatus === "idle" ? (
-                      <IdleState platformLabel={demoTarget.platformLabel} />
+                      <IdleState
+                        platformLabel={demoTarget.platformLabel}
+                        sportSwitchNote={sportSwitchNote}
+                      />
                     ) : null}
 
                     {selectedPreset ? (
