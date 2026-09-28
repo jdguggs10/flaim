@@ -61,7 +61,7 @@ const FOOTBALL_FAQS: readonly {
   {
     question: "Can Flaim set my lineup or make trades?",
     answer:
-      "No. Flaim is read-only. It can't set lineups, add or drop players, or make trades.",
+      "No. Flaim reads your leagues but never changes them. It can't set lineups, add or drop players, or make trades.",
   },
 ];
 
