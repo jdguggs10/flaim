@@ -14,9 +14,26 @@ interface FakeElement {
   className: string;
   textContent: string;
   href?: string;
+  /** The anchor's `target` attribute (e.g. `_blank`), matching the real widget HTML. */
+  target?: string;
   disabled?: boolean;
   listeners: Record<string, Array<(event: unknown) => unknown>>;
   addEventListener(type: string, handler: (event: unknown) => unknown): void;
+}
+
+/** A `.widget`-selector stand-in with a real `style` object, so tests can
+ * observe the hide/show display toggle render() applies, and so
+ * sendSizeChanged()'s getBoundingClientRect() branch has something to read
+ * instead of always falling back to the WIDGET_WIDTH default. Mirrors
+ * loadEmbeddedRender's widgetEl below. */
+function fakeWidgetEl() {
+  return {
+    style: {} as Record<string, string>,
+    getBoundingClientRect() {
+      if (this.style.display === 'none') return { width: 0, height: 0 };
+      return { width: 353, height: 240 };
+    },
+  };
 }
 
 function fakeElement(props: Partial<FakeElement> = {}): FakeElement {
@@ -40,6 +57,8 @@ interface WidgetHarness {
   windowListeners: Record<string, Array<(event: unknown) => unknown>>;
   /** The script's own `window`, needed as `event.source` for trusted messages. */
   contextWindow: Record<string, unknown>;
+  /** The `.widget` element render() shows/hides. See fakeWidgetEl() above. */
+  widgetEl: ReturnType<typeof fakeWidgetEl>;
   /**
    * `window.parent` as the script sees it: a distinct scripted-host object
    * when `bridge` is set, otherwise the script's own window (self-referencing,
@@ -113,20 +132,25 @@ function loadWidgetScript(
     `${exposed.map((name) => `globalThis.__${name} = ${name};`).join('\n')}\n})();`,
   );
 
+  // href/target match the real widget HTML's anchor attributes exactly (see
+  // buildUserSessionWidgetHtml), so a trace that reads them off these
+  // elements reflects what a real click's native-navigation fallback would
+  // actually use, not a disconnected test-only stand-in.
   const elements: Record<string, FakeElement> = {
     content: fakeElement(),
     'refresh-status': fakeElement(),
     'refresh-button': fakeElement(),
     'refresh-word': fakeElement(),
-    'edit-link': fakeElement(),
-    'yahoo-link': fakeElement({ href: 'https://sports.yahoo.com/fantasy/' }),
-    'espn-link': fakeElement({ href: 'https://www.espn.com/fantasy/' }),
-    'sleeper-link': fakeElement({ href: 'https://sleeper.com/' }),
+    'edit-link': fakeElement({ href: 'https://flaim.app/leagues?from=widget', target: '_blank' }),
+    'yahoo-link': fakeElement({ href: 'https://sports.yahoo.com/fantasy/', target: '_blank' }),
+    'espn-link': fakeElement({ href: 'https://www.espn.com/fantasy/', target: '_blank' }),
+    'sleeper-link': fakeElement({ href: 'https://sleeper.com/', target: '_blank' }),
   };
   const classes = new Set<string>();
   const windowListeners: Record<string, Array<(event: unknown) => unknown>> = Object.create(null);
   const postedMessages: Array<Record<string, unknown>> = [];
   const openedTabs: string[] = [];
+  const widgetEl = fakeWidgetEl();
 
   const context: Record<string, unknown> = {
     document: {
@@ -154,7 +178,7 @@ function loadWidgetScript(
       getElementById(id: string) {
         return Object.prototype.hasOwnProperty.call(elements, id) ? elements[id] : null;
       },
-      querySelector() { return null; },
+      querySelector(selector: string) { return selector === '.widget' ? widgetEl : null; },
     },
     URL,
     setTimeout,
@@ -207,7 +231,17 @@ function loadWidgetScript(
 
   const exports: Record<string, unknown> = {};
   for (const name of exposed) exports[name] = context[`__${name}`];
-  return { exports, elements, classes, windowListeners, contextWindow: windowStub, parent, postedMessages, openedTabs };
+  return {
+    exports,
+    elements,
+    classes,
+    windowListeners,
+    contextWindow: windowStub,
+    widgetEl,
+    parent,
+    postedMessages,
+    openedTabs,
+  };
 }
 
 /**
@@ -1517,6 +1551,26 @@ describe('user session widget script', () => {
       url: unknown;
     }
 
+    /**
+     * What a single click actually did: whether the handler suppressed the
+     * native action, the clicked anchor's own href/target at that moment, and
+     * — the part a Set-of-methods or a "did it call preventDefault" check
+     * alone would miss — which of the two ways the resulting navigation
+     * happens: the browser's native anchor navigation (unprevented) or a
+     * specific scripted call (prevented). A regression that started calling
+     * preventDefault without ever opening anything, or vice versa, changes
+     * `navigation` even when `defaultPrevented` alone would not.
+     */
+    interface ClickOutcome {
+      defaultPrevented: boolean;
+      href: unknown;
+      target: unknown;
+      navigation:
+        | { kind: 'native'; href: unknown; target: unknown }
+        | { kind: 'window.open' | 'openExternal'; url: unknown }
+        | { kind: 'none' };
+    }
+
     interface Trace {
       calls: CallLogEntry[];
       posted: Array<{ method: unknown; params: unknown }>;
@@ -1527,8 +1581,14 @@ describe('user session widget script', () => {
         statusClass: string;
         buttonDisabled: boolean;
         buttonWord: string;
+        /** render()'s hide/show toggle on the `.widget` element itself — the
+         * dimension the hidden-widget case actually needs to compare, and
+         * cheap to check on every other case too. */
+        widgetDisplay: string;
       };
       theme: string[];
+      /** Present only for the scenarios below that click something. */
+      click?: ClickOutcome;
     }
 
     /** A window.openai stub whose callTool is scenario-specific; openExternal
@@ -1555,40 +1615,110 @@ describe('user session widget script', () => {
       };
     }
 
-    function captureDom(elements: Record<string, FakeElement>): Trace['dom'] {
+    function captureDom(harness: WidgetHarness): Trace['dom'] {
+      const { elements } = harness;
       return {
         content: elements.content.innerHTML,
         status: elements['refresh-status'].innerHTML,
         statusClass: elements['refresh-status'].className,
         buttonDisabled: !!elements['refresh-button'].disabled,
         buttonWord: elements['refresh-word'].textContent,
+        widgetDisplay: harness.widgetEl.style.display ?? '',
       };
+    }
+
+    /** Pulls href/target off the first `<a ...>` tag in an innerHTML string —
+     * used for the status-link case, whose anchor is injected HTML rather
+     * than one of the harness's static elements. */
+    function extractAnchor(html: string): { href?: string; target?: string } | undefined {
+      const tag = html.match(/<a\b([^>]*)>/i)?.[1];
+      if (tag === undefined) return undefined;
+      return {
+        href: tag.match(/\bhref="([^"]*)"/)?.[1],
+        target: tag.match(/\btarget="([^"]*)"/)?.[1],
+      };
+    }
+
+    function classifyNavigation(
+      prevented: boolean,
+      href: unknown,
+      target: unknown,
+      opened: OpenedEntry[],
+      openedBefore: number,
+      openedTabs: string[],
+      tabsBefore: number,
+    ): ClickOutcome['navigation'] {
+      if (!prevented) return { kind: 'native', href, target };
+      if (opened.length > openedBefore) return { kind: 'openExternal', url: opened[opened.length - 1].url };
+      if (openedTabs.length > tabsBefore) return { kind: 'window.open', url: openedTabs[openedTabs.length - 1] };
+      return { kind: 'none' };
+    }
+
+    /**
+     * Clicks `el` (or a no-op when it has no registered listener at all —
+     * true of the old script's status-link anchor, which never gets a
+     * listener) and records the full click outcome: whether the default was
+     * prevented, the anchor's own href/target, and which of native
+     * navigation or a specific scripted call would actually run. `overrides`
+     * lets the status-link case supply the injected anchor's real
+     * href/target (read from its innerHTML, not a harness element) and a
+     * synthetic `event.target` for the delegated listener's `tagName` check.
+     */
+    function clickAndRecord(
+      harness: WidgetHarness,
+      opened: OpenedEntry[],
+      el: FakeElement,
+      listener: ((event: unknown) => unknown) | undefined,
+      overrides: { href?: unknown; target?: unknown; eventTarget?: unknown } = {},
+    ): ClickOutcome {
+      const { state, event } = clickEvent();
+      if (overrides.eventTarget !== undefined) (event as { target?: unknown }).target = overrides.eventTarget;
+      const href = 'href' in overrides ? overrides.href : el.href;
+      const target = 'target' in overrides ? overrides.target : el.target;
+      const openedBefore = opened.length;
+      const tabsBefore = harness.openedTabs.length;
+      if (listener) listener(event);
+      const navigation = classifyNavigation(
+        state.prevented,
+        href,
+        target,
+        opened,
+        openedBefore,
+        harness.openedTabs,
+        tabsBefore,
+      );
+      return { defaultPrevented: state.prevented, href, target, navigation };
     }
 
     async function runScenario(
       html: string,
       callTool: ((name: string, args: unknown) => unknown) | undefined,
       openaiExtra: Record<string, unknown>,
-      act: (harness: WidgetHarness) => Promise<void> | void,
+      act: (harness: WidgetHarness, opened: OpenedEntry[], recordClick: (outcome: ClickOutcome) => void) => Promise<void> | void,
     ): Promise<Trace> {
       const calls: CallLogEntry[] = [];
       const opened: OpenedEntry[] = [];
       const openai = { ...buildOpenai(calls, opened, callTool), ...openaiExtra };
       const harness = loadWidgetScript(html, { openai, bridge: BRIDGE_HOST });
+      let click: ClickOutcome | undefined;
 
-      await act(harness);
+      await act(harness, opened, (outcome) => { click = outcome; });
       // Flush any size-changed notification queued via setTimeout(fn, 0) (no
       // requestAnimationFrame in this harness), so every scenario captures a
       // settled trace regardless of which internal path queued it.
       await new Promise((resolve) => setTimeout(resolve, 0));
+      // clickAndRecord() only ever reads harness.openedTabs to classify a
+      // click's navigation — it never pushes into `opened` itself — so this
+      // merge is the sole source of 'window.open' entries and can't double count.
       for (const url of harness.openedTabs) opened.push({ kind: 'window.open', url });
 
       return {
         calls,
         posted: harness.postedMessages.map((message) => ({ method: message.method, params: message.params })),
         opened,
-        dom: captureDom(harness.elements),
+        dom: captureDom(harness),
         theme: Array.from(harness.classes).sort(),
+        ...(click ? { click } : {}),
       };
     }
 
@@ -1605,7 +1735,7 @@ describe('user session widget script', () => {
       name: string;
       callTool?: (name: string, args: unknown) => unknown;
       openaiExtra?: Record<string, unknown>;
-      act: (harness: WidgetHarness) => Promise<void> | void;
+      act: (harness: WidgetHarness, opened: OpenedEntry[], recordClick: (outcome: ClickOutcome) => void) => Promise<void> | void;
     }> = [
       {
         name: '(a) initial render',
@@ -1631,9 +1761,9 @@ describe('user session widget script', () => {
       },
       {
         name: '(e) edit link click',
-        act: (harness) => {
-          const { event } = clickEvent();
-          harness.elements['edit-link'].listeners.click[0](event);
+        act: (harness, opened, recordClick) => {
+          const el = harness.elements['edit-link'];
+          recordClick(clickAndRecord(harness, opened, el, el.listeners.click[0]));
         },
       },
       {
@@ -1641,24 +1771,31 @@ describe('user session widget script', () => {
         callTool: () => {
           throw new Error('transport failure');
         },
-        act: async (harness) => {
+        act: async (harness, opened, recordClick) => {
           await refresh(harness);
           // The old script never attaches a listener here (it relies on the
           // plain anchor's own navigation); the new script attaches one
           // unconditionally but no-ops whenever window.openai exists. Either
-          // way there is nothing to invoke-and-observe beyond what the
-          // failed refresh above already set, so a missing listener is
-          // itself part of the identical trace, not a test bug.
-          const { event } = clickEvent();
-          (event as { target?: unknown }).target = { tagName: 'A' };
-          harness.elements['refresh-status'].listeners.click?.[0]?.(event);
+          // way, href/target are read straight off the injected anchor
+          // itself (not a harness element), so a regression that broke or
+          // blanked that markup shows up here even though neither script
+          // currently does anything scripted with this click.
+          const anchor = extractAnchor(harness.elements['refresh-status'].innerHTML);
+          const el = harness.elements['refresh-status'];
+          recordClick(
+            clickAndRecord(harness, opened, el, el.listeners.click?.[0], {
+              href: anchor?.href,
+              target: anchor?.target,
+              eventTarget: { tagName: 'A' },
+            }),
+          );
         },
       },
       {
         name: '(g) Yahoo credit link click',
-        act: (harness) => {
-          const { event } = clickEvent();
-          harness.elements['yahoo-link'].listeners.click[0](event);
+        act: (harness, opened, recordClick) => {
+          const el = harness.elements['yahoo-link'];
+          recordClick(clickAndRecord(harness, opened, el, el.listeners.click[0]));
         },
       },
       {
