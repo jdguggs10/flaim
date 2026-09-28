@@ -1,24 +1,12 @@
 "use client";
 
-import type { PublicChatDemoSport } from "@/lib/public-chat";
-import type { PublicDemoSportOption } from "@/lib/public-demo-client";
-import { SportIcon } from "@/components/site/sport-icon";
-import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Database, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, type RefObject } from "react";
 
-export type PhoneEducationPanelId =
-  | "about"
-  | "drawer"
-  | "activation"
-  | "ask"
-  | "sports";
-type PhoneInsideChatGptPanelId = Exclude<
-  PhoneEducationPanelId,
-  "about" | "sports"
->;
+export type PhoneEducationPanelId = "about" | "drawer" | "activation" | "ask";
+type PhoneInsideChatGptPanelId = Exclude<PhoneEducationPanelId, "about">;
 
 // The composer's plus, Flaim, and send controls each open a short "Inside
 // ChatGPT" sheet: a title and a sentence or two. They are informational
@@ -43,30 +31,9 @@ const INSIDE_CHATGPT_CONTENT: Record<
 
 interface PhoneEducationPanelProps {
   container: HTMLElement | null;
-  onSelectSport: (sport: PublicChatDemoSport) => void;
   panel: PhoneEducationPanelId | null;
   returnFocusRef: RefObject<HTMLButtonElement | null>;
-  sportOptions: PublicDemoSportOption[];
 }
-
-const SPORT_CHOOSER_ICONS: Record<PublicChatDemoSport, React.ReactNode> = {
-  football: <SportIcon sport="football" className="h-5 w-5" />,
-  baseball: <SportIcon sport="baseball" className="h-5 w-5" />,
-  hockey: <SportIcon sport="hockey" className="h-5 w-5" />,
-};
-
-// Basketball isn't a real demo sport yet (see PublicChatDemoSport), so it's
-// rendered as a permanently-disabled tile rather than driven by
-// `sportOptions`. Real demo sports the current platform doesn't advertise
-// (for example hockey before its targets go live) render from `sportOptions`
-// as disabled tiles instead.
-const SPORTS_PANEL_COMING_SOON = [
-  {
-    key: "basketball",
-    label: "Basketball",
-    icon: <SportIcon sport="basketball" className="h-5 w-5" />,
-  },
-] as const;
 
 function AboutPanel() {
   return (
@@ -124,73 +91,10 @@ function AboutPanel() {
   );
 }
 
-function SportsPanel({
-  onSelectSport,
-  sportOptions,
-}: {
-  onSelectSport: (sport: PublicChatDemoSport) => void;
-  sportOptions: PublicDemoSportOption[];
-}) {
-  return (
-    <>
-      <DialogPrimitive.Description className="text-[length:var(--phone-type-secondary)] leading-[1.45] text-[var(--phone-muted)]">
-        Flaim supports football, baseball, basketball, and hockey. The demo
-        covers the sports with prepared answers.
-      </DialogPrimitive.Description>
-
-      <div className="mt-4 grid grid-cols-2 gap-2.5">
-        {sportOptions.map((option) => (
-          <button
-            key={option.sport}
-            type="button"
-            disabled={!option.available}
-            aria-pressed={option.selected}
-            onClick={() => {
-              if (!option.available) {
-                return;
-              }
-              onSelectSport(option.sport);
-            }}
-            className={cn(
-              "flex min-h-11 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-[length:var(--phone-type-secondary)] font-medium transition-colors",
-              option.selected
-                ? "border-[var(--phone-accent)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
-                : option.available
-                  ? "border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] hover:bg-[var(--phone-panel-strong)]"
-                  : "cursor-not-allowed border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-muted)] opacity-45",
-            )}
-          >
-            {SPORT_CHOOSER_ICONS[option.sport]}
-            {option.label}
-          </button>
-        ))}
-
-        {SPORTS_PANEL_COMING_SOON.map((sport) => (
-          <button
-            key={sport.key}
-            type="button"
-            disabled
-            className="flex min-h-11 cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[var(--phone-border)] bg-[var(--phone-panel)] px-3 py-2.5 text-[length:var(--phone-type-secondary)] font-medium text-[var(--phone-muted)] opacity-45"
-          >
-            {sport.icon}
-            {sport.label}
-          </button>
-        ))}
-      </div>
-
-      <p className="mt-3 text-[length:var(--phone-type-caption)] leading-[1.45] text-[var(--phone-muted)]">
-        The basketball demo is not available yet.
-      </p>
-    </>
-  );
-}
-
 export function PhoneEducationPanel({
   container,
-  onSelectSport,
   panel,
   returnFocusRef,
-  sportOptions,
 }: PhoneEducationPanelProps) {
   const titleRef = useRef<HTMLHeadingElement | null>(null);
 
@@ -207,12 +111,10 @@ export function PhoneEducationPanel({
   const heading =
     panel === "about"
       ? { eyebrow: "Demo guide", title: "About this demo" }
-      : panel === "sports"
-        ? { eyebrow: "Demo sport", title: "All sports" }
-        : {
-            eyebrow: "Inside ChatGPT",
-            title: INSIDE_CHATGPT_CONTENT[panel].title,
-          };
+      : {
+          eyebrow: "Inside ChatGPT",
+          title: INSIDE_CHATGPT_CONTENT[panel].title,
+        };
 
   return (
     <DialogPrimitive.Portal container={container}>
@@ -252,8 +154,6 @@ export function PhoneEducationPanel({
         <div className="mt-3">
           {panel === "about" ? (
             <AboutPanel />
-          ) : panel === "sports" ? (
-            <SportsPanel onSelectSport={onSelectSport} sportOptions={sportOptions} />
           ) : (
             <DialogPrimitive.Description className="text-[length:var(--phone-type-body)] leading-[var(--phone-leading-body)] text-[var(--phone-text)]">
               {INSIDE_CHATGPT_CONTENT[panel].body}

@@ -14,10 +14,10 @@ import {
   PUBLIC_DEMO_PLATFORM_LABELS,
   PUBLIC_DEMO_SPORT_LABELS,
   buildPublicDemoCacheRequestUrl,
+  buildPublicDemoSportMenuRows,
   canStartPublicDemoRun,
   loadPublicDemoCapabilities,
   publicDemoReducer,
-  selectNextAvailableSportOption,
   selectPublicDemoPlatformOptions,
   selectPublicDemoRequestPlatform,
   selectPublicDemoSportOptions,
@@ -26,8 +26,10 @@ import {
 } from "@/lib/public-demo-client";
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
+  Check,
   Copy,
   LoaderCircle,
   Menu,
@@ -78,8 +80,6 @@ const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
 const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
 /** Seconds of ticker travel per prepared question; ~45px/s at pill width. */
 const PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT = 4;
-/** Press-and-hold duration on the sport button before the all-sports sheet opens. */
-const SPORT_HOLD_THRESHOLD_MS = 500;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
@@ -356,17 +356,17 @@ export function PublicChatExperience({
     }),
     [state.platform],
   );
-  // A short tap on the sport button cycles to the next sport the current
-  // platform offers, wrapping around; press-and-hold (or right-click) opens
-  // the full all-sports sheet, so the button stays enabled even when the
-  // platform only offers one sport — a short tap just does nothing then.
+  // Tapping the sport button opens a dropdown listing all four sports; rows
+  // for sports the current platform doesn't advertise (or basketball, which
+  // never ships in the demo) render grayed and unselectable.
   const currentSportOption = sportOptions.find((option) => option.selected);
-  const nextSportOption = selectNextAvailableSportOption(sportOptions);
   const currentSportLabel =
     currentSportOption?.label ?? PUBLIC_DEMO_SPORT_LABELS[demoSport];
-  const sportButtonAriaLabel = nextSportOption
-    ? `Demo sport: ${currentSportLabel}. Tap to switch to ${nextSportOption.label}. Hold to see all sports.`
-    : `Demo sport: ${currentSportLabel}. Hold to see all sports.`;
+  const sportButtonAriaLabel = `Change sport, current: ${currentSportLabel}`;
+  const sportMenuRows = useMemo(
+    () => buildPublicDemoSportMenuRows(sportOptions),
+    [sportOptions],
+  );
 
   const selectedPreset = useMemo(
     () =>
@@ -651,84 +651,6 @@ export function PublicChatExperience({
     });
   }, []);
 
-  // Press-and-hold (or right-click) on the sport button opens the full
-  // all-sports sheet; a short tap cycles to the next available sport.
-  // The timer set on pointerdown is what tells a hold apart from a tap —
-  // when it fires we flag the hold so the click event it also produces gets
-  // swallowed instead of re-toggling the sport underneath the open sheet.
-  const sportHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const sportHoldTriggeredRef = useRef(false);
-
-  const clearSportHoldTimer = useCallback(() => {
-    if (sportHoldTimerRef.current !== null) {
-      clearTimeout(sportHoldTimerRef.current);
-      sportHoldTimerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      clearSportHoldTimer();
-    };
-  }, [clearSportHoldTimer]);
-
-  // Central close path: whenever the education panel (including the sports
-  // sheet a hold opens) closes — via Escape, an outside click, or selecting a
-  // sport from the sheet — clear the hold flag so it can't leak into a tap
-  // that happens after the sheet is gone.
-  useEffect(() => {
-    if (educationPanel === null) {
-      sportHoldTriggeredRef.current = false;
-    }
-  }, [educationPanel]);
-
-  const handleSportPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      const trigger = event.currentTarget;
-      clearSportHoldTimer();
-      // Reset at the start of every new gesture so a hold whose release
-      // landed outside the button (leaving the flag set) doesn't swallow
-      // this tap's click.
-      sportHoldTriggeredRef.current = false;
-      sportHoldTimerRef.current = setTimeout(() => {
-        sportHoldTimerRef.current = null;
-        sportHoldTriggeredRef.current = true;
-        openEducationPanel("sports", trigger);
-      }, SPORT_HOLD_THRESHOLD_MS);
-    },
-    [clearSportHoldTimer, openEducationPanel],
-  );
-
-  const handleSportClick = useCallback(() => {
-    if (sportHoldTriggeredRef.current) {
-      // The hold already opened the sheet; swallow the click it also fires.
-      sportHoldTriggeredRef.current = false;
-      return;
-    }
-    if (nextSportOption) {
-      handleSelectSport(nextSportOption.sport);
-    }
-  }, [handleSelectSport, nextSportOption]);
-
-  const handleSportContextMenu = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.preventDefault();
-      clearSportHoldTimer();
-      openEducationPanel("sports", event.currentTarget);
-    },
-    [clearSportHoldTimer, openEducationPanel],
-  );
-
-  const handleSelectSportFromSheet = useCallback(
-    (sport: PublicChatDemoSport) => {
-      handleSelectSport(sport);
-      setEducationPanel(null);
-    },
-    [handleSelectSport],
-  );
-
   useEffect(() => {
     if (!initialQueryPreset) {
       return;
@@ -913,24 +835,54 @@ export function PublicChatExperience({
                 })}
               </div>
 
-              <button
-                type="button"
-                onClick={handleSportClick}
-                onPointerDown={handleSportPointerDown}
-                onPointerUp={clearSportHoldTimer}
-                onPointerLeave={clearSportHoldTimer}
-                onPointerCancel={clearSportHoldTimer}
-                onContextMenu={handleSportContextMenu}
-                aria-label={sportButtonAriaLabel}
-                aria-haspopup="dialog"
-                aria-expanded={educationPanel === "sports"}
-                className={cn(
-                  "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
-                  nextSportOption ? "" : "opacity-45",
-                )}
-              >
-                {PUBLIC_SPORT_COPY[demoSport].icon}
-              </button>
+              <DropdownMenuPrimitive.Root>
+                <DropdownMenuPrimitive.Trigger asChild>
+                  <button
+                    type="button"
+                    aria-label={sportButtonAriaLabel}
+                    className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                  >
+                    {PUBLIC_SPORT_COPY[demoSport].icon}
+                  </button>
+                </DropdownMenuPrimitive.Trigger>
+                <DropdownMenuPrimitive.Portal container={phonePanelContainer}>
+                  <DropdownMenuPrimitive.Content
+                    align="end"
+                    sideOffset={8}
+                    className="z-50 w-48 rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5 text-[var(--phone-text)] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1"
+                  >
+                    {sportMenuRows.map((row) => (
+                      <DropdownMenuPrimitive.Item
+                        key={row.sport}
+                        disabled={!row.available}
+                        onSelect={(event) => {
+                          if (!row.available) {
+                            event.preventDefault();
+                            return;
+                          }
+                          handleSelectSport(row.sport as PublicChatDemoSport);
+                        }}
+                        className={cn(
+                          "flex min-h-11 cursor-pointer select-none items-center gap-2.5 rounded-xl px-3 py-2 text-[length:var(--phone-type-secondary)] font-medium outline-none transition-colors data-[highlighted]:bg-[var(--phone-panel-strong)]",
+                          row.available
+                            ? "text-[var(--phone-text)]"
+                            : "cursor-not-allowed text-[var(--phone-muted)] opacity-60 data-[highlighted]:bg-transparent",
+                        )}
+                      >
+                        <SportIcon sport={row.sport} className="h-5 w-5 shrink-0" />
+                        <span className="flex-1">{row.label}</span>
+                        {row.selected ? (
+                          <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        ) : !row.available ? (
+                          <span className="text-[length:var(--phone-type-control)] text-[var(--phone-muted)]">
+                            Not in demo
+                          </span>
+                        ) : null}
+                      </DropdownMenuPrimitive.Item>
+                    ))}
+                  </DropdownMenuPrimitive.Content>
+                </DropdownMenuPrimitive.Portal>
+              </DropdownMenuPrimitive.Root>
             </div>
 
             <div role="status" aria-live="polite" className="sr-only">
@@ -1134,10 +1086,8 @@ export function PublicChatExperience({
           </div>
           <PhoneEducationPanel
             container={phonePanelContainer}
-            onSelectSport={handleSelectSportFromSheet}
             panel={educationPanel}
             returnFocusRef={educationTriggerRef}
-            sportOptions={sportOptions}
           />
           </DialogPrimitive.Root>
         </PhoneDemoFrame>
