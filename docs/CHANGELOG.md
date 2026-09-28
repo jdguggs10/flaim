@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Homepage Demo Times Out a Hung Answer Fetch (FLA-429)
+
+- **Fixed**: the homepage demo's cached-answer fetch (`/api/public-chat/cache`) now gives up after 12 seconds (`PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS`) instead of leaving the status line on "Thinking" forever when a request hangs. The timeout goes through the same failure path a failed fetch already used: the status line clears and the existing "Demo answer unavailable" alert shows. Switching preset, platform, or sport mid-run still cancels silently, exactly as before — the fetch helper tells the two apart by checking whether the run's own abort signal (not the internal deadline) is what fired.
+- **Changed**: the fetch itself moved out of `public-chat-experience.tsx` into a new pure, unit-tested helper, `fetchPublicDemoCachedAnswer` in `web/lib/public-demo-client.ts`, matching the existing `loadPublicDemoCapabilities` pattern (injectable `fetchImpl`, an internal deadline `AbortController`, the timer always cleared in a `finally`).
+- **Removed**: the `pre_tool_step_advanced` reducer action and `preToolStatusIndex` state field in `web/lib/public-demo-client.ts`, dead since the FLA-428 status-line redesign stopped reading them.
+
 ### Homepage Demo Status Line Replaces Tool Step Cards (FLA-428)
 
 - **Changed**: the homepage demo's bordered tool-step cards ("Reviewing Gerry's roster…", "Scanning available players…") are gone. In their place, one plain-text status line renders under the user's bubble while a preset runs: it swaps text in place with a subtle shimmer sweep, and shows a small leading icon — none for "Thinking", the Flaim mark for a Flaim tool step, a globe for the simulated web-search step. The sequence is: "Thinking", then the simulated `get_user_session` step, then the preset's own tools in order, then "Searching the web" only when the cached answer's tool trace shows the runner actually searched the web. `get_user_session` is always simulated here — the real runner pre-loads the league before the chat starts, so there's no live session call to trace.

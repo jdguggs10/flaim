@@ -15,6 +15,8 @@ import {
   buildPublicChatStepSequence,
   buildPublicDemoCacheRequestUrl,
   buildPublicDemoSportMenuRows,
+  fetchPublicDemoCachedAnswer,
+  PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS,
   PUBLIC_DEMO_CAPABILITIES_TIMEOUT_MS,
   buildPublicDemoSportSwitchNote,
   buildPublicDemoSportTransitionAnnouncement,
@@ -319,7 +321,6 @@ describe("capability resolution", () => {
 
     // The platform-less request settles after activation and must not paint.
     const stale = reduceAll(resolved, [
-      { type: "pre_tool_step_advanced", index: 2, token: 1 },
       {
         type: "tool_call_started",
         toolCall: { id: "get_roster-0", status: "in_progress" },
@@ -755,6 +756,211 @@ describe("cache request construction", () => {
 
     expect(params.get("platform")).toBe("sleeper");
     expect(params.get("sport")).toBe("football");
+  });
+});
+
+describe("cached answer fetch", () => {
+  /** A response object with only the fields the helper touches. */
+  function jsonResponse(
+    payload: unknown,
+    init: { ok?: boolean; status?: number; statusText?: string } = {},
+  ) {
+    return {
+      ok: init.ok ?? true,
+      status: init.status ?? 200,
+      statusText: init.statusText ?? "OK",
+      json: async () => payload,
+    } as unknown as Response;
+  }
+
+  /**
+   * A request that never answers and never fails on its own — the shape the
+   * deadline exists for. Records the signal so a test can prove the helper
+   * actually released the request rather than merely stopping waiting on it.
+   */
+  function hangingFetch() {
+    const signals: AbortSignal[] = [];
+    const impl = ((_input: unknown, init?: { signal?: AbortSignal }) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (!signal) {
+          return;
+        }
+        signals.push(signal);
+        signal.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true },
+        );
+      })) as unknown as typeof fetch;
+
+    return { impl, signals };
+  }
+
+  const HIT_PAYLOAD = {
+    hit: true,
+    answer: {
+      text: "The answer.",
+      generatedAt: ANSWER_META.generatedAt,
+      expiresAt: ANSWER_META.expiresAt,
+      staleAfter: ANSWER_META.staleAfter,
+      provider: ANSWER_META.provider,
+      providerModel: ANSWER_META.providerModel,
+      isExpired: false,
+      isStale: false,
+      status: "ready",
+      toolTraceSummary: { byName: { get_roster: { count: 1 } } },
+    },
+  };
+
+  const requestFields = {
+    presetId: "hot-hands",
+    sport: "baseball" as const,
+    platform: "espn" as const,
+  };
+
+  it("uses a finite deadline of about twelve seconds", () => {
+    expect(Number.isFinite(PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS)).toBe(true);
+    expect(PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS).toBe(12_000);
+  });
+
+  it("returns the cached answer for a usable response", async () => {
+    const result = await fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: new AbortController().signal,
+      fetchImpl: (async () =>
+        jsonResponse(HIT_PAYLOAD)) as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({
+      outcome: "ok",
+      answer: {
+        text: "The answer.",
+        toolTraceSummary: { byName: { get_roster: { count: 1 } } },
+        meta: ANSWER_META,
+      },
+    });
+  });
+
+  it("rejects a hung answer into the failure path instead of hanging forever", async () => {
+    const { impl, signals } = hangingFetch();
+
+    // The regression this guards: a hung answer fetch used to leave the
+    // status line on "Thinking" forever, with no way to reach the alert.
+    const result = await fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: new AbortController().signal,
+      timeoutMs: 10,
+      fetchImpl: impl,
+    });
+
+    expect(result.outcome).toBe("failed");
+    if (result.outcome === "failed") {
+      expect(result.message).toContain("too long");
+    }
+    // The stalled request was released, not left hanging behind the deadline.
+    expect(signals).toHaveLength(1);
+    expect(signals[0].aborted).toBe(true);
+  });
+
+  it("stays silent on a user-initiated cancel rather than the failure path", async () => {
+    const { impl, signals } = hangingFetch();
+    const controller = new AbortController();
+
+    const pending = fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: controller.signal,
+      timeoutMs: 10_000,
+      fetchImpl: impl,
+    });
+    // Switching preset, platform, or sport mid-run aborts the same way.
+    controller.abort();
+
+    await expect(pending).resolves.toEqual({ outcome: "aborted" });
+    expect(signals[0].aborted).toBe(true);
+  });
+
+  it("does not start a fetch for an already-aborted caller", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchImpl = vi.fn();
+
+    await expect(
+      fetchPublicDemoCachedAnswer({
+        ...requestFields,
+        signal: controller.signal,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).resolves.toEqual({ outcome: "aborted" });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("clears the deadline timer on every settled path, including success", async () => {
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+
+    await fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: new AbortController().signal,
+      fetchImpl: (async () =>
+        jsonResponse(HIT_PAYLOAD)) as unknown as typeof fetch,
+    });
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+
+    await fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: new AbortController().signal,
+      fetchImpl: (async () => {
+        throw new Error("network down");
+      }) as unknown as typeof fetch,
+    });
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
+
+    const aborted = new AbortController();
+    const { impl } = hangingFetch();
+    const pending = fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: aborted.signal,
+      fetchImpl: impl,
+    });
+    aborted.abort();
+    await pending;
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(3);
+
+    clearTimeoutSpy.mockRestore();
+  });
+
+  it("fails with the server's error message for a non-OK response", async () => {
+    const result = await fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: new AbortController().signal,
+      fetchImpl: (async () =>
+        jsonResponse(
+          { error: "Unable to load the demo answer." },
+          { ok: false, status: 500, statusText: "Internal Server Error" },
+        )) as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({
+      outcome: "failed",
+      message: "Unable to load the demo answer.",
+    });
+  });
+
+  it("fails with the stored refresh failure's copy when nothing is cached", async () => {
+    const result = await fetchPublicDemoCachedAnswer({
+      ...requestFields,
+      signal: new AbortController().signal,
+      fetchImpl: (async () =>
+        jsonResponse({
+          hit: false,
+          failure: { errorCode: "provider_failed" },
+        })) as unknown as typeof fetch,
+    });
+
+    expect(result).toEqual({
+      outcome: "failed",
+      message: "The latest refresh failed while talking to the AI provider.",
+    });
   });
 });
 
@@ -1277,7 +1483,6 @@ describe("run concurrency", () => {
   function runningState() {
     return reduceAll(withCapabilities(TARGETS), [
       { type: "run_started", presetId: "hot-hands", token: 2 },
-      { type: "pre_tool_step_advanced", index: 2, token: 2 },
       {
         type: "tool_call_started",
         toolCall: { id: "get_roster-0", name: "get_roster", status: "in_progress" },
@@ -1290,7 +1495,6 @@ describe("run concurrency", () => {
     const state = runningState();
 
     expect(state.runStatus).toBe("running");
-    expect(state.preToolStatusIndex).toBe(2);
     expect(state.toolCalls).toHaveLength(1);
 
     const completed = reduceAll(state, [
@@ -1323,7 +1527,6 @@ describe("run concurrency", () => {
     expect(switched.assistantText).toBe("");
     expect(switched.answerMeta).toBeNull();
     expect(switched.error).toBeNull();
-    expect(switched.preToolStatusIndex).toBe(0);
   });
 
   it("clears transcript and run state atomically on a sport change", () => {
@@ -1360,7 +1563,6 @@ describe("run concurrency", () => {
 
     // The aborted ESPN request settles late and must not repaint Sleeper.
     const stale = reduceAll(switched, [
-      { type: "pre_tool_step_advanced", index: 1, token: 2 },
       {
         type: "tool_call_started",
         toolCall: { id: "get_roster-0", status: "in_progress" },
