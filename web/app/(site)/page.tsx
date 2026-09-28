@@ -143,7 +143,7 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
                 name: "Can ChatGPT directly access my fantasy league?",
                 acceptedAnswer: {
                   "@type": "Answer",
-                  text: "Yes. Flaim enables your AI to access your league data, read-only. Once you sync your leagues to Flaim, your AI will securely get up-to-date, accurate information on your private leagues.",
+                  text: "Yes. Flaim lets your AI read your league data. It never changes anything in your leagues. Once you sync your leagues to Flaim, your AI will securely get up-to-date, accurate information on your private leagues.",
                 },
               },
               {
@@ -373,8 +373,9 @@ export default async function LandingPage({ searchParams }: LandingPageProps) {
               </summary>
               <div className="space-y-2 px-4 pb-4 text-sm text-muted-foreground">
                 <p>
-                  Yes. Flaim enables your AI to access your league data,
-                  read-only. Once you sync your leagues to Flaim, your AI will
+                  Yes. Flaim lets your AI read your league data. It never
+                  changes anything in your leagues. Once you sync your leagues
+                  to Flaim, your AI will
                   securely get up-to-date, accurate information on your private
                   leagues.
                 </p>

@@ -4,7 +4,7 @@ import Link from "next/link";
 export const metadata: Metadata = {
   title: "Support",
   description:
-    "Get help with Flaim: read-only fantasy league analysis for ESPN, Yahoo, and Sleeper",
+    "Get help with Flaim: fantasy league analysis for ESPN, Yahoo, and Sleeper",
   alternates: {
     canonical: "https://flaim.app/support",
   },
