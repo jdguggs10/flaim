@@ -198,13 +198,15 @@ export default function PrivacyPage() {
               Perplexity, to your Flaim account, Flaim sends that app the
               league data it requests on your behalf: things like your
               roster, matchups, standings, available players, recent league
-              moves, league rules, and league history. This only happens in
-              response to your own prompts to that AI app.
+              moves, league rules, and league history. This only happens when
+              you ask for it, in a prompt or by using a control such as the
+              league widget&apos;s refresh button.
             </p>
             <p className="text-muted-foreground mt-2">
               Flaim never sends the AI app your ESPN session credentials, your
-              Yahoo tokens, your Flaim account details, or the Sleeper
-              username you used to connect Sleeper. Once your league data
+              Yahoo tokens, or your Flaim account details. When you refresh
+              Sleeper leagues, the result includes the Sleeper username you
+              connected, which Sleeper already shows publicly. Once your league data
               reaches the AI app, it is processed by the AI provider you
               chose, under that provider&apos;s own terms and privacy policy.
             </p>
