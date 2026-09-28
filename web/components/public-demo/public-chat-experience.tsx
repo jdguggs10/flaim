@@ -849,37 +849,45 @@ export function PublicChatExperience({
                   <DropdownMenuPrimitive.Content
                     align="end"
                     sideOffset={8}
-                    className="z-50 w-48 rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5 text-[var(--phone-text)] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1"
+                    className="z-50 w-max min-w-48 rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5 text-[var(--phone-text)] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1"
                   >
-                    {sportMenuRows.map((row) => (
-                      <DropdownMenuPrimitive.Item
-                        key={row.sport}
-                        disabled={!row.available}
-                        onSelect={(event) => {
-                          if (!row.available) {
-                            event.preventDefault();
-                            return;
-                          }
-                          handleSelectSport(row.sport as PublicChatDemoSport);
-                        }}
-                        className={cn(
-                          "flex min-h-11 cursor-pointer select-none items-center gap-2.5 rounded-xl px-3 py-2 text-[length:var(--phone-type-secondary)] font-medium outline-none transition-colors data-[highlighted]:bg-[var(--phone-panel-strong)]",
-                          row.available
-                            ? "text-[var(--phone-text)]"
-                            : "cursor-not-allowed text-[var(--phone-muted)] opacity-60 data-[highlighted]:bg-transparent",
-                        )}
-                      >
-                        <SportIcon sport={row.sport} className="h-5 w-5 shrink-0" />
-                        <span className="flex-1">{row.label}</span>
-                        {row.selected ? (
-                          <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                        ) : !row.available ? (
-                          <span className="text-[length:var(--phone-type-control)] text-[var(--phone-muted)]">
-                            Not in demo
+                    {/* A radio group so assistive tech hears which sport is
+                        current (menuitemradio + aria-checked), not just the
+                        visual check mark. */}
+                    <DropdownMenuPrimitive.RadioGroup value={demoSport}>
+                      {sportMenuRows.map((row) => (
+                        <DropdownMenuPrimitive.RadioItem
+                          key={row.sport}
+                          value={row.sport}
+                          disabled={!row.available}
+                          onSelect={(event) => {
+                            if (!row.available) {
+                              event.preventDefault();
+                              return;
+                            }
+                            handleSelectSport(row.sport as PublicChatDemoSport);
+                          }}
+                          className={cn(
+                            "flex min-h-11 cursor-pointer select-none items-center gap-2.5 rounded-xl px-3 py-2 text-[length:var(--phone-type-secondary)] font-medium outline-none transition-colors data-[highlighted]:bg-[var(--phone-panel-strong)]",
+                            row.available
+                              ? "text-[var(--phone-text)]"
+                              : "cursor-not-allowed text-[var(--phone-muted)] opacity-60 data-[highlighted]:bg-transparent",
+                          )}
+                        >
+                          <SportIcon sport={row.sport} className="h-5 w-5 shrink-0" />
+                          <span className="flex-1 whitespace-nowrap">
+                            {row.label}
                           </span>
-                        ) : null}
-                      </DropdownMenuPrimitive.Item>
-                    ))}
+                          {row.selected ? (
+                            <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          ) : !row.available ? (
+                            <span className="shrink-0 whitespace-nowrap text-[length:var(--phone-type-control)] text-[var(--phone-muted)]">
+                              Not in demo
+                            </span>
+                          ) : null}
+                        </DropdownMenuPrimitive.RadioItem>
+                      ))}
+                    </DropdownMenuPrimitive.RadioGroup>
                   </DropdownMenuPrimitive.Content>
                 </DropdownMenuPrimitive.Portal>
               </DropdownMenuPrimitive.Root>
