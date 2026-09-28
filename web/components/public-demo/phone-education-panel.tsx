@@ -5,12 +5,12 @@ import { Database, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, type RefObject } from "react";
 
-export type PhoneEducationPanelId = "about" | "drawer" | "activation" | "ask";
+export type PhoneEducationPanelId = "about" | "drawer" | "ask";
 type PhoneInsideChatGptPanelId = Exclude<PhoneEducationPanelId, "about">;
 
-// The composer's plus, Flaim, and send controls each open a short "Inside
-// ChatGPT" sheet: a title and a sentence or two. They are informational
-// asides, not numbered steps, so there is no step switcher.
+// The composer's plus and send controls each open a short "Inside ChatGPT"
+// sheet: a title and a sentence or two. They are informational asides, not
+// numbered steps, so there is no step switcher.
 const INSIDE_CHATGPT_CONTENT: Record<
   PhoneInsideChatGptPanelId,
   { title: string; body: string }
@@ -18,10 +18,6 @@ const INSIDE_CHATGPT_CONTENT: Record<
   drawer: {
     title: "Find Flaim in the + menu",
     body: "Adding Flaim Fantasy to ChatGPT puts it in this drawer. Connect your leagues first, then add it once.",
-  },
-  activation: {
-    title: "Flaim is active",
-    body: "This badge means ChatGPT is using Flaim's read-only league info. It should activate on its own for fantasy questions; if it doesn't, choose Flaim from the drawer.",
   },
   ask: {
     title: "Ask in your own words",

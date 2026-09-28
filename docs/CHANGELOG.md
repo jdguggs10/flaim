@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Homepage Demo Composer Drops the Flaim Activation Chip
+
+- **Removed**: the blue pill-shaped "Flaim" chip between the composer's input and send button. Modern AI apps no longer show connector-active state as a composer badge; the demo already shows it inline in the transcript via the "Flaim Fantasy" / "Reading Flaim Fantasy..." rows. Removed with it: the chip's `chipActive` state, its `public-chat-chip-active` style and `public-chat-chip-activate` keyframe in `globals.css`, and the "activation" entry in `PhoneEducationPanel`'s "Inside ChatGPT" sheet content (title "Flaim is active") that only the chip opened. The input now fills the freed space; the plus and send buttons are unchanged.
+
 ### League Widget Refresh, Theme, and Links Work in Claude (FLA-426)
 
 - **Added**: the league widget now works through the MCP Apps bridge, not just `window.openai`. When the widget's `ui/initialize` handshake reply says the host supports it, the refresh button calls `refresh_leagues` and `get_user_session` over `tools/call`, the edit link, the "Open leagues" status link, and the provider credit links open through `ui/open-link`, and the widget adopts the host's theme from `hostContext` and any later `ui/notifications/host-context-changed` update. A bridge call that errors, reports `isError`, or never replies within its timeout falls back to the same "Refresh failed. Open leagues." or "Open Flaim to manage leagues." text the ChatGPT path already used, and a late reply after a timeout is dropped rather than acted on.
