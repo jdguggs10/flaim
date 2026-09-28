@@ -181,10 +181,15 @@ export function listAdvertisedSports(
 }
 
 /**
- * The sport to show for `platform`. Keeps `preferredSport` when the platform
- * advertises it, otherwise falls back to the sport last shown for that
- * platform, then to the platform's matrix default, then to its first
- * advertised sport. Sleeper therefore lands on football naturally.
+ * The sport to show for `platform`. Prefers `lastSport` — the sport the user
+ * last chose for this exact platform — over `preferredSport` when the
+ * platform still advertises it, because `preferredSport` (the sport currently
+ * on screen) may itself only be showing because a previous platform switch
+ * forced it there. Falling back to `preferredSport` when there is no
+ * platform-specific memory yet is what makes a same-sport hop (ESPN football
+ * → Yahoo) carry the sport across unchanged. After that: the platform's
+ * matrix default, then its first advertised sport. Sleeper therefore lands on
+ * football naturally.
  */
 export function resolveSportForPlatform(
   targets: readonly PublicDemoCapabilityTarget[],
@@ -197,11 +202,11 @@ export function resolveSportForPlatform(
     return null;
   }
 
-  if (preferredSport && sports.includes(preferredSport)) {
-    return preferredSport;
-  }
   if (lastSport && sports.includes(lastSport)) {
     return lastSport;
+  }
+  if (preferredSport && sports.includes(preferredSport)) {
+    return preferredSport;
   }
 
   const matrixDefault = sports.find(
@@ -266,6 +271,13 @@ export interface PublicDemoState {
   runToken: number;
   /** aria-live copy for an automatic sport transition; "" when there is none. */
   sportTransitionAnnouncement: string;
+  /**
+   * Short, visible copy for the same automatic sport transition; "" when
+   * there is none. Cleared on a run start, on any platform/sport selection
+   * that does not itself force a transition, or when the transition's own
+   * live-region copy above is cleared.
+   */
+  sportSwitchNote: string;
 }
 
 export const INITIAL_PUBLIC_DEMO_STATE: PublicDemoState = {
@@ -283,6 +295,7 @@ export const INITIAL_PUBLIC_DEMO_STATE: PublicDemoState = {
   error: null,
   runToken: 0,
   sportTransitionAnnouncement: "",
+  sportSwitchNote: "",
 };
 
 export type PublicDemoAction =
@@ -494,6 +507,24 @@ export function buildPublicDemoSportTransitionAnnouncement(input: {
   return `${fromLabel} is not available for ${platformLabel}. Showing the ${platformLabel} ${toLabel} demo.`;
 }
 
+/**
+ * Short, visible copy for the same forced sport transition. Sighted users see
+ * the sport icon change on its own; this is the plain-language reason,
+ * displayed in the phone's idle block rather than only announced to
+ * assistive tech.
+ */
+export function buildPublicDemoSportSwitchNote(input: {
+  platform: PublicChatDemoPlatform;
+  fromSport: PublicChatDemoSport;
+  toSport: PublicChatDemoSport;
+}): string {
+  const platformLabel = PUBLIC_DEMO_PLATFORM_LABELS[input.platform];
+  const fromLabel = PUBLIC_DEMO_SPORT_LABELS[input.fromSport].toLowerCase();
+  const toLabel = PUBLIC_DEMO_SPORT_LABELS[input.toSport].toLowerCase();
+
+  return `No ${fromLabel} on ${platformLabel}, showing ${toLabel}.`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Request construction                                               */
 /* ------------------------------------------------------------------ */
@@ -644,6 +675,16 @@ function applyTargetSelection(
     platform: PublicChatDemoPlatform;
     sport: PublicChatDemoSport;
     announcement?: string;
+    note?: string;
+    /**
+     * Records `next.sport` as this platform's remembered sport. Defaults to
+     * true (an explicit `sport_selected`, or a `platform_selected` that
+     * honored the user's preference, is worth remembering). Pass false for a
+     * resolution that only happened because nothing better was advertised —
+     * an initial default, or a forced fallback — so a platform's memory only
+     * ever holds a sport the user actually landed on by choice.
+     */
+    rememberSport?: boolean;
     /**
      * Forces the reset even when the visible target and preset are unchanged.
      * Used when the request shape moved, not just the selection.
@@ -657,11 +698,12 @@ function applyTargetSelection(
     targets: next.targets ?? state.targets,
     platform: next.platform,
     sport: next.sport,
-    lastSportByPlatform: {
-      ...state.lastSportByPlatform,
-      [next.platform]: next.sport,
-    },
+    lastSportByPlatform:
+      next.rememberSport === false
+        ? state.lastSportByPlatform
+        : { ...state.lastSportByPlatform, [next.platform]: next.sport },
     sportTransitionAnnouncement: next.announcement ?? "",
+    sportSwitchNote: next.note ?? "",
   };
 
   const targetMoved =
@@ -719,6 +761,9 @@ export function publicDemoReducer(
           platform: defaultTarget.platform,
           sport: defaultTarget.sport,
           requestIdentityChanged: hasPreResolutionRun,
+          // The initial default is not a sport the user chose; don't let it
+          // shadow a real preference the user picks on this platform later.
+          rememberSport: false,
         },
         action.token,
       );
@@ -736,29 +781,46 @@ export function publicDemoReducer(
         return state;
       }
 
+      const rememberedSport = state.lastSportByPlatform[action.platform];
       const sport = resolveSportForPlatform(
         state.targets,
         action.platform,
         state.sport,
-        state.lastSportByPlatform[action.platform],
+        rememberedSport,
       );
       if (sport === null) {
         return state;
       }
+
+      // Forced means neither the platform's own remembered sport nor the
+      // sport currently on screen was advertised, so the resolver had to
+      // fall back to a matrix default. A sport restored from memory, or
+      // simply carried over unchanged, is not a forced switch and gets no
+      // announcement or note.
+      const forced = sport !== state.sport && sport !== rememberedSport;
 
       return applyTargetSelection(
         state,
         {
           platform: action.platform,
           sport,
-          announcement:
-            sport === state.sport
-              ? ""
-              : buildPublicDemoSportTransitionAnnouncement({
-                  platform: action.platform,
-                  fromSport: state.sport,
-                  toSport: sport,
-                }),
+          announcement: forced
+            ? buildPublicDemoSportTransitionAnnouncement({
+                platform: action.platform,
+                fromSport: state.sport,
+                toSport: sport,
+              })
+            : "",
+          note: forced
+            ? buildPublicDemoSportSwitchNote({
+                platform: action.platform,
+                fromSport: state.sport,
+                toSport: sport,
+              })
+            : "",
+          // A forced fallback is not a choice worth remembering; keep any
+          // prior memory for this platform (or the lack of it) untouched.
+          rememberSport: !forced,
         },
         action.token,
       );
@@ -794,6 +856,11 @@ export function publicDemoReducer(
         runToken: action.token,
         selectedPresetId: action.presetId,
         runStatus: "running",
+        // The visible note is about the phone's idle state; a question in
+        // flight replaces it. The sr-only announcement is left alone — it
+        // already only fires once per transition and doesn't compete for
+        // idle-block space.
+        sportSwitchNote: "",
       };
     }
 

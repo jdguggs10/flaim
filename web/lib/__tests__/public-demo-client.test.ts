@@ -9,6 +9,7 @@ import {
   buildPublicDemoCacheRequestUrl,
   buildPublicDemoSportMenuRows,
   PUBLIC_DEMO_CAPABILITIES_TIMEOUT_MS,
+  buildPublicDemoSportSwitchNote,
   buildPublicDemoSportTransitionAnnouncement,
   canStartPublicDemoRun,
   isPublicDemoTargetMode,
@@ -82,6 +83,7 @@ const SLEEPER_FOOTBALL = capabilityDto("sleeper", "football");
 const YAHOO_BASEBALL = capabilityDto("yahoo", "baseball");
 const ESPN_HOCKEY = capabilityDto("espn", "hockey");
 const YAHOO_HOCKEY = capabilityDto("yahoo", "hockey");
+const YAHOO_FOOTBALL = capabilityDto("yahoo", "football");
 
 describe("parsePublicDemoCapabilities", () => {
   it("parses an advertised target from the allowlisted DTO", () => {
@@ -983,6 +985,99 @@ describe("platform and sport selection", () => {
     ).toEqual([
       { sport: "baseball", label: "Baseball", available: true, selected: true },
     ]);
+  });
+});
+
+describe("per-platform sport memory and the sport switch note", () => {
+  // Mirrors the live matrix: ESPN and Yahoo carry all three sports, Sleeper
+  // only football.
+  const TARGETS = parsePublicDemoCapabilities({
+    targets: [
+      ESPN_BASEBALL,
+      ESPN_FOOTBALL,
+      ESPN_HOCKEY,
+      YAHOO_BASEBALL,
+      YAHOO_FOOTBALL,
+      YAHOO_HOCKEY,
+      SLEEPER_FOOTBALL,
+    ],
+  });
+
+  it("restores a platform's remembered sport, and clears the note, after a forced round trip", () => {
+    const onEspnHockey = reduceAll(withCapabilities(TARGETS), [
+      { type: "sport_selected", sport: "hockey", token: 2 },
+    ]);
+    expect(onEspnHockey.platform).toBe("espn");
+    expect(onEspnHockey.sport).toBe("hockey");
+
+    const onSleeper = publicDemoReducer(onEspnHockey, {
+      type: "platform_selected",
+      platform: "sleeper",
+      token: 3,
+    });
+    expect(onSleeper.sport).toBe("football");
+    expect(onSleeper.sportSwitchNote).toBe(
+      buildPublicDemoSportSwitchNote({
+        platform: "sleeper",
+        fromSport: "hockey",
+        toSport: "football",
+      }),
+    );
+    expect(onSleeper.sportSwitchNote).toBe(
+      "No hockey on Sleeper, showing football.",
+    );
+    expect(onSleeper.sportTransitionAnnouncement).not.toBe("");
+
+    const backOnEspn = publicDemoReducer(onSleeper, {
+      type: "platform_selected",
+      platform: "espn",
+      token: 4,
+    });
+    expect(backOnEspn.sport).toBe("hockey");
+    expect(backOnEspn.sportSwitchNote).toBe("");
+    expect(backOnEspn.sportTransitionAnnouncement).toBe("");
+  });
+
+  it("keeps hockey across a Yahoo hop when Yahoo also offers it", () => {
+    const state = reduceAll(withCapabilities(TARGETS), [
+      { type: "sport_selected", sport: "hockey", token: 2 },
+      { type: "platform_selected", platform: "yahoo", token: 3 },
+    ]);
+
+    expect(state.platform).toBe("yahoo");
+    expect(state.sport).toBe("hockey");
+    expect(state.sportSwitchNote).toBe("");
+    expect(state.sportTransitionAnnouncement).toBe("");
+  });
+
+  it("carries football through Sleeper and Yahoo without a forced switch", () => {
+    const state = reduceAll(withCapabilities(TARGETS), [
+      { type: "sport_selected", sport: "football", token: 2 },
+      { type: "platform_selected", platform: "sleeper", token: 3 },
+      { type: "platform_selected", platform: "yahoo", token: 4 },
+    ]);
+
+    expect(state.platform).toBe("yahoo");
+    expect(state.sport).toBe("football");
+    expect(state.sportSwitchNote).toBe("");
+  });
+
+  it("clears the note once a run starts, leaving the sr-only announcement alone", () => {
+    const onSleeper = reduceAll(withCapabilities(TARGETS), [
+      { type: "sport_selected", sport: "hockey", token: 2 },
+      { type: "platform_selected", platform: "sleeper", token: 3 },
+    ]);
+    expect(onSleeper.sportSwitchNote).not.toBe("");
+    const announcementBefore = onSleeper.sportTransitionAnnouncement;
+
+    const running = publicDemoReducer(onSleeper, {
+      type: "run_started",
+      presetId: "hot-hands",
+      token: 4,
+    });
+
+    expect(running.sportSwitchNote).toBe("");
+    expect(running.sportTransitionAnnouncement).toBe(announcementBefore);
   });
 });
 
