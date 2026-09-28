@@ -311,9 +311,19 @@ export const PUBLIC_CHAT_WEB_SEARCH_STATUS_LABEL = "Searching the web…";
 /** A step in the simulated status-line sequence: a Flaim tool, or web search. */
 export type PublicChatStepName = PublicChatAllowedTool | "web_search";
 
-/** Friendly status-line copy for one step, Flaim tool or web search. */
-export function getPublicChatStepStatusLabel(step: PublicChatStepName): string {
-  return step === "web_search"
-    ? PUBLIC_CHAT_WEB_SEARCH_STATUS_LABEL
-    : PUBLIC_CHAT_TOOL_STATUS_LABELS[step];
+/** Status-line copy for a step name the label map doesn't know. */
+export const PUBLIC_CHAT_FALLBACK_STATUS_LABEL = "Using Flaim Fantasy…";
+
+/**
+ * Friendly status-line copy for one step, Flaim tool or web search. Accepts
+ * any string because the component reads step names back out of reducer
+ * state; an unknown name gets the generic fallback instead of a blank line.
+ */
+export function getPublicChatStepStatusLabel(step: string): string {
+  if (step === "web_search") {
+    return PUBLIC_CHAT_WEB_SEARCH_STATUS_LABEL;
+  }
+  return Object.prototype.hasOwnProperty.call(PUBLIC_CHAT_TOOL_STATUS_LABELS, step)
+    ? PUBLIC_CHAT_TOOL_STATUS_LABELS[step as PublicChatAllowedTool]
+    : PUBLIC_CHAT_FALLBACK_STATUS_LABEL;
 }

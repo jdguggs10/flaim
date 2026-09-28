@@ -439,23 +439,28 @@
     animation: public-chat-idle-spin 6s cubic-bezier(0.16, 1, 0.3, 1) 1;
   }
 
-  /* Solid muted color first, so the text stays readable if background-clip:
-     text is ever unsupported; the gradient below overrides it. */
+  /* Solid muted color by default; the gradient sweep only applies where
+     background-clip: text is supported, so the text never turns invisible. */
   .public-chat-status-shimmer {
     color: var(--phone-muted);
-    background-image: linear-gradient(
-      90deg,
-      var(--phone-muted) 0%,
-      var(--phone-muted) 38%,
-      var(--phone-text) 50%,
-      var(--phone-muted) 62%,
-      var(--phone-muted) 100%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: public-chat-status-shimmer 1.6s ease-in-out infinite;
+  }
+
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+    .public-chat-status-shimmer {
+      background-image: linear-gradient(
+        90deg,
+        var(--phone-muted) 0%,
+        var(--phone-muted) 38%,
+        var(--phone-text) 50%,
+        var(--phone-muted) 62%,
+        var(--phone-muted) 100%
+      );
+      background-size: 200% 100%;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: public-chat-status-shimmer 1.6s ease-in-out infinite;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

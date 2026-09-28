@@ -1,9 +1,13 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   PUBLIC_CHAT_ALLOWED_TOOLS,
+  PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
   PUBLIC_CHAT_PRESETS,
   PUBLIC_CHAT_TARGET_PRESET_IDS,
+  PUBLIC_CHAT_TOOL_STATUS_LABELS,
   getPublicChatStepStatusLabel,
 } from "../public-chat";
 import {
@@ -1536,6 +1540,14 @@ describe("buildPublicChatStepSequence", () => {
     });
     expect(sequence.filter((step) => step === "web_search")).toHaveLength(1);
   });
+
+  it("never duplicates get_user_session when a preset already allows it", () => {
+    const sequence = buildPublicChatStepSequence(
+      { ...wireWatch, allowedTools: ["get_user_session", "get_roster"] },
+      null,
+    );
+    expect(sequence).toEqual(["get_user_session", "get_roster"]);
+  });
 });
 
 describe("getPublicChatStepStatusLabel", () => {
@@ -1567,8 +1579,41 @@ describe("getPublicChatStepStatusLabel", () => {
       PUBLIC_CHAT_PRESETS.flatMap((preset) => preset.allowedTools),
     );
     for (const tool of toolsInUse) {
-      expect(() => getPublicChatStepStatusLabel(tool)).not.toThrow();
-      expect(getPublicChatStepStatusLabel(tool).length).toBeGreaterThan(0);
+      expect(getPublicChatStepStatusLabel(tool)).not.toBe(
+        PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
+      );
+    }
+  });
+
+  it("falls back to generic copy for an unknown step name", () => {
+    expect(getPublicChatStepStatusLabel("get_something_new")).toBe(
+      PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
+    );
+    expect(getPublicChatStepStatusLabel("constructor")).toBe(
+      PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
+    );
+  });
+
+  it("matches the Worker's openaiMeta.invoking string for every tool", () => {
+    const toolsSource = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../../workers/fantasy-mcp/src/mcp/tools.ts",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    for (const [tool, label] of Object.entries(PUBLIC_CHAT_TOOL_STATUS_LABELS)) {
+      const nameIndex = toolsSource.indexOf(`name: '${tool}'`);
+      expect(nameIndex, `${tool} not found in tools.ts`).toBeGreaterThan(-1);
+      const invoking = /invoking: '([^']*)'/.exec(
+        toolsSource.slice(nameIndex),
+      )?.[1];
+      const decoded = invoking?.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+        String.fromCharCode(parseInt(hex, 16)),
+      );
+      expect(decoded, tool).toBe(label);
     }
   });
 });

@@ -274,7 +274,7 @@ export function buildPublicChatStepSequence(
 
   const steps: PublicChatStepName[] = [
     "get_user_session",
-    ...preset.allowedTools,
+    ...preset.allowedTools.filter((tool) => tool !== "get_user_session"),
   ];
 
   return usedWebSearch ? [...steps, "web_search"] : steps;

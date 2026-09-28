@@ -9,7 +9,6 @@ import {
   type PublicChatDemoPlatform,
   type PublicChatDemoSport,
   type PublicChatPreset,
-  type PublicChatStepName,
 } from "@/lib/public-chat";
 import {
   INITIAL_PUBLIC_DEMO_STATE,
@@ -367,7 +366,7 @@ export function PublicChatExperience({
   const showStatusLine = runStatus === "running" && !hasAssistantText;
   const isWebSearchStep = activeStatusStep?.name === "web_search";
   const statusLineLabel = activeStatusStep
-    ? getPublicChatStepStatusLabel(activeStatusStep.name as PublicChatStepName)
+    ? getPublicChatStepStatusLabel(activeStatusStep.name ?? "")
     : "Thinking";
   // Single polite live region announcing coarse phases only — not every
   // individual tool step, since the text only changes when the phase does:
