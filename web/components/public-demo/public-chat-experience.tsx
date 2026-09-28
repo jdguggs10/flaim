@@ -29,7 +29,6 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
-  Check,
   Copy,
   LoaderCircle,
   Menu,
@@ -854,17 +853,27 @@ export function PublicChatExperience({
                     align="end"
                     sideOffset={8}
                     avoidCollisions={false}
-                    className="z-50 w-max min-w-48 rounded-2xl border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5 text-[var(--phone-text)] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1"
+                    className="z-50 flex w-max items-center gap-1 rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5 text-[var(--phone-text)] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1"
                   >
-                    {/* A radio group so assistive tech hears which sport is
-                        current (menuitemradio + aria-checked), not just the
-                        visual check mark. */}
-                    <DropdownMenuPrimitive.RadioGroup value={demoSport}>
+                    {/* Icon-only row, mirroring the platform selector's pill:
+                        a filled bg-[var(--phone-panel-strong)] tile marks the
+                        current sport instead of a check mark or label. A
+                        radio group so assistive tech hears which sport is
+                        current (menuitemradio + aria-checked) even though
+                        there's no visible text; each icon gets its own
+                        aria-label since it's the row's only content. */}
+                    <DropdownMenuPrimitive.RadioGroup
+                      value={demoSport}
+                      className="flex items-center gap-1"
+                    >
                       {sportMenuRows.map((row) => (
                         <DropdownMenuPrimitive.RadioItem
                           key={row.sport}
                           value={row.sport}
                           disabled={!row.available}
+                          aria-label={
+                            row.available ? row.label : `${row.label}, not in demo`
+                          }
                           onSelect={(event) => {
                             if (!row.available) {
                               event.preventDefault();
@@ -873,23 +882,15 @@ export function PublicChatExperience({
                             handleSelectSport(row.sport as PublicChatDemoSport);
                           }}
                           className={cn(
-                            "flex min-h-11 cursor-pointer select-none items-center gap-2.5 rounded-xl px-3 py-2 text-[length:var(--phone-type-secondary)] font-medium outline-none transition-colors data-[highlighted]:bg-[var(--phone-panel-strong)]",
-                            row.available
-                              ? "text-[var(--phone-text)]"
-                              : "cursor-not-allowed text-[var(--phone-muted)] opacity-60 data-[highlighted]:bg-transparent",
+                            "flex h-11 w-11 shrink-0 cursor-pointer select-none items-center justify-center rounded-full outline-none transition-colors",
+                            row.selected
+                              ? "bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
+                              : row.available
+                                ? "text-[var(--phone-text)] data-[highlighted]:bg-[var(--phone-panel-strong)]/60"
+                                : "cursor-not-allowed text-[var(--phone-muted)] opacity-60 data-[highlighted]:bg-transparent",
                           )}
                         >
-                          <SportIcon sport={row.sport} className="h-5 w-5 shrink-0" />
-                          <span className="flex-1 whitespace-nowrap">
-                            {row.label}
-                          </span>
-                          {row.selected ? (
-                            <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                          ) : !row.available ? (
-                            <span className="shrink-0 whitespace-nowrap text-[length:var(--phone-type-control)] text-[var(--phone-muted)]">
-                              Not in demo
-                            </span>
-                          ) : null}
+                          <SportIcon sport={row.sport} className="h-5 w-5" />
                         </DropdownMenuPrimitive.RadioItem>
                       ))}
                     </DropdownMenuPrimitive.RadioGroup>
