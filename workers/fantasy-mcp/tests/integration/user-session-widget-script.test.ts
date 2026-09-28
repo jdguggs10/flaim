@@ -570,6 +570,33 @@ describe('user session widget script', () => {
         expect(documentElementStyle.maxWidth).toBe('400px');
       });
 
+      it('queues a new size report when a later host-context-changed changes the applied maxWidth cap, with no ResizeObserver to catch it', async () => {
+        // resizeObserver is omitted, so this host has none (see loadWidgetScript's
+        // default), matching a host that relies solely on applyContainerDimensions's
+        // own report.
+        const { exports, windowListeners, parent, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {},
+        });
+        (exports.render as (data: unknown) => void)(SAMPLE_SESSION);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        postedMessages.length = 0;
+
+        windowListeners.message[0]({
+          source: parent,
+          origin: 'null',
+          data: {
+            jsonrpc: '2.0',
+            method: 'ui/notifications/host-context-changed',
+            params: { containerDimensions: { maxWidth: 400 } },
+          },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+        expect(sizeMessages).toHaveLength(1);
+        expect(sizeMessages[0].params).toEqual({ width: 353, height: 240 });
+      });
+
       it('clears a previously applied cap when a later update has no valid maxWidth', () => {
         const { documentElementStyle, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
           bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth: 400 } } } },
@@ -637,6 +664,29 @@ describe('user session widget script', () => {
           },
         });
         expect(bodyStyle.paddingTop).toBe('12px');
+      });
+
+      it('clamps negative insets to zero padding and does not shrink the reported size', async () => {
+        const { bodyStyle, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            initResult: {
+              hostCapabilities: {},
+              hostContext: { safeAreaInsets: { top: -10, right: -5, bottom: -20, left: -5 } },
+            },
+          },
+        });
+        expect(bodyStyle.paddingTop).toBe('0px');
+        expect(bodyStyle.paddingRight).toBe('0px');
+        expect(bodyStyle.paddingBottom).toBe('0px');
+        expect(bodyStyle.paddingLeft).toBe('0px');
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+        // The stubbed rect is 353x240 (see fakeWidgetEl); negative insets must
+        // not subtract from the reported size.
+        expect(sizeMessages).toContainEqual(
+          expect.objectContaining({ params: { width: 353, height: 240 } }),
+        );
       });
 
       it('defaults to zero, so a host that never reports insets leaves the reported size unchanged', async () => {
