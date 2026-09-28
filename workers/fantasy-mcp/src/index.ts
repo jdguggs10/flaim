@@ -601,10 +601,10 @@ app.get('/fantasy/mcp/.well-known/oauth-protected-resource/*', (c) => {
 });
 
 // Widget HTML endpoint (fallback for HTTP-fetching clients). Deliberately
-// version-less: serves the v4 body, so live fetches carry the linked provider
-// attribution the Yahoo agreement requires on rendering surfaces. The older
-// bodies, whose published widget CSP cannot allow those links, are only
-// reachable through their own ui://widget/... resource URIs.
+// version-less: serves the v4/v5 body, so live fetches carry the linked
+// provider attribution the Yahoo agreement requires on rendering surfaces.
+// The older bodies, whose published widget CSP cannot allow those links, are
+// only reachable through their own ui://widget/... resource URIs.
 app.get('/widgets/user-session', (c) => {
   return c.html(USER_SESSION_WIDGET_HTML);
 });

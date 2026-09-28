@@ -14,7 +14,9 @@
  *
  * Design constraints:
  * - No external scripts, fonts, images, or stylesheets (CSP-safe for iframe sandbox)
- * - 353px maximum width, shrinking to its container (ChatGPT text response template)
+ * - Fluid width: fills the available container up to a 480px cap, honoring a
+ *   host's reported `hostContext.containerDimensions.maxWidth` (MCP Apps
+ *   sizing contract, FLA-427)
  * - System fonts only
  * - Light and dark palettes: window.openai.theme when window.openai exists,
  *   otherwise the MCP Apps ui/initialize/host-context-changed theme, with a
@@ -53,17 +55,22 @@
  * declare — for example a new redirect, connect, or resource domain — gets a
  * new URI instead.
  *
- * That is why there are exactly three bodies for four URIs, one per set of
+ * That is why there are exactly three bodies for five URIs, one per set of
  * link permissions. v1 and v2 declare only https://flaim.app as a redirect
  * domain, so their body names the data providers as plain text. v3 additionally
  * declares https://sports.yahoo.com, so its body links "Yahoo Fantasy" to the
- * official Yahoo Fantasy site. v4 additionally declares https://www.espn.com
- * and https://sleeper.com, so its body links all three provider credits.
+ * official Yahoo Fantasy site. v4 and v5 additionally declare
+ * https://www.espn.com and https://sleeper.com, so they share the body that
+ * links all three provider credits. v5 (FLA-427) serves that identical body
+ * and differs from v4 only in its published `_meta.ui.prefersBorder: false`,
+ * which asks every host to skip its own border and background so this card
+ * stays the only chrome everywhere; v5 is the tool descriptor's target.
  */
 export const LEGACY_USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
 export const V2_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
 export const V3_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v4.html';
+export const V4_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v4.html';
+export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v5.html';
 
 export type RefreshResultKind =
   | 'success'
@@ -396,7 +403,6 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   html,
   body {
     width: 100%;
-    max-width: 353px;
     overflow-x: hidden;
     background: transparent;
   }
@@ -423,7 +429,7 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   .widget {
     position: relative;
     width: 100%;
-    max-width: 353px;
+    max-width: 480px;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 24px;
@@ -665,17 +671,23 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
     other: '<path d="M8 21l8 0"></path><path d="M12 17l0 4"></path><path d="M7 4l10 0"></path><path d="M17 4v8a5 5 0 0 1 -10 0v-8"></path><path d="M3 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path><path d="M17 9a2 2 0 1 0 4 0a2 2 0 1 0 -4 0"></path>'
   };
   var LEAGUES_URL = 'https://flaim.app/leagues?from=widget';
-  var WIDGET_WIDTH = 353;
+  var WIDGET_MAX_WIDTH = 480;
   var initId = 'flaim-init-' + Math.random().toString(36).slice(2);
   var initializedSent = false;
   var hasRendered = false;
   // Hide-widget support (FLA-277): when get_user_session's structuredContent
   // carries widget.hidden === true (the user's hide_league_widget
   // preference), the widget renders nothing and reports a zero size instead
-  // of the 353px fallback. widgetHidden is re-derived on every render() call
-  // (not sticky), so a refresh that flips the preference back off re-shows
-  // the widget and resumes real size reporting.
+  // of the WIDGET_MAX_WIDTH fallback. widgetHidden is re-derived on every
+  // render() call (not sticky), so a refresh that flips the preference back
+  // off re-shows the widget and resumes real size reporting.
   var widgetHidden = false;
+  // Safe-area insets (FLA-427): a borderless host (prefersBorder: false, see
+  // the v5 URI) runs our content edge-to-edge with no host padding, so these
+  // are what keep the card off the screen edges. Defaults to zero so a host
+  // that never sends hostContext.safeAreaInsets leaves sendSizeChanged's
+  // output unchanged.
+  var safeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 };
   // MCP Apps bridge state (Claude parity, FLA-426). bridgeReady flips true
   // once the host answers ui/initialize; hostCaps holds that reply's
   // hostCapabilities. bridgeSeq/pending back bridgeRequest()'s id-keyed
@@ -854,12 +866,17 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
     }
     var widget = document.querySelector('.widget');
     var rect = widget && widget.getBoundingClientRect ? widget.getBoundingClientRect() : null;
+    var width = rect && rect.width ? Math.ceil(rect.width) : WIDGET_MAX_WIDTH;
+    var height = rect && rect.height ? Math.ceil(rect.height) : document.body.scrollHeight || 0;
+    // Fold the safe-area insets into the reported size (FLA-427), or a
+    // borderless host clips the bottom padding. Zero by default, so a host
+    // that never reports insets sees the same numbers as before.
     postToParent({
       jsonrpc: '2.0',
       method: 'ui/notifications/size-changed',
       params: {
-        width: rect && rect.width ? Math.ceil(rect.width) : WIDGET_WIDTH,
-        height: rect && rect.height ? Math.ceil(rect.height) : document.body.scrollHeight || 0,
+        width: width + safeAreaInsets.left + safeAreaInsets.right,
+        height: height + safeAreaInsets.top + safeAreaInsets.bottom,
       },
     });
   }
@@ -870,6 +887,45 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
       return;
     }
     setTimeout(sendSizeChanged, 0);
+  }
+
+  // Fluid sizing (FLA-427): when the host reports a maxWidth
+  // (hostContext.containerDimensions), cap the html element's width at
+  // min(that value, WIDGET_MAX_WIDTH) instead of fixing it. html stays
+  // width: 100%, so a real frame narrower than the reported maxWidth (a
+  // rotation before a context update, or a host that ignores our reported
+  // size) still shrinks to fit instead of overflowing under
+  // overflow-x: hidden. Runs for every host, not just ChatGPT -- layout is
+  // never gated on window.openai. An update with no valid maxWidth --
+  // omitted, non-finite, zero, negative, or a fixed width instead -- clears
+  // any earlier cap rather than leaving a stale one in place.
+  function applyContainerDimensions(containerDimensions) {
+    var root = document.documentElement;
+    if (!root || !root.style) return;
+    var maxWidth = containerDimensions && containerDimensions.maxWidth;
+    var isValid = typeof maxWidth === 'number' && isFinite(maxWidth) && maxWidth > 0;
+    root.style.maxWidth = isValid ? Math.min(maxWidth, WIDGET_MAX_WIDTH) + 'px' : '';
+  }
+
+  // Safe-area insets (FLA-427): applied as body padding, and folded into
+  // sendSizeChanged()'s reported size above. See the safeAreaInsets
+  // declaration for why the default (all zero) is a no-op.
+  function applySafeAreaInsets(insets) {
+    if (!insets || typeof insets !== 'object') return;
+    safeAreaInsets = {
+      top: Number(insets.top) || 0,
+      right: Number(insets.right) || 0,
+      bottom: Number(insets.bottom) || 0,
+      left: Number(insets.left) || 0,
+    };
+    var body = document.body;
+    if (body && body.style) {
+      body.style.paddingTop = safeAreaInsets.top + 'px';
+      body.style.paddingRight = safeAreaInsets.right + 'px';
+      body.style.paddingBottom = safeAreaInsets.bottom + 'px';
+      body.style.paddingLeft = safeAreaInsets.left + 'px';
+    }
+    queueSizeChanged();
   }
 
   // Theme: prefer the host global when it exposes one, otherwise leave the
@@ -1268,6 +1324,13 @@ ${creditLinkHandlers}
         if (!window.openai && hostContext && typeof hostContext.theme === 'string') {
           applyTheme(hostContext.theme);
         }
+        // Layout (containerDimensions, safeAreaInsets) is not gated on
+        // window.openai: any host advertising the MCP Apps sizing contract
+        // gets it, ChatGPT included.
+        if (hostContext) {
+          applyContainerDimensions(hostContext.containerDimensions);
+          applySafeAreaInsets(hostContext.safeAreaInsets);
+        }
       }
       sendInitialized();
       // FLA-277: a hidden result can post its zero size before the host has
@@ -1309,6 +1372,10 @@ ${creditLinkHandlers}
       if (!window.openai && msg.params && typeof msg.params.theme === 'string') {
         applyTheme(msg.params.theme);
       }
+      if (msg.params) {
+        applyContainerDimensions(msg.params.containerDimensions);
+        applySafeAreaInsets(msg.params.safeAreaInsets);
+      }
       return;
     }
 
@@ -1323,6 +1390,15 @@ ${creditLinkHandlers}
     var data = extract(msg);
     if (data) render(data);
   });
+  // Fluid sizing (FLA-427): observe .widget directly so a size change that
+  // doesn't go through render()/refresh's own queueSizeChanged() calls --
+  // rotation, a host column resize, a font swap -- still gets reported.
+  // Guarded: not every host environment exposes ResizeObserver.
+  if (typeof ResizeObserver === 'function') {
+    var resizeTarget = document.querySelector('.widget');
+    if (resizeTarget) new ResizeObserver(queueSizeChanged).observe(resizeTarget);
+  }
+
   // Safe in non-MCP hosts: postToParent no-ops when the widget is top-level,
   // and ChatGPT window.openai data paths remain independent of initialization.
   startMcpAppsLifecycle();

@@ -73,12 +73,42 @@ interface WidgetHarness {
   postedMessages: Array<Record<string, unknown>>;
   /** URLs passed to window.open (the last-resort link fallback), in order. */
   openedTabs: string[];
+  /** `document.documentElement.style`, so a test can assert the fluid-sizing
+   * width the widget sets (FLA-427). */
+  documentElementStyle: Record<string, string>;
+  /** `document.body.style`, so a test can assert the safe-area-inset padding
+   * the widget sets (FLA-427). */
+  bodyStyle: Record<string, string>;
+  /**
+   * Set only when `resizeObserver: true` was passed. Invoking it simulates
+   * the stubbed ResizeObserver firing on `.widget`, exactly as the widget's
+   * `new ResizeObserver(queueSizeChanged).observe(...)` wiring would.
+   */
+  triggerResize?: () => void;
+  /** The element the stubbed ResizeObserver observed, or undefined if it
+   * never called `.observe()` (e.g. it found no `.widget` element). */
+  resizeObserverTarget?: unknown;
 }
 
 interface BridgeRequestMessage {
   id: string;
   method: string;
   params: unknown;
+}
+
+/** `hostContext.containerDimensions` / `.safeAreaInsets`, per the MCP Apps
+ * sizing contract (FLA-427). Only the fields the widget reads are typed. */
+interface FakeContainerDimensions {
+  width?: number;
+  height?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+}
+interface FakeSafeAreaInsets {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
 }
 
 interface BridgeHostOptions {
@@ -89,7 +119,14 @@ interface BridgeHostOptions {
    * Pass null to simulate a host that never answers (bridgeReady stays
    * false, matching the "no init reply" fallback case).
    */
-  initResult?: { hostCapabilities?: Record<string, boolean>; hostContext?: { theme?: string } } | null;
+  initResult?: {
+    hostCapabilities?: Record<string, boolean>;
+    hostContext?: {
+      theme?: string;
+      containerDimensions?: FakeContainerDimensions;
+      safeAreaInsets?: FakeSafeAreaInsets;
+    };
+  } | null;
   /**
    * Called for every non-init request the widget posts (tools/call,
    * ui/open-link). Return the JSON-RPC reply to deliver, or omit/return
@@ -110,6 +147,14 @@ interface WidgetHarnessOptions {
    * listener, exactly like a real host posting back into the iframe.
    */
   bridge?: BridgeHostOptions;
+  /**
+   * Expose a stubbed global ResizeObserver so a test can trigger the
+   * widget's resize callback directly and assert it re-reports size.
+   * Omitted entirely (not just false), so the default harness matches a
+   * host environment with no ResizeObserver global at all -- exercising the
+   * widget's `typeof ResizeObserver === 'function'` guard.
+   */
+  resizeObserver?: boolean;
 }
 
 const DEFAULT_EXPORTS = ['classifyRefreshResult', 'render', 'applyTheme', 'refreshLeagues'];
@@ -151,12 +196,18 @@ function loadWidgetScript(
   const postedMessages: Array<Record<string, unknown>> = [];
   const openedTabs: string[] = [];
   const widgetEl = fakeWidgetEl();
+  // Real style objects (FLA-427), so applyContainerDimensions() and
+  // applySafeAreaInsets() have somewhere real to write, and tests can read
+  // the resulting inline styles back.
+  const documentElementStyle: Record<string, string> = {};
+  const bodyStyle: Record<string, string> = {};
 
   const context: Record<string, unknown> = {
     document: {
       addEventListener() {},
-      body: { scrollHeight: 0 },
+      body: { scrollHeight: 0, style: bodyStyle },
       documentElement: {
+        style: documentElementStyle,
         classList: {
           add: (name: string) => classes.add(name),
           remove: (name: string) => classes.delete(name),
@@ -227,6 +278,24 @@ function loadWidgetScript(
   windowStub.parent = parent;
   context.window = windowStub;
 
+  // Fluid sizing (FLA-427): a stubbed global, opt-in per test. Left off the
+  // context entirely by default, so `typeof ResizeObserver` reads
+  // 'undefined' in the script -- the same guard a host with no
+  // ResizeObserver support would trip.
+  let triggerResize: (() => void) | undefined;
+  let resizeObserverTarget: unknown;
+  if (options.resizeObserver) {
+    context.ResizeObserver = class {
+      constructor(callback: () => void) {
+        triggerResize = callback;
+      }
+      observe(target: unknown) {
+        resizeObserverTarget = target;
+      }
+      disconnect() {}
+    };
+  }
+
   runInNewContext(exposedScript, context);
 
   const exports: Record<string, unknown> = {};
@@ -241,6 +310,9 @@ function loadWidgetScript(
     parent,
     postedMessages,
     openedTabs,
+    documentElementStyle,
+    bodyStyle,
+    ...(options.resizeObserver ? { triggerResize, resizeObserverTarget } : {}),
   };
 }
 
@@ -407,6 +479,215 @@ describe('user session widget script', () => {
     const addedHandlers =
       /\n {2}\/\/ Present only on bodies whose published widget CSP allows the (?:ESPN|Sleeper)\n[\s\S]*?\n {2}\}/g;
     expect((currentScript || '').replace(addedHandlers, '')).toBe(legacyScript);
+  });
+
+  // Fluid sizing (FLA-427): the card fills its host up to a 480px cap,
+  // honors a reported containerDimensions.maxWidth, and folds safe-area
+  // insets into both the applied padding and the reported size.
+  describe('fluid sizing (FLA-427)', () => {
+    it('drops the old 353px cap from every body and caps .widget at 480px', () => {
+      for (const html of [LEGACY_USER_SESSION_WIDGET_HTML, V3_USER_SESSION_WIDGET_HTML, USER_SESSION_WIDGET_HTML]) {
+        expect(html).not.toContain('353px');
+        expect(html).toContain('max-width: 480px');
+      }
+    });
+
+    it('reports WIDGET_MAX_WIDTH (480) when there is no rect to measure', async () => {
+      const harness = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: { initResult: { hostCapabilities: {} } },
+      });
+      // The harness's .widget stub always has a real getBoundingClientRect
+      // (see fakeWidgetEl); strip it to hit sendSizeChanged's "no rect"
+      // fallback the same way a host with no .widget element yet would.
+      // @ts-expect-error -- deliberately removed to force the fallback branch.
+      delete harness.widgetEl.getBoundingClientRect;
+
+      (harness.exports.render as (data: unknown) => void)(SAMPLE_SESSION);
+      // render()'s queueSizeChanged() defers through setTimeout (no
+      // requestAnimationFrame in this harness).
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const sizeMessages = harness.postedMessages.filter(
+        (message) => message.method === 'ui/notifications/size-changed',
+      );
+      expect(sizeMessages).toContainEqual(expect.objectContaining({ params: { width: 480, height: 0 } }));
+    });
+
+    describe('containerDimensions (hostContext.containerDimensions)', () => {
+      it.each([
+        { maxWidth: 400, expectedMaxWidth: '400px' },
+        { maxWidth: 900, expectedMaxWidth: '480px' },
+      ])(
+        'caps html max-width at $expectedMaxWidth from an init reply maxWidth of $maxWidth, leaving width fluid',
+        ({ maxWidth, expectedMaxWidth }) => {
+          const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+            bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth } } } },
+          });
+          expect(documentElementStyle.maxWidth).toBe(expectedMaxWidth);
+          // A cap, not a fixed width: html keeps its static width: 100% CSS
+          // rule (see buildUserSessionWidgetHtml), so a real frame narrower
+          // than maxWidth still shrinks to fit instead of overflowing under
+          // overflow-x: hidden.
+          expect(documentElementStyle.width).toBeUndefined();
+        },
+      );
+
+      it('leaves html max-width unset when the host reports a fixed width instead of maxWidth', () => {
+        const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { width: 400 } } } },
+        });
+        expect(documentElementStyle.maxWidth).toBe('');
+      });
+
+      it.each([0, -100, NaN, '400' as unknown as number])(
+        'ignores an invalid maxWidth (%p)',
+        (maxWidth) => {
+          const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+            bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth } } } },
+          });
+          expect(documentElementStyle.maxWidth).toBe('');
+        },
+      );
+
+      it('updates html max-width from a later host-context-changed notification', () => {
+        const { documentElementStyle, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {},
+        });
+        // bridge:{} means the default init reply, which carries no
+        // hostContext at all, so applyContainerDimensions is never called
+        // during init -- the style is untouched, not cleared.
+        expect(documentElementStyle.maxWidth).toBeUndefined();
+
+        windowListeners.message[0]({
+          source: parent,
+          origin: 'null',
+          data: {
+            jsonrpc: '2.0',
+            method: 'ui/notifications/host-context-changed',
+            params: { containerDimensions: { maxWidth: 400 } },
+          },
+        });
+        expect(documentElementStyle.maxWidth).toBe('400px');
+      });
+
+      it('clears a previously applied cap when a later update has no valid maxWidth', () => {
+        const { documentElementStyle, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth: 400 } } } },
+        });
+        expect(documentElementStyle.maxWidth).toBe('400px');
+
+        // A later update reports a fixed width instead of maxWidth -- the
+        // stale 400px cap must not stick.
+        windowListeners.message[0]({
+          source: parent,
+          origin: 'null',
+          data: {
+            jsonrpc: '2.0',
+            method: 'ui/notifications/host-context-changed',
+            params: { containerDimensions: { width: 500 } },
+          },
+        });
+        expect(documentElementStyle.maxWidth).toBe('');
+      });
+
+      it('applies containerDimensions the same way whether or not window.openai exists', () => {
+        const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          openai: { theme: 'light' },
+          bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth: 400 } } } },
+        });
+        expect(documentElementStyle.maxWidth).toBe('400px');
+      });
+    });
+
+    describe('safe-area insets (hostContext.safeAreaInsets)', () => {
+      it('applies insets as body padding and folds them into the reported size, from the init reply', async () => {
+        const { bodyStyle, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            initResult: {
+              hostCapabilities: {},
+              hostContext: { safeAreaInsets: { top: 10, right: 5, bottom: 20, left: 5 } },
+            },
+          },
+        });
+        expect(bodyStyle.paddingTop).toBe('10px');
+        expect(bodyStyle.paddingRight).toBe('5px');
+        expect(bodyStyle.paddingBottom).toBe('20px');
+        expect(bodyStyle.paddingLeft).toBe('5px');
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+        // The stubbed rect is 353x240 (see fakeWidgetEl); insets add
+        // left+right to width and top+bottom to height.
+        expect(sizeMessages).toContainEqual(
+          expect.objectContaining({ params: { width: 363, height: 270 } }),
+        );
+      });
+
+      it('updates the applied padding from a later host-context-changed notification', () => {
+        const { bodyStyle, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        expect(bodyStyle.paddingTop).toBeUndefined();
+
+        windowListeners.message[0]({
+          source: parent,
+          origin: 'null',
+          data: {
+            jsonrpc: '2.0',
+            method: 'ui/notifications/host-context-changed',
+            params: { safeAreaInsets: { top: 12, right: 0, bottom: 0, left: 0 } },
+          },
+        });
+        expect(bodyStyle.paddingTop).toBe('12px');
+      });
+
+      it('defaults to zero, so a host that never reports insets leaves the reported size unchanged', async () => {
+        const { exports, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        (exports.render as (data: unknown) => void)(SAMPLE_SESSION);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+        expect(sizeMessages).toContainEqual(
+          expect.objectContaining({ params: { width: 353, height: 240 } }),
+        );
+      });
+    });
+
+    describe('ResizeObserver', () => {
+      it('observes .widget and re-reports size when the stubbed observer fires', async () => {
+        const { triggerResize, resizeObserverTarget, widgetEl, postedMessages } = loadWidgetScript(
+          USER_SESSION_WIDGET_HTML,
+          { bridge: {}, resizeObserver: true },
+        );
+        expect(resizeObserverTarget).toBe(widgetEl);
+        postedMessages.length = 0;
+
+        expect(triggerResize).toBeTypeOf('function');
+        triggerResize!();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+        expect(sizeMessages).toHaveLength(1);
+        expect(sizeMessages[0].params).toEqual({ width: 353, height: 240 });
+      });
+
+      it('reports zero when the observer fires while the widget is hidden', async () => {
+        const { exports, triggerResize, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {},
+          resizeObserver: true,
+        });
+        (exports.render as (data: unknown) => void)({ allLeagues: [], widget: { hidden: true } });
+        postedMessages.length = 0;
+
+        triggerResize!();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+        expect(sizeMessages).toHaveLength(1);
+        expect(sizeMessages[0].params).toEqual({ width: 0, height: 0 });
+      });
+
+      it('does not throw when ResizeObserver is absent from the host environment', () => {
+        expect(() => loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} })).not.toThrow();
+      });
+    });
   });
 
   it('renders a sport band per sport with the matching Tabler icon', () => {

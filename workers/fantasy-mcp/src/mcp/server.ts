@@ -11,6 +11,7 @@ import {
   V2_USER_SESSION_WIDGET_URI,
   V3_USER_SESSION_WIDGET_HTML,
   V3_USER_SESSION_WIDGET_URI,
+  V4_USER_SESSION_WIDGET_URI,
 } from '../widgets/user-session-widget';
 import { FLAIM_MCP_INSTRUCTIONS } from './instructions';
 
@@ -64,12 +65,19 @@ export const WIDGET_READ_LOG_SAMPLE_RATE = 50;
  * Redirect domains published per widget URI. Each URI declares exactly the
  * provider attribution links its body carries. A published URI's list never
  * changes: clients cache read-result _meta per URI, so a new link target mints
- * a new URI rather than widening an existing one.
+ * a new URI rather than widening an existing one. v5 declares the same
+ * domains as v4 — it shares v4's body and adds only prefersBorder (FLA-427).
  */
 const WIDGET_REDIRECT_DOMAINS: Record<string, readonly string[]> = {
   [LEGACY_USER_SESSION_WIDGET_URI]: ['https://flaim.app'],
   [V2_USER_SESSION_WIDGET_URI]: ['https://flaim.app'],
   [V3_USER_SESSION_WIDGET_URI]: ['https://flaim.app', 'https://sports.yahoo.com'],
+  [V4_USER_SESSION_WIDGET_URI]: [
+    'https://flaim.app',
+    'https://sports.yahoo.com',
+    'https://www.espn.com',
+    'https://sleeper.com',
+  ],
   [USER_SESSION_WIDGET_URI]: [
     'https://flaim.app',
     'https://sports.yahoo.com',
@@ -119,15 +127,17 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
   // change only within the metadata that URI already declares. v1 and v2
   // declare only the flaim.app redirect domain, so they share the body whose
   // provider credits are plain text. v3 also declares sports.yahoo.com, so its
-  // body links the Yahoo Fantasy credit. v4 additionally declares www.espn.com
-  // and sleeper.com, so its body links all three provider credits; v4 is the
-  // tool descriptor target. A body that needs metadata its URI does not
-  // declare gets a new URI.
+  // body links the Yahoo Fantasy credit. v4 and v5 additionally declare
+  // www.espn.com and sleeper.com, so they share the body that links all three
+  // provider credits. v5 (FLA-427) is the only one with `prefersBorder: false`
+  // in its _meta, and is the tool descriptor target. A body that needs
+  // metadata its URI does not declare gets a new URI.
   const widgetResources = [
     ['user-session-widget', LEGACY_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
     ['user-session-widget-v2', V2_USER_SESSION_WIDGET_URI, LEGACY_USER_SESSION_WIDGET_HTML],
     ['user-session-widget-v3', V3_USER_SESSION_WIDGET_URI, V3_USER_SESSION_WIDGET_HTML],
-    ['user-session-widget-v4', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v4', V4_USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
+    ['user-session-widget-v5', USER_SESSION_WIDGET_URI, USER_SESSION_WIDGET_HTML],
   ] as const;
 
   for (const [name, uri, widgetHtml] of widgetResources) {
@@ -169,14 +179,20 @@ export function createFantasyMcpServer(ctx: McpContext): McpServer {
             // read-result _meta must stay backward compatible with what
             // clients already hold for that URI (v1: plain-text credits;
             // v2: adds the FLA-177 descriptor fields; v3: adds the Yahoo
-            // attribution link; v4: adds the ESPN and Sleeper links). A body
-            // change that would need new metadata gets a new URI instead.
+            // attribution link; v4: adds the ESPN and Sleeper links; v5:
+            // FLA-427's prefersBorder: false, nothing else). A body change
+            // that would need new metadata gets a new URI instead.
             _meta: {
               ui: {
                 csp: {
                   connectDomains: [],
                   resourceDomains: [],
                 },
+                // Only v5 declares this (FLA-427): it asks every host to
+                // skip its own border/background so this card is the only
+                // chrome everywhere. v1-v4 stay without it, so their
+                // published _meta stays byte-identical.
+                ...(uri === USER_SESSION_WIDGET_URI && { prefersBorder: false }),
               },
               ...(uri !== LEGACY_USER_SESSION_WIDGET_URI && {
                 // Plain-language widget summary for directory/host surfaces.
