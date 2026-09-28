@@ -515,27 +515,48 @@ describe('user session widget script', () => {
 
     describe('containerDimensions (hostContext.containerDimensions)', () => {
       it.each([
-        { maxWidth: 400, expectedWidth: '400px' },
-        { maxWidth: 900, expectedWidth: '480px' },
-      ])('sets html width to $expectedWidth from an init reply maxWidth of $maxWidth', ({ maxWidth, expectedWidth }) => {
-        const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
-          bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth } } } },
-        });
-        expect(documentElementStyle.width).toBe(expectedWidth);
-      });
+        { maxWidth: 400, expectedMaxWidth: '400px' },
+        { maxWidth: 900, expectedMaxWidth: '480px' },
+      ])(
+        'caps html max-width at $expectedMaxWidth from an init reply maxWidth of $maxWidth, leaving width fluid',
+        ({ maxWidth, expectedMaxWidth }) => {
+          const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+            bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth } } } },
+          });
+          expect(documentElementStyle.maxWidth).toBe(expectedMaxWidth);
+          // A cap, not a fixed width: html keeps its static width: 100% CSS
+          // rule (see buildUserSessionWidgetHtml), so a real frame narrower
+          // than maxWidth still shrinks to fit instead of overflowing under
+          // overflow-x: hidden.
+          expect(documentElementStyle.width).toBeUndefined();
+        },
+      );
 
-      it('leaves html width unset when the host reports a fixed width instead of maxWidth', () => {
+      it('leaves html max-width unset when the host reports a fixed width instead of maxWidth', () => {
         const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
           bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { width: 400 } } } },
         });
-        expect(documentElementStyle.width).toBeUndefined();
+        expect(documentElementStyle.maxWidth).toBe('');
       });
 
-      it('updates html width from a later host-context-changed notification', () => {
+      it.each([0, -100, NaN, '400' as unknown as number])(
+        'ignores an invalid maxWidth (%p)',
+        (maxWidth) => {
+          const { documentElementStyle } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+            bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth } } } },
+          });
+          expect(documentElementStyle.maxWidth).toBe('');
+        },
+      );
+
+      it('updates html max-width from a later host-context-changed notification', () => {
         const { documentElementStyle, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
           bridge: {},
         });
-        expect(documentElementStyle.width).toBeUndefined();
+        // bridge:{} means the default init reply, which carries no
+        // hostContext at all, so applyContainerDimensions is never called
+        // during init -- the style is untouched, not cleared.
+        expect(documentElementStyle.maxWidth).toBeUndefined();
 
         windowListeners.message[0]({
           source: parent,
@@ -546,7 +567,27 @@ describe('user session widget script', () => {
             params: { containerDimensions: { maxWidth: 400 } },
           },
         });
-        expect(documentElementStyle.width).toBe('400px');
+        expect(documentElementStyle.maxWidth).toBe('400px');
+      });
+
+      it('clears a previously applied cap when a later update has no valid maxWidth', () => {
+        const { documentElementStyle, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth: 400 } } } },
+        });
+        expect(documentElementStyle.maxWidth).toBe('400px');
+
+        // A later update reports a fixed width instead of maxWidth -- the
+        // stale 400px cap must not stick.
+        windowListeners.message[0]({
+          source: parent,
+          origin: 'null',
+          data: {
+            jsonrpc: '2.0',
+            method: 'ui/notifications/host-context-changed',
+            params: { containerDimensions: { width: 500 } },
+          },
+        });
+        expect(documentElementStyle.maxWidth).toBe('');
       });
 
       it('applies containerDimensions the same way whether or not window.openai exists', () => {
@@ -554,7 +595,7 @@ describe('user session widget script', () => {
           openai: { theme: 'light' },
           bridge: { initResult: { hostCapabilities: {}, hostContext: { containerDimensions: { maxWidth: 400 } } } },
         });
-        expect(documentElementStyle.width).toBe('400px');
+        expect(documentElementStyle.maxWidth).toBe('400px');
       });
     });
 

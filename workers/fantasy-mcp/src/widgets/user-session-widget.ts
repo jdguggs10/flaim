@@ -890,14 +890,21 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   }
 
   // Fluid sizing (FLA-427): when the host reports a maxWidth
-  // (hostContext.containerDimensions), give the html element a real width to
-  // grow the iframe to, capped at WIDGET_MAX_WIDTH. Runs for every host, not
-  // just ChatGPT -- layout is never gated on window.openai. A fixed width, or
-  // no containerDimensions at all, leaves html on its default fluid CSS rule.
+  // (hostContext.containerDimensions), cap the html element's width at
+  // min(that value, WIDGET_MAX_WIDTH) instead of fixing it. html stays
+  // width: 100%, so a real frame narrower than the reported maxWidth (a
+  // rotation before a context update, or a host that ignores our reported
+  // size) still shrinks to fit instead of overflowing under
+  // overflow-x: hidden. Runs for every host, not just ChatGPT -- layout is
+  // never gated on window.openai. An update with no valid maxWidth --
+  // omitted, non-finite, zero, negative, or a fixed width instead -- clears
+  // any earlier cap rather than leaving a stale one in place.
   function applyContainerDimensions(containerDimensions) {
     var root = document.documentElement;
-    if (!containerDimensions || typeof containerDimensions.maxWidth !== 'number' || !root || !root.style) return;
-    root.style.width = Math.min(containerDimensions.maxWidth, WIDGET_MAX_WIDTH) + 'px';
+    if (!root || !root.style) return;
+    var maxWidth = containerDimensions && containerDimensions.maxWidth;
+    var isValid = typeof maxWidth === 'number' && isFinite(maxWidth) && maxWidth > 0;
+    root.style.maxWidth = isValid ? Math.min(maxWidth, WIDGET_MAX_WIDTH) + 'px' : '';
   }
 
   // Safe-area insets (FLA-427): applied as body padding, and folded into
