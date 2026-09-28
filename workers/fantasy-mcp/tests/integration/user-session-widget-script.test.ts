@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   classifyRefreshResult,
   type RefreshResultClassification,
@@ -13,9 +14,26 @@ interface FakeElement {
   className: string;
   textContent: string;
   href?: string;
+  /** The anchor's `target` attribute (e.g. `_blank`), matching the real widget HTML. */
+  target?: string;
   disabled?: boolean;
   listeners: Record<string, Array<(event: unknown) => unknown>>;
   addEventListener(type: string, handler: (event: unknown) => unknown): void;
+}
+
+/** A `.widget`-selector stand-in with a real `style` object, so tests can
+ * observe the hide/show display toggle render() applies, and so
+ * sendSizeChanged()'s getBoundingClientRect() branch has something to read
+ * instead of always falling back to the WIDGET_WIDTH default. Mirrors
+ * loadEmbeddedRender's widgetEl below. */
+function fakeWidgetEl() {
+  return {
+    style: {} as Record<string, string>,
+    getBoundingClientRect() {
+      if (this.style.display === 'none') return { width: 0, height: 0 };
+      return { width: 353, height: 240 };
+    },
+  };
 }
 
 function fakeElement(props: Partial<FakeElement> = {}): FakeElement {
@@ -39,12 +57,59 @@ interface WidgetHarness {
   windowListeners: Record<string, Array<(event: unknown) => unknown>>;
   /** The script's own `window`, needed as `event.source` for trusted messages. */
   contextWindow: Record<string, unknown>;
+  /** The `.widget` element render() shows/hides. See fakeWidgetEl() above. */
+  widgetEl: ReturnType<typeof fakeWidgetEl>;
+  /**
+   * `window.parent` as the script sees it: a distinct scripted-host object
+   * when `bridge` is set, otherwise the script's own window (self-referencing,
+   * so postToParent no-ops, matching a top-level/non-iframe host). Use this as
+   * `event.source` for any reply delivered by hand.
+   */
+  parent: Record<string, unknown>;
+  /**
+   * Every message the script posted to `window.parent`, in order. Only
+   * populated when `bridge` is set — postToParent no-ops otherwise.
+   */
+  postedMessages: Array<Record<string, unknown>>;
+  /** URLs passed to window.open (the last-resort link fallback), in order. */
+  openedTabs: string[];
+}
+
+interface BridgeRequestMessage {
+  id: string;
+  method: string;
+  params: unknown;
+}
+
+interface BridgeHostOptions {
+  /**
+   * Reply to the widget's ui/initialize handshake, delivered synchronously
+   * (a real host still resolves the widget's pending promise on the next
+   * microtask). Defaults to a host that supports both bridge capabilities.
+   * Pass null to simulate a host that never answers (bridgeReady stays
+   * false, matching the "no init reply" fallback case).
+   */
+  initResult?: { hostCapabilities?: Record<string, boolean>; hostContext?: { theme?: string } } | null;
+  /**
+   * Called for every non-init request the widget posts (tools/call,
+   * ui/open-link). Return the JSON-RPC reply to deliver, or omit/return
+   * undefined to simulate a host that never answers that request (drive the
+   * widget's own timeout with vi.useFakeTimers() + advanceTimersByTimeAsync).
+   */
+  respond?: (message: BridgeRequestMessage) => { result?: unknown; error?: unknown } | undefined;
 }
 
 interface WidgetHarnessOptions {
   /** Host global to expose as `window.openai`, or omitted for a bare host. */
   openai?: Record<string, unknown>;
   exposed?: string[];
+  /**
+   * Simulates an MCP Apps host: gives `window.parent` a distinct object so
+   * postToParent actually posts, records every posted message, and answers
+   * the handshake and bridge requests by calling the widget's own message
+   * listener, exactly like a real host posting back into the iframe.
+   */
+  bridge?: BridgeHostOptions;
 }
 
 const DEFAULT_EXPORTS = ['classifyRefreshResult', 'render', 'applyTheme', 'refreshLeagues'];
@@ -67,16 +132,25 @@ function loadWidgetScript(
     `${exposed.map((name) => `globalThis.__${name} = ${name};`).join('\n')}\n})();`,
   );
 
+  // href/target match the real widget HTML's anchor attributes exactly (see
+  // buildUserSessionWidgetHtml), so a trace that reads them off these
+  // elements reflects what a real click's native-navigation fallback would
+  // actually use, not a disconnected test-only stand-in.
   const elements: Record<string, FakeElement> = {
     content: fakeElement(),
     'refresh-status': fakeElement(),
     'refresh-button': fakeElement(),
     'refresh-word': fakeElement(),
-    'edit-link': fakeElement(),
-    'yahoo-link': fakeElement({ href: 'https://sports.yahoo.com/fantasy/' }),
+    'edit-link': fakeElement({ href: 'https://flaim.app/leagues?from=widget', target: '_blank' }),
+    'yahoo-link': fakeElement({ href: 'https://sports.yahoo.com/fantasy/', target: '_blank' }),
+    'espn-link': fakeElement({ href: 'https://www.espn.com/fantasy/', target: '_blank' }),
+    'sleeper-link': fakeElement({ href: 'https://sleeper.com/', target: '_blank' }),
   };
   const classes = new Set<string>();
   const windowListeners: Record<string, Array<(event: unknown) => unknown>> = Object.create(null);
+  const postedMessages: Array<Record<string, unknown>> = [];
+  const openedTabs: string[] = [];
+  const widgetEl = fakeWidgetEl();
 
   const context: Record<string, unknown> = {
     document: {
@@ -104,26 +178,70 @@ function loadWidgetScript(
       getElementById(id: string) {
         return Object.prototype.hasOwnProperty.call(elements, id) ? elements[id] : null;
       },
-      querySelector() { return null; },
+      querySelector(selector: string) { return selector === '.widget' ? widgetEl : null; },
     },
     URL,
     setTimeout,
+    clearTimeout,
   };
   const windowStub: Record<string, unknown> = {
     addEventListener(type: string, handler: (event: unknown) => unknown) {
       (windowListeners[type] = windowListeners[type] || []).push(handler);
     },
+    open(url: string) { openedTabs.push(String(url)); },
     parent: null,
   };
   if (options.openai) windowStub.openai = options.openai;
-  windowStub.parent = windowStub;
+
+  // Defaults to the script's own window (self-referencing), which makes
+  // postToParent a no-op — the pre-existing behavior for every test that
+  // does not opt into a scripted bridge host.
+  let parent: Record<string, unknown> = windowStub;
+  if (options.bridge) {
+    const bridge = options.bridge;
+    const deliver = (data: Record<string, unknown>) => {
+      for (const handler of windowListeners.message || []) {
+        handler({ source: parent, origin: 'null', data });
+      }
+    };
+    parent = {
+      postMessage(message: Record<string, unknown>) {
+        postedMessages.push(message);
+        if (message.method === 'ui/initialize') {
+          if (bridge.initResult === null) return; // Host never answers.
+          deliver({
+            jsonrpc: '2.0',
+            id: message.id,
+            result: bridge.initResult ?? { hostCapabilities: { serverTools: true, openLinks: true } },
+          });
+          return;
+        }
+        if (message.id === undefined || message.id === null) return;
+        const reply = bridge.respond
+          ? bridge.respond({ id: message.id as string, method: message.method as string, params: message.params })
+          : undefined;
+        if (reply) deliver({ jsonrpc: '2.0', id: message.id, ...reply });
+      },
+    };
+  }
+  windowStub.parent = parent;
   context.window = windowStub;
 
   runInNewContext(exposedScript, context);
 
   const exports: Record<string, unknown> = {};
   for (const name of exposed) exports[name] = context[`__${name}`];
-  return { exports, elements, classes, windowListeners, contextWindow: windowStub };
+  return {
+    exports,
+    elements,
+    classes,
+    windowListeners,
+    contextWindow: windowStub,
+    widgetEl,
+    parent,
+    postedMessages,
+    openedTabs,
+  };
 }
 
 /**
@@ -175,6 +293,7 @@ function loadEmbeddedRender() {
     },
     URL,
     setTimeout,
+    clearTimeout,
   };
 
   // window.parent must be a distinct object from window itself: postToParent
@@ -559,6 +678,360 @@ describe('user session widget script', () => {
       expect(elements.content.innerHTML).toBe('');
       expect(elements['refresh-button'].disabled).toBe(false);
       expect(elements['refresh-word'].textContent).toBe('Refresh');
+    });
+  });
+
+  // Claude parity (FLA-426): when window.openai is absent, refresh and links
+  // route through the MCP Apps bridge instead, gated by hostCapabilityReady().
+  // These tests use loadWidgetScript's `bridge` option, a scripted host that
+  // answers ui/initialize and any subsequent tools/call / ui/open-link.
+  describe('MCP Apps bridge (Claude parity, FLA-426)', () => {
+    function toolCallName(message: Record<string, unknown>): unknown {
+      return (message.params as { name?: unknown } | undefined)?.name;
+    }
+
+    it('refreshes leagues through the bridge, posting two tools/call requests with distinct ids', async () => {
+      const { exports, elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond(message) {
+            if (toolCallName(message) === 'refresh_leagues') {
+              return {
+                result: {
+                  structuredContent: {
+                    success: true,
+                    results: { espn: { platform: 'espn', status: 'success', details: { added: 2 } } },
+                  },
+                },
+              };
+            }
+            if (toolCallName(message) === 'get_user_session') {
+              return { result: { structuredContent: SAMPLE_SESSION } };
+            }
+            return undefined;
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      const toolCalls = postedMessages.filter((message) => message.method === 'tools/call');
+      expect(toolCalls.map(toolCallName)).toEqual(['refresh_leagues', 'get_user_session']);
+      expect(new Set(toolCalls.map((message) => message.id)).size).toBe(2);
+      expect(elements['refresh-status'].innerHTML).toBe('Leagues refreshed.');
+      expect(elements['refresh-status'].className).toBe('status is-success');
+      expect(elements.content.innerHTML).toContain('Sunday Night Football League');
+      expect(elements['refresh-button'].disabled).toBe(false);
+    });
+
+    it('shows a recoverable failure when the bridge replies with a JSON-RPC error', async () => {
+      const { exports, elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond() {
+            return { error: { code: -32000, message: 'boom' } };
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      // The rejection stops the flow before get_user_session is ever called.
+      expect(postedMessages.filter((message) => message.method === 'tools/call')).toHaveLength(1);
+      expect(elements['refresh-status'].className).toBe('status is-error');
+      expect(elements['refresh-status'].innerHTML).toBe(
+        'Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.'
+      );
+      expect(elements['refresh-button'].disabled).toBe(false);
+    });
+
+    it('shows a recoverable failure when the tool result itself reports isError (e.g. INSUFFICIENT_SCOPE)', async () => {
+      const { exports, elements } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond(message) {
+            if (toolCallName(message) !== 'refresh_leagues') return undefined;
+            return { result: { isError: true, content: [{ type: 'text', text: 'INSUFFICIENT_SCOPE' }] } };
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      expect(elements['refresh-status'].className).toBe('status is-error');
+      expect(elements['refresh-status'].innerHTML).toBe(
+        'Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.'
+      );
+    });
+
+    it('times out a bridge call that never replies, re-enables the button, and ignores a later late reply', async () => {
+      vi.useFakeTimers();
+      try {
+        let sentId: unknown;
+        const { exports, elements, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            respond(message) {
+              sentId = message.id;
+              return undefined; // The host never answers this one.
+            },
+          },
+        });
+
+        const refreshPromise = (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+        await vi.advanceTimersByTimeAsync(120000);
+        await refreshPromise;
+
+        expect(elements['refresh-status'].className).toBe('status is-error');
+        expect(elements['refresh-status'].innerHTML).toBe(
+          'Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.'
+        );
+        expect(elements['refresh-button'].disabled).toBe(false);
+
+        // A reply that arrives after the timeout already dropped the pending
+        // entry must be a silent no-op, not a crash or a status change.
+        windowListeners.message[0]({
+          source: parent,
+          origin: 'null',
+          data: { jsonrpc: '2.0', id: sentId, result: { structuredContent: SAMPLE_SESSION } },
+        });
+        expect(elements['refresh-status'].className).toBe('status is-error');
+        expect(elements.content.innerHTML).toBe('');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('falls back to "Open Flaim to manage leagues" when the host init reply omits serverTools', async () => {
+      const { exports, elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        // No openLinks either, so the LEAGUES_URL fallback also can't route
+        // through the bridge — this isolates the serverTools-only guard.
+        bridge: { initResult: { hostCapabilities: {} } },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      expect(elements['refresh-status'].innerHTML).toBe('Open Flaim to manage leagues.');
+      expect(openedTabs).toEqual(['https://flaim.app/leagues?from=widget']);
+    });
+
+    it('falls back to "Open Flaim to manage leagues" when the host never answers ui/initialize', async () => {
+      const { exports, elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: { initResult: null },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      expect(elements['refresh-status'].innerHTML).toBe('Open Flaim to manage leagues.');
+      expect(openedTabs).toEqual(['https://flaim.app/leagues?from=widget']);
+    });
+
+    it('reports a zero size when a bridge refresh reloads a hidden widget', async () => {
+      const { exports, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond(message) {
+            if (toolCallName(message) === 'refresh_leagues') {
+              return {
+                result: {
+                  structuredContent: {
+                    success: true,
+                    results: { espn: { platform: 'espn', status: 'success', details: { added: 1 } } },
+                  },
+                },
+              };
+            }
+            if (toolCallName(message) === 'get_user_session') {
+              return { result: { structuredContent: { allLeagues: [], widget: { hidden: true } } } };
+            }
+            return undefined;
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+      expect(sizeMessages).toContainEqual(expect.objectContaining({ params: { width: 0, height: 0 } }));
+    });
+
+    it('applies the theme from the ui/initialize reply, then a later host-context-changed update', () => {
+      const { classes, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: { initResult: { hostCapabilities: {}, hostContext: { theme: 'dark' } } },
+      });
+
+      expect(classes.has('theme-dark')).toBe(true);
+      expect(classes.has('theme-light')).toBe(false);
+
+      // A partial host-context-changed update with no theme field is a no-op.
+      windowListeners.message[0]({
+        source: parent,
+        origin: 'null',
+        data: { jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: {} },
+      });
+      expect(classes.has('theme-dark')).toBe(true);
+
+      windowListeners.message[0]({
+        source: parent,
+        origin: 'null',
+        data: { jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'light' } },
+      });
+      expect(classes.has('theme-light')).toBe(true);
+      expect(classes.has('theme-dark')).toBe(false);
+    });
+
+    it('stays fully on the ChatGPT path when window.openai exists, even with a bridge host present', async () => {
+      const calls: string[] = [];
+      const openai = {
+        theme: 'light',
+        async callTool(name: string) {
+          calls.push(name);
+          if (name === 'refresh_leagues') {
+            return {
+              success: true,
+              results: { espn: { platform: 'espn', status: 'success', details: { added: 1 } } },
+            };
+          }
+          return SAMPLE_SESSION;
+        },
+      };
+      const { exports, elements, postedMessages, classes, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        openai,
+        bridge: {
+          initResult: { hostCapabilities: { serverTools: true, openLinks: true }, hostContext: { theme: 'dark' } },
+        },
+      });
+
+      // The bridge host answered with a dark hostContext, but window.openai
+      // exists, so window.openai.theme wins per the FLA-426 design decision.
+      expect(classes.has('theme-dark')).toBe(false);
+      expect(classes.has('theme-light')).toBe(true);
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+      // Let the queued size-change notification(s) from render()/setRefreshStatus() flush.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(calls).toEqual(['refresh_leagues', 'get_user_session']);
+      expect(elements['refresh-status'].innerHTML).toBe('Leagues refreshed.');
+
+      // This openai stub has no openExternal or openUrl, and the bridge host
+      // advertises openLinks, but window.openai's presence rules the bridge
+      // out entirely for links exactly as it does for tool calls: the edit
+      // link falls back to the native window.open, never ui/open-link.
+      const { state: editState, event: editEvent } = clickEvent();
+      elements['edit-link'].listeners.click[0](editEvent);
+      expect(editState.prevented).toBe(true);
+      expect(openedTabs).toEqual(['https://flaim.app/leagues?from=widget']);
+
+      // The credit link's handler only intercepts via window.openai.openExternal
+      // or the bridge; with neither available here, it leaves the native
+      // anchor alone.
+      const { state: creditState, event: creditEvent } = clickEvent();
+      elements['yahoo-link'].listeners.click[0](creditEvent);
+      expect(creditState.prevented).toBe(false);
+
+      // Only the handshake and the widget's own size notifications were ever
+      // posted: no tools/call for the refresh, no ui/open-link for either
+      // link click above.
+      expect(new Set(postedMessages.map((message) => message.method))).toEqual(
+        new Set(['ui/initialize', 'ui/notifications/initialized', 'ui/notifications/size-changed'])
+      );
+    });
+
+    describe('links', () => {
+      it('routes the edit link through the bridge when openLinks is available', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        const { state, event } = clickEvent();
+
+        elements['edit-link'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(true);
+        const openLinkMessage = postedMessages.find((message) => message.method === 'ui/open-link');
+        expect(openLinkMessage?.params).toEqual({ url: 'https://flaim.app/leagues?from=widget' });
+      });
+
+      it('routes a provider credit link through the bridge when openLinks is available', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        const { state, event } = clickEvent();
+
+        elements['yahoo-link'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(true);
+        const openLinkMessage = postedMessages.find((message) => message.method === 'ui/open-link');
+        expect(openLinkMessage?.params).toEqual({ url: 'https://sports.yahoo.com/fantasy/' });
+      });
+
+      it('routes the "Open leagues" status link through the bridge when openLinks is available', async () => {
+        const { elements, exports, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            respond() {
+              return { error: { code: -32000, message: 'boom' } };
+            },
+          },
+        });
+        // Trigger a failure so #refresh-status carries the "Open leagues" link.
+        await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+        expect(elements['refresh-status'].innerHTML).toContain('Open leagues');
+
+        const { state, event } = clickEvent();
+        (event as { target?: unknown }).target = { tagName: 'A' };
+        elements['refresh-status'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(true);
+        const openLinkMessages = postedMessages.filter((message) => message.method === 'ui/open-link');
+        expect(openLinkMessages).toHaveLength(1);
+        expect(openLinkMessages[0].params).toEqual({ url: 'https://flaim.app/leagues?from=widget' });
+      });
+
+      it('ignores a click on #refresh-status that did not land on the anchor', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        const { event } = clickEvent();
+        (event as { target?: unknown }).target = { tagName: 'DIV' };
+
+        elements['refresh-status'].listeners.click[0](event);
+
+        expect(postedMessages.filter((message) => message.method === 'ui/open-link')).toHaveLength(0);
+      });
+
+      it('falls back to window.open when the bridge open-link call reports isError', async () => {
+        const { elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            respond() {
+              return { result: { isError: true } };
+            },
+          },
+        });
+        const { event } = clickEvent();
+
+        elements['yahoo-link'].listeners.click[0](event);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(openedTabs).toEqual(['https://sports.yahoo.com/fantasy/']);
+      });
+
+      it('falls back to window.open when the bridge open-link call times out', async () => {
+        vi.useFakeTimers();
+        try {
+          const { elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+            bridge: { respond: () => undefined },
+          });
+          const { event } = clickEvent();
+
+          elements['yahoo-link'].listeners.click[0](event);
+          await vi.advanceTimersByTimeAsync(15000);
+
+          expect(openedTabs).toEqual(['https://sports.yahoo.com/fantasy/']);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('leaves the native anchor alone without the openLinks capability, even with a bridge host present', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: { initResult: { hostCapabilities: { serverTools: true } } },
+        });
+        const { state, event } = clickEvent();
+
+        elements['yahoo-link'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(false);
+        expect(postedMessages.filter((message) => message.method === 'ui/open-link')).toHaveLength(0);
+      });
     });
   });
 
@@ -1029,6 +1502,313 @@ describe('user session widget script', () => {
       );
       expect(sizeMessages).toHaveLength(1);
       expect(sizeMessages[0].params).not.toEqual({ width: 0, height: 0 });
+    });
+  });
+
+  // Golden differential (FLA-426 cross-model review follow-up): the targeted
+  // bridge tests above assert specific behaviors one at a time; this suite
+  // instead runs the exact pre-FLA-426 script and the current script through
+  // the same fake ChatGPT-with-a-bridge-host environment and diffs their full
+  // ordered traces, so a change in call order, a duplicate call, or a
+  // regression in an untouched link/failure path would show up even if no
+  // single targeted assertion happens to catch it.
+  //
+  // Fixture choice: fixtures/pre-fla-426-user-session-widget-v4.html is the
+  // exact v4 body origin/main served immediately before FLA-426 (see the
+  // comment in that file for how it was produced). It holds the full HTML,
+  // not just the extracted <script>, so it works with loadWidgetScript()
+  // completely unmodified — the same "build the script body the same way the
+  // tests build it today" extraction every other test in this file already
+  // relies on. Only v4 is needed: none of the cases below (initial render,
+  // refresh, edit link, status link, Yahoo credit link, hidden widget) probe
+  // link-permission variance across widget URIs, which is what v1 vs v4
+  // differ by.
+  describe('golden differential: pre-FLA-426 baseline vs current (ChatGPT + bridge host present)', () => {
+    const OLD_WIDGET_HTML = readFileSync(
+      new URL('./fixtures/pre-fla-426-user-session-widget-v4.html', import.meta.url),
+      'utf8',
+    );
+
+    // Every capability the widget ever checks, plus a hostContext theme that
+    // conflicts with window.openai.theme below. window.openai must win on
+    // both scripts: the old script has no bridge concept at all to prefer it
+    // over, and the new script's hostCapabilityReady() gate must produce that
+    // identical outcome whenever window.openai exists.
+    const BRIDGE_HOST = {
+      initResult: {
+        hostCapabilities: { serverTools: true, openLinks: true },
+        hostContext: { theme: 'dark' as const },
+      },
+    };
+
+    interface CallLogEntry {
+      name: string;
+      args: unknown;
+    }
+
+    interface OpenedEntry {
+      kind: 'window.open' | 'openExternal';
+      url: unknown;
+    }
+
+    /**
+     * What a single click actually did: whether the handler suppressed the
+     * native action, the clicked anchor's own href/target at that moment, and
+     * — the part a Set-of-methods or a "did it call preventDefault" check
+     * alone would miss — which of the two ways the resulting navigation
+     * happens: the browser's native anchor navigation (unprevented) or a
+     * specific scripted call (prevented). A regression that started calling
+     * preventDefault without ever opening anything, or vice versa, changes
+     * `navigation` even when `defaultPrevented` alone would not.
+     */
+    interface ClickOutcome {
+      defaultPrevented: boolean;
+      href: unknown;
+      target: unknown;
+      navigation:
+        | { kind: 'native'; href: unknown; target: unknown }
+        | { kind: 'window.open' | 'openExternal'; url: unknown }
+        | { kind: 'none' };
+    }
+
+    interface Trace {
+      calls: CallLogEntry[];
+      posted: Array<{ method: unknown; params: unknown }>;
+      opened: OpenedEntry[];
+      dom: {
+        content: string;
+        status: string;
+        statusClass: string;
+        buttonDisabled: boolean;
+        buttonWord: string;
+        /** render()'s hide/show toggle on the `.widget` element itself — the
+         * dimension the hidden-widget case actually needs to compare, and
+         * cheap to check on every other case too. */
+        widgetDisplay: string;
+      };
+      theme: string[];
+      /** Present only for the scenarios below that click something. */
+      click?: ClickOutcome;
+    }
+
+    /** A window.openai stub whose callTool is scenario-specific; openExternal
+     * always succeeds synchronously (a normal ChatGPT host), recording into
+     * `opened` so link scenarios trace through the same host path both
+     * scripts have always used, unaffected by the new bridge branch (which
+     * only fires when window.openai is absent). */
+    function buildOpenai(
+      calls: CallLogEntry[],
+      opened: OpenedEntry[],
+      callTool?: (name: string, args: unknown) => unknown,
+    ) {
+      return {
+        theme: 'light',
+        openExternal(args: unknown) {
+          opened.push({ kind: 'openExternal', url: (args as { href?: unknown } | undefined)?.href });
+          return true;
+        },
+        async callTool(name: string, args: unknown) {
+          calls.push({ name, args });
+          if (!callTool) return SAMPLE_SESSION;
+          return callTool(name, args);
+        },
+      };
+    }
+
+    function captureDom(harness: WidgetHarness): Trace['dom'] {
+      const { elements } = harness;
+      return {
+        content: elements.content.innerHTML,
+        status: elements['refresh-status'].innerHTML,
+        statusClass: elements['refresh-status'].className,
+        buttonDisabled: !!elements['refresh-button'].disabled,
+        buttonWord: elements['refresh-word'].textContent,
+        widgetDisplay: harness.widgetEl.style.display ?? '',
+      };
+    }
+
+    /** Pulls href/target off the first `<a ...>` tag in an innerHTML string —
+     * used for the status-link case, whose anchor is injected HTML rather
+     * than one of the harness's static elements. */
+    function extractAnchor(html: string): { href?: string; target?: string } | undefined {
+      const tag = html.match(/<a\b([^>]*)>/i)?.[1];
+      if (tag === undefined) return undefined;
+      return {
+        href: tag.match(/\bhref="([^"]*)"/)?.[1],
+        target: tag.match(/\btarget="([^"]*)"/)?.[1],
+      };
+    }
+
+    function classifyNavigation(
+      prevented: boolean,
+      href: unknown,
+      target: unknown,
+      opened: OpenedEntry[],
+      openedBefore: number,
+      openedTabs: string[],
+      tabsBefore: number,
+    ): ClickOutcome['navigation'] {
+      if (!prevented) return { kind: 'native', href, target };
+      if (opened.length > openedBefore) return { kind: 'openExternal', url: opened[opened.length - 1].url };
+      if (openedTabs.length > tabsBefore) return { kind: 'window.open', url: openedTabs[openedTabs.length - 1] };
+      return { kind: 'none' };
+    }
+
+    /**
+     * Clicks `el` (or a no-op when it has no registered listener at all —
+     * true of the old script's status-link anchor, which never gets a
+     * listener) and records the full click outcome: whether the default was
+     * prevented, the anchor's own href/target, and which of native
+     * navigation or a specific scripted call would actually run. `overrides`
+     * lets the status-link case supply the injected anchor's real
+     * href/target (read from its innerHTML, not a harness element) and a
+     * synthetic `event.target` for the delegated listener's `tagName` check.
+     */
+    function clickAndRecord(
+      harness: WidgetHarness,
+      opened: OpenedEntry[],
+      el: FakeElement,
+      listener: ((event: unknown) => unknown) | undefined,
+      overrides: { href?: unknown; target?: unknown; eventTarget?: unknown } = {},
+    ): ClickOutcome {
+      const { state, event } = clickEvent();
+      if (overrides.eventTarget !== undefined) (event as { target?: unknown }).target = overrides.eventTarget;
+      const href = 'href' in overrides ? overrides.href : el.href;
+      const target = 'target' in overrides ? overrides.target : el.target;
+      const openedBefore = opened.length;
+      const tabsBefore = harness.openedTabs.length;
+      if (listener) listener(event);
+      const navigation = classifyNavigation(
+        state.prevented,
+        href,
+        target,
+        opened,
+        openedBefore,
+        harness.openedTabs,
+        tabsBefore,
+      );
+      return { defaultPrevented: state.prevented, href, target, navigation };
+    }
+
+    async function runScenario(
+      html: string,
+      callTool: ((name: string, args: unknown) => unknown) | undefined,
+      openaiExtra: Record<string, unknown>,
+      act: (harness: WidgetHarness, opened: OpenedEntry[], recordClick: (outcome: ClickOutcome) => void) => Promise<void> | void,
+    ): Promise<Trace> {
+      const calls: CallLogEntry[] = [];
+      const opened: OpenedEntry[] = [];
+      const openai = { ...buildOpenai(calls, opened, callTool), ...openaiExtra };
+      const harness = loadWidgetScript(html, { openai, bridge: BRIDGE_HOST });
+      let click: ClickOutcome | undefined;
+
+      await act(harness, opened, (outcome) => { click = outcome; });
+      // Flush any size-changed notification queued via setTimeout(fn, 0) (no
+      // requestAnimationFrame in this harness), so every scenario captures a
+      // settled trace regardless of which internal path queued it.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      // clickAndRecord() only ever reads harness.openedTabs to classify a
+      // click's navigation — it never pushes into `opened` itself — so this
+      // merge is the sole source of 'window.open' entries and can't double count.
+      for (const url of harness.openedTabs) opened.push({ kind: 'window.open', url });
+
+      return {
+        calls,
+        posted: harness.postedMessages.map((message) => ({ method: message.method, params: message.params })),
+        opened,
+        dom: captureDom(harness),
+        theme: Array.from(harness.classes).sort(),
+        ...(click ? { click } : {}),
+      };
+    }
+
+    const REFRESH_SUCCESS_RESULT = {
+      success: true,
+      results: { espn: { platform: 'espn', status: 'success', details: { added: 2 } } },
+    };
+
+    async function refresh(harness: WidgetHarness) {
+      await (harness.exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+    }
+
+    const scenarios: Array<{
+      name: string;
+      callTool?: (name: string, args: unknown) => unknown;
+      openaiExtra?: Record<string, unknown>;
+      act: (harness: WidgetHarness, opened: OpenedEntry[], recordClick: (outcome: ClickOutcome) => void) => Promise<void> | void;
+    }> = [
+      {
+        name: '(a) initial render',
+        openaiExtra: { toolOutput: SAMPLE_SESSION },
+        act: () => {},
+      },
+      {
+        name: '(b) refresh success',
+        callTool: (name) => (name === 'refresh_leagues' ? REFRESH_SUCCESS_RESULT : SAMPLE_SESSION),
+        act: refresh,
+      },
+      {
+        name: '(c) refresh where refresh_leagues returns isError',
+        callTool: (name) => (name === 'refresh_leagues' ? { isError: true } : SAMPLE_SESSION),
+        act: refresh,
+      },
+      {
+        name: '(d) refresh where callTool throws',
+        callTool: () => {
+          throw new Error('transport failure');
+        },
+        act: refresh,
+      },
+      {
+        name: '(e) edit link click',
+        act: (harness, opened, recordClick) => {
+          const el = harness.elements['edit-link'];
+          recordClick(clickAndRecord(harness, opened, el, el.listeners.click[0]));
+        },
+      },
+      {
+        name: '(f) status link after a failure',
+        callTool: () => {
+          throw new Error('transport failure');
+        },
+        act: async (harness, opened, recordClick) => {
+          await refresh(harness);
+          // The old script never attaches a listener here (it relies on the
+          // plain anchor's own navigation); the new script attaches one
+          // unconditionally but no-ops whenever window.openai exists. Either
+          // way, href/target are read straight off the injected anchor
+          // itself (not a harness element), so a regression that broke or
+          // blanked that markup shows up here even though neither script
+          // currently does anything scripted with this click.
+          const anchor = extractAnchor(harness.elements['refresh-status'].innerHTML);
+          const el = harness.elements['refresh-status'];
+          recordClick(
+            clickAndRecord(harness, opened, el, el.listeners.click?.[0], {
+              href: anchor?.href,
+              target: anchor?.target,
+              eventTarget: { tagName: 'A' },
+            }),
+          );
+        },
+      },
+      {
+        name: '(g) Yahoo credit link click',
+        act: (harness, opened, recordClick) => {
+          const el = harness.elements['yahoo-link'];
+          recordClick(clickAndRecord(harness, opened, el, el.listeners.click[0]));
+        },
+      },
+      {
+        name: '(h) hidden-widget payload',
+        openaiExtra: { toolOutput: { allLeagues: [], widget: { hidden: true } } },
+        act: () => {},
+      },
+    ];
+
+    it.each(scenarios)('$name produces an identical trace on both scripts', async ({ callTool, openaiExtra, act }) => {
+      const oldTrace = await runScenario(OLD_WIDGET_HTML, callTool, openaiExtra ?? {}, act);
+      const newTrace = await runScenario(USER_SESSION_WIDGET_HTML, callTool, openaiExtra ?? {}, act);
+      expect(newTrace).toEqual(oldTrace);
     });
   });
 });

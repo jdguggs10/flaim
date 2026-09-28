@@ -514,8 +514,8 @@ describe('fantasy-mcp tools', () => {
   });
 
   it('user session widget refreshes through callTool and reloads session output', () => {
-    expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('refresh_leagues', {})");
-    expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('get_user_session', {})");
+    expect(USER_SESSION_WIDGET_HTML).toContain("callTool('refresh_leagues', {})");
+    expect(USER_SESSION_WIDGET_HTML).toContain("callTool('get_user_session', {})");
     expect(USER_SESSION_WIDGET_HTML).toContain('extractRefreshResult');
     expect(USER_SESSION_WIDGET_HTML).toContain('refreshResult && refreshResult.isError');
     expect(USER_SESSION_WIDGET_HTML).toContain('classifyRefreshResult(refreshPayload)');

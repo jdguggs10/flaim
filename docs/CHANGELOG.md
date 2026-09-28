@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### League Widget Refresh, Theme, and Links Work in Claude (FLA-426)
+
+- **Added**: the league widget now works through the MCP Apps bridge, not just `window.openai`. When the widget's `ui/initialize` handshake reply says the host supports it, the refresh button calls `refresh_leagues` and `get_user_session` over `tools/call`, the edit link, the "Open leagues" status link, and the provider credit links open through `ui/open-link`, and the widget adopts the host's theme from `hostContext` and any later `ui/notifications/host-context-changed` update. A bridge call that errors, reports `isError`, or never replies within its timeout falls back to the same "Refresh failed. Open leagues." or "Open Flaim to manage leagues." text the ChatGPT path already used, and a late reply after a timeout is dropped rather than acted on.
+- **Unchanged**: whenever `window.openai` exists, the widget stays on that path for data, theme, refresh, and links, with the exact same calls in the exact same order as before. No published widget resource's `_meta` changed, and no widget body gained a new `https://` literal, so the existing strict `_meta` and body-origin tests still pass unmodified. The hide-widget flag (`widget.hidden`) keeps working across every published URI.
+
 ### Privacy and Terms Describe the AI App Data Flow (FLA-268)
 
 - **Added**: a new "Your AI App" section on the privacy policy explains what league data Flaim sends to a connected AI app (roster, matchups, standings, available players, recent moves, league rules, and history), that it only happens when the user asks, through a prompt or a control such as the league widget's refresh button, and that Flaim never sends the AI app ESPN session credentials, Yahoo tokens, or Flaim account details. It also says a Sleeper refresh result includes the connected Sleeper username, which Sleeper shows publicly.

@@ -1,302 +1,22 @@
-// workers/fantasy-mcp/src/widgets/user-session-widget.ts
+<!--
+Golden fixture (FLA-426 review follow-up): the v4 user-session widget body
+exactly as origin/main served it at commit 8b46457b1f266af5294650d1167a4bb6b98778cf,
+the last commit before the FLA-426 MCP Apps bridge work. This is the
+pre-FLA-426 baseline for the differential test in
+tests/integration/user-session-widget-script.test.ts, which runs this body
+and the current USER_SESSION_WIDGET_HTML through the same fake ChatGPT
+environment and asserts their traces (calls, posted messages, opened URLs,
+rendered DOM, applied theme) are identical.
 
-/**
- * Self-contained HTML widget for the get_user_session tool.
- * Renders the user's fantasy leagues inline through the MCP Apps bridge, with
- * ChatGPT window.openai compatibility as a fallback.
- *
- * Host detection: whenever window.openai exists, the widget stays on the
- * ChatGPT path everywhere (data, theme, tool calls, links), unchanged. The
- * MCP Apps bridge (postMessage tools/call and ui/open-link) is only used when
- * window.openai is absent, and only once the ui/initialize reply has
- * advertised the matching host capability. See hostCapabilityReady() in the
- * emitted script.
- *
- * Design constraints:
- * - No external scripts, fonts, images, or stylesheets (CSP-safe for iframe sandbox)
- * - 353px maximum width, shrinking to its container (ChatGPT text response template)
- * - System fonts only
- * - Light and dark palettes: window.openai.theme when window.openai exists,
- *   otherwise the MCP Apps ui/initialize/host-context-changed theme, with a
- *   prefers-color-scheme fallback
- * - Aligns with flaim.app branding
- *
- * Data access - in order of priority:
- * 1. MCP Apps postMessage JSON-RPC ui/notifications/tool-result
- * 2. openai:set_globals CustomEvent -> window.openai.toolOutput
- * 3. window.openai.toolOutput on immediate/DOMContentLoaded (may already be set)
- * 4. Manual refresh button: window.openai.callTool when window.openai exists,
- *    otherwise an MCP Apps bridge tools/call once the host capability is
- *    confirmed, otherwise the "Open Flaim to manage leagues" fallback.
- *
- * Links: the edit link, empty-state link, refresh fallback link, and provider
- * credit links open through window.openai.openExternal/openUrl when present,
- * an MCP Apps bridge ui/open-link when the host capability is confirmed, or
- * the native anchor / window.open otherwise.
- *
- * References:
- * - https://developers.openai.com/apps-sdk/build/chatgpt-ui/
- * - https://developers.openai.com/apps-sdk/build/mcp-server/
- */
-/**
- * Versioning rule:
- *
- * A published widget URI is a cache key for ChatGPT clients. Both the
- * read-result `_meta` (`ui.csp`, `openai/widgetDescription`, and
- * `openai/widgetCSP`) declared per URI in `../mcp/server.ts` and the body
- * served at that URI must stay backward compatible with what clients already
- * hold.
- *
- * The *body* served at a published URI may change, as long as the change stays
- * within the metadata that URI already declares; cached client copies pick the
- * new body up on their own. A body that would need metadata its URI does not
- * declare — for example a new redirect, connect, or resource domain — gets a
- * new URI instead.
- *
- * That is why there are exactly three bodies for four URIs, one per set of
- * link permissions. v1 and v2 declare only https://flaim.app as a redirect
- * domain, so their body names the data providers as plain text. v3 additionally
- * declares https://sports.yahoo.com, so its body links "Yahoo Fantasy" to the
- * official Yahoo Fantasy site. v4 additionally declares https://www.espn.com
- * and https://sleeper.com, so its body links all three provider credits.
- */
-export const LEGACY_USER_SESSION_WIDGET_URI = 'ui://widget/user-session.html';
-export const V2_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v2.html';
-export const V3_USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v3.html';
-export const USER_SESSION_WIDGET_URI = 'ui://widget/user-session-v4.html';
-
-export type RefreshResultKind =
-  | 'success'
-  | 'unchanged'
-  | 'partial'
-  | 'retry'
-  | 'reconnect'
-  | 'failure';
-
-export interface RefreshResultClassification {
-  kind: RefreshResultKind;
-  message: string;
-  reloadSession: boolean;
-  showLeaguesLink?: boolean;
-}
-
-/** Classify the auth-worker batch response without trusting aggregate success alone. */
-export function classifyRefreshResult(payload: unknown): RefreshResultClassification {
-  const fallback = { kind: 'failure', message: 'Refresh failed.', reloadSession: false } as const;
-  if (!payload || typeof payload !== 'object') return fallback;
-
-  const batch = payload as Record<string, unknown>;
-  if (batch.status === 429) {
-    return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
-  }
-  const rawResults = batch.results;
-  if (!rawResults || typeof rawResults !== 'object' || Array.isArray(rawResults)) return fallback;
-
-  const results = Object.values(rawResults as Record<string, unknown>).filter(
-    (value): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value),
-  );
-  if (results.length === 0) return fallback;
-
-  const successes = results.filter((result) => result.status === 'success');
-  const skipped = results.filter((result) => result.status === 'skipped');
-  const failed = results.filter((result) => result.status === 'error');
-  const textFor = (result: Record<string, unknown>) =>
-    `${String(result.error || '')} ${String(result.error_description || '')}`.toLowerCase();
-  const explicitlyRequiresReconnect = results.some((result) =>
-    result.reconnectRequired === true || result.requiresReconnect === true || result.reconnect_required === true,
-  );
-  const reconnectRequired = explicitlyRequiresReconnect || failed.some((result) => {
-    const text = textFor(result);
-    return result.httpStatus === 401 || result.httpStatus === 403 ||
-      /auth|credential|connect|expired|invalid.token|revoked/.test(text);
-  });
-  const retryRequired = failed.some((result) => {
-    const text = textFor(result);
-    return result.httpStatus === 429 || !!result.retryAfter || /rate.?limit|too many|try again/.test(text);
-  });
-
-  if (successes.length > 0) {
-    // A successful provider result is not enough: the batch contract must also
-    // explicitly confirm success before the widget reports a positive outcome.
-    if (batch.success !== true) return fallback;
-    const changeKeys = new Set(['added', 'refreshed', 'created', 'updated', 'saved']);
-    let changed = false;
-    const inspectCounts = (value: unknown): boolean => {
-      let sawChangeCount = false;
-      if (!value || typeof value !== 'object') return false;
-      for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-        if (changeKeys.has(key) && typeof nested === 'number') {
-          sawChangeCount = true;
-          if (nested > 0) changed = true;
-        } else if (typeof nested === 'object') {
-          sawChangeCount = inspectCounts(nested) || sawChangeCount;
-        }
-      }
-      return sawChangeCount;
-    };
-    let allSuccessesHaveChangeCounts = true;
-    successes.forEach((result) => {
-      if (result.platform !== 'espn' || !inspectCounts(result.details)) {
-        allSuccessesHaveChangeCounts = false;
-      }
-    });
-
-    if (failed.length > 0 || explicitlyRequiresReconnect) {
-      const partialMessage = changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
-      return {
-        kind: 'partial',
-        message: reconnectRequired
-          ? `${partialMessage} Reconnect a provider.`
-          : retryRequired
-            ? `${partialMessage} Try again later.`
-            : partialMessage,
-        reloadSession: true,
-        ...(reconnectRequired ? { showLeaguesLink: true } : {}),
-      };
-    }
-
-    if (changed) {
-      return { kind: 'success', message: 'Leagues refreshed.', reloadSession: true };
-    }
-    if (!allSuccessesHaveChangeCounts) {
-      return { kind: 'success', message: 'Refresh complete.', reloadSession: true };
-    }
-    return { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true };
-  }
-
-  if (reconnectRequired) {
-    return { kind: 'reconnect', message: 'Reconnect a league provider.', reloadSession: false };
-  }
-  if (retryRequired) {
-    return { kind: 'retry', message: 'Refresh limited. Try again later.', reloadSession: false };
-  }
-  if (skipped.length === results.length) {
-    return { kind: 'unchanged', message: 'No connected leagues to refresh.', reloadSession: false };
-  }
-  return fallback;
-}
-
-/**
- * Provider attribution: surfaces that display Yahoo Fantasy data credit
- * "Fantasy data provided by Yahoo Fantasy". ESPN and Sleeper are named
- * voluntarily so the three providers read consistently. Each credit is linked
- * only where the URI's published widget CSP allows that provider's domain as a
- * redirect domain, so the plain-text form stays the fallback for older URIs.
- */
-const YAHOO_ATTRIBUTION_PLAIN = 'Yahoo Fantasy';
-const YAHOO_ATTRIBUTION_LINKED =
-  '<a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>';
-const ESPN_ATTRIBUTION_PLAIN = 'ESPN';
-const ESPN_ATTRIBUTION_LINKED =
-  '<a class="credit" href="https://www.espn.com/fantasy/" target="_blank" rel="noopener noreferrer" id="espn-link">ESPN</a>';
-const SLEEPER_ATTRIBUTION_PLAIN = 'Sleeper';
-const SLEEPER_ATTRIBUTION_LINKED =
-  '<a class="credit" href="https://sleeper.com/" target="_blank" rel="noopener noreferrer" id="sleeper-link">Sleeper</a>';
-
-/**
- * Click handling for one provider credit link, emitted into the widget script.
- * `openExternal` is the preferred path where the host exposes it; everywhere
- * else the native anchor already works, so the default action is left alone.
- */
-function creditLinkScript(providerLabel: string, varName: string, elementId: string): string {
-  return `  // Present only on bodies whose published widget CSP allows the ${providerLabel}
-  // redirect domain. The href is read from the anchor so no other body carries
-  // an external URL.
-  var ${varName} = document.getElementById('${elementId}');
-  if (${varName}) {
-    ${varName}.addEventListener('click', function(e) {
-      // Only intercept where the host exposes openExternal, or where the MCP
-      // Apps bridge has confirmed it can open links. Everywhere else (other
-      // MCP Apps hosts, the HTTP fallback route) the native anchor is the
-      // working path, so leave the default action alone.
-      // Deliberately no location.href fallback on this link: it would
-      // navigate the widget iframe away from the widget.
-      var host = null;
-      try { host = window.openai; } catch (_) {}
-      if (!host && canOpenLinks()) {
-        if (e && e.preventDefault) e.preventDefault();
-        openLinkViaBridge(${varName}.href);
-        return;
-      }
-      if (!host || typeof host.openExternal !== 'function') return;
-      if (e && e.preventDefault) e.preventDefault();
-      var opened = host.openExternal({ href: ${varName}.href });
-      if (opened && typeof opened.catch === 'function') {
-        opened.catch(function() { openNewTab(${varName}.href); });
-      }
-      if (opened === false) openNewTab(${varName}.href);
-    });
-  }`;
-}
-
-/**
- * Inline SVG paths from Tabler Icons v3.41.1 (MIT), copyright Paweł Kuna.
- * The widget stays self-contained, so it needs no resource-domain allowance.
- */
-const TABLER_LICENSE_HTML = `<!--
-Tabler Icons v3.41.1
-Copyright (c) 2020-2026 Paweł Kuna
-
-MIT License
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
--->`;
-
-export interface UserSessionWidgetOptions {
-  /**
-   * Link the Yahoo Fantasy credit to the official Yahoo Fantasy site. Only
-   * enable this for a URI whose published widget CSP allows
-   * https://sports.yahoo.com as a redirect domain.
-   */
-  linkYahoo: boolean;
-  /**
-   * Link the ESPN credit to the official ESPN Fantasy site. Only enable this
-   * for a URI whose published widget CSP allows https://www.espn.com as a
-   * redirect domain.
-   */
-  linkEspn: boolean;
-  /**
-   * Link the Sleeper credit to the official Sleeper site. Only enable this for
-   * a URI whose published widget CSP allows https://sleeper.com as a redirect
-   * domain.
-   */
-  linkSleeper: boolean;
-}
-
-/**
- * Build the widget document. The variants differ only in the provider credits:
- * each credit is a link where the URI's published widget CSP allows that
- * provider's redirect domain, and plain text otherwise.
- */
-export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): string {
-  const yahooCredit = options.linkYahoo ? YAHOO_ATTRIBUTION_LINKED : YAHOO_ATTRIBUTION_PLAIN;
-  const espnCredit = options.linkEspn ? ESPN_ATTRIBUTION_LINKED : ESPN_ATTRIBUTION_PLAIN;
-  const sleeperCredit = options.linkSleeper ? SLEEPER_ATTRIBUTION_LINKED : SLEEPER_ATTRIBUTION_PLAIN;
-  // The Yahoo handler is always emitted (its guard no-ops where the anchor is
-  // absent), so every body's script differs only by which of the ESPN and
-  // Sleeper handlers, emitted only where they can fire, are also present.
-  const creditLinkHandlers = [
-    creditLinkScript('Yahoo', 'yahooLink', 'yahoo-link'),
-    ...(options.linkEspn ? [creditLinkScript('ESPN', 'espnLink', 'espn-link')] : []),
-    ...(options.linkSleeper ? [creditLinkScript('Sleeper', 'sleeperLink', 'sleeper-link')] : []),
-  ].join('\n');
-  return `<!DOCTYPE html>
+Generated, not hand-edited: extracted with
+`git show 8b46457b:workers/fantasy-mcp/src/widgets/user-session-widget.ts`,
+then produced by calling that commit's own
+`buildUserSessionWidgetHtml({ linkYahoo: true, linkEspn: true, linkSleeper: true })`
+(esbuild-transpiled and executed, not transcribed by hand) to get its
+USER_SESSION_WIDGET_HTML. Do not hand-edit this file; regenerate it the same
+way only if the baseline itself intentionally moves.
+-->
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -648,7 +368,7 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
     <div class="loading">Loading&hellip;</div>
   </div>
   <footer class="footer">
-    <button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button> Fantasy data provided by ${yahooCredit}, ${espnCredit}, and ${sleeperCredit}.
+    <button type="button" class="refresh" id="refresh-button"><span class="refresh-word" id="refresh-word">Refresh</span> your leagues, seasons, and team names.</button> Fantasy data provided by <a class="credit" href="https://sports.yahoo.com/fantasy/" target="_blank" rel="noopener noreferrer" id="yahoo-link">Yahoo Fantasy</a>, <a class="credit" href="https://www.espn.com/fantasy/" target="_blank" rel="noopener noreferrer" id="espn-link">ESPN</a>, and <a class="credit" href="https://sleeper.com/" target="_blank" rel="noopener noreferrer" id="sleeper-link">Sleeper</a>.
     <div class="status" id="refresh-status" role="status" aria-live="polite"></div>
   </footer>
 </div>
@@ -676,14 +396,6 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   // (not sticky), so a refresh that flips the preference back off re-shows
   // the widget and resumes real size reporting.
   var widgetHidden = false;
-  // MCP Apps bridge state (Claude parity, FLA-426). bridgeReady flips true
-  // once the host answers ui/initialize; hostCaps holds that reply's
-  // hostCapabilities. bridgeSeq/pending back bridgeRequest()'s id-keyed
-  // promises for tools/call and ui/open-link.
-  var bridgeReady = false;
-  var hostCaps = {};
-  var bridgeSeq = 0;
-  var pending = Object.create(null);
   function sendZeroSize() {
     postToParent({
       jsonrpc: '2.0',
@@ -890,54 +602,6 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
     if (theme) root.classList.add('theme-' + theme);
   }
 
-  // MCP Apps bridge (Claude parity, FLA-426): a request/reply helper over the
-  // same postMessage transport the lifecycle handshake already uses.
-  // bridgeRequest() posts a JSON-RPC request with a unique id, and the
-  // message handler below resolves or rejects the matching pending entry
-  // when a reply with that id arrives. A late reply (after the timeout
-  // deleted the entry) is silently dropped.
-  function bridgeRequest(method, params, timeoutMs) {
-    return new Promise(function(resolve, reject) {
-      var id = initId + '-' + (++bridgeSeq);
-      var timer = setTimeout(function() {
-        delete pending[id];
-        reject(new Error('Bridge request timed out'));
-      }, timeoutMs);
-      pending[id] = { resolve: resolve, reject: reject, timer: timer };
-      postToParent({
-        jsonrpc: '2.0',
-        id: id,
-        method: method,
-        params: params,
-      });
-    });
-  }
-
-  // The single gate for every bridge-backed feature: never on the ChatGPT
-  // path, and only once the host's ui/initialize reply has confirmed it
-  // supports the capability in question. Relaxing this later (for example to
-  // "handshake completed" once Claude's real init reply is confirmed) only
-  // means changing this one function.
-  function hostCapabilityReady(name) {
-    return !window.openai && bridgeReady && !!hostCaps[name];
-  }
-
-  function canCallServerTools() {
-    return hostCapabilityReady('serverTools');
-  }
-
-  function canOpenLinks() {
-    return hostCapabilityReady('openLinks');
-  }
-
-  function openLinkViaBridge(url) {
-    bridgeRequest('ui/open-link', { url: url }, 15000).then(function(result) {
-      if (result && result.isError) openNewTab(url);
-    }).catch(function() {
-      openNewTab(url);
-    });
-  }
-
   function openNewTab(url) {
     try {
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -951,10 +615,6 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
         return false;
       }
     } catch (_) {}
-    if (!window.openai && canOpenLinks()) {
-      openLinkViaBridge(url);
-      return false;
-    }
     try {
       window.open(url, '_blank', 'noopener,noreferrer');
       return false;
@@ -1139,20 +799,72 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   if (editLink) editLink.addEventListener('click', openLeagues);
   var refreshButton = document.getElementById('refresh-button');
   if (refreshButton) refreshButton.addEventListener('click', refreshLeagues);
-  // The "Open leagues" link inside #refresh-status is injected as innerHTML
-  // by setRefreshStatus(), so it needs a delegated listener rather than one
-  // bound to the anchor directly.
-  var refreshStatusEl = document.getElementById('refresh-status');
-  if (refreshStatusEl) {
-    refreshStatusEl.addEventListener('click', function(e) {
-      if (window.openai || !canOpenLinks()) return;
-      var target = e && e.target;
-      if (!target || target.tagName !== 'A') return;
-      if (e.preventDefault) e.preventDefault();
-      openLinkViaBridge(LEAGUES_URL);
+  // Present only on bodies whose published widget CSP allows the Yahoo
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var yahooLink = document.getElementById('yahoo-link');
+  if (yahooLink) {
+    yahooLink.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: yahooLink.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(yahooLink.href); });
+      }
+      if (opened === false) openNewTab(yahooLink.href);
     });
   }
-${creditLinkHandlers}
+  // Present only on bodies whose published widget CSP allows the ESPN
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var espnLink = document.getElementById('espn-link');
+  if (espnLink) {
+    espnLink.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: espnLink.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(espnLink.href); });
+      }
+      if (opened === false) openNewTab(espnLink.href);
+    });
+  }
+  // Present only on bodies whose published widget CSP allows the Sleeper
+  // redirect domain. The href is read from the anchor so no other body carries
+  // an external URL.
+  var sleeperLink = document.getElementById('sleeper-link');
+  if (sleeperLink) {
+    sleeperLink.addEventListener('click', function(e) {
+      // Only intercept where the host exposes openExternal. Everywhere else
+      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
+      // anchor is the working path, so leave the default action alone.
+      // Deliberately no location.href fallback on this link: it would
+      // navigate the widget iframe away from the widget.
+      var host = null;
+      try { host = window.openai; } catch (_) {}
+      if (!host || typeof host.openExternal !== 'function') return;
+      if (e && e.preventDefault) e.preventDefault();
+      var opened = host.openExternal({ href: sleeperLink.href });
+      if (opened && typeof opened.catch === 'function') {
+        opened.catch(function() { openNewTab(sleeperLink.href); });
+      }
+      if (opened === false) openNewTab(sleeperLink.href);
+    });
+  }
 
   // Extract payload data from any wrapper format
   function unwrapPayload(obj) {
@@ -1192,30 +904,24 @@ ${creditLinkHandlers}
 
   async function refreshLeagues(e) {
     if (e && e.preventDefault) e.preventDefault();
-    var useBridge = canCallServerTools();
-    if (!useBridge && (!window.openai || typeof window.openai.callTool !== 'function')) {
+    if (!window.openai || typeof window.openai.callTool !== 'function') {
       setRefreshStatus('Open Flaim to manage leagues.', 'error');
       openFallbackUrl(LEAGUES_URL);
       return false;
     }
-    function callTool(name, args) {
-      return useBridge
-        ? bridgeRequest('tools/call', { name: name, arguments: args }, 120000)
-        : window.openai.callTool(name, args);
-    }
     setRefreshLoading(true);
     setRefreshStatus('Refreshing leagues...', '');
     try {
-      var refreshResult = await callTool('refresh_leagues', {});
+      var refreshResult = await window.openai.callTool('refresh_leagues', {});
       var refreshPayload = extractRefreshResult(refreshResult);
       if (refreshResult && refreshResult.isError) {
         throw new Error((refreshPayload && (refreshPayload.error_description || refreshPayload.error)) || 'Refresh failed');
       }
       var classification = classifyRefreshResult(refreshPayload);
       if (classification.reloadSession) {
-        var sessionResult = await callTool('get_user_session', {});
+        var sessionResult = await window.openai.callTool('get_user_session', {});
         var data = extract(sessionResult);
-        if (!data && window.openai && window.openai.toolOutput != null) {
+        if (!data && window.openai.toolOutput != null) {
           data = extract(window.openai.toolOutput);
         }
         if (!data) {
@@ -1261,14 +967,6 @@ ${creditLinkHandlers}
     var msg = event.data;
 
     if (msg.jsonrpc === '2.0' && msg.id === initId) {
-      if (msg.result) {
-        bridgeReady = true;
-        hostCaps = msg.result.hostCapabilities || {};
-        var hostContext = msg.result.hostContext;
-        if (!window.openai && hostContext && typeof hostContext.theme === 'string') {
-          applyTheme(hostContext.theme);
-        }
-      }
       sendInitialized();
       // FLA-277: a hidden result can post its zero size before the host has
       // answered ui/initialize. Repeat it once the handshake completes, in
@@ -1277,37 +975,9 @@ ${creditLinkHandlers}
       return;
     }
 
-    // MCP Apps bridge (Claude parity, FLA-426): a reply to a bridgeRequest()
-    // call (tools/call, ui/open-link), matched by id. Every id this widget
-    // ever sends is prefixed with initId, so any reply carrying that prefix
-    // is consumed here and never falls through to the "direct data" fallback
-    // below — including a late reply whose pending entry the timeout already
-    // deleted, which is dropped silently rather than resolved twice.
-    if (msg.jsonrpc === '2.0' && msg.id !== undefined && msg.id !== null &&
-        String(msg.id).indexOf(initId + '-') === 0) {
-      if (Object.prototype.hasOwnProperty.call(pending, msg.id)) {
-        var entry = pending[msg.id];
-        delete pending[msg.id];
-        clearTimeout(entry.timer);
-        if (msg.error) {
-          entry.reject(msg.error);
-        } else {
-          entry.resolve(msg.result);
-        }
-      }
-      return;
-    }
-
     if (msg.jsonrpc === '2.0' && msg.method === 'ui/resource-teardown') {
       if (msg.id !== undefined && msg.id !== null) {
         postToParent({ jsonrpc: '2.0', id: msg.id, result: {} });
-      }
-      return;
-    }
-
-    if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/host-context-changed') {
-      if (!window.openai && msg.params && typeof msg.params.theme === 'string') {
-        applyTheme(msg.params.theme);
       }
       return;
     }
@@ -1328,40 +998,29 @@ ${creditLinkHandlers}
   startMcpAppsLifecycle();
 })();
 </script>
-${TABLER_LICENSE_HTML}
+<!--
+Tabler Icons v3.41.1
+Copyright (c) 2020-2026 Paweł Kuna
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
 </body>
-</html>`;
-}
-
-/**
- * Body served at the v1 and v2 URIs. Their published widget CSP allows only
- * https://flaim.app as a redirect domain, so this body carries no other
- * external link.
- */
-export const LEGACY_USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({
-  linkYahoo: false,
-  linkEspn: false,
-  linkSleeper: false,
-});
-
-/**
- * Body served at the v3 URI. v3's published widget CSP also allows
- * https://sports.yahoo.com, so the Yahoo Fantasy credit is a link here; ESPN
- * and Sleeper stay plain text because v3 does not declare their domains.
- */
-export const V3_USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({
-  linkYahoo: true,
-  linkEspn: false,
-  linkSleeper: false,
-});
-
-/**
- * Body served at the v4 URI (the tool descriptor target) and at the
- * version-less HTTP fallback routes. v4's published widget CSP allows all three
- * provider domains, so every provider credit is a link here.
- */
-export const USER_SESSION_WIDGET_HTML = buildUserSessionWidgetHtml({
-  linkYahoo: true,
-  linkEspn: true,
-  linkSleeper: true,
-});
+</html>
