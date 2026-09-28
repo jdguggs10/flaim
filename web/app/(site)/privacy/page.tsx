@@ -4,7 +4,7 @@ import { Lock, Shield, User } from "lucide-react";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "Privacy policy for Flaim: read-only fantasy league analysis for ESPN, Yahoo, and Sleeper",
+    "Privacy policy for Flaim: fantasy league analysis for ESPN, Yahoo, and Sleeper",
   alternates: {
     canonical: "https://flaim.app/privacy",
   },
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-muted-foreground mb-8">
-          Last updated: September 26, 2026
+          Last updated: September 27, 2026
         </p>
 
         <div className="max-w-none space-y-8">
@@ -64,10 +64,13 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-xl font-semibold mb-3">Overview</h2>
             <p className="text-muted-foreground">
-              Flaim is a read-only fantasy sports analysis service for ESPN,
-              Yahoo, and Sleeper leagues. This privacy policy explains how we
-              collect, use, and protect your information when you use Flaim, the
-              Flaim Chrome Extension, and the Flaim Fantasy service.
+              Flaim reads your ESPN, Yahoo, and Sleeper fantasy leagues to power
+              its analysis. The only thing Flaim can write is its own list of
+              your leagues, when you ask it to refresh; it never changes
+              anything in your leagues on ESPN, Yahoo, or Sleeper. This privacy
+              policy explains how we collect, use, and protect your information
+              when you use Flaim, the Flaim Chrome Extension, and the Flaim
+              Fantasy service.
             </p>
           </section>
 
@@ -141,6 +144,20 @@ export default function PrivacyPage() {
               We do not store a Sleeper password or token.
             </p>
 
+            <h3 className="text-lg font-medium mt-4 mb-2">
+              AI App Connections
+            </h3>
+            <p className="text-muted-foreground">
+              When you connect an AI app, such as ChatGPT, Claude, or
+              Perplexity, to your Flaim account, we store a connection record
+              for that app so Flaim can recognize it on later requests: which
+              app it is, and when the connection was made and last renewed. We
+              also keep a record of each request a connected app makes: which
+              tool it used, when, which app made the request, whether it
+              succeeded, and how long it took. We do not log the question you
+              asked or the AI&apos;s answer.
+            </p>
+
             <h3 className="text-lg font-medium mt-4 mb-2">Email</h3>
             <p className="text-muted-foreground">
               We use your email address to run your account and, from time to
@@ -171,6 +188,27 @@ export default function PrivacyPage() {
             </ul>
             <p className="text-muted-foreground mt-2">
               We do not use your connection data for any other purpose.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold mb-3">Your AI App</h2>
+            <p className="text-muted-foreground">
+              When you connect an AI app, such as ChatGPT, Claude, or
+              Perplexity, to your Flaim account, Flaim sends that app the
+              league data it requests on your behalf: things like your
+              roster, matchups, standings, available players, recent league
+              moves, league rules, and league history. This only happens when
+              you ask for it, in a prompt or by using a control such as the
+              league widget&apos;s refresh button.
+            </p>
+            <p className="text-muted-foreground mt-2">
+              Flaim never sends the AI app your ESPN session credentials, your
+              Yahoo tokens, or your Flaim account details. When you refresh
+              Sleeper leagues, the result includes the Sleeper username you
+              connected, which Sleeper already shows publicly. Once your league data
+              reaches the AI app, it is processed by the AI provider you
+              chose, under that provider&apos;s own terms and privacy policy.
             </p>
           </section>
 
@@ -279,10 +317,12 @@ export default function PrivacyPage() {
               credentials, and we do not share them with third parties for
               their own marketing. Your data is used to provide Flaim&apos;s
               services to you. Our service providers (Clerk for authentication
-              and account email, Supabase for data storage, Resend for
-              transactional product email, Plunk for product-update email, and
-              Fastmail for human correspondence) process data only as
-              necessary to operate the service. The one exception is a
+              and account email, Supabase for data storage, Cloudflare and
+              Vercel for hosting and compute, Resend for transactional product
+              email, Plunk for product-update email, and Fastmail for human
+              correspondence) process data only as necessary to operate the
+              service. See Your AI App above for how your league data reaches
+              the AI app you connect. The one exception to all of this is a
               business transfer, described below.
             </p>
           </section>
