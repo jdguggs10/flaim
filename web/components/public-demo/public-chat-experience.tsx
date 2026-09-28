@@ -14,10 +14,10 @@ import {
   PUBLIC_DEMO_PLATFORM_LABELS,
   PUBLIC_DEMO_SPORT_LABELS,
   buildPublicDemoCacheRequestUrl,
+  buildPublicDemoSportMenuRows,
   canStartPublicDemoRun,
   loadPublicDemoCapabilities,
   publicDemoReducer,
-  selectNextAvailableSportOption,
   selectPublicDemoPlatformOptions,
   selectPublicDemoRequestPlatform,
   selectPublicDemoSportOptions,
@@ -26,6 +26,7 @@ import {
 } from "@/lib/public-demo-client";
 import { cn } from "@/lib/utils";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import {
   ArrowUp,
   Copy,
@@ -78,8 +79,6 @@ const PUBLIC_TOOL_CARD_IN_PROGRESS_MS = 650;
 const PUBLIC_TOOL_CARD_COMPLETED_PAUSE_MS = 220;
 /** Seconds of ticker travel per prepared question; ~45px/s at pill width. */
 const PUBLIC_PROMPT_TICKER_SECONDS_PER_PROMPT = 4;
-/** Press-and-hold duration on the sport button before the all-sports sheet opens. */
-const SPORT_HOLD_THRESHOLD_MS = 500;
 
 const PUBLIC_SPORT_COPY: Record<
   PublicChatDemoSport,
@@ -356,17 +355,17 @@ export function PublicChatExperience({
     }),
     [state.platform],
   );
-  // A short tap on the sport button cycles to the next sport the current
-  // platform offers, wrapping around; press-and-hold (or right-click) opens
-  // the full all-sports sheet, so the button stays enabled even when the
-  // platform only offers one sport — a short tap just does nothing then.
+  // Tapping the sport button opens a dropdown listing all four sports; rows
+  // for sports the current platform doesn't advertise (or basketball, which
+  // never ships in the demo) render grayed and unselectable.
   const currentSportOption = sportOptions.find((option) => option.selected);
-  const nextSportOption = selectNextAvailableSportOption(sportOptions);
   const currentSportLabel =
     currentSportOption?.label ?? PUBLIC_DEMO_SPORT_LABELS[demoSport];
-  const sportButtonAriaLabel = nextSportOption
-    ? `Demo sport: ${currentSportLabel}. Tap to switch to ${nextSportOption.label}. Hold to see all sports.`
-    : `Demo sport: ${currentSportLabel}. Hold to see all sports.`;
+  const sportButtonAriaLabel = `Change sport, current: ${currentSportLabel}`;
+  const sportMenuRows = useMemo(
+    () => buildPublicDemoSportMenuRows(sportOptions),
+    [sportOptions],
+  );
 
   const selectedPreset = useMemo(
     () =>
@@ -651,84 +650,6 @@ export function PublicChatExperience({
     });
   }, []);
 
-  // Press-and-hold (or right-click) on the sport button opens the full
-  // all-sports sheet; a short tap cycles to the next available sport.
-  // The timer set on pointerdown is what tells a hold apart from a tap —
-  // when it fires we flag the hold so the click event it also produces gets
-  // swallowed instead of re-toggling the sport underneath the open sheet.
-  const sportHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const sportHoldTriggeredRef = useRef(false);
-
-  const clearSportHoldTimer = useCallback(() => {
-    if (sportHoldTimerRef.current !== null) {
-      clearTimeout(sportHoldTimerRef.current);
-      sportHoldTimerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      clearSportHoldTimer();
-    };
-  }, [clearSportHoldTimer]);
-
-  // Central close path: whenever the education panel (including the sports
-  // sheet a hold opens) closes — via Escape, an outside click, or selecting a
-  // sport from the sheet — clear the hold flag so it can't leak into a tap
-  // that happens after the sheet is gone.
-  useEffect(() => {
-    if (educationPanel === null) {
-      sportHoldTriggeredRef.current = false;
-    }
-  }, [educationPanel]);
-
-  const handleSportPointerDown = useCallback(
-    (event: React.PointerEvent<HTMLButtonElement>) => {
-      const trigger = event.currentTarget;
-      clearSportHoldTimer();
-      // Reset at the start of every new gesture so a hold whose release
-      // landed outside the button (leaving the flag set) doesn't swallow
-      // this tap's click.
-      sportHoldTriggeredRef.current = false;
-      sportHoldTimerRef.current = setTimeout(() => {
-        sportHoldTimerRef.current = null;
-        sportHoldTriggeredRef.current = true;
-        openEducationPanel("sports", trigger);
-      }, SPORT_HOLD_THRESHOLD_MS);
-    },
-    [clearSportHoldTimer, openEducationPanel],
-  );
-
-  const handleSportClick = useCallback(() => {
-    if (sportHoldTriggeredRef.current) {
-      // The hold already opened the sheet; swallow the click it also fires.
-      sportHoldTriggeredRef.current = false;
-      return;
-    }
-    if (nextSportOption) {
-      handleSelectSport(nextSportOption.sport);
-    }
-  }, [handleSelectSport, nextSportOption]);
-
-  const handleSportContextMenu = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      event.preventDefault();
-      clearSportHoldTimer();
-      openEducationPanel("sports", event.currentTarget);
-    },
-    [clearSportHoldTimer, openEducationPanel],
-  );
-
-  const handleSelectSportFromSheet = useCallback(
-    (sport: PublicChatDemoSport) => {
-      handleSelectSport(sport);
-      setEducationPanel(null);
-    },
-    [handleSelectSport],
-  );
-
   useEffect(() => {
     if (!initialQueryPreset) {
       return;
@@ -858,7 +779,7 @@ export function PublicChatExperience({
                 aria-label="About this demo"
                 aria-haspopup="dialog"
                 aria-expanded={educationPanel === "about"}
-                className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
               >
                 <Menu className="h-5 w-5" />
               </button>
@@ -913,24 +834,69 @@ export function PublicChatExperience({
                 })}
               </div>
 
-              <button
-                type="button"
-                onClick={handleSportClick}
-                onPointerDown={handleSportPointerDown}
-                onPointerUp={clearSportHoldTimer}
-                onPointerLeave={clearSportHoldTimer}
-                onPointerCancel={clearSportHoldTimer}
-                onContextMenu={handleSportContextMenu}
-                aria-label={sportButtonAriaLabel}
-                aria-haspopup="dialog"
-                aria-expanded={educationPanel === "sports"}
-                className={cn(
-                  "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
-                  nextSportOption ? "" : "opacity-45",
-                )}
-              >
-                {PUBLIC_SPORT_COPY[demoSport].icon}
-              </button>
+              {/* Non-modal so the page can still scroll: the menu always
+                  drops down inside the phone, and on a short viewport its
+                  last rows can sit below the fold. */}
+              <DropdownMenuPrimitive.Root modal={false}>
+                <DropdownMenuPrimitive.Trigger asChild>
+                  <button
+                    type="button"
+                    aria-label={sportButtonAriaLabel}
+                    className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] text-[var(--phone-text)] transition-[background-color,box-shadow,transform] hover:bg-[var(--phone-panel-strong)] hover:shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                  >
+                    {PUBLIC_SPORT_COPY[demoSport].icon}
+                  </button>
+                </DropdownMenuPrimitive.Trigger>
+                <DropdownMenuPrimitive.Portal container={phonePanelContainer}>
+                  <DropdownMenuPrimitive.Content
+                    side="bottom"
+                    align="end"
+                    sideOffset={8}
+                    avoidCollisions={false}
+                    className="z-50 flex w-max items-center gap-1 rounded-full border border-[var(--phone-border)] bg-[var(--phone-panel)] p-1.5 text-[var(--phone-text)] shadow-[0_18px_40px_-16px_rgba(0,0,0,0.45)] outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-1 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-1"
+                  >
+                    {/* Icon-only row, mirroring the platform selector's pill:
+                        a filled bg-[var(--phone-panel-strong)] tile marks the
+                        current sport instead of a check mark or label. A
+                        radio group so assistive tech hears which sport is
+                        current (menuitemradio + aria-checked) even though
+                        there's no visible text; each icon gets its own
+                        aria-label since it's the row's only content. */}
+                    <DropdownMenuPrimitive.RadioGroup
+                      value={demoSport}
+                      className="flex items-center gap-1"
+                    >
+                      {sportMenuRows.map((row) => (
+                        <DropdownMenuPrimitive.RadioItem
+                          key={row.sport}
+                          value={row.sport}
+                          disabled={!row.available}
+                          aria-label={
+                            row.available ? row.label : `${row.label}, not in demo`
+                          }
+                          onSelect={(event) => {
+                            if (!row.available) {
+                              event.preventDefault();
+                              return;
+                            }
+                            handleSelectSport(row.sport as PublicChatDemoSport);
+                          }}
+                          className={cn(
+                            "flex h-11 w-11 shrink-0 cursor-pointer select-none items-center justify-center rounded-full outline-none transition-colors",
+                            row.selected
+                              ? "bg-[var(--phone-panel-strong)] text-[var(--phone-text)]"
+                              : row.available
+                                ? "text-[var(--phone-text)] data-[highlighted]:bg-[var(--phone-panel-strong)]/60"
+                                : "cursor-not-allowed text-[var(--phone-muted)] opacity-60 data-[highlighted]:bg-transparent",
+                          )}
+                        >
+                          <SportIcon sport={row.sport} className="h-5 w-5" />
+                        </DropdownMenuPrimitive.RadioItem>
+                      ))}
+                    </DropdownMenuPrimitive.RadioGroup>
+                  </DropdownMenuPrimitive.Content>
+                </DropdownMenuPrimitive.Portal>
+              </DropdownMenuPrimitive.Root>
             </div>
 
             <div role="status" aria-live="polite" className="sr-only">
@@ -1082,7 +1048,7 @@ export function PublicChatExperience({
                   aria-label="How to add Flaim in ChatGPT"
                   aria-haspopup="dialog"
                   aria-expanded={educationPanel === "drawer"}
-                  className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--phone-text)] transition-[background-color,transform] hover:-translate-y-0.5 hover:bg-[var(--phone-panel-strong)] active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
+                  className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full text-[var(--phone-text)] transition-[background-color,transform] hover:bg-[var(--phone-panel-strong)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]"
                 >
                   <Plus className="h-5 w-5" />
                 </button>
@@ -1100,7 +1066,7 @@ export function PublicChatExperience({
                   aria-haspopup="dialog"
                   aria-expanded={educationPanel === "activation"}
                   className={cn(
-                    "inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[length:var(--phone-type-caption)] font-medium transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-sm active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
+                    "inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[length:var(--phone-type-caption)] font-medium transition-[box-shadow,transform] hover:shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)]",
                     chipActive
                       ? "public-chat-chip-active border-[var(--phone-accent)] bg-[var(--phone-accent)] text-[var(--phone-accent-text)]"
                       : "border-[var(--phone-border)] bg-[var(--phone-panel-strong)] text-[var(--phone-text)]",
@@ -1116,7 +1082,7 @@ export function PublicChatExperience({
                     openEducationPanel("ask", event.currentTarget)
                   }
                   className={cn(
-                    "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--phone-text)] text-[var(--phone-screen)] transition-[box-shadow,transform] hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--phone-screen)]",
+                    "inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[var(--phone-text)] text-[var(--phone-screen)] transition-[box-shadow,transform] hover:shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--phone-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--phone-screen)]",
                     runStatus === "running" ? "public-chat-send-running" : "",
                   )}
                   aria-label="How to ask in the demo"
@@ -1134,10 +1100,8 @@ export function PublicChatExperience({
           </div>
           <PhoneEducationPanel
             container={phonePanelContainer}
-            onSelectSport={handleSelectSportFromSheet}
             panel={educationPanel}
             returnFocusRef={educationTriggerRef}
-            sportOptions={sportOptions}
           />
           </DialogPrimitive.Root>
         </PhoneDemoFrame>

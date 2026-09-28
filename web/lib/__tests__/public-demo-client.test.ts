@@ -7,6 +7,7 @@ import {
 import {
   INITIAL_PUBLIC_DEMO_STATE,
   buildPublicDemoCacheRequestUrl,
+  buildPublicDemoSportMenuRows,
   PUBLIC_DEMO_CAPABILITIES_TIMEOUT_MS,
   buildPublicDemoSportTransitionAnnouncement,
   canStartPublicDemoRun,
@@ -18,12 +19,10 @@ import {
   selectPublicDemoPlatformOptions,
   selectPublicDemoRequestPlatform,
   selectPublicDemoSportOptions,
-  selectNextAvailableSportOption,
   selectPublicDemoVisiblePresets,
   type PublicDemoAction,
   type PublicDemoAnswerMeta,
   type PublicDemoCapabilityTarget,
-  type PublicDemoSportOption,
   type PublicDemoState,
 } from "../public-demo-client";
 
@@ -1026,95 +1025,130 @@ describe("resolveSportForPlatform", () => {
   });
 });
 
-describe("selectNextAvailableSportOption", () => {
-  function options(
-    selected: string,
-    available: readonly string[],
-  ): PublicDemoSportOption[] {
-    return (["baseball", "football", "hockey"] as const).map((sport) => ({
-      sport,
-      label: sport,
-      available: available.includes(sport),
-      selected: sport === selected,
-    }));
-  }
-
-  it("moves to the next available sport in display order", () => {
-    expect(
-      selectNextAvailableSportOption(
-        options("baseball", ["baseball", "football", "hockey"]),
-      )?.sport,
-    ).toBe("football");
-    expect(
-      selectNextAvailableSportOption(
-        options("football", ["baseball", "football", "hockey"]),
-      )?.sport,
-    ).toBe("hockey");
-  });
-
-  it("wraps from the last sport back to the first available one", () => {
-    expect(
-      selectNextAvailableSportOption(
-        options("hockey", ["baseball", "football", "hockey"]),
-      )?.sport,
-    ).toBe("baseball");
-  });
-
-  it("skips sports the platform does not offer", () => {
-    // ESPN with football and hockey but no baseball: football <-> hockey.
-    expect(
-      selectNextAvailableSportOption(options("football", ["football", "hockey"]))
-        ?.sport,
-    ).toBe("hockey");
-    expect(
-      selectNextAvailableSportOption(options("hockey", ["football", "hockey"]))
-        ?.sport,
-    ).toBe("football");
-    // Two sports where the unavailable one sits between them.
-    expect(
-      selectNextAvailableSportOption(options("baseball", ["baseball", "hockey"]))
-        ?.sport,
-    ).toBe("hockey");
-  });
-
-  it("returns null when the current sport is the only one available", () => {
-    expect(
-      selectNextAvailableSportOption(options("football", ["football"])),
-    ).toBeNull();
-  });
-
-  it("returns null in legacy mode, where only ESPN baseball is offered", () => {
-    const legacy = publicDemoReducer(INITIAL_PUBLIC_DEMO_STATE, {
-      type: "capabilities_unavailable",
-    });
-
-    expect(
-      selectNextAvailableSportOption(selectPublicDemoSportOptions(legacy)),
-    ).toBeNull();
-  });
-
-  it("drives a full cycle through the reducer for a three-sport platform", () => {
-    let state = withCapabilities(
+describe("buildPublicDemoSportMenuRows", () => {
+  it("orders rows Football, Baseball, Basketball, Hockey and marks all three real sports selectable on ESPN", () => {
+    const state = withCapabilities(
       parsePublicDemoCapabilities({
         targets: [ESPN_BASEBALL, ESPN_FOOTBALL, ESPN_HOCKEY],
       }),
     );
-    const visited: string[] = [state.sport];
 
-    for (let token = 2; token <= 4; token += 1) {
-      const next = selectNextAvailableSportOption(
+    expect(
+      buildPublicDemoSportMenuRows(selectPublicDemoSportOptions(state)),
+    ).toEqual([
+      {
+        sport: "football",
+        label: "Football",
+        available: true,
+        selected: false,
+      },
+      // ESPN_BASEBALL is the advertised default target, so it's selected.
+      { sport: "baseball", label: "Baseball", available: true, selected: true },
+      {
+        sport: "basketball",
+        label: "Basketball",
+        available: false,
+        selected: false,
+      },
+      { sport: "hockey", label: "Hockey", available: true, selected: false },
+    ]);
+  });
+
+  it("offers only football on Sleeper, graying baseball, basketball, and hockey", () => {
+    const state = withCapabilities(
+      parsePublicDemoCapabilities({ targets: [SLEEPER_FOOTBALL] }),
+    );
+
+    expect(
+      buildPublicDemoSportMenuRows(selectPublicDemoSportOptions(state)),
+    ).toEqual([
+      {
+        sport: "football",
+        label: "Football",
+        available: true,
+        selected: true,
+      },
+      {
+        sport: "baseball",
+        label: "Baseball",
+        available: false,
+        selected: false,
+      },
+      {
+        sport: "basketball",
+        label: "Basketball",
+        available: false,
+        selected: false,
+      },
+      { sport: "hockey", label: "Hockey", available: false, selected: false },
+    ]);
+  });
+
+  it("never marks basketball available or selected, on any platform", () => {
+    const espn = withCapabilities(
+      parsePublicDemoCapabilities({
+        targets: [ESPN_BASEBALL, ESPN_FOOTBALL, ESPN_HOCKEY],
+      }),
+    );
+    const sleeper = withCapabilities(
+      parsePublicDemoCapabilities({ targets: [SLEEPER_FOOTBALL] }),
+    );
+
+    for (const state of [espn, sleeper]) {
+      const basketballRow = buildPublicDemoSportMenuRows(
+        selectPublicDemoSportOptions(state),
+      ).find((row) => row.sport === "basketball");
+
+      expect(basketballRow).toEqual({
+        sport: "basketball",
+        label: "Basketball",
+        available: false,
+        selected: false,
+      });
+    }
+  });
+
+  it("flags exactly the current sport as selected", () => {
+    const state = withCapabilities(
+      parsePublicDemoCapabilities({
+        targets: [ESPN_BASEBALL, ESPN_FOOTBALL, ESPN_HOCKEY],
+      }),
+    );
+    const withHockeySelected = publicDemoReducer(state, {
+      type: "sport_selected",
+      sport: "hockey",
+      token: 2,
+    });
+
+    const rows = buildPublicDemoSportMenuRows(
+      selectPublicDemoSportOptions(withHockeySelected),
+    );
+
+    expect(rows.filter((row) => row.selected)).toEqual([
+      { sport: "hockey", label: "Hockey", available: true, selected: true },
+    ]);
+  });
+
+  it("offers only the legacy sport while capabilities load and in legacy mode", () => {
+    const legacy = publicDemoReducer(INITIAL_PUBLIC_DEMO_STATE, {
+      type: "capabilities_unavailable",
+    });
+
+    for (const state of [INITIAL_PUBLIC_DEMO_STATE, legacy]) {
+      const rows = buildPublicDemoSportMenuRows(
         selectPublicDemoSportOptions(state),
       );
-      expect(next).not.toBeNull();
-      state = publicDemoReducer(state, {
-        type: "sport_selected",
-        sport: next!.sport,
-        token,
-      });
-      visited.push(state.sport);
-    }
 
-    expect(visited).toEqual(["baseball", "football", "hockey", "baseball"]);
+      expect(rows.map((row) => row.sport)).toEqual([
+        "football",
+        "baseball",
+        "basketball",
+        "hockey",
+      ]);
+      expect(rows.filter((row) => row.available)).toEqual([
+        { sport: "baseball", label: "Baseball", available: true, selected: true },
+      ]);
+    }
   });
 });
 

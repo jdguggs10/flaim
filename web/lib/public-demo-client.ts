@@ -419,25 +419,63 @@ export function selectPublicDemoSportOptions(
 }
 
 /**
- * The sport a short tap on the phone's sport button moves to: the next
- * available option after the selected one in display order, wrapping around.
- * Returns null when no other sport is available for the current platform, so
- * the tap does nothing and the button can show that it has nowhere to go.
+ * A sport row in the sport picker menu. `basketball` is display-only: it is
+ * never a real `PublicChatDemoSport` (see `public-chat.ts`), so it is always
+ * unavailable and never selected.
  */
-export function selectNextAvailableSportOption(
-  options: readonly PublicDemoSportOption[],
-): PublicDemoSportOption | null {
-  const count = options.length;
-  const selectedIndex = options.findIndex((option) => option.selected);
+export type PublicDemoSportMenuSport = PublicChatDemoSport | "basketball";
 
-  for (let step = 1; step <= count; step += 1) {
-    const candidate = options[(selectedIndex + step + count) % count];
-    if (candidate.available && !candidate.selected) {
-      return candidate;
+export interface PublicDemoSportMenuRow {
+  sport: PublicDemoSportMenuSport;
+  label: string;
+  available: boolean;
+  selected: boolean;
+}
+
+/**
+ * Fixed display order for the sport picker menu: the three real demo sports
+ * in the order used elsewhere in this file's copy, with basketball slotted in
+ * as the third row.
+ */
+export const PUBLIC_DEMO_SPORT_MENU_ORDER: readonly PublicDemoSportMenuSport[] =
+  ["football", "baseball", "basketball", "hockey"];
+
+const PUBLIC_DEMO_SPORT_MENU_LABELS: Record<PublicDemoSportMenuSport, string> =
+  {
+    ...PUBLIC_DEMO_SPORT_LABELS,
+    basketball: "Basketball",
+  };
+
+/**
+ * Builds the four rows for the sport picker menu from the current platform's
+ * `sportOptions` (real sports only) plus the always-unavailable basketball
+ * row. Pure: no DOM, no gesture handling, just row shape for the menu to
+ * render.
+ */
+export function buildPublicDemoSportMenuRows(
+  sportOptions: readonly PublicDemoSportOption[],
+): PublicDemoSportMenuRow[] {
+  return PUBLIC_DEMO_SPORT_MENU_ORDER.map((sport) => {
+    if (sport === "basketball") {
+      return {
+        sport,
+        label: PUBLIC_DEMO_SPORT_MENU_LABELS.basketball,
+        available: false,
+        selected: false,
+      };
     }
-  }
 
-  return null;
+    const option = sportOptions.find(
+      (candidate) => candidate.sport === sport,
+    );
+
+    return {
+      sport,
+      label: PUBLIC_DEMO_SPORT_MENU_LABELS[sport],
+      available: option?.available ?? false,
+      selected: option?.selected ?? false,
+    };
+  });
 }
 
 /**
