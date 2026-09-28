@@ -1,11 +1,18 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  PUBLIC_CHAT_ALLOWED_TOOLS,
+  PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
   PUBLIC_CHAT_PRESETS,
   PUBLIC_CHAT_TARGET_PRESET_IDS,
+  PUBLIC_CHAT_TOOL_STATUS_LABELS,
+  getPublicChatStepStatusLabel,
 } from "../public-chat";
 import {
   INITIAL_PUBLIC_DEMO_STATE,
+  buildPublicChatStepSequence,
   buildPublicDemoCacheRequestUrl,
   buildPublicDemoSportMenuRows,
   PUBLIC_DEMO_CAPABILITIES_TIMEOUT_MS,
@@ -14,6 +21,7 @@ import {
   canStartPublicDemoRun,
   isPublicDemoTargetMode,
   loadPublicDemoCapabilities,
+  normalizePublicChatTraceToolName,
   parsePublicDemoCapabilities,
   publicDemoReducer,
   resolveSportForPlatform,
@@ -1451,5 +1459,161 @@ describe("run concurrency", () => {
 
     expect(state.runToken).toBe(4);
     expect(state.runStatus).toBe("running");
+  });
+});
+
+describe("normalizePublicChatTraceToolName", () => {
+  it("strips the runner's mcp_fantasy_ prefix", () => {
+    expect(normalizePublicChatTraceToolName("mcp_fantasy_get_roster")).toBe(
+      "get_roster",
+    );
+  });
+
+  it("folds every web-search trace variant into web_search", () => {
+    expect(normalizePublicChatTraceToolName("web_search")).toBe("web_search");
+    expect(normalizePublicChatTraceToolName("web_search_call")).toBe(
+      "web_search",
+    );
+    expect(normalizePublicChatTraceToolName("google_web_search")).toBe(
+      "web_search",
+    );
+  });
+
+  it("passes an already-bare name through unchanged", () => {
+    expect(normalizePublicChatTraceToolName("get_free_agents")).toBe(
+      "get_free_agents",
+    );
+  });
+});
+
+describe("buildPublicChatStepSequence", () => {
+  const wireWatch = PUBLIC_CHAT_PRESETS.find(
+    (preset) => preset.id === "wire-watch",
+  )!;
+
+  it("puts the simulated get_user_session step first, then the preset's allowedTools in order", () => {
+    expect(buildPublicChatStepSequence(wireWatch, null)).toEqual([
+      "get_user_session",
+      "get_roster",
+      "get_free_agents",
+      "get_players",
+    ]);
+  });
+
+  it("appends web_search only when the trace shows the runner searched the web", () => {
+    expect(
+      buildPublicChatStepSequence(wireWatch, {
+        byName: { get_roster: { count: 1 } },
+      }),
+    ).toEqual(["get_user_session", "get_roster", "get_free_agents", "get_players"]);
+
+    expect(
+      buildPublicChatStepSequence(wireWatch, {
+        byName: { get_roster: { count: 1 }, web_search: { count: 2 } },
+      }),
+    ).toEqual([
+      "get_user_session",
+      "get_roster",
+      "get_free_agents",
+      "get_players",
+      "web_search",
+    ]);
+  });
+
+  it("recognizes a runner-namespaced or provider-native web-search trace name", () => {
+    expect(
+      buildPublicChatStepSequence(wireWatch, {
+        byName: { mcp_fantasy_get_roster: { count: 1 }, google_web_search: { count: 1 } },
+      }),
+    ).toEqual([
+      "get_user_session",
+      "get_roster",
+      "get_free_agents",
+      "get_players",
+      "web_search",
+    ]);
+  });
+
+  it("never duplicates web_search when the trace lists more than one search variant", () => {
+    const sequence = buildPublicChatStepSequence(wireWatch, {
+      byName: { web_search: { count: 1 }, web_search_call: { count: 1 } },
+    });
+    expect(sequence.filter((step) => step === "web_search")).toHaveLength(1);
+  });
+
+  it("never duplicates get_user_session when a preset already allows it", () => {
+    const sequence = buildPublicChatStepSequence(
+      { ...wireWatch, allowedTools: ["get_user_session", "get_roster"] },
+      null,
+    );
+    expect(sequence).toEqual(["get_user_session", "get_roster"]);
+  });
+});
+
+describe("getPublicChatStepStatusLabel", () => {
+  it("returns the web-search status line for web_search", () => {
+    expect(getPublicChatStepStatusLabel("web_search")).toBe(
+      "Searching the web…",
+    );
+  });
+
+  it("returns a friendly, non-empty status label for get_roster", () => {
+    expect(getPublicChatStepStatusLabel("get_roster")).toBe(
+      "Fetching roster…",
+    );
+  });
+
+  it("covers every tool in PUBLIC_CHAT_ALLOWED_TOOLS with a distinct, non-empty label", () => {
+    const labels = PUBLIC_CHAT_ALLOWED_TOOLS.map((tool) =>
+      getPublicChatStepStatusLabel(tool),
+    );
+    for (const label of labels) {
+      expect(typeof label).toBe("string");
+      expect(label.length).toBeGreaterThan(0);
+    }
+    expect(new Set(labels).size).toBe(labels.length);
+  });
+
+  it("covers every tool that appears in any preset's allowedTools", () => {
+    const toolsInUse = new Set(
+      PUBLIC_CHAT_PRESETS.flatMap((preset) => preset.allowedTools),
+    );
+    for (const tool of toolsInUse) {
+      expect(getPublicChatStepStatusLabel(tool)).not.toBe(
+        PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
+      );
+    }
+  });
+
+  it("falls back to generic copy for an unknown step name", () => {
+    expect(getPublicChatStepStatusLabel("get_something_new")).toBe(
+      PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
+    );
+    expect(getPublicChatStepStatusLabel("constructor")).toBe(
+      PUBLIC_CHAT_FALLBACK_STATUS_LABEL,
+    );
+  });
+
+  it("matches the Worker's openaiMeta.invoking string for every tool", () => {
+    const toolsSource = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../../workers/fantasy-mcp/src/mcp/tools.ts",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    for (const [tool, label] of Object.entries(PUBLIC_CHAT_TOOL_STATUS_LABELS)) {
+      const nameIndex = toolsSource.indexOf(`name: '${tool}'`);
+      expect(nameIndex, `${tool} not found in tools.ts`).toBeGreaterThan(-1);
+      const invoking = /invoking: '([^']*)'/.exec(
+        toolsSource.slice(nameIndex),
+      )?.[1];
+      const decoded = invoking?.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+        String.fromCharCode(parseInt(hex, 16)),
+      );
+      expect(decoded, tool).toBe(label);
+    }
   });
 });
