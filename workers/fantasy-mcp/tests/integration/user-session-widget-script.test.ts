@@ -1,5 +1,5 @@
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   classifyRefreshResult,
   type RefreshResultClassification,
@@ -39,12 +39,57 @@ interface WidgetHarness {
   windowListeners: Record<string, Array<(event: unknown) => unknown>>;
   /** The script's own `window`, needed as `event.source` for trusted messages. */
   contextWindow: Record<string, unknown>;
+  /**
+   * `window.parent` as the script sees it: a distinct scripted-host object
+   * when `bridge` is set, otherwise the script's own window (self-referencing,
+   * so postToParent no-ops, matching a top-level/non-iframe host). Use this as
+   * `event.source` for any reply delivered by hand.
+   */
+  parent: Record<string, unknown>;
+  /**
+   * Every message the script posted to `window.parent`, in order. Only
+   * populated when `bridge` is set — postToParent no-ops otherwise.
+   */
+  postedMessages: Array<Record<string, unknown>>;
+  /** URLs passed to window.open (the last-resort link fallback), in order. */
+  openedTabs: string[];
+}
+
+interface BridgeRequestMessage {
+  id: string;
+  method: string;
+  params: unknown;
+}
+
+interface BridgeHostOptions {
+  /**
+   * Reply to the widget's ui/initialize handshake, delivered synchronously
+   * (a real host still resolves the widget's pending promise on the next
+   * microtask). Defaults to a host that supports both bridge capabilities.
+   * Pass null to simulate a host that never answers (bridgeReady stays
+   * false, matching the "no init reply" fallback case).
+   */
+  initResult?: { hostCapabilities?: Record<string, boolean>; hostContext?: { theme?: string } } | null;
+  /**
+   * Called for every non-init request the widget posts (tools/call,
+   * ui/open-link). Return the JSON-RPC reply to deliver, or omit/return
+   * undefined to simulate a host that never answers that request (drive the
+   * widget's own timeout with vi.useFakeTimers() + advanceTimersByTimeAsync).
+   */
+  respond?: (message: BridgeRequestMessage) => { result?: unknown; error?: unknown } | undefined;
 }
 
 interface WidgetHarnessOptions {
   /** Host global to expose as `window.openai`, or omitted for a bare host. */
   openai?: Record<string, unknown>;
   exposed?: string[];
+  /**
+   * Simulates an MCP Apps host: gives `window.parent` a distinct object so
+   * postToParent actually posts, records every posted message, and answers
+   * the handshake and bridge requests by calling the widget's own message
+   * listener, exactly like a real host posting back into the iframe.
+   */
+  bridge?: BridgeHostOptions;
 }
 
 const DEFAULT_EXPORTS = ['classifyRefreshResult', 'render', 'applyTheme', 'refreshLeagues'];
@@ -74,9 +119,13 @@ function loadWidgetScript(
     'refresh-word': fakeElement(),
     'edit-link': fakeElement(),
     'yahoo-link': fakeElement({ href: 'https://sports.yahoo.com/fantasy/' }),
+    'espn-link': fakeElement({ href: 'https://www.espn.com/fantasy/' }),
+    'sleeper-link': fakeElement({ href: 'https://sleeper.com/' }),
   };
   const classes = new Set<string>();
   const windowListeners: Record<string, Array<(event: unknown) => unknown>> = Object.create(null);
+  const postedMessages: Array<Record<string, unknown>> = [];
+  const openedTabs: string[] = [];
 
   const context: Record<string, unknown> = {
     document: {
@@ -108,22 +157,56 @@ function loadWidgetScript(
     },
     URL,
     setTimeout,
+    clearTimeout,
   };
   const windowStub: Record<string, unknown> = {
     addEventListener(type: string, handler: (event: unknown) => unknown) {
       (windowListeners[type] = windowListeners[type] || []).push(handler);
     },
+    open(url: string) { openedTabs.push(String(url)); },
     parent: null,
   };
   if (options.openai) windowStub.openai = options.openai;
-  windowStub.parent = windowStub;
+
+  // Defaults to the script's own window (self-referencing), which makes
+  // postToParent a no-op — the pre-existing behavior for every test that
+  // does not opt into a scripted bridge host.
+  let parent: Record<string, unknown> = windowStub;
+  if (options.bridge) {
+    const bridge = options.bridge;
+    const deliver = (data: Record<string, unknown>) => {
+      for (const handler of windowListeners.message || []) {
+        handler({ source: parent, origin: 'null', data });
+      }
+    };
+    parent = {
+      postMessage(message: Record<string, unknown>) {
+        postedMessages.push(message);
+        if (message.method === 'ui/initialize') {
+          if (bridge.initResult === null) return; // Host never answers.
+          deliver({
+            jsonrpc: '2.0',
+            id: message.id,
+            result: bridge.initResult ?? { hostCapabilities: { serverTools: true, openLinks: true } },
+          });
+          return;
+        }
+        if (message.id === undefined || message.id === null) return;
+        const reply = bridge.respond
+          ? bridge.respond({ id: message.id as string, method: message.method as string, params: message.params })
+          : undefined;
+        if (reply) deliver({ jsonrpc: '2.0', id: message.id, ...reply });
+      },
+    };
+  }
+  windowStub.parent = parent;
   context.window = windowStub;
 
   runInNewContext(exposedScript, context);
 
   const exports: Record<string, unknown> = {};
   for (const name of exposed) exports[name] = context[`__${name}`];
-  return { exports, elements, classes, windowListeners, contextWindow: windowStub };
+  return { exports, elements, classes, windowListeners, contextWindow: windowStub, parent, postedMessages, openedTabs };
 }
 
 /**
@@ -175,6 +258,7 @@ function loadEmbeddedRender() {
     },
     URL,
     setTimeout,
+    clearTimeout,
   };
 
   // window.parent must be a distinct object from window itself: postToParent
@@ -559,6 +643,338 @@ describe('user session widget script', () => {
       expect(elements.content.innerHTML).toBe('');
       expect(elements['refresh-button'].disabled).toBe(false);
       expect(elements['refresh-word'].textContent).toBe('Refresh');
+    });
+  });
+
+  // Claude parity (FLA-426): when window.openai is absent, refresh and links
+  // route through the MCP Apps bridge instead, gated by hostCapabilityReady().
+  // These tests use loadWidgetScript's `bridge` option, a scripted host that
+  // answers ui/initialize and any subsequent tools/call / ui/open-link.
+  describe('MCP Apps bridge (Claude parity, FLA-426)', () => {
+    function toolCallName(message: Record<string, unknown>): unknown {
+      return (message.params as { name?: unknown } | undefined)?.name;
+    }
+
+    it('refreshes leagues through the bridge, posting two tools/call requests with distinct ids', async () => {
+      const { exports, elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond(message) {
+            if (toolCallName(message) === 'refresh_leagues') {
+              return {
+                result: {
+                  structuredContent: {
+                    success: true,
+                    results: { espn: { platform: 'espn', status: 'success', details: { added: 2 } } },
+                  },
+                },
+              };
+            }
+            if (toolCallName(message) === 'get_user_session') {
+              return { result: { structuredContent: SAMPLE_SESSION } };
+            }
+            return undefined;
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      const toolCalls = postedMessages.filter((message) => message.method === 'tools/call');
+      expect(toolCalls.map(toolCallName)).toEqual(['refresh_leagues', 'get_user_session']);
+      expect(new Set(toolCalls.map((message) => message.id)).size).toBe(2);
+      expect(elements['refresh-status'].innerHTML).toBe('Leagues refreshed.');
+      expect(elements['refresh-status'].className).toBe('status is-success');
+      expect(elements.content.innerHTML).toContain('Sunday Night Football League');
+      expect(elements['refresh-button'].disabled).toBe(false);
+    });
+
+    it('shows a recoverable failure when the bridge replies with a JSON-RPC error', async () => {
+      const { exports, elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond() {
+            return { error: { code: -32000, message: 'boom' } };
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      // The rejection stops the flow before get_user_session is ever called.
+      expect(postedMessages.filter((message) => message.method === 'tools/call')).toHaveLength(1);
+      expect(elements['refresh-status'].className).toBe('status is-error');
+      expect(elements['refresh-status'].innerHTML).toBe(
+        'Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.'
+      );
+      expect(elements['refresh-button'].disabled).toBe(false);
+    });
+
+    it('shows a recoverable failure when the tool result itself reports isError (e.g. INSUFFICIENT_SCOPE)', async () => {
+      const { exports, elements } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond(message) {
+            if (toolCallName(message) !== 'refresh_leagues') return undefined;
+            return { result: { isError: true, content: [{ type: 'text', text: 'INSUFFICIENT_SCOPE' }] } };
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      expect(elements['refresh-status'].className).toBe('status is-error');
+      expect(elements['refresh-status'].innerHTML).toBe(
+        'Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.'
+      );
+    });
+
+    it('times out a bridge call that never replies, re-enables the button, and ignores a later late reply', async () => {
+      vi.useFakeTimers();
+      try {
+        let sentId: unknown;
+        const { exports, elements, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            respond(message) {
+              sentId = message.id;
+              return undefined; // The host never answers this one.
+            },
+          },
+        });
+
+        const refreshPromise = (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+        await vi.advanceTimersByTimeAsync(120000);
+        await refreshPromise;
+
+        expect(elements['refresh-status'].className).toBe('status is-error');
+        expect(elements['refresh-status'].innerHTML).toBe(
+          'Refresh failed. <a href="https://flaim.app/leagues?from=widget" target="_blank" rel="noopener">Open leagues</a>.'
+        );
+        expect(elements['refresh-button'].disabled).toBe(false);
+
+        // A reply that arrives after the timeout already dropped the pending
+        // entry must be a silent no-op, not a crash or a status change.
+        windowListeners.message[0]({
+          source: parent,
+          origin: 'null',
+          data: { jsonrpc: '2.0', id: sentId, result: { structuredContent: SAMPLE_SESSION } },
+        });
+        expect(elements['refresh-status'].className).toBe('status is-error');
+        expect(elements.content.innerHTML).toBe('');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('falls back to "Open Flaim to manage leagues" when the host init reply omits serverTools', async () => {
+      const { exports, elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        // No openLinks either, so the LEAGUES_URL fallback also can't route
+        // through the bridge — this isolates the serverTools-only guard.
+        bridge: { initResult: { hostCapabilities: {} } },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      expect(elements['refresh-status'].innerHTML).toBe('Open Flaim to manage leagues.');
+      expect(openedTabs).toEqual(['https://flaim.app/leagues?from=widget']);
+    });
+
+    it('falls back to "Open Flaim to manage leagues" when the host never answers ui/initialize', async () => {
+      const { exports, elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: { initResult: null },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      expect(elements['refresh-status'].innerHTML).toBe('Open Flaim to manage leagues.');
+      expect(openedTabs).toEqual(['https://flaim.app/leagues?from=widget']);
+    });
+
+    it('reports a zero size when a bridge refresh reloads a hidden widget', async () => {
+      const { exports, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: {
+          respond(message) {
+            if (toolCallName(message) === 'refresh_leagues') {
+              return {
+                result: {
+                  structuredContent: {
+                    success: true,
+                    results: { espn: { platform: 'espn', status: 'success', details: { added: 1 } } },
+                  },
+                },
+              };
+            }
+            if (toolCallName(message) === 'get_user_session') {
+              return { result: { structuredContent: { allLeagues: [], widget: { hidden: true } } } };
+            }
+            return undefined;
+          },
+        },
+      });
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      const sizeMessages = postedMessages.filter((message) => message.method === 'ui/notifications/size-changed');
+      expect(sizeMessages).toContainEqual(expect.objectContaining({ params: { width: 0, height: 0 } }));
+    });
+
+    it('applies the theme from the ui/initialize reply, then a later host-context-changed update', () => {
+      const { classes, windowListeners, parent } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        bridge: { initResult: { hostCapabilities: {}, hostContext: { theme: 'dark' } } },
+      });
+
+      expect(classes.has('theme-dark')).toBe(true);
+      expect(classes.has('theme-light')).toBe(false);
+
+      // A partial host-context-changed update with no theme field is a no-op.
+      windowListeners.message[0]({
+        source: parent,
+        origin: 'null',
+        data: { jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: {} },
+      });
+      expect(classes.has('theme-dark')).toBe(true);
+
+      windowListeners.message[0]({
+        source: parent,
+        origin: 'null',
+        data: { jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'light' } },
+      });
+      expect(classes.has('theme-light')).toBe(true);
+      expect(classes.has('theme-dark')).toBe(false);
+    });
+
+    it('stays fully on the ChatGPT path when window.openai exists, even with a bridge host present', async () => {
+      const calls: string[] = [];
+      const openai = {
+        theme: 'light',
+        async callTool(name: string) {
+          calls.push(name);
+          if (name === 'refresh_leagues') {
+            return {
+              success: true,
+              results: { espn: { platform: 'espn', status: 'success', details: { added: 1 } } },
+            };
+          }
+          return SAMPLE_SESSION;
+        },
+      };
+      const { exports, elements, postedMessages, classes } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+        openai,
+        bridge: {
+          initResult: { hostCapabilities: { serverTools: true, openLinks: true }, hostContext: { theme: 'dark' } },
+        },
+      });
+
+      // The bridge host answered with a dark hostContext, but window.openai
+      // exists, so window.openai.theme wins per the FLA-426 design decision.
+      expect(classes.has('theme-dark')).toBe(false);
+      expect(classes.has('theme-light')).toBe(true);
+
+      await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+
+      expect(calls).toEqual(['refresh_leagues', 'get_user_session']);
+      expect(
+        postedMessages.filter((message) => message.method === 'tools/call' || message.method === 'ui/open-link')
+      ).toHaveLength(0);
+      expect(elements['refresh-status'].innerHTML).toBe('Leagues refreshed.');
+    });
+
+    describe('links', () => {
+      it('routes the edit link through the bridge when openLinks is available', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        const { state, event } = clickEvent();
+
+        elements['edit-link'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(true);
+        const openLinkMessage = postedMessages.find((message) => message.method === 'ui/open-link');
+        expect(openLinkMessage?.params).toEqual({ url: 'https://flaim.app/leagues?from=widget' });
+      });
+
+      it('routes a provider credit link through the bridge when openLinks is available', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        const { state, event } = clickEvent();
+
+        elements['yahoo-link'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(true);
+        const openLinkMessage = postedMessages.find((message) => message.method === 'ui/open-link');
+        expect(openLinkMessage?.params).toEqual({ url: 'https://sports.yahoo.com/fantasy/' });
+      });
+
+      it('routes the "Open leagues" status link through the bridge when openLinks is available', async () => {
+        const { elements, exports, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            respond() {
+              return { error: { code: -32000, message: 'boom' } };
+            },
+          },
+        });
+        // Trigger a failure so #refresh-status carries the "Open leagues" link.
+        await (exports.refreshLeagues as (event?: unknown) => Promise<unknown>)();
+        expect(elements['refresh-status'].innerHTML).toContain('Open leagues');
+
+        const { state, event } = clickEvent();
+        (event as { target?: unknown }).target = { tagName: 'A' };
+        elements['refresh-status'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(true);
+        const openLinkMessages = postedMessages.filter((message) => message.method === 'ui/open-link');
+        expect(openLinkMessages).toHaveLength(1);
+        expect(openLinkMessages[0].params).toEqual({ url: 'https://flaim.app/leagues?from=widget' });
+      });
+
+      it('ignores a click on #refresh-status that did not land on the anchor', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, { bridge: {} });
+        const { event } = clickEvent();
+        (event as { target?: unknown }).target = { tagName: 'DIV' };
+
+        elements['refresh-status'].listeners.click[0](event);
+
+        expect(postedMessages.filter((message) => message.method === 'ui/open-link')).toHaveLength(0);
+      });
+
+      it('falls back to window.open when the bridge open-link call reports isError', async () => {
+        const { elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: {
+            respond() {
+              return { result: { isError: true } };
+            },
+          },
+        });
+        const { event } = clickEvent();
+
+        elements['yahoo-link'].listeners.click[0](event);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(openedTabs).toEqual(['https://sports.yahoo.com/fantasy/']);
+      });
+
+      it('falls back to window.open when the bridge open-link call times out', async () => {
+        vi.useFakeTimers();
+        try {
+          const { elements, openedTabs } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+            bridge: { respond: () => undefined },
+          });
+          const { event } = clickEvent();
+
+          elements['yahoo-link'].listeners.click[0](event);
+          await vi.advanceTimersByTimeAsync(15000);
+
+          expect(openedTabs).toEqual(['https://sports.yahoo.com/fantasy/']);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('leaves the native anchor alone without the openLinks capability, even with a bridge host present', () => {
+        const { elements, postedMessages } = loadWidgetScript(USER_SESSION_WIDGET_HTML, {
+          bridge: { initResult: { hostCapabilities: { serverTools: true } } },
+        });
+        const { state, event } = clickEvent();
+
+        elements['yahoo-link'].listeners.click[0](event);
+
+        expect(state.prevented).toBe(false);
+        expect(postedMessages.filter((message) => message.method === 'ui/open-link')).toHaveLength(0);
+      });
     });
   });
 

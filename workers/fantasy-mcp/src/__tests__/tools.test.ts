@@ -514,8 +514,8 @@ describe('fantasy-mcp tools', () => {
   });
 
   it('user session widget refreshes through callTool and reloads session output', () => {
-    expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('refresh_leagues', {})");
-    expect(USER_SESSION_WIDGET_HTML).toContain("window.openai.callTool('get_user_session', {})");
+    expect(USER_SESSION_WIDGET_HTML).toContain("callTool('refresh_leagues', {})");
+    expect(USER_SESSION_WIDGET_HTML).toContain("callTool('get_user_session', {})");
     expect(USER_SESSION_WIDGET_HTML).toContain('extractRefreshResult');
     expect(USER_SESSION_WIDGET_HTML).toContain('refreshResult && refreshResult.isError');
     expect(USER_SESSION_WIDGET_HTML).toContain('classifyRefreshResult(refreshPayload)');
@@ -525,6 +525,18 @@ describe('fantasy-mcp tools', () => {
     expect(USER_SESSION_WIDGET_HTML).toContain('classification.showLeaguesLink');
     expect(USER_SESSION_WIDGET_HTML).toContain('var hasRendered = false');
     expect(USER_SESSION_WIDGET_HTML).not.toContain('if (rendered) return');
+  });
+
+  it('user session widget declares the MCP Apps bridge calls for Claude parity (FLA-426)', () => {
+    // The bridge (Claude, when window.openai is absent) and the ChatGPT path
+    // share the same refresh/link call sites; these strings guard the
+    // protocol methods the bridge half depends on.
+    expect(USER_SESSION_WIDGET_HTML).toContain("bridgeRequest('tools/call'");
+    expect(USER_SESSION_WIDGET_HTML).toContain("bridgeRequest('ui/open-link'");
+    expect(USER_SESSION_WIDGET_HTML).toContain("msg.method === 'ui/notifications/host-context-changed'");
+    expect(USER_SESSION_WIDGET_HTML).toContain('function hostCapabilityReady(name)');
+    expect(USER_SESSION_WIDGET_HTML).toContain('function canCallServerTools()');
+    expect(USER_SESSION_WIDGET_HTML).toContain('function canOpenLinks()');
   });
 
   it.each([

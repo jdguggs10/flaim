@@ -5,11 +5,19 @@
  * Renders the user's fantasy leagues inline through the MCP Apps bridge, with
  * ChatGPT window.openai compatibility as a fallback.
  *
+ * Host detection: whenever window.openai exists, the widget stays on the
+ * ChatGPT path everywhere (data, theme, tool calls, links), unchanged. The
+ * MCP Apps bridge (postMessage tools/call and ui/open-link) is only used when
+ * window.openai is absent, and only once the ui/initialize reply has
+ * advertised the matching host capability. See hostCapabilityReady() in the
+ * emitted script.
+ *
  * Design constraints:
  * - No external scripts, fonts, images, or stylesheets (CSP-safe for iframe sandbox)
  * - 353px maximum width, shrinking to its container (ChatGPT text response template)
  * - System fonts only
- * - Light and dark palettes, driven by window.openai.theme with a
+ * - Light and dark palettes: window.openai.theme when window.openai exists,
+ *   otherwise the MCP Apps ui/initialize/host-context-changed theme, with a
  *   prefers-color-scheme fallback
  * - Aligns with flaim.app branding
  *
@@ -17,7 +25,14 @@
  * 1. MCP Apps postMessage JSON-RPC ui/notifications/tool-result
  * 2. openai:set_globals CustomEvent -> window.openai.toolOutput
  * 3. window.openai.toolOutput on immediate/DOMContentLoaded (may already be set)
- * 4. window.openai.callTool refresh button for manual league discovery refresh
+ * 4. Manual refresh button: window.openai.callTool when window.openai exists,
+ *    otherwise an MCP Apps bridge tools/call once the host capability is
+ *    confirmed, otherwise the "Open Flaim to manage leagues" fallback.
+ *
+ * Links: the edit link, empty-state link, refresh fallback link, and provider
+ * credit links open through window.openai.openExternal/openUrl when present,
+ * an MCP Apps bridge ui/open-link when the host capability is confirmed, or
+ * the native anchor / window.open otherwise.
  *
  * References:
  * - https://developers.openai.com/apps-sdk/build/chatgpt-ui/
@@ -190,13 +205,19 @@ function creditLinkScript(providerLabel: string, varName: string, elementId: str
   var ${varName} = document.getElementById('${elementId}');
   if (${varName}) {
     ${varName}.addEventListener('click', function(e) {
-      // Only intercept where the host exposes openExternal. Everywhere else
-      // (Claude, other MCP Apps hosts, the HTTP fallback route) the native
-      // anchor is the working path, so leave the default action alone.
+      // Only intercept where the host exposes openExternal, or where the MCP
+      // Apps bridge has confirmed it can open links. Everywhere else (other
+      // MCP Apps hosts, the HTTP fallback route) the native anchor is the
+      // working path, so leave the default action alone.
       // Deliberately no location.href fallback on this link: it would
       // navigate the widget iframe away from the widget.
       var host = null;
       try { host = window.openai; } catch (_) {}
+      if (!host && canOpenLinks()) {
+        if (e && e.preventDefault) e.preventDefault();
+        openLinkViaBridge(${varName}.href);
+        return;
+      }
       if (!host || typeof host.openExternal !== 'function') return;
       if (e && e.preventDefault) e.preventDefault();
       var opened = host.openExternal({ href: ${varName}.href });
@@ -655,6 +676,14 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   // (not sticky), so a refresh that flips the preference back off re-shows
   // the widget and resumes real size reporting.
   var widgetHidden = false;
+  // MCP Apps bridge state (Claude parity, FLA-426). bridgeReady flips true
+  // once the host answers ui/initialize; hostCaps holds that reply's
+  // hostCapabilities. bridgeSeq/pending back bridgeRequest()'s id-keyed
+  // promises for tools/call and ui/open-link.
+  var bridgeReady = false;
+  var hostCaps = {};
+  var bridgeSeq = 0;
+  var pending = Object.create(null);
   function sendZeroSize() {
     postToParent({
       jsonrpc: '2.0',
@@ -861,6 +890,54 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
     if (theme) root.classList.add('theme-' + theme);
   }
 
+  // MCP Apps bridge (Claude parity, FLA-426): a request/reply helper over the
+  // same postMessage transport the lifecycle handshake already uses.
+  // bridgeRequest() posts a JSON-RPC request with a unique id, and the
+  // message handler below resolves or rejects the matching pending entry
+  // when a reply with that id arrives. A late reply (after the timeout
+  // deleted the entry) is silently dropped.
+  function bridgeRequest(method, params, timeoutMs) {
+    return new Promise(function(resolve, reject) {
+      var id = initId + '-' + (++bridgeSeq);
+      var timer = setTimeout(function() {
+        delete pending[id];
+        reject(new Error('Bridge request timed out'));
+      }, timeoutMs);
+      pending[id] = { resolve: resolve, reject: reject, timer: timer };
+      postToParent({
+        jsonrpc: '2.0',
+        id: id,
+        method: method,
+        params: params,
+      });
+    });
+  }
+
+  // The single gate for every bridge-backed feature: never on the ChatGPT
+  // path, and only once the host's ui/initialize reply has confirmed it
+  // supports the capability in question. Relaxing this later (for example to
+  // "handshake completed" once Claude's real init reply is confirmed) only
+  // means changing this one function.
+  function hostCapabilityReady(name) {
+    return !window.openai && bridgeReady && !!hostCaps[name];
+  }
+
+  function canCallServerTools() {
+    return hostCapabilityReady('serverTools');
+  }
+
+  function canOpenLinks() {
+    return hostCapabilityReady('openLinks');
+  }
+
+  function openLinkViaBridge(url) {
+    bridgeRequest('ui/open-link', { url: url }, 15000).then(function(result) {
+      if (result && result.isError) openNewTab(url);
+    }).catch(function() {
+      openNewTab(url);
+    });
+  }
+
   function openNewTab(url) {
     try {
       window.open(url, '_blank', 'noopener,noreferrer');
@@ -874,6 +951,10 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
         return false;
       }
     } catch (_) {}
+    if (!window.openai && canOpenLinks()) {
+      openLinkViaBridge(url);
+      return false;
+    }
     try {
       window.open(url, '_blank', 'noopener,noreferrer');
       return false;
@@ -1058,6 +1139,19 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
   if (editLink) editLink.addEventListener('click', openLeagues);
   var refreshButton = document.getElementById('refresh-button');
   if (refreshButton) refreshButton.addEventListener('click', refreshLeagues);
+  // The "Open leagues" link inside #refresh-status is injected as innerHTML
+  // by setRefreshStatus(), so it needs a delegated listener rather than one
+  // bound to the anchor directly.
+  var refreshStatusEl = document.getElementById('refresh-status');
+  if (refreshStatusEl) {
+    refreshStatusEl.addEventListener('click', function(e) {
+      if (window.openai || !canOpenLinks()) return;
+      var target = e && e.target;
+      if (!target || target.tagName !== 'A') return;
+      if (e.preventDefault) e.preventDefault();
+      openLinkViaBridge(LEAGUES_URL);
+    });
+  }
 ${creditLinkHandlers}
 
   // Extract payload data from any wrapper format
@@ -1098,24 +1192,30 @@ ${creditLinkHandlers}
 
   async function refreshLeagues(e) {
     if (e && e.preventDefault) e.preventDefault();
-    if (!window.openai || typeof window.openai.callTool !== 'function') {
+    var useBridge = canCallServerTools();
+    if (!useBridge && (!window.openai || typeof window.openai.callTool !== 'function')) {
       setRefreshStatus('Open Flaim to manage leagues.', 'error');
       openFallbackUrl(LEAGUES_URL);
       return false;
     }
+    function callTool(name, args) {
+      return useBridge
+        ? bridgeRequest('tools/call', { name: name, arguments: args }, 120000)
+        : window.openai.callTool(name, args);
+    }
     setRefreshLoading(true);
     setRefreshStatus('Refreshing leagues...', '');
     try {
-      var refreshResult = await window.openai.callTool('refresh_leagues', {});
+      var refreshResult = await callTool('refresh_leagues', {});
       var refreshPayload = extractRefreshResult(refreshResult);
       if (refreshResult && refreshResult.isError) {
         throw new Error((refreshPayload && (refreshPayload.error_description || refreshPayload.error)) || 'Refresh failed');
       }
       var classification = classifyRefreshResult(refreshPayload);
       if (classification.reloadSession) {
-        var sessionResult = await window.openai.callTool('get_user_session', {});
+        var sessionResult = await callTool('get_user_session', {});
         var data = extract(sessionResult);
-        if (!data && window.openai.toolOutput != null) {
+        if (!data && window.openai && window.openai.toolOutput != null) {
           data = extract(window.openai.toolOutput);
         }
         if (!data) {
@@ -1161,6 +1261,14 @@ ${creditLinkHandlers}
     var msg = event.data;
 
     if (msg.jsonrpc === '2.0' && msg.id === initId) {
+      if (msg.result) {
+        bridgeReady = true;
+        hostCaps = msg.result.hostCapabilities || {};
+        var hostContext = msg.result.hostContext;
+        if (!window.openai && hostContext && typeof hostContext.theme === 'string') {
+          applyTheme(hostContext.theme);
+        }
+      }
       sendInitialized();
       // FLA-277: a hidden result can post its zero size before the host has
       // answered ui/initialize. Repeat it once the handshake completes, in
@@ -1169,9 +1277,37 @@ ${creditLinkHandlers}
       return;
     }
 
+    // MCP Apps bridge (Claude parity, FLA-426): a reply to a bridgeRequest()
+    // call (tools/call, ui/open-link), matched by id. Every id this widget
+    // ever sends is prefixed with initId, so any reply carrying that prefix
+    // is consumed here and never falls through to the "direct data" fallback
+    // below — including a late reply whose pending entry the timeout already
+    // deleted, which is dropped silently rather than resolved twice.
+    if (msg.jsonrpc === '2.0' && msg.id !== undefined && msg.id !== null &&
+        String(msg.id).indexOf(initId + '-') === 0) {
+      if (Object.prototype.hasOwnProperty.call(pending, msg.id)) {
+        var entry = pending[msg.id];
+        delete pending[msg.id];
+        clearTimeout(entry.timer);
+        if (msg.error) {
+          entry.reject(msg.error);
+        } else {
+          entry.resolve(msg.result);
+        }
+      }
+      return;
+    }
+
     if (msg.jsonrpc === '2.0' && msg.method === 'ui/resource-teardown') {
       if (msg.id !== undefined && msg.id !== null) {
         postToParent({ jsonrpc: '2.0', id: msg.id, result: {} });
+      }
+      return;
+    }
+
+    if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/host-context-changed') {
+      if (!window.openai && msg.params && typeof msg.params.theme === 'string') {
+        applyTheme(msg.params.theme);
       }
       return;
     }
