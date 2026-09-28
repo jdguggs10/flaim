@@ -1128,6 +1128,28 @@ describe("buildPublicDemoSportMenuRows", () => {
       { sport: "hockey", label: "Hockey", available: true, selected: true },
     ]);
   });
+
+  it("offers only the legacy sport while capabilities load and in legacy mode", () => {
+    const legacy = publicDemoReducer(INITIAL_PUBLIC_DEMO_STATE, {
+      type: "capabilities_unavailable",
+    });
+
+    for (const state of [INITIAL_PUBLIC_DEMO_STATE, legacy]) {
+      const rows = buildPublicDemoSportMenuRows(
+        selectPublicDemoSportOptions(state),
+      );
+
+      expect(rows.map((row) => row.sport)).toEqual([
+        "football",
+        "baseball",
+        "basketball",
+        "hockey",
+      ]);
+      expect(rows.filter((row) => row.available)).toEqual([
+        { sport: "baseball", label: "Baseball", available: true, selected: true },
+      ]);
+    }
+  });
 });
 
 describe("buildPublicDemoSportTransitionAnnouncement", () => {
