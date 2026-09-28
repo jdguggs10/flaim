@@ -21,11 +21,11 @@ import {
   RefreshCw,
   Archive,
   ArchiveRestore,
-  Eye,
   EyeOff,
   CheckCircle2,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Switch } from '@/components/ui/switch';
 import { useEspnCredentials } from '@/lib/use-espn-credentials';
 import {
   getYahooBadgeCopy,
@@ -1893,33 +1893,37 @@ function LeaguesPageContent() {
                 renderCard={false}
                 showHeader={false}
               />
-              <div className="flex items-start justify-between gap-4 rounded-lg border bg-card p-3">
-                <div className="min-w-0 space-y-1">
-                  <p className="text-sm font-medium">Hide the league widget in ChatGPT and Claude</p>
-                  <p className="text-xs text-muted-foreground">
-                    Flaim still returns your leagues to the assistant; only the visual card is hidden.
-                  </p>
+              <div className="border-t" />
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className="text-sm font-medium">Show league card in chat</span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="League card visibility info"
+                        title="League card visibility info"
+                      >
+                        <Info className="h-3.5 w-3.5" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="max-w-xs text-sm text-muted-foreground">
+                      The card listing your leagues in ChatGPT and Claude. Flaim still uses your leagues when it&apos;s off.
+                    </PopoverContent>
+                  </Popover>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="flex-shrink-0 gap-1.5"
-                  onClick={handleToggleHideLeagueWidget}
-                  disabled={isSavingHideLeagueWidget || isLoadingPreferences}
-                  aria-pressed={displayPreferences.hideLeagueWidget}
-                  aria-label="Hide the league widget in ChatGPT and Claude"
-                  title={displayPreferences.hideLeagueWidget ? 'Widget hidden (click to show)' : 'Widget shown (click to hide)'}
-                >
+                <div className="flex flex-shrink-0 items-center gap-2">
                   {isSavingHideLeagueWidget ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : displayPreferences.hideLeagueWidget ? (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  ) : (
-                    <Eye className="h-3.5 w-3.5" />
-                  )}
-                  {displayPreferences.hideLeagueWidget ? 'Hidden' : 'Shown'}
-                </Button>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : null}
+                  <Switch
+                    checked={!displayPreferences.hideLeagueWidget}
+                    onCheckedChange={handleToggleHideLeagueWidget}
+                    disabled={isSavingHideLeagueWidget || isLoadingPreferences}
+                    aria-label="Show league card in chat"
+                  />
+                </div>
               </div>
             </CardContent>
           ) : null}
