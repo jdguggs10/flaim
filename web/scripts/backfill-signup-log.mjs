@@ -309,7 +309,18 @@ export async function* listUsersAtCutoff({
     currentOffset += page.users.length;
     scanned += page.users.length;
 
-    if (page.users.length === 0) return;
+    if (page.users.length === 0) {
+      // An empty page is only a clean end once the frozen total is reached.
+      // Before that it is a truncated read, and returning here would hand
+      // callers a partial snapshot as if it were complete.
+      if (currentOffset < expectedTotal) {
+        throw new PaginationAnomalyError(
+          `empty page before the reported total was reached (read ${currentOffset} of ${expectedTotal})`,
+          currentOffset,
+        );
+      }
+      return;
+    }
 
     // Re-read the count after every page. The frozen cutoff means it should
     // never move; if it does, someone (or something) has changed the set out

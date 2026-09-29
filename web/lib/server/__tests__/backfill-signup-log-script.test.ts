@@ -287,6 +287,51 @@ describe("backfill-signup-log script helpers", () => {
       await expect(drain()).rejects.toThrow(/short page/);
       await expect(drain()).rejects.toMatchObject({ resumeOffset: 1 });
     });
+
+    it("throws on an empty page before the reported total is reached", async () => {
+      let listCallIndex = 0;
+      const fetchImpl = vi.fn(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          return jsonResponse({ object: "total_count", total_count: 3 });
+        }
+        listCallIndex += 1;
+        return jsonResponse(listCallIndex === 1 ? [clerkUser("user_1", 1000)] : []);
+      });
+
+      const drain = async () => {
+        for await (const _page of listUsersAtCutoff({
+          clerkSecretKey: "sk_test",
+          cutoffMs: 5000,
+          fetchImpl: fetchImpl as unknown as typeof fetch,
+          limit: 1,
+        })) {
+          // drain
+        }
+      };
+
+      await expect(drain()).rejects.toThrow(/empty page before the reported total/);
+    });
+
+    it("treats an empty first page as a clean end only when the total is zero", async () => {
+      const fetchImpl = vi.fn(async (input) => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith("/users/count")) {
+          return jsonResponse({ object: "total_count", total_count: 0 });
+        }
+        return jsonResponse([]);
+      });
+
+      const pages = [];
+      for await (const page of listUsersAtCutoff({
+        clerkSecretKey: "sk_test",
+        cutoffMs: 5000,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      })) {
+        pages.push(page);
+      }
+      expect(pages).toEqual([]);
+    });
   });
 
   describe("fetchUserCount", () => {

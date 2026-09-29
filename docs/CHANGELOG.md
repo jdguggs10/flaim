@@ -4,6 +4,13 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Deleted Accounts Are Unsubscribed From Marketing Email (FLA-431)
+
+- **Changed**: deleting a Flaim account now stops product-update email. This replaces the earlier policy that left the marketing-contact record untouched. The privacy page's "Marketing email" bullet says so, and its last-updated date is now September 29, 2026.
+- **Added**: `web/scripts/unsubscribe-deleted-accounts-from-plunk.mjs`, a dry-run-by-default operator gate. It unsubscribes subscribed Plunk contacts whose `data.clerkUserId` is in `account_deletions`, plus subscribed contacts with no `clerkUserId` that predate a frozen Clerk snapshot. An email that is any current Clerk address protects the contact under both rules. Immediately before each write it re-reads the contact from Plunk, re-judges it, and looks its address up in Clerk, skipping anything a signup claimed after the scan or between writes. It sends only `PATCH /contacts/:id {"subscribed": false}` and never deletes a contact. It fails closed on malformed pages, count mismatches, or more matches than `--max-matches`, reports `rerun` if a deletion or any change to the Clerk snapshot's user IDs or addresses lands during the scan, verifies every write on a fresh read, and prints counts only.
+- **Fixed**: the shared Clerk snapshot pager in `web/scripts/backfill-signup-log.mjs` now treats an empty page before the reported total as a pagination anomaly instead of a clean end, so neither the signup-log backfill nor the Plunk scripts can act on a silently partial snapshot.
+- **Changed**: the Broadcast workflow in `docs/EMAILS.md` gains a pre-send step. Run the gate's dry run, apply with approval if it reports matches, and confirm a final dry run shows zero matches before confirming the audience. The Plunk migration script's `createPlunkClient` now also returns its paced, `Retry-After`-aware `request` helper so both scripts share it.
+
 ### Homepage Demo Times Out a Hung Answer Fetch (FLA-429)
 
 - **Fixed**: the homepage demo's cached-answer fetch (`/api/public-chat/cache`) now gives up after 12 seconds (`PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS`) instead of leaving the status line on "Thinking" forever when a request hangs. The timeout goes through the same failure path a failed fetch already used: the status line clears and the existing "Demo answer unavailable" alert shows. Switching preset, platform, or sport mid-run still cancels silently, exactly as before — the fetch helper tells the two apart by checking whether the run's own abort signal (not the internal deadline) is what fired.
