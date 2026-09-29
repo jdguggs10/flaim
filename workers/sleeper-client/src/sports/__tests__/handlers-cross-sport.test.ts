@@ -6,7 +6,7 @@ import { clearSleeperPlayersInMemoryCacheForTesting } from '../../shared/sleeper
 import { SLEEPER_PLAYER_ENRICHMENT_WARNING } from '../../shared/sleeper-enrichment';
 import { TRADED_PICKS_UNAVAILABLE_WARNING, tradedPicksPartialWarning } from '../../shared/handlers/get-league-info';
 import { TEAMS_UNAVAILABLE_WARNING } from '../../shared/handlers/get-transactions';
-import { LEAGUE_STATUS_UNAVAILABLE_WARNING, PLAYER_POINTS_UNAVAILABLE_WARNING } from '../../shared/handlers/get-roster';
+import { LEAGUE_STATUS_UNAVAILABLE_WARNING, PLAYER_POINTS_DEADLINE_MS, PLAYER_POINTS_UNAVAILABLE_WARNING } from '../../shared/handlers/get-roster';
 
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 global.fetch = mockFetch;
@@ -1259,6 +1259,34 @@ describe('sleeper cross-sport handler characterization tests', () => {
       }
     });
 
+    it.each(scenarios)('$label returns the roster with a warning when the score body stalls after headers', async ({ sport, handlers }) => {
+      vi.useFakeTimers();
+      try {
+        mockFetchByUrl(currentRosterRoutes({
+          state: () => jsonResponse({ week: 6, season: '2025', season_type: 'regular' }),
+          matchups: () => {
+            const response = jsonResponse([]);
+            response.json = () => new Promise(() => {});
+            return response;
+          },
+        }));
+
+        const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+        const pending = handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
+        await vi.advanceTimersByTimeAsync(PLAYER_POINTS_DEADLINE_MS);
+        const result = await pending;
+
+        expect(result.success).toBe(true);
+        const data = result.data as Record<string, unknown>;
+        expect((data.starters as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'p1' });
+        expect((data.starters as Array<Record<string, unknown>>)[0]).not.toHaveProperty('points');
+        expect(data.snapshot).toMatchObject({ type: 'current', leagueStatus: 'in_season', pointsWeek: 6 });
+        expect(data.warnings).toEqual([PLAYER_POINTS_UNAVAILABLE_WARNING]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it.each(scenarios)('$label omits points and warns when this roster has no matchup row', async ({ sport, handlers }) => {
       mockFetchByUrl(currentRosterRoutes({
         state: () => jsonResponse({ week: 6, season: '2025' }),
@@ -1303,11 +1331,15 @@ describe('sleeper cross-sport handler characterization tests', () => {
       }
     });
 
-    it.each(scenarios)('$label omits points and warns when the league season is not the live state season', async ({ sport, handlers }) => {
-      mockFetchByUrl(currentRosterRoutes({
-        state: () => jsonResponse({ week: 4, season: '2026', season_type: 'regular' }),
-        matchups: scoredMatchup,
-      }));
+    it.each(scenarios)('$label omits points and warns when a saved older season would reuse the live week', async ({ sport, handlers }) => {
+      mockFetchByUrl({
+        ...currentRosterRoutes({
+          state: () => jsonResponse({ week: 4, season: '2026', season_type: 'regular' }),
+          matchups: scoredMatchup,
+        }),
+        // A 2024 league while /state is 2026 week 4. Do not attach 2024 week-4 scores.
+        '/league/12345': () => jsonResponse({ status: 'in_season', season: '2024' }),
+      });
 
       const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
       const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);

@@ -30,6 +30,13 @@ export const LEAGUE_STATUS_UNAVAILABLE_WARNING =
 export const PLAYER_POINTS_UNAVAILABLE_WARNING =
   'PLAYER_POINTS_UNAVAILABLE: Sleeper weekly player points unavailable; player entries omit points.';
 
+/**
+ * Bound for the optional current-roster score lookup, including response
+ * bodies. `sleeperFetch` aborts only until headers arrive, so a stalled
+ * `json()` would otherwise hold the roster forever.
+ */
+export const PLAYER_POINTS_DEADLINE_MS = 10_000;
+
 interface CurrentWeekPlayerPoints {
   /** Set when this week's matchups loaded. A roster id absent from the map has no row. */
   pointsByRosterId?: Map<number, unknown>;
@@ -55,11 +62,41 @@ const SCORING_SEASON_TYPES = new Set(['regular', 'post']);
  * offseason), and when the league status is `complete`, there is no current
  * scoring week, so this returns quietly with no warning and no matchup fetch.
  * Never throws; the roster request still succeeds without `points`.
+ * The whole lookup, including reading JSON, is bounded by
+ * `PLAYER_POINTS_DEADLINE_MS`.
  */
 async function loadCurrentWeekPlayerPoints(
   config: SleeperSportConfig,
   leagueId: string,
   leagueStatusPromise: Promise<LeagueStatusResult>,
+): Promise<CurrentWeekPlayerPoints> {
+  const attempt: { week?: number } = {};
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      loadCurrentWeekPlayerPointsBody(config, leagueId, leagueStatusPromise, attempt),
+      new Promise<CurrentWeekPlayerPoints>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error('SLEEPER_TIMEOUT: current-week player points exceeded their deadline'));
+        }, PLAYER_POINTS_DEADLINE_MS);
+      }),
+    ]);
+  } catch (error) {
+    console.error('[get-roster] current-week player points unavailable:', error);
+    return {
+      ...(attempt.week !== undefined ? { week: attempt.week } : {}),
+      warning: PLAYER_POINTS_UNAVAILABLE_WARNING,
+    };
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
+async function loadCurrentWeekPlayerPointsBody(
+  config: SleeperSportConfig,
+  leagueId: string,
+  leagueStatusPromise: Promise<LeagueStatusResult>,
+  attempt: { week?: number },
 ): Promise<CurrentWeekPlayerPoints> {
   let week: number | undefined;
   try {
@@ -93,6 +130,7 @@ async function loadCurrentWeekPlayerPoints(
 
     const stateWeek = state.week;
     week = typeof stateWeek === 'number' && Number.isFinite(stateWeek) && stateWeek > 0 ? stateWeek : 1;
+    attempt.week = week;
 
     const matchupsRes = await sleeperFetch(`/league/${leagueId}/matchups/${week}`);
     if (!matchupsRes.ok) {
