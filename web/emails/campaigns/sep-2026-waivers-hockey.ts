@@ -14,7 +14,9 @@ export default definePlunkBroadcast({
   subject: "Hockey is here, plus better waiver help",
   preview:
     "Waiver priority, FAAB budgets, smarter free agents, and a steadier Yahoo.",
-  type: "MARKETING",
+  // The template supplies and validates its own Plunk unsubscribe link. Keep
+  // the reviewed Flaim footer intact instead of adding Plunk's standard one.
+  type: "HEADLESS",
   releaseGate: {
     status: "CLEARED",
     evidence:

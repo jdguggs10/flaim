@@ -53,8 +53,11 @@ export type PlunkBroadcastManifest = {
   name: string;
   subject: string;
   preview: string;
-  /** MARKETING respects opt-outs and uses Plunk's marketing safeguards. */
-  type: "MARKETING";
+  /**
+   * Both types suppress opted-out contacts. HEADLESS leaves a reviewed custom
+   * HTML body unchanged; MARKETING appends Plunk's provider-owned footer.
+   */
+  type: "HEADLESS" | "MARKETING";
   /** A provider draft and proof require an approved, evidenced release gate. */
   releaseGate: BroadcastReleaseGate;
   audience: BroadcastAudience;

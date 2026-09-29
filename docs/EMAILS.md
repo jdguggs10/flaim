@@ -88,8 +88,8 @@ or send a campaign.
    approval in `evidence`.
    Its statement that OpenAI has approved v3.0 must not be sent or proofed
    before that portal evidence exists.
-5. Once the release gate is met, create exactly one Plunk **MARKETING** campaign
-   draft, either in the dashboard or by a one-off, separately approved
+5. Once the release gate is met, create exactly one Plunk campaign draft using
+   the manifest's declared type, either in the dashboard or by a one-off, separately approved
    operator API call (`POST /campaigns`, no `scheduledFor`) using the Plunk
    secret key from the password manager, from the reviewed local `plunk.html`
    and `campaign.json`. The API accepts only an HTML body, so check the proof
@@ -97,7 +97,13 @@ or send a campaign.
    campaign; the audience send stays a manual dashboard action by Gerry after
    explicit approval. Use `Gerry <updates@news.flaim.app>` with
    `gerry@news.flaim.app` as Reply-To. Do not edit links or unsubscribe markup
-   in the dashboard. Ordinary product updates use all subscribed contacts;
+   in the dashboard. Use **HEADLESS** for a Flaim custom-HTML Broadcast: it
+   still excludes opted-out contacts, preserves the reviewed Flaim footer with
+   `{{unsubscribeUrl}}`, and does not append Plunk's provider footer. Use
+   **MARKETING** only when that provider-owned footer is intended. Paste the
+   reviewed export in Plunk's HTML editor and stay in HTML mode; the Visual
+   editor rewrites table-based HTML and can strip its inline styling. Ordinary
+   product updates use all subscribed contacts;
    one-off operational cohorts, such as affected Yahoo users, use a
    campaign-specific segment rather than permanent audience structure.
 6. Confirm the intended Plunk audience or segment and its current recipient

@@ -82,6 +82,18 @@ describe("Plunk broadcast preparation", () => {
     });
   });
 
+  it("prepares a headless campaign with the validated Flaim unsubscribe link", async () => {
+    const prepared = await preparePlunkBroadcast({
+      ...manifest,
+      id: "test-headless",
+      type: "HEADLESS",
+    });
+
+    expect(prepared.manifest.type).toBe("HEADLESS");
+    expect(prepared.html).toContain(`href="${plunkUnsubscribeUrl}"`);
+    expect(prepared.text).toContain(`Unsubscribe ${plunkUnsubscribeUrl}`);
+  });
+
   it("fails closed when a Flaim link loses its campaign ref", () => {
     expect(() =>
       validatePlunkBroadcastHtml(

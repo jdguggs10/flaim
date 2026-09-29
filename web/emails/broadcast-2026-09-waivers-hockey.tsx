@@ -1,8 +1,6 @@
 import * as React from "react";
 import { Button, Column, Row, Section } from "react-email";
 import {
-  FlaimCallout,
-  FlaimCalloutText,
   FlaimEmailLayout,
   FlaimFooterLink,
   FlaimText,
@@ -42,87 +40,50 @@ export default function WaiversHockeyBroadcastEmail({
           <FlaimFooterLink href={unsubscribeUrl}>Unsubscribe</FlaimFooterLink>.
         </>
       }
+      footerDescription={
+        <>
+          I also clarified the privacy policy and terms.{" "}
+          <FlaimFooterLink href={privacyUrl}>Read the update.</FlaimFooterLink>
+        </>
+      }
       headerUrl={homeUrl}
       preview="Waiver priority, FAAB budgets, smarter free agents, and a steadier Yahoo."
       title="Waivers, hockey, and a steadier Yahoo"
     >
-      <FlaimText>Hey everyone,</FlaimText>
-      <FlaimText>
-        It&apos;s been a busy few weeks since kickoff. Here&apos;s what&apos;s
-        new:
-      </FlaimText>
+      <FlaimText>Hey everyone, a few quick updates:</FlaimText>
       <ul style={styles.updateList}>
         <li style={styles.updateItem}>
-          <strong>Hockey is underway.</strong> The NHL season just started, and
-          Flaim works with your ESPN and Yahoo hockey leagues using the same
-          connection as football. Basketball too once the NBA tips off. Yahoo
-          category leagues now show how each category stands in your matchup.
-          Winter sports are newer territory for me, so if anything looks off,
-          let me know.
+          <strong>Hockey is here.</strong> Connect your ESPN and Yahoo hockey
+          leagues just like football. Basketball works too.
         </li>
         <li style={styles.updateItem}>
-          <strong>Better waiver help.</strong> Standings now include your waiver
-          priority and remaining FAAB budget (Yahoo and Sleeper). ESPN free
-          agents come with season points, points per game, and projections.
-          Sleeper free agents are sorted by who&apos;s getting picked up most,
-          and Yahoo free agent lists no longer stop at 25. Try asking:
-          &quot;Who should I bid on this week, and how much of my FAAB should I
-          spend?&quot;
+          <strong>Better waiver help.</strong> Flaim now sees Yahoo and Sleeper
+          waiver priority and FAAB budgets, plus better free-agent detail across
+          all three platforms.
         </li>
         <li style={styles.updateItem}>
-          <strong>A steadier Yahoo.</strong> Football leagues that went missing
-          after a sync now show up, errors tell you what to do next, and rosters
-          show weekly points for each player. If Yahoo gave you trouble earlier,
-          give it another try.
+          <strong>Yahoo is more reliable.</strong> Missing football leagues,
+          sync errors, and weekly player points got fixes. If you had trouble
+          earlier, give it another try.
         </li>
-      </ul>
-      <FlaimText>A few smaller things:</FlaimText>
-      <ul style={styles.updateList}>
         <li style={styles.updateItem}>
-          ESPN setup is smoother in the latest Chrome extension, with a new{" "}
+          <strong>Easier ESPN setup.</strong> The latest Chrome extension and{" "}
           <a href={espnGuideUrl} style={styles.inlineLink}>
             setup guide
-          </a>
-          .
+          </a>{" "}
+          make connecting simpler.
         </li>
         <li style={styles.updateItem}>
-          Don&apos;t want the league card in every reply? There&apos;s now a
-          switch on your{" "}
+          <strong>A better league card.</strong> Refresh, dark mode, and links
+          work better in Claude. Prefer less clutter? Hide the card from your{" "}
           <a href={attributedLeaguesUrl} style={styles.inlineLink}>
             leagues page
-          </a>{" "}
-          to hide it.
-        </li>
-        <li style={styles.updateItem}>
-          The league card works better in Claude: refresh, dark mode, and links
-          all behave.
+          </a>
+          .
         </li>
       </ul>
 
-      <FlaimCallout>
-        <FlaimCalloutText>
-          <strong>Privacy policy update.</strong> I updated the privacy policy
-          and terms. They now explain more clearly how your league data reaches
-          ChatGPT or Claude when you ask a question, and what would happen to
-          your account if Flaim were ever sold: a new owner would have to keep
-          these promises and ask your permission before using your data
-          differently. Nothing changes about how Flaim works today. Your ESPN
-          and Yahoo logins never go to the AI, and Flaim never changes your
-          leagues.{" "}
-          <a href={privacyUrl} style={styles.inlineLink}>
-            Read the privacy policy
-          </a>
-          .
-        </FlaimCalloutText>
-      </FlaimCallout>
-
-      <FlaimText>
-        Feedback is always appreciated at{" "}
-        <a href="mailto:support@flaim.app" style={styles.inlineLink}>
-          support@flaim.app
-        </a>
-        , or just reply to this email.
-      </FlaimText>
+      <FlaimText>As always, keep the feedback coming. Just reply to this email.</FlaimText>
       <FlaimText>Gerry</FlaimText>
 
       <Section style={styles.actionSection}>
