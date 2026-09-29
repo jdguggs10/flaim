@@ -10,30 +10,35 @@
  * by hand, so this script runs immediately before each audience send instead
  * of in real time.
  *
- * Rules, applied only to contacts that are currently subscribed:
- *   1. `data.clerkUserId` is in `public.account_deletions`
- *      -> unsubscribeSource "account_deletion".
- *   2. No `data.clerkUserId`, the email is not any current Clerk address
- *      (primary or secondary), and the contact was created before the frozen
- *      Clerk snapshot -> unsubscribeSource "no_current_account".
+ * Rules, applied only to contacts that are currently subscribed and whose
+ * email is not any current Clerk address (primary or secondary). A current
+ * Clerk address always wins, so a live account is never unsubscribed:
+ *   1. `data.clerkUserId` is in `public.account_deletions` ("account_deletion").
+ *   2. No `data.clerkUserId`, and the contact was created before the frozen
+ *      Clerk snapshot ("no_current_account").
  *
- * Matches are unsubscribed with PATCH /contacts/:id. Contacts are never
- * deleted, so the unsubscribed record keeps a later re-signup from being
- * re-added as subscribed (the signup sync omits `subscribed`).
+ * Matches are unsubscribed with PATCH /contacts/:id {"subscribed": false}.
+ * Before each write the contact is re-read and re-judged against a fresh
+ * Clerk snapshot, so a signup that claimed it after the scan is skipped.
+ * Contacts are never deleted, so the unsubscribed record keeps a later
+ * re-signup from being re-added as subscribed (the signup sync omits
+ * `subscribed`).
  *
  * Dry-run is the default. The report is aggregate counts only: it never
  * prints an email address, a contact id, a Clerk user id, or a key. Any
  * malformed provider page, count mismatch, or match count above the ceiling
- * fails the run closed.
+ * fails the run closed. If a deletion or Clerk change lands during the scan,
+ * the run reports "rerun" instead of a clean result.
  *
  * Env (all required, for dry-run and apply alike):
  *   PLUNK_SECRET_API_KEY   operator shell only; never deployed.
- *   CLERK_SECRET_KEY       frozen Clerk snapshot for rule 2.
+ *   CLERK_SECRET_KEY       frozen Clerk snapshots (ownership protection).
  *   SUPABASE_URL           reads public.account_deletions.
  *   SUPABASE_SERVICE_KEY   service-role key (select on account_deletions).
  */
 
 import { pathToFileURL } from "node:url";
+import { fetchUserCount } from "./backfill-signup-log.mjs";
 import {
   createPlunkClient,
   listMigrationClerkUsers,
@@ -186,8 +191,7 @@ export async function listDeletedClerkUserIds({
   return ids;
 }
 
-function validateContact(contact, position) {
-  const where = `Plunk contact at position ${position}`;
+function validateContact(contact, where) {
   if (!isRecord(contact)) throw new Error(`${where} is not an object`);
   if (typeof contact.id !== "string" || !contact.id.trim()) {
     throw new Error(`${where} has no id`);
@@ -256,7 +260,7 @@ export async function listAllPlunkContacts({ request }) {
     lastTotal = body.total;
 
     for (const raw of body.data) {
-      const contact = validateContact(raw, contacts.length + 1);
+      const contact = validateContact(raw, `Plunk contact at position ${contacts.length + 1}`);
       if (ids.has(contact.id)) throw new Error("Plunk contact list returned a duplicate id");
       ids.add(contact.id);
       contacts.push(contact);
@@ -292,10 +296,29 @@ export function collectClerkEmails(clerkUsers) {
   return emails;
 }
 
+/**
+ * Judge one contact. Returns `{ source }` when a rule matches, otherwise
+ * `{ skip }` naming why it is left alone. A current Clerk address outranks
+ * both rules: a deleted account's old contact whose email now belongs to a
+ * live account stays subscribed.
+ */
+export function classifyContact(contact, { clerkEmails, cutoffMs, deletedClerkUserIds }) {
+  if (!contact.subscribed) return { skip: "alreadyUnsubscribed" };
+  if (contact.clerkUserId) {
+    if (!deletedClerkUserIds.has(contact.clerkUserId)) return { skip: "notDeleted" };
+    if (clerkEmails.has(contact.email)) return { skip: "rule1ProtectedByClerkEmail" };
+    return { source: UNSUBSCRIBE_SOURCES.accountDeletion };
+  }
+  if (clerkEmails.has(contact.email)) return { skip: "rule2ProtectedByClerkEmail" };
+  if (contact.createdAtMs >= cutoffMs) return { skip: "rule2SkippedCreatedAfterSnapshot" };
+  return { source: UNSUBSCRIBE_SOURCES.noCurrentAccount };
+}
+
 export function buildUnsubscribePlan({ clerkEmails, contacts, cutoffMs, deletedClerkUserIds }) {
   const stats = {
     alreadyUnsubscribed: 0,
     rule1Matches: 0,
+    rule1ProtectedByClerkEmail: 0,
     rule2Matches: 0,
     rule2ProtectedByClerkEmail: 0,
     rule2SkippedCreatedAfterSnapshot: 0,
@@ -306,56 +329,58 @@ export function buildUnsubscribePlan({ clerkEmails, contacts, cutoffMs, deletedC
   const matches = [];
 
   for (const contact of contacts) {
-    if (!contact.subscribed) {
-      stats.alreadyUnsubscribed += 1;
-      continue;
+    if (contact.subscribed) {
+      stats.subscribed += 1;
+      if (!contact.clerkUserId) stats.subscribedWithoutClerkUserId += 1;
     }
-    stats.subscribed += 1;
-
-    if (contact.clerkUserId) {
-      if (deletedClerkUserIds.has(contact.clerkUserId)) {
-        stats.rule1Matches += 1;
-        matches.push({ contact, source: UNSUBSCRIBE_SOURCES.accountDeletion });
-      }
-      continue;
-    }
-
-    stats.subscribedWithoutClerkUserId += 1;
-    if (clerkEmails.has(contact.email)) {
-      stats.rule2ProtectedByClerkEmail += 1;
-      continue;
-    }
-    if (contact.createdAtMs >= cutoffMs) {
-      stats.rule2SkippedCreatedAfterSnapshot += 1;
-      continue;
-    }
-    stats.rule2Matches += 1;
-    matches.push({ contact, source: UNSUBSCRIBE_SOURCES.noCurrentAccount });
+    const verdict = classifyContact(contact, { clerkEmails, cutoffMs, deletedClerkUserIds });
+    if (verdict.source === UNSUBSCRIBE_SOURCES.accountDeletion) stats.rule1Matches += 1;
+    else if (verdict.source === UNSUBSCRIBE_SOURCES.noCurrentAccount) stats.rule2Matches += 1;
+    else if (verdict.skip in stats) stats[verdict.skip] += 1;
+    if (verdict.source) matches.push({ contact, source: verdict.source });
   }
 
   return { matches, stats };
 }
 
 /**
- * Existing contact data is sent back with the source added, so the call keeps
- * `clerkUserId` and other fields whether Plunk merges or replaces `data`.
+ * Only the subscription flag is written. Contact `data` is never sent, so a
+ * stale copy from the scan can never overwrite newer metadata.
  */
-export function buildUnsubscribeBody(match) {
-  return {
-    data: { ...match.contact.data, unsubscribeSource: match.source },
-    subscribed: false,
-  };
+export const UNSUBSCRIBE_BODY = Object.freeze({ subscribed: false });
+
+export async function getPlunkContact({ id, request }) {
+  const response = await request(`/contacts/${encodeURIComponent(id)}`);
+  const body = await response.json().catch(() => null);
+  // Accept a bare contact or a `{ data: contact }` envelope. A bare contact
+  // also has a `data` field (its metadata), so check for a top-level id first.
+  const raw = isRecord(body) && typeof body.id === "string" ? body : body?.data;
+  const contact = validateContact(raw, "Plunk contact re-read");
+  if (contact.id !== id) throw new Error("Plunk contact re-read returned a different contact");
+  return contact;
 }
 
-export async function applyUnsubscribes({ matches, request }) {
-  const counts = { applied: 0, failed: 0 };
+/**
+ * Re-read each matched contact immediately before writing and re-judge it
+ * with `judge` (fresh Clerk ownership). Anything that no longer matches the
+ * same rule, such as a contact a new signup claimed after the scan, is
+ * skipped and counted rather than written.
+ */
+export async function applyUnsubscribes({ judge, matches, request }) {
+  const counts = { applied: 0, failed: 0, patchedIds: [], skippedNoLongerQualifies: 0 };
   for (const match of matches) {
     try {
+      const current = await getPlunkContact({ id: match.contact.id, request });
+      if (judge(current).source !== match.source) {
+        counts.skippedNoLongerQualifies += 1;
+        continue;
+      }
       await request(`/contacts/${encodeURIComponent(match.contact.id)}`, {
-        body: JSON.stringify(buildUnsubscribeBody(match)),
+        body: JSON.stringify(UNSUBSCRIBE_BODY),
         method: "PATCH",
       });
       counts.applied += 1;
+      counts.patchedIds.push(match.contact.id);
     } catch {
       counts.failed += 1;
     }
@@ -363,16 +388,24 @@ export async function applyUnsubscribes({ matches, request }) {
   return counts;
 }
 
-export function verifyUnsubscribed({ contacts, matches }) {
+export function verifyUnsubscribed({ contacts, ids }) {
   const byId = new Map(contacts.map((contact) => [contact.id, contact]));
   const result = { missing: 0, stillSubscribed: 0, verified: 0 };
-  for (const match of matches) {
-    const contact = byId.get(match.contact.id);
+  for (const id of ids) {
+    const contact = byId.get(id);
     if (!contact) result.missing += 1;
     else if (contact.subscribed === false) result.verified += 1;
     else result.stillSubscribed += 1;
   }
   return { ...result, safe: result.missing === 0 && result.stillSubscribed === 0 };
+}
+
+async function readClerkSnapshot({ clerkSecretKey, cutoffMs, fetchImpl }) {
+  const users = await listMigrationClerkUsers({ clerkSecretKey, cutoffMs, fetchImpl });
+  if (users.length === 0) {
+    throw new Error("Clerk snapshot is empty; refusing to judge contacts against it");
+  }
+  return users;
 }
 
 function requireEnv(env, name) {
@@ -383,8 +416,9 @@ function requireEnv(env, name) {
 
 /**
  * The whole job with its I/O injected. Returns the process exit code: zero
- * only when the run completed and, for --apply, every match verified false.
- * Configuration and fail-closed provider errors throw.
+ * only when the run completed without drift and, for --apply, every write
+ * succeeded and verified false. Configuration and fail-closed provider errors
+ * throw.
  *
  * @param {string[]} argv
  * @param {{
@@ -421,19 +455,26 @@ export async function run(
   // before the cutoff can then be judged against a Clerk set that already
   // contains any account that could own it.
   const cutoffMs = now();
-  const clerkUsers = await listMigrationClerkUsers({ clerkSecretKey, cutoffMs, fetchImpl });
-  if (clerkUsers.length === 0) {
-    throw new Error("Clerk snapshot is empty; refusing to judge contacts against it");
-  }
+  const clerkUsers = await readClerkSnapshot({ clerkSecretKey, cutoffMs, fetchImpl });
   const clerkEmails = collectClerkEmails(clerkUsers);
-  const deletedClerkUserIds = await listDeletedClerkUserIds({
-    fetchImpl,
-    supabaseServiceKey,
-    supabaseUrl,
-  });
+  const readDeletedIds = () =>
+    listDeletedClerkUserIds({ fetchImpl, supabaseServiceKey, supabaseUrl });
+  const deletedClerkUserIds = await readDeletedIds();
   const contacts = await listAllPlunkContacts({ request });
 
   const plan = buildUnsubscribePlan({ clerkEmails, contacts, cutoffMs, deletedClerkUserIds });
+
+  // A deletion during the scan changes both counts: the tombstone set grows
+  // and the frozen Clerk total shrinks. Either one means this run's verdict
+  // may already be stale, so it must not report a clean result.
+  const [clerkTotalAfterScan, deletedIdsAfterScan] = await Promise.all([
+    fetchUserCount({ clerkSecretKey, cutoffMs, fetchImpl }),
+    readDeletedIds(),
+  ]);
+  const drift = {
+    clerkTotalChanged: clerkTotalAfterScan !== clerkUsers.length,
+    deletedAccountsChanged: deletedIdsAfterScan.size !== deletedClerkUserIds.size,
+  };
   const totalMatches = plan.matches.length;
   const report = {
     clerkSnapshot: {
@@ -448,6 +489,11 @@ export async function run(
     totalMatches,
   };
 
+  if (drift.clerkTotalChanged || drift.deletedAccountsChanged) {
+    log(JSON.stringify({ ...report, drift, status: "rerun" }, null, 2));
+    return 1;
+  }
+
   if (totalMatches > args.maxMatches) {
     log(JSON.stringify({ ...report, status: "refused: matches above --max-matches" }, null, 2));
     throw new Error(
@@ -460,9 +506,24 @@ export async function run(
     return 0;
   }
 
-  const counts = await applyUnsubscribes({ matches: plan.matches, request });
+  // Refresh Clerk ownership right before writing, so a signup that landed
+  // after the scan protects its address. The original cutoff still bounds
+  // rule 2, and tombstones are insert-only, so the scan's set stays valid.
+  const freshClerkEmails = collectClerkEmails(
+    await readClerkSnapshot({ clerkSecretKey, cutoffMs: now(), fetchImpl }),
+  );
+  const counts = await applyUnsubscribes({
+    judge: (contact) =>
+      classifyContact(contact, {
+        clerkEmails: freshClerkEmails,
+        cutoffMs,
+        deletedClerkUserIds,
+      }),
+    matches: plan.matches,
+    request,
+  });
   const finalContacts = await listAllPlunkContacts({ request });
-  const verification = verifyUnsubscribed({ contacts: finalContacts, matches: plan.matches });
+  const verification = verifyUnsubscribed({ contacts: finalContacts, ids: counts.patchedIds });
   const completed = counts.failed === 0 && verification.safe;
   log(
     JSON.stringify(
@@ -470,6 +531,7 @@ export async function run(
         ...report,
         applied: counts.applied,
         failed: counts.failed,
+        skippedNoLongerQualifies: counts.skippedNoLongerQualifies,
         status: completed ? "complete" : "incomplete",
         verification,
       },

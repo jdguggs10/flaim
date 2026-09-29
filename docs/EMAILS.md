@@ -99,7 +99,8 @@ or send a campaign.
    [Deleted-account unsubscribe gate](#deleted-account-unsubscribe-gate))
    before confirming the audience. Run the dry run. If it reports any matches,
    review the counts, get explicit approval, and run `--apply`. Then run a
-   final dry run, which must report `totalMatches: 0`. Do not continue to the
+   final dry run, which must report `status: "complete"` with
+   `totalMatches: 0`. A `rerun` status means run it again. Do not continue to the
    audience step until it does. Repeat the final dry run if the send slips to
    a later day.
 7. Confirm the intended Plunk audience or segment and its current recipient
@@ -258,14 +259,16 @@ Deleting a Flaim account unsubscribes its address from product-update email befo
 
 This is a pre-send gate, not a real-time hook. Only the auth worker receives Clerk's `user.deleted` event, and that event carries no email address. Flaim keeps no first-party email copy (`account_deletions` stores only the Clerk user ID and time). Unsubscribing a Plunk contact by ID needs the broad Plunk secret key, which must never be deployed. Marketing email only goes out when an operator sends a Broadcast by hand, so the gate runs immediately before every audience send (Broadcast workflow step 6).
 
-`web/scripts/unsubscribe-deleted-accounts-from-plunk.mjs` reads three sources: a frozen, ascending, count-checked Clerk snapshot; every `account_deletions.clerk_user_id` through Supabase REST with the service key; and every Plunk contact through cursor pagination. It then applies two rules to currently subscribed contacts only:
+`web/scripts/unsubscribe-deleted-accounts-from-plunk.mjs` reads three sources: a frozen, ascending, count-checked Clerk snapshot; every `account_deletions.clerk_user_id` through Supabase REST with the service key; and every Plunk contact through cursor pagination. It considers only currently subscribed contacts whose email is not any current Clerk address (primary or secondary). A current Clerk address outranks both rules, so an address that now belongs to a live account is never unsubscribed, even if an older contact record still carries a deleted account's ID:
 
-1. **Account deletion:** the contact's `data.clerkUserId` is in `account_deletions`. It is unsubscribed with `data.unsubscribeSource: "account_deletion"`.
-2. **No current account:** the contact has no `data.clerkUserId` (retained Resend-only records), its email is not any current Clerk address (primary or secondary), and the contact was created before the Clerk snapshot. It is unsubscribed with `data.unsubscribeSource: "no_current_account"`.
+1. **Account deletion:** the contact's `data.clerkUserId` is in `account_deletions`.
+2. **No current account:** the contact has no `data.clerkUserId` (retained Resend-only records) and was created before the Clerk snapshot.
 
-Each match gets `PATCH /contacts/:id` with `subscribed: false` and its existing `data` plus `unsubscribeSource`, so `clerkUserId` survives whether Plunk merges or replaces `data`. The script never touches an already-unsubscribed contact and never deletes a contact. It fails closed on a malformed Plunk or Supabase page, a duplicate ID, a Plunk scan that does not end at the reported `total`, a Supabase read that does not match its exact count, an empty Clerk snapshot, or more matches than `--max-matches` (default 200). After `--apply`, it re-reads every Plunk contact and verifies each matched contact is now unsubscribed. A failed write or an unverified contact exits non-zero.
+After the Plunk scan, the script re-reads the `account_deletions` count and the frozen Clerk total. If either changed during the run, it reports `status: "rerun"` and exits non-zero instead of a clean result. Rerun it.
 
-The report is aggregate counts only: Clerk snapshot size, deleted-account count, contacts scanned, subscribed, already unsubscribed, subscribed without `clerkUserId`, rule 1 and rule 2 matches, rule 2 contacts protected by a current Clerk address or skipped as newer than the snapshot, and, after apply, applied, failed, and verification counts. It never prints an email address, a contact ID, a Clerk user ID, or a key.
+With `--apply`, the script takes a fresh Clerk snapshot, then re-reads each matched contact immediately before writing it and re-judges it against that fresh snapshot. A contact that no longer qualifies under the same rule, such as one a new signup claimed after the scan, is skipped and counted as `skippedNoLongerQualifies`. Each remaining match gets `PATCH /contacts/:id` with exactly `{"subscribed": false}`. Contact `data` is never sent, so a stale copy from the scan cannot overwrite newer metadata. The script never touches an already-unsubscribed contact and never deletes a contact. It fails closed on a malformed Plunk or Supabase page, a duplicate ID, a Clerk page that is empty or short before its reported total, a Plunk scan that does not end at the reported `total`, a Supabase read that does not match its exact count, an empty Clerk snapshot, or more matches than `--max-matches` (default 200). After writing, it re-reads every Plunk contact and verifies each written contact is now unsubscribed. A failed re-read, a failed write, or an unverified contact exits non-zero.
+
+The report is aggregate counts only: Clerk snapshot size, deleted-account count, contacts scanned, subscribed, already unsubscribed, subscribed without `clerkUserId`, rule 1 and rule 2 matches, contacts each rule left alone because a current Clerk address owns them, rule 2 contacts skipped as newer than the snapshot, any drift, and, after apply, applied, failed, skipped, and verification counts. It never prints an email address, a contact ID, a Clerk user ID, or a key.
 
 ```sh
 # Read-only dry run. Required before every audience send.
@@ -274,7 +277,8 @@ corepack pnpm --dir web exec node scripts/unsubscribe-deleted-accounts-from-plun
 # Separately approved write pass, only when the dry run reports matches.
 corepack pnpm --dir web exec node scripts/unsubscribe-deleted-accounts-from-plunk.mjs --apply
 
-# Final dry run. It must report totalMatches: 0 before the audience step.
+# Final dry run. It must report status "complete" and totalMatches: 0
+# before the audience step.
 corepack pnpm --dir web exec node scripts/unsubscribe-deleted-accounts-from-plunk.mjs
 ```
 
