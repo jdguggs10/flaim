@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Late September Plunk Broadcast (FLA-289)
+
+- **Added**: a local Plunk broadcast template and manifest for the late September product update (hockey, waiver priority and FAAB in standings, free-agent improvements, a steadier Yahoo, and the privacy policy update). It has no external release dependency and is prepared with the existing `email:plunk` command, which still performs no provider call.
+- **Changed**: the Broadcast workflow now allows the single MARKETING draft to be created either in the Plunk dashboard or by an operator-run API call. No agent or command may schedule or send the audience campaign; that stays a manual dashboard action after explicit approval.
+
 ### Homepage Demo Times Out a Hung Answer Fetch (FLA-429)
 
 - **Fixed**: the homepage demo's cached-answer fetch (`/api/public-chat/cache`) now gives up after 12 seconds (`PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS`) instead of leaving the status line on "Thinking" forever when a request hangs. The timeout goes through the same failure path a failed fetch already used: the status line clears and the existing "Demo answer unavailable" alert shows. Switching preset, platform, or sport mid-run still cancels silently, exactly as before — the fetch helper tells the two apart by checking whether the run's own abort signal (not the internal deadline) is what fired.

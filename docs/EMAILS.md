@@ -89,8 +89,11 @@ or send a campaign.
    Its statement that OpenAI has approved v3.0 must not be sent or proofed
    before that portal evidence exists.
 5. Once the release gate is met, create exactly one Plunk **MARKETING** campaign
-   draft in the dashboard from the reviewed local `plunk.html` and
-   `campaign.json`. Use `Gerry <updates@news.flaim.app>` with
+   draft, either in the dashboard or by an operator-run API call using the
+   Plunk secret key, from the reviewed local `plunk.html` and
+   `campaign.json`. No agent or command may schedule or send the audience
+   campaign; the audience send stays a manual dashboard action by Gerry after
+   explicit approval. Use `Gerry <updates@news.flaim.app>` with
    `gerry@news.flaim.app` as Reply-To. Do not edit links or unsubscribe markup
    in the dashboard. Ordinary product updates use all subscribed contacts;
    one-off operational cohorts, such as affected Yahoo users, use a
@@ -118,6 +121,7 @@ The first product templates are:
 - `web/emails/broadcast-2026-08-yahoo-access.tsx`
 - `web/emails/broadcast-2026-09-update.tsx`
 - `web/emails/broadcast-2026-09-yahoo-back.tsx`
+- `web/emails/broadcast-2026-09-waivers-hockey.tsx`
 - `web/emails/espn-setup-link.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. New Plunk
