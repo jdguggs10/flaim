@@ -110,6 +110,7 @@ export default function WaiversHockeyBroadcastEmail({
         label="Off the injury report"
         items={[
           "Yahoo: missing football leagues show up again, errors tell you what to do next, and rosters show weekly points. Upgraded from questionable to probable.",
+          "Sleeper: rosters and matchups now show each player's points for the week.",
         ]}
       />
       <ReportSection
