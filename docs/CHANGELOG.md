@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Static Eval and Demo Auth Documentation
+
+- **Changed**: Auth-worker documentation now treats eval and demo credentials as lane-local key/user pairs, permits production to map both keys to one fixed test user, and keeps preview in its own Clerk pool. The public README no longer records a concrete test-user ID or email. It also clarifies that `mcp:write` permits the rate-limited Flaim connected-league registry refresh only; it never writes upstream provider rosters, lineups, transactions, trades, or league settings.
+
 ### Synchronous ESPN League-Add Warnings (FLA-183)
 
 - **Fixed**: ESPN refresh and extension discovery now report a partial result when league discovery succeeds but Flaim cannot add one or more current or historical league seasons. The additive response keeps the existing success status while including a safe failure count and affected season metadata; `/leagues` and the league widget show the partial outcome alongside any other provider warning. `provider_sync` records only the safe count and `DB_ERROR` code. Existing-row refresh failures remain outside this issue's verified `addLeague` scope.
