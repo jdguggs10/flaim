@@ -52,9 +52,9 @@ const SCORING_SEASON_TYPES = new Set(['regular', 'post']);
  * roster while state is 2026 week 4). A failed state fetch does not guess
  * week 1 — that would attach the wrong week's scores — and a failed matchup
  * fetch is the same degradation. Outside `regular` and `post` (preseason,
- * offseason) there is no scoring week, so this returns quietly with no
- * warning and no matchup fetch. Never throws; the roster request still
- * succeeds without `points`.
+ * offseason), and when the league status is `complete`, there is no current
+ * scoring week, so this returns quietly with no warning and no matchup fetch.
+ * Never throws; the roster request still succeeds without `points`.
  */
 async function loadCurrentWeekPlayerPoints(
   config: SleeperSportConfig,
@@ -78,10 +78,17 @@ async function loadCurrentWeekPlayerPoints(
     const stateSeason = seasonToken(state.season);
     const leagueSeason = leagueStatus.season;
     if (!stateSeason || !leagueSeason || stateSeason !== leagueSeason) {
+      // A missing league season is also a failed league-status load, so the
+      // roster response pairs this with LEAGUE_STATUS_UNAVAILABLE.
       console.error(
         `[get-roster] skipping current-week player points; state season ${stateSeason ?? 'unknown'} does not match league season ${leagueSeason ?? 'unknown'}`,
       );
       return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+    }
+
+    if (leagueStatus.status === 'complete') {
+      // The current roster is the final roster. The live week is not its scoring week.
+      return { skipped: true };
     }
 
     const stateWeek = state.week;

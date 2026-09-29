@@ -1322,6 +1322,27 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/'))).toBe(false);
     });
 
+    it.each(scenarios)('$label skips player points when the league is already complete, with no warning and no matchup fetch', async ({ sport, handlers }) => {
+      mockFetchByUrl({
+        ...currentRosterRoutes({
+          state: () => jsonResponse({ week: 4, season: '2025', season_type: 'regular' }),
+          matchups: scoredMatchup,
+        }),
+        '/league/12345': () => jsonResponse({ status: 'complete', season: '2025' }),
+      });
+
+      const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+      const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
+
+      expect(result.success).toBe(true);
+      const data = result.data as Record<string, unknown>;
+      expect((data.starters as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'p1' });
+      expect((data.starters as Array<Record<string, unknown>>)[0]).not.toHaveProperty('points');
+      expect(data.snapshot).toEqual({ type: 'current', leagueStatus: 'complete' });
+      expect(data.warnings).toBeUndefined();
+      expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/'))).toBe(false);
+    });
+
     it.each(scenarios)('$label keeps a roster row with a null players_points map and does not invent points or a warning', async ({ sport, handlers }) => {
       mockFetchByUrl(currentRosterRoutes({
         state: () => jsonResponse({ week: 6, season: '2025' }),
