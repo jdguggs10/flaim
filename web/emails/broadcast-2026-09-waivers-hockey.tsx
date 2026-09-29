@@ -73,7 +73,7 @@ export default function WaiversHockeyBroadcastEmail({
       <ReportSection
         label="Called up"
         items={[
-          "Hockey works on ESPN and Yahoo. Basketball's ready for tip-off.",
+          "Hockey works on ESPN and Yahoo, checked against a live ESPN league. Basketball's ready for tip-off.",
           "Winter sports are newer for Flaim. If something looks off, tell me.",
         ]}
       />
@@ -90,7 +90,8 @@ export default function WaiversHockeyBroadcastEmail({
         label="Off the injury report"
         items={[
           "Yahoo: missing football leagues show up again, errors tell you what to do next, and rosters show weekly points. Upgraded from questionable to probable.",
-          "Sleeper: rosters and matchups now show each player's points for the week.",
+          "ESPN: standings now match ESPN's order and count ties correctly.",
+          "Sleeper: rosters and matchups show each player's points for the week, and drops no longer show up as adds.",
         ]}
       />
       <ReportSection
