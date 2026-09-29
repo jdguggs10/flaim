@@ -54,39 +54,19 @@ export default function WaiversHockeyBroadcastEmail({
       }
       headerUrl={homeUrl}
       preview="Waiver priority, FAAB budgets, smarter free agents, and a steadier Yahoo."
-      // PLACEHOLDER headline: Gerry rewrites this before sending.
-      title="Hockey's here. Yahoo's steadier. Lots of small stuff."
+      // DRAFT headline: Gerry may rewrite before sending.
+      title="The best time of year."
     >
       <BroadcastHero alt="Hockey player winding up a shot" gifUrl={gifUrl} />
 
       <GerryNote
         paragraphs={[
-          // PLACEHOLDER note: Gerry writes this in his own voice.
-          "[Gerry writes this: 2-4 sentences, his voice. What's been going on, what he's excited about, honest about what's still rough.]",
+          // DRAFT note from Gerry's dictated notes; he edits before sending.
+          "Football's a few weeks in, hockey just dropped the puck, basketball's around the corner, and the baseball playoffs are starting. It doesn't get better than this.",
+          "It's also been a wild few weeks for Flaim. At the start of the summer, fewer than 200 people had signed up. Today it's almost 17,000. Keeping everything afloat through that, plus getting Yahoo back online, has been a grind. But things feel stable now, and hearing from so many of you that this is actually useful has been the most energizing part.",
+          "So thanks for giving this a shot. Seriously. If you've got ideas, complaints, or a trade you want a second opinion on, just hit reply.",
         ]}
       />
-
-      <TryThis prompt="Who should I bid on this week, and how much FAAB should I spend?" />
-
-      <Section style={styles.actionSection}>
-        <Button href={attributedLeaguesUrl} style={styles.leaguesButton}>
-          Manage your leagues
-        </Button>
-      </Section>
-      <Section style={styles.assistantButtons}>
-        <Row data-text-stack="true">
-          <Column style={styles.assistantColumn}>
-            <Button href={chatGptAppUrl} style={styles.assistantButton}>
-              Ask Flaim in ChatGPT
-            </Button>
-          </Column>
-          <Column style={styles.assistantColumnLast}>
-            <Button href={claudeConnectorUrl} style={styles.assistantButton}>
-              Ask Flaim in Claude
-            </Button>
-          </Column>
-        </Row>
-      </Section>
 
       <ReportHeader />
 
@@ -141,7 +121,27 @@ export default function WaiversHockeyBroadcastEmail({
         ]}
       />
 
-      <FlaimText>Keep the feedback coming. Just hit reply.</FlaimText>
+      <TryThis prompt="Who should I bid on this week, and how much FAAB should I spend?" />
+
+      <Section style={styles.actionSection}>
+        <Button href={attributedLeaguesUrl} style={styles.leaguesButton}>
+          Manage your leagues
+        </Button>
+      </Section>
+      <Section style={styles.assistantButtons}>
+        <Row data-text-stack="true">
+          <Column style={styles.assistantColumn}>
+            <Button href={chatGptAppUrl} style={styles.assistantButton}>
+              Ask Flaim in ChatGPT
+            </Button>
+          </Column>
+          <Column style={styles.assistantColumnLast}>
+            <Button href={claudeConnectorUrl} style={styles.assistantButton}>
+              Ask Flaim in Claude
+            </Button>
+          </Column>
+        </Row>
+      </Section>
     </FlaimEmailLayout>
   );
 }
