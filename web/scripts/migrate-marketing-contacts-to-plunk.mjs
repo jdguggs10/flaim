@@ -416,7 +416,9 @@ export function createPlunkClient({
     return { action: "tracked_true" };
   }
 
-  return { applyTarget, listContacts };
+  // `request` is shared with unsubscribe-deleted-accounts-from-plunk.mjs so
+  // both operator scripts use the same pacing, Retry-After, and retry rules.
+  return { applyTarget, listContacts, request };
 }
 
 async function readState(path, fingerprint, targetHashes) {

@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Deleted Accounts Are Unsubscribed From Marketing Email (FLA-431)
+
+- **Changed**: deleting a Flaim account now stops product-update email. This replaces the earlier policy that left the marketing-contact record untouched. The privacy page's "Marketing email" bullet says so, and its last-updated date is now September 29, 2026.
+- **Added**: `web/scripts/unsubscribe-deleted-accounts-from-plunk.mjs`, a dry-run-by-default operator gate. It unsubscribes subscribed Plunk contacts whose `data.clerkUserId` is in `account_deletions`, plus subscribed contacts with no `clerkUserId` whose email is not any current Clerk address and that predate a frozen Clerk snapshot. It sends `PATCH /contacts/:id` with `subscribed: false` and an `unsubscribeSource`, and never deletes a contact. It fails closed on malformed pages, count mismatches, or more matches than `--max-matches`, verifies every write on a fresh read, and prints counts only.
+- **Changed**: the Broadcast workflow in `docs/EMAILS.md` gains a pre-send step. Run the gate's dry run, apply with approval if it reports matches, and confirm a final dry run shows zero matches before confirming the audience. The Plunk migration script's `createPlunkClient` now also returns its paced, `Retry-After`-aware `request` helper so both scripts share it.
+
 ### Homepage Demo Times Out a Hung Answer Fetch (FLA-429)
 
 - **Fixed**: the homepage demo's cached-answer fetch (`/api/public-chat/cache`) now gives up after 12 seconds (`PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS`) instead of leaving the status line on "Thinking" forever when a request hangs. The timeout goes through the same failure path a failed fetch already used: the status line clears and the existing "Demo answer unavailable" alert shows. Switching preset, platform, or sport mid-run still cancels silently, exactly as before — the fetch helper tells the two apart by checking whether the run's own abort signal (not the internal deadline) is what fired.
