@@ -33,20 +33,31 @@ export const PLAYER_POINTS_UNAVAILABLE_WARNING =
 interface CurrentWeekPlayerPoints {
   /** Set when this week's matchups loaded. A roster id absent from the map has no row. */
   pointsByRosterId?: Map<number, unknown>;
+  /** Scoring week the points belong to, once state resolved one. */
+  week?: number;
+  /** Preseason or offseason: no scoring week, so omit points without a warning. */
+  skipped?: boolean;
   warning?: string;
 }
 
+/** Fantasy scores exist for regular season and playoffs. Preseason and offseason do not. */
+const SCORING_SEASON_TYPES = new Set(['regular', 'post']);
+
 /**
  * Current-week `players_points` for a single-team roster. Week resolution
- * matches get_matchups: `config.statePath`, then a positive finite week, else
- * 1. A failed state fetch does not guess week 1 — that would attach the wrong
- * week's scores — and a failed matchup fetch is the same degradation. Never
- * throws; the roster request still succeeds without `points`.
+ * matches get_matchups when a scoring season is in progress: `config.statePath`,
+ * then a positive finite week, else 1. A failed state fetch does not guess
+ * week 1 — that would attach the wrong week's scores — and a failed matchup
+ * fetch is the same degradation. Outside `regular` and `post` (preseason,
+ * offseason) there is no scoring week, so this returns quietly with no
+ * warning and no matchup fetch. Never throws; the roster request still
+ * succeeds without `points`.
  */
 async function loadCurrentWeekPlayerPoints(
   config: SleeperSportConfig,
   leagueId: string,
 ): Promise<CurrentWeekPlayerPoints> {
+  let week: number | undefined;
   try {
     const stateRes = await sleeperFetch(config.statePath);
     if (!stateRes.ok) {
@@ -54,20 +65,24 @@ async function loadCurrentWeekPlayerPoints(
       return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
     }
 
-    const state = await stateRes.json() as { week?: number };
+    const state = await stateRes.json() as { week?: number; season_type?: unknown };
+    if (typeof state.season_type === 'string' && state.season_type.length > 0 && !SCORING_SEASON_TYPES.has(state.season_type)) {
+      return { skipped: true };
+    }
+
     const stateWeek = state.week;
-    const week = typeof stateWeek === 'number' && Number.isFinite(stateWeek) && stateWeek > 0 ? stateWeek : 1;
+    week = typeof stateWeek === 'number' && Number.isFinite(stateWeek) && stateWeek > 0 ? stateWeek : 1;
 
     const matchupsRes = await sleeperFetch(`/league/${leagueId}/matchups/${week}`);
     if (!matchupsRes.ok) {
       console.error(`[get-roster] matchups fetch failed for current-week player points (status ${matchupsRes.status})`);
-      return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+      return { week, warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
     }
 
     const matchups: unknown = await matchupsRes.json();
     if (!Array.isArray(matchups)) {
       console.error('[get-roster] matchups response for current-week player points was not an array');
-      return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+      return { week, warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
     }
 
     const pointsByRosterId = new Map<number, unknown>();
@@ -77,10 +92,13 @@ async function loadCurrentWeekPlayerPoints(
       if (typeof rosterId !== 'number') continue;
       pointsByRosterId.set(rosterId, (row as SleeperMatchup).players_points ?? null);
     }
-    return { pointsByRosterId };
+    return { week, pointsByRosterId };
   } catch (error) {
     console.error('[get-roster] current-week player points unavailable:', error);
-    return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+    return {
+      ...(week !== undefined ? { week } : {}),
+      warning: PLAYER_POINTS_UNAVAILABLE_WARNING,
+    };
   }
 }
 
@@ -339,7 +357,9 @@ export function createGetRosterHandler(config: SleeperSportConfig): HandlerFn {
       // playerPointsPromise is always defined here: team_id was truthy.
       const playerPointsResult = await playerPointsPromise!;
       let playersPoints: unknown;
-      if (playerPointsResult.warning) {
+      if (playerPointsResult.skipped) {
+        // No scoring week. Leave points off and do not warn.
+      } else if (playerPointsResult.warning) {
         warnings.push(playerPointsResult.warning);
       } else if (!playerPointsResult.pointsByRosterId?.has(roster.roster_id)) {
         console.error(
@@ -361,7 +381,10 @@ export function createGetRosterHandler(config: SleeperSportConfig): HandlerFn {
           ownerId: roster.owner_id,
           ownerName: ownerEntry?.displayName ?? 'Unknown',
           teamName: ownerEntry?.teamName,
-          snapshot: toSnapshotMetadata(snapshot, { leagueStatus: leagueStatusResult.status }),
+          snapshot: {
+            ...toSnapshotMetadata(snapshot, { leagueStatus: leagueStatusResult.status }),
+            ...(typeof playerPointsResult.week === 'number' ? { pointsWeek: playerPointsResult.week } : {}),
+          },
           starters: scoreEntries(starters),
           bench: scoreEntries(bench),
           reserve: scoreEntries(reserve),

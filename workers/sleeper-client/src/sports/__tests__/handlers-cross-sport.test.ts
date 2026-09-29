@@ -1011,7 +1011,8 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.starters).toEqual([{ id: 'p1', name: 'Player One', position: 'QB', team: 'BUF' }]);
       expect(data.record).toEqual({ wins: 3, losses: 2, ties: 0 });
       // leagueStatus is simply absent — not a malformed/empty-string value.
-      expect(data.snapshot).toEqual({ type: 'current' });
+      // pointsWeek is the scoring week the state fetch resolved.
+      expect(data.snapshot).toEqual({ type: 'current', pointsWeek: 4 });
       expect(data.warnings).toEqual([LEAGUE_STATUS_UNAVAILABLE_WARNING]);
       expect(mockFetch.mock.calls.some(([url]) => String(url) === leagueUrl)).toBe(true);
     });
@@ -1066,7 +1067,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
-      expect(data.snapshot).toEqual({ type: 'current' });
+      expect(data.snapshot).toEqual({ type: 'current', pointsWeek: 4 });
       expect(data.warnings).toEqual([LEAGUE_STATUS_UNAVAILABLE_WARNING]);
       expect(mockFetch.mock.calls.some(([url]) => String(url) === leagueUrl)).toBe(true);
     });
@@ -1160,6 +1161,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
       expect(data.taxi).toEqual([{ id: 'p4', name: 'Player Four', position: 'RB', team: 'DAL' }]);
       expect((data.taxi as Array<Record<string, unknown>>)[0]).not.toHaveProperty('points');
       expect(data.keepers).toEqual([{ id: 'p5', name: 'Player Five', position: 'QB', team: 'NYJ', points: 7 }]);
+      expect(data.snapshot).toMatchObject({ type: 'current', leagueStatus: 'in_season', pointsWeek: 6 });
       expect(data.warnings).toBeUndefined();
       expect(mockFetch.mock.calls.some(([url]) => String(url).includes(statePath))).toBe(true);
       expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/6'))).toBe(true);
@@ -1180,6 +1182,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         expect(result.success).toBe(true);
         const data = result.data as Record<string, unknown>;
         expect((data.starters as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'p1', points: 12.5 });
+        expect(data.snapshot).toMatchObject({ pointsWeek: 1 });
         expect(data.warnings).toBeUndefined();
         expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/1'))).toBe(true);
       }
@@ -1203,6 +1206,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         { id: '0', empty: true },
       ]);
       expect((data.bench as Array<Record<string, unknown>>)[0]).not.toHaveProperty('points');
+      expect(data.snapshot).not.toHaveProperty('pointsWeek');
       expect(data.warnings).toEqual([PLAYER_POINTS_UNAVAILABLE_WARNING]);
       expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/'))).toBe(false);
     });
@@ -1240,6 +1244,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
         expect(result.success).toBe(true);
         const data = result.data as Record<string, unknown>;
         expect((data.starters as Array<Record<string, unknown>>)[0]).not.toHaveProperty('points');
+        expect(data.snapshot).toMatchObject({ pointsWeek: 6 });
         expect(data.warnings).toEqual([PLAYER_POINTS_UNAVAILABLE_WARNING]);
       }
     });
@@ -1263,7 +1268,29 @@ describe('sleeper cross-sport handler characterization tests', () => {
       const data = result.data as Record<string, unknown>;
       expect((data.starters as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'p1' });
       expect((data.starters as Array<Record<string, unknown>>)[0]).not.toHaveProperty('points');
+      expect(data.snapshot).toMatchObject({ pointsWeek: 6 });
       expect(data.warnings).toEqual([PLAYER_POINTS_UNAVAILABLE_WARNING]);
+    });
+
+    it.each(scenarios)('$label skips player points outside regular season and playoffs, with no warning and no matchup fetch', async ({ sport, handlers }) => {
+      for (const seasonType of ['pre', 'off']) {
+        mockFetch.mockReset();
+        mockFetchByUrl(currentRosterRoutes({
+          state: () => jsonResponse({ week: 1, season_type: seasonType }),
+          matchups: scoredMatchup,
+        }));
+
+        const params: ToolParams = { sport, league_id: '12345', season_year: 2025, team_id: '1' };
+        const result = await handlers.get_roster(playersCacheEnv(UNUSED_PLAYER), params);
+
+        expect(result.success).toBe(true);
+        const data = result.data as Record<string, unknown>;
+        expect((data.starters as Array<Record<string, unknown>>)[0]).toMatchObject({ id: 'p1' });
+        expect((data.starters as Array<Record<string, unknown>>)[0]).not.toHaveProperty('points');
+        expect(data.snapshot).not.toHaveProperty('pointsWeek');
+        expect(data.warnings).toBeUndefined();
+        expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/matchups/'))).toBe(false);
+      }
     });
 
     it.each(scenarios)('$label keeps a roster row with a null players_points map and does not invent points or a warning', async ({ sport, handlers }) => {
@@ -1481,7 +1508,7 @@ describe('sleeper cross-sport handler characterization tests', () => {
 
       expect(result.success).toBe(true);
       const data = result.data as Record<string, unknown>;
-      expect(data.snapshot).toEqual({ type: 'current', leagueStatus: 'in_season' });
+      expect(data.snapshot).toEqual({ type: 'current', leagueStatus: 'in_season', pointsWeek: 4 });
       expect(data).toHaveProperty('record');
     });
   });
