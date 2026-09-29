@@ -89,9 +89,11 @@ or send a campaign.
    Its statement that OpenAI has approved v3.0 must not be sent or proofed
    before that portal evidence exists.
 5. Once the release gate is met, create exactly one Plunk **MARKETING** campaign
-   draft, either in the dashboard or by an operator-run API call using the
-   Plunk secret key, from the reviewed local `plunk.html` and
-   `campaign.json`. No agent or command may schedule or send the audience
+   draft, either in the dashboard or by a one-off, separately approved
+   operator API call (`POST /campaigns`, no `scheduledFor`) using the Plunk
+   secret key from the password manager, from the reviewed local `plunk.html`
+   and `campaign.json`. The API accepts only an HTML body, so check the proof
+   for a plain-text part. No agent or command may schedule or send the audience
    campaign; the audience send stays a manual dashboard action by Gerry after
    explicit approval. Use `Gerry <updates@news.flaim.app>` with
    `gerry@news.flaim.app` as Reply-To. Do not edit links or unsubscribe markup
