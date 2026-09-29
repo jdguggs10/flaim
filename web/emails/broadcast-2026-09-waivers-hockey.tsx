@@ -34,7 +34,7 @@ export default function WaiversHockeyBroadcastEmail({
     "https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
   claudeConnectorUrl =
     "https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754",
-  gifUrl = "https://media1.tenor.com/m/lYC5z5E6wKEAAAAC/hockey-goal.gif",
+  gifUrl = "",
   leaguesUrl = "https://flaim.app/leagues",
   unsubscribeUrl = previewUnsubscribeUrl,
 }: WaiversHockeyBroadcastEmailProps) {
@@ -150,7 +150,7 @@ WaiversHockeyBroadcastEmail.PreviewProps = {
     "https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
   claudeConnectorUrl:
     "https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754",
-  gifUrl: "https://media1.tenor.com/m/lYC5z5E6wKEAAAAC/hockey-goal.gif",
+  gifUrl: "",
   leaguesUrl: "https://flaim.app/leagues",
   unsubscribeUrl: previewUnsubscribeUrl,
 } satisfies WaiversHockeyBroadcastEmailProps;
