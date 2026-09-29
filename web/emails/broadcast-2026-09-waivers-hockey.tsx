@@ -63,7 +63,7 @@ export default function WaiversHockeyBroadcastEmail({
         paragraphs={[
           // DRAFT note from Gerry's dictated notes; he edits before sending.
           "Football's a few weeks in, hockey just dropped the puck, basketball's around the corner, and the baseball playoffs are starting. It doesn't get better than this.",
-          "It's also been a wild few weeks for Flaim. At the start of the summer, fewer than 200 people had signed up. Today it's almost 17,000. Keeping everything afloat through that, plus getting Yahoo back online, has been a grind. But things feel stable now, and hearing from so many of you that this is actually useful has been the most energizing part.",
+          "It's also been a wild few weeks for Flaim. At the start of the summer, a couple hundred people had tried Flaim. Today it's about 100 times that. Keeping everything afloat through that, plus getting Yahoo back online, has been a grind. But things feel stable now, and hearing from so many of you that this is actually useful has been the most energizing part.",
           "So thanks for giving this a shot. Seriously. If you've got ideas, complaints, or a trade you want a second opinion on, just hit reply.",
         ]}
       />
