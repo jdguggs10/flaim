@@ -6,8 +6,9 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ### Standings, Sleeper Drops, and ESPN Hockey Mapping Accuracy
 
-- **Fixed**: ESPN `get_standings` now counts a tie as half a win when calculating `winPercentage`. When every returned team has a valid ESPN `playoffSeed`, that provider order now determines `rank`; incomplete seed data keeps the existing computed-percentage and wins fallback.
+- **Fixed**: ESPN `get_standings` now counts a tie as half a win when calculating `winPercentage`. When every returned team has a unique, valid ESPN `playoffSeed`, that provider order now determines `rank`; incomplete or contradictory seed data keeps the existing computed-percentage and wins fallback.
 - **Fixed**: Sleeper transactions containing drops and no adds now normalize as `type: "drop"`, so `get_transactions` with `type=drop` can return standalone releases. Add-only and add-plus-drop replacements remain `type: "add"`, matching ESPN and Yahoo transaction semantics while retaining their `players_dropped` details.
+- **Changed**: ESPN hockey time stats now expose their actual units as `TOI_SECONDS`, `ATOI_SECONDS`, and `MIN_SECONDS`. The unverified goalie stat ID 34 no longer aliases `GP`; it uses the safe `STAT_34` fallback while the live-verified ID 30 remains `GP`. No worker, web, or shipped-skill consumer depended on the removed labels.
 - **Verified**: ESPN hockey position, lineup-slot, pro-team, and stat mappings against live 2026-27 league data, including 2025-26 actual and 2026-27 projected stat payloads available during the preseason. Newly identified stat IDs now use readable labels; basketball mappings remain unverified until a live basketball league is available.
 
 ### Sleeper Roster and Matchup Entries Carry Weekly League Points
