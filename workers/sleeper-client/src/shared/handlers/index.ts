@@ -14,7 +14,7 @@ export function createSleeperHandlers(config: SleeperSportConfig): Record<string
   return {
     get_league_info: createGetLeagueInfoHandler(),
     get_standings: createGetStandingsHandler(),
-    get_roster: createGetRosterHandler(),
+    get_roster: createGetRosterHandler(config),
     get_matchups: createGetMatchupsHandler(config),
     get_free_agents: createSleeperGetFreeAgentsHandler(config.sport),
     get_transactions: createGetTransactionsHandler(config),

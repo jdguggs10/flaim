@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import {
+  attachSleeperPlayerPoints,
   buildUserDirectory,
   loadSleeperPlayersIndexForEnrichment,
   resolveSleeperPlayerEntries,
   SLEEPER_PLAYER_ENRICHMENT_WARNING,
+  type SleeperPlayerEntry,
 } from '../sleeper-enrichment';
 import { getSleeperPlayersIndex, type SleeperPlayerRecord } from '../sleeper-players-cache';
 import type { Env, SleeperLeagueUser } from '../../types';
@@ -162,6 +164,66 @@ describe('resolveSleeperPlayerEntries', () => {
 
   it('returns an empty array for an empty id list', () => {
     expect(resolveSleeperPlayerEntries([], new Map())).toEqual([]);
+  });
+});
+
+describe('attachSleeperPlayerPoints', () => {
+  const entries: SleeperPlayerEntry[] = [
+    { id: 'p1', name: 'Player One', position: 'RB', team: 'BUF' },
+    { id: 'p2', name: 'Player Two', position: 'WR' },
+    { id: '0', empty: true },
+    { id: 'ghost' },
+  ];
+
+  it('attaches a finite league score, including 0 and negatives, and leaves identity fields in place', () => {
+    const scored = attachSleeperPlayerPoints(entries, { p1: 18.4, p2: 0, ghost: -1.5 });
+
+    expect(scored).toEqual([
+      { id: 'p1', name: 'Player One', position: 'RB', team: 'BUF', points: 18.4 },
+      { id: 'p2', name: 'Player Two', position: 'WR', points: 0 },
+      { id: '0', empty: true },
+      { id: 'ghost', points: -1.5 },
+    ]);
+    expect(scored[1]).not.toHaveProperty('team');
+    expect(scored[2]).not.toHaveProperty('points');
+    expect(scored[2]).toEqual({ id: '0', empty: true });
+  });
+
+  it('never scores the empty-slot sentinel, even when the map has a "0" key', () => {
+    const scored = attachSleeperPlayerPoints([{ id: '0', empty: true }], { '0': 15 });
+
+    expect(scored).toEqual([{ id: '0', empty: true }]);
+    expect(scored[0]).not.toHaveProperty('points');
+  });
+
+  it('omits points when the id is absent or the value is not a finite number', () => {
+    const scored = attachSleeperPlayerPoints(
+      [{ id: 'p1', name: 'Player One' }, { id: 'p2' }, { id: 'p3' }, { id: 'p4' }, { id: 'p5' }],
+      {
+        p2: Number.NaN,
+        p3: Number.POSITIVE_INFINITY,
+        p4: '12' as unknown as number,
+        p5: null as unknown as number,
+      },
+    );
+
+    expect(scored).toEqual([
+      { id: 'p1', name: 'Player One' },
+      { id: 'p2' },
+      { id: 'p3' },
+      { id: 'p4' },
+      { id: 'p5' },
+    ]);
+    for (const entry of scored) {
+      expect(entry).not.toHaveProperty('points');
+    }
+  });
+
+  it('omits points when the map is missing, null, or not a plain object', () => {
+    expect(attachSleeperPlayerPoints(entries, undefined)).toEqual(entries);
+    expect(attachSleeperPlayerPoints(entries, null)).toEqual(entries);
+    expect(attachSleeperPlayerPoints(entries, [18.4])).toEqual(entries);
+    expect(attachSleeperPlayerPoints([], { p1: 1 })).toEqual([]);
   });
 });
 

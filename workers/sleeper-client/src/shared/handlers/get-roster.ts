@@ -1,4 +1,4 @@
-import type { HandlerFn } from './types';
+import type { HandlerFn, SleeperSportConfig } from './types';
 import type { Env, SleeperLeague, SleeperLeagueUser, SleeperMatchup, SleeperRoster, ToolParams } from '../../types';
 import {
   ErrorCode,
@@ -11,7 +11,13 @@ import {
 } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
-import { buildUserDirectory, loadSleeperPlayersIndexForEnrichment, resolveSleeperPlayerEntries } from '../sleeper-enrichment';
+import {
+  attachSleeperPlayerPoints,
+  buildUserDirectory,
+  loadSleeperPlayersIndexForEnrichment,
+  resolveSleeperPlayerEntries,
+  type SleeperPlayerEntry,
+} from '../sleeper-enrichment';
 
 // team_id matches either the roster ID or the owner's user ID.
 function findRoster(rosters: SleeperRoster[], teamId: string): SleeperRoster | undefined {
@@ -20,6 +26,63 @@ function findRoster(rosters: SleeperRoster[], teamId: string): SleeperRoster | u
 
 export const LEAGUE_STATUS_UNAVAILABLE_WARNING =
   'LEAGUE_STATUS_UNAVAILABLE: Sleeper league status unavailable; snapshot.leagueStatus omitted.';
+
+export const PLAYER_POINTS_UNAVAILABLE_WARNING =
+  'PLAYER_POINTS_UNAVAILABLE: Sleeper weekly player points unavailable; player entries omit points.';
+
+interface CurrentWeekPlayerPoints {
+  /** Set when this week's matchups loaded. A roster id absent from the map has no row. */
+  pointsByRosterId?: Map<number, unknown>;
+  warning?: string;
+}
+
+/**
+ * Current-week `players_points` for a single-team roster. Week resolution
+ * matches get_matchups: `config.statePath`, then a positive finite week, else
+ * 1. A failed state fetch does not guess week 1 — that would attach the wrong
+ * week's scores — and a failed matchup fetch is the same degradation. Never
+ * throws; the roster request still succeeds without `points`.
+ */
+async function loadCurrentWeekPlayerPoints(
+  config: SleeperSportConfig,
+  leagueId: string,
+): Promise<CurrentWeekPlayerPoints> {
+  try {
+    const stateRes = await sleeperFetch(config.statePath);
+    if (!stateRes.ok) {
+      console.error(`[get-roster] state fetch failed for current-week player points (status ${stateRes.status})`);
+      return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+    }
+
+    const state = await stateRes.json() as { week?: number };
+    const stateWeek = state.week;
+    const week = typeof stateWeek === 'number' && Number.isFinite(stateWeek) && stateWeek > 0 ? stateWeek : 1;
+
+    const matchupsRes = await sleeperFetch(`/league/${leagueId}/matchups/${week}`);
+    if (!matchupsRes.ok) {
+      console.error(`[get-roster] matchups fetch failed for current-week player points (status ${matchupsRes.status})`);
+      return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+    }
+
+    const matchups: unknown = await matchupsRes.json();
+    if (!Array.isArray(matchups)) {
+      console.error('[get-roster] matchups response for current-week player points was not an array');
+      return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+    }
+
+    const pointsByRosterId = new Map<number, unknown>();
+    for (const row of matchups) {
+      if (!row || typeof row !== 'object') continue;
+      const rosterId = (row as SleeperMatchup).roster_id;
+      if (typeof rosterId !== 'number') continue;
+      pointsByRosterId.set(rosterId, (row as SleeperMatchup).players_points ?? null);
+    }
+    return { pointsByRosterId };
+  } catch (error) {
+    console.error('[get-roster] current-week player points unavailable:', error);
+    return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
+  }
+}
 
 interface LeagueStatusResult {
   status?: string;
@@ -133,6 +196,7 @@ async function getHistoricalRoster(
   const bench = players.filter((p) => !starters.includes(p));
 
   const { index: playersIndex, warnings } = await playersIndexPromise;
+  const playersPoints = matchup.players_points ?? undefined;
 
   return {
     success: true as const,
@@ -145,17 +209,24 @@ async function getHistoricalRoster(
       snapshot: toSnapshotMetadata(snapshot),
       // includeTeam: false — the player index only tracks each player's CURRENT
       // club, so a past-week roster must not show a club they joined later.
-      starters: resolveSleeperPlayerEntries(starters, playersIndex, { includeTeam: false }),
-      bench: resolveSleeperPlayerEntries(bench, playersIndex, { includeTeam: false }),
+      // points come from this same matchup's players_points map (no extra fetch).
+      starters: attachSleeperPlayerPoints(
+        resolveSleeperPlayerEntries(starters, playersIndex, { includeTeam: false }),
+        playersPoints,
+      ),
+      bench: attachSleeperPlayerPoints(
+        resolveSleeperPlayerEntries(bench, playersIndex, { includeTeam: false }),
+        playersPoints,
+      ),
       points: matchup.points,
-      playersPoints: matchup.players_points ?? undefined,
+      playersPoints,
       limitations: { reserveAndTaxiClassificationAvailable: false, playerProTeamAvailable: false },
       ...(warnings.length ? { warnings } : {}),
     },
   };
 }
 
-export function createGetRosterHandler(): HandlerFn {
+export function createGetRosterHandler(config: SleeperSportConfig): HandlerFn {
   return async (env, params) => {
     const { league_id, team_id, sport } = params;
     if (!league_id) {
@@ -194,10 +265,19 @@ export function createGetRosterHandler(): HandlerFn {
       // it never rejects (no unhandled rejection).
       const leagueStatusPromise = loadLeagueStatus(league_id);
 
-      const [rostersRes, usersRes] = await Promise.all([
+      // Rosters/users are started before the optional points load so their
+      // call order stays stable, and so a hanging state fetch is not inside
+      // this Promise.all — a prompt roster error still returns without waiting
+      // on player points. The points load itself overlaps that round trip
+      // (state, then this week's matchups) and never rejects.
+      const rosterUsersPromise = Promise.all([
         sleeperFetch(`/league/${league_id}/rosters`),
         sleeperFetch(`/league/${league_id}/users`),
       ]);
+      const playerPointsPromise = team_id
+        ? loadCurrentWeekPlayerPoints(config, league_id)
+        : undefined;
+      const [rostersRes, usersRes] = await rosterUsersPromise;
 
       if (!rostersRes.ok) handleSleeperError(rostersRes);
       if (!usersRes.ok) handleSleeperError(usersRes);
@@ -256,6 +336,23 @@ export function createGetRosterHandler(): HandlerFn {
       const leagueStatusResult = await leagueStatusPromise;
       if (leagueStatusResult.warning) warnings.push(leagueStatusResult.warning);
 
+      // playerPointsPromise is always defined here: team_id was truthy.
+      const playerPointsResult = await playerPointsPromise!;
+      let playersPoints: unknown;
+      if (playerPointsResult.warning) {
+        warnings.push(playerPointsResult.warning);
+      } else if (!playerPointsResult.pointsByRosterId?.has(roster.roster_id)) {
+        console.error(
+          `[get-roster] no current-week matchup row for roster ${roster.roster_id} in league ${league_id}`,
+        );
+        warnings.push(PLAYER_POINTS_UNAVAILABLE_WARNING);
+      } else {
+        playersPoints = playerPointsResult.pointsByRosterId.get(roster.roster_id);
+      }
+
+      const scoreEntries = (ids: string[]): SleeperPlayerEntry[] =>
+        attachSleeperPlayerPoints(resolveSleeperPlayerEntries(ids, playersIndex), playersPoints);
+
       return {
         success: true,
         data: {
@@ -265,10 +362,10 @@ export function createGetRosterHandler(): HandlerFn {
           ownerName: ownerEntry?.displayName ?? 'Unknown',
           teamName: ownerEntry?.teamName,
           snapshot: toSnapshotMetadata(snapshot, { leagueStatus: leagueStatusResult.status }),
-          starters: resolveSleeperPlayerEntries(starters, playersIndex),
-          bench: resolveSleeperPlayerEntries(bench, playersIndex),
-          reserve: resolveSleeperPlayerEntries(reserve, playersIndex),
-          taxi: resolveSleeperPlayerEntries(taxi, playersIndex),
+          starters: scoreEntries(starters),
+          bench: scoreEntries(bench),
+          reserve: scoreEntries(reserve),
+          taxi: scoreEntries(taxi),
           // Populated only during Sleeper's pre-draft keeper-selection window
           // (see README); null vs [] is preserved exactly as Sleeper sends it
           // rather than collapsed to one shape.
@@ -277,7 +374,7 @@ export function createGetRosterHandler(): HandlerFn {
               ? undefined
               : roster.keepers === null
                 ? null
-                : resolveSleeperPlayerEntries(roster.keepers, playersIndex),
+                : scoreEntries(roster.keepers),
           record: {
             wins: settings?.wins ?? 0,
             losses: settings?.losses ?? 0,

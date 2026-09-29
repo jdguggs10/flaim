@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Sleeper Roster and Matchup Entries Carry Weekly League Points
+
+- **Added**: Sleeper `get_roster` and `get_matchups` player entries now include `points` when that week's matchup `players_points` map has a finite league score for the player. A reported `0` is kept; a missing or non-finite value is omitted, and Sleeper's empty lineup slot never gets `points`. `get_matchups` puts the score on each side's existing starters from the payload it already fetched. A current single-team `get_roster` loads the current week's matchups (week resolved the same way as `get_matchups`) and puts `points` on starters, bench, reserve, taxi, and keepers; if that state or matchup fetch fails, or the roster has no matchup row, the request still succeeds, entries omit `points`, and a `PLAYER_POINTS_UNAVAILABLE` warning is added. A historical week roster keeps its top-level `playersPoints` map and also puts `points` on each starter and bench entry.
+- **Unchanged**: additive passthrough only. No MCP schema or tool-description change — starter and roster player arrays stay loose, so the extra field needs no contract edit. ESPN and Yahoo are unchanged. Category stat lines are not included; Flaim does not call `/stats` or `/projections` or score players from `scoring_settings`. Bench players are not added to matchup responses.
+
 ### Homepage Demo Times Out a Hung Answer Fetch (FLA-429)
 
 - **Fixed**: the homepage demo's cached-answer fetch (`/api/public-chat/cache`) now gives up after 12 seconds (`PUBLIC_DEMO_CACHE_FETCH_TIMEOUT_MS`) instead of leaving the status line on "Thinking" forever when a request hangs. The timeout goes through the same failure path a failed fetch already used: the status line clears and the existing "Demo answer unavailable" alert shows. Switching preset, platform, or sport mid-run still cancels silently, exactly as before — the fetch helper tells the two apart by checking whether the run's own abort signal (not the internal deadline) is what fired.

@@ -3,7 +3,7 @@ import type { SleeperLeagueUser, SleeperMatchup, SleeperRoster } from '../../typ
 import { ErrorCode } from '@flaim/worker-shared';
 import { sleeperFetch, handleSleeperError } from '../sleeper-api';
 import { toExecuteErrorResponse } from './utils';
-import { buildUserDirectory, loadSleeperPlayersIndexForEnrichment, resolveSleeperPlayerEntries } from '../sleeper-enrichment';
+import { attachSleeperPlayerPoints, buildUserDirectory, loadSleeperPlayersIndexForEnrichment, resolveSleeperPlayerEntries } from '../sleeper-enrichment';
 
 export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn {
   return async (env, params) => {
@@ -78,7 +78,10 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
             ownerName: owner?.ownerName ?? 'Unknown',
             teamName: owner?.teamName,
             points: m.points ?? 0,
-            starters: resolveSleeperPlayerEntries(m.starters ?? [], playersIndex, { includeTeam: !explicitWeek }),
+            starters: attachSleeperPlayerPoints(
+              resolveSleeperPlayerEntries(m.starters ?? [], playersIndex, { includeTeam: !explicitWeek }),
+              m.players_points,
+            ),
           };
         };
 
