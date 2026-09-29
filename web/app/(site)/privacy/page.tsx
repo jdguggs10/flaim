@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <div className="container max-w-3xl mx-auto py-12 px-4">
         <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
         <p className="text-muted-foreground mb-8">
-          Last updated: September 27, 2026
+          Last updated: September 29, 2026
         </p>
 
         <div className="max-w-none space-y-8">
@@ -285,10 +285,13 @@ export default function PrivacyPage() {
                 identifier.
               </li>
               <li>
-                <strong>Marketing email:</strong> Deleting your account does
-                not remove or unsubscribe any existing marketing-contact
-                record with our marketing email provider. Use the unsubscribe
-                link in any marketing email to opt out of that separately.
+                <strong>Marketing email:</strong> When you delete your account,
+                we unsubscribe your address from product-update email as part
+                of preparing our next send. If you delete your account just as
+                an email is going out, you may still receive that one. We keep
+                only an unsubscribed record with our marketing email provider
+                so the address is not re-added. You can also use the
+                unsubscribe link in any marketing email at any time.
               </li>
               <li>
                 <strong>Signup attribution:</strong> A first-party cookie keeps

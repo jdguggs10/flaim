@@ -95,15 +95,25 @@ or send a campaign.
    in the dashboard. Ordinary product updates use all subscribed contacts;
    one-off operational cohorts, such as affected Yahoo users, use a
    campaign-specific segment rather than permanent audience structure.
-6. Confirm the intended Plunk audience or segment and its current recipient
+6. Run the deleted-account unsubscribe gate (see
+   [Deleted-account unsubscribe gate](#deleted-account-unsubscribe-gate))
+   before confirming the audience. Run the dry run. If it reports any matches,
+   review the counts, get explicit approval, and run `--apply`. Then run a
+   final dry run, which must report `status: "complete"` with
+   `totalMatches: 0`. A `rerun` status means run it again. Do not continue to the
+   audience step until it does. Repeat the final dry run as the last action
+   before the audience send, so the only gap is the minutes between that run
+   and the send. The privacy policy discloses that gap.
+7. Confirm the intended Plunk audience or segment and its current recipient
    count. Send proofs only to the internal test contacts. Verify Gmail, iCloud,
    and Fastmail rendering, the recipient-specific unsubscribe link, reply
    routing into Fastmail, Flaim `ref=` parameters, provider branding, and raw
    bulk-sender headers before considering an audience send.
-7. Show the final subject, body, sender, reply-to, audience or segment,
-   recipient count, proof result, and review state. Wait for immediate explicit
-   approval before sending to the audience from the Plunk dashboard.
-8. Comment every real proof or audience send on its Linear issue with the
+8. Show the final subject, body, sender, reply-to, audience or segment,
+   recipient count, proof result, unsubscribe-gate result, and review state.
+   Wait for immediate explicit approval before sending to the audience from
+   the Plunk dashboard.
+9. Comment every real proof or audience send on its Linear issue with the
    campaign ID, audience, proof result, and final send state.
 
 Do not send a real audience email while developing this workflow. The Plunk secret key is an operator-only credential and must not be stored in `.env.local` or deployed to Vercel. The server-side signup sync uses only `PLUNK_PUBLIC_API_KEY` and cannot create or send campaigns.
@@ -228,7 +238,7 @@ clears only its own marker; it cannot clear a failure from another lane.
 
 The Plunk sync runs in its own `after()` callback and never changes the webhook response or welcome result. Provider failures are acknowledged to Clerk, logged as `email.contact_sync_failed` with `provider: "plunk"`, and leave the durable Plunk retry marker for reconciliation. Flag-off and unusable-email skips do not create retry debt. The Plunk marker is deliberately passive: `backfill-resend-contacts.mjs` does not consume it, and no background retry worker is being introduced. Treat it as durable operator evidence, reconcile the affected current Clerk user through the Plunk migration command, confirm the contact exists with the intended subscription state, and only then clear that marker in Clerk. This avoids coupling the retired Resend repair lane to Plunk or creating a second automatic writer. The production key and feature flag were enabled after the internal proof passed on 2026-09-16.
 
-Historical ownership moves through `web/scripts/migrate-marketing-contacts-to-plunk.mjs`. It is dry-run by default and requires the Resend all-status contact export, live Clerk users, live Resend suppressions, and current Plunk contacts. The candidate set is their normalized union: this captures Clerk users created after Resend contact growth stopped while retaining Resend-only records under the existing account-deletion policy. Clerk is read through a frozen, ascending, count-checked snapshot so live signup growth cannot shift offset pages. Resend unsubscribe, Resend suppression, and existing false Plunk state always beat a subscribed candidate. The apply pass writes false targets first through the secret contacts API, then sends true targets through `/v1/track` without a subscription override, which atomically creates new contacts subscribed while preserving any false state established concurrently. It honors `Retry-After`, stores only email-and-subscription hashes in its required resumable state file, then re-reads Plunk and a fresh frozen Clerk snapshot. Those unsalted hashes avoid placing raw addresses in the file but are private identifiers, not anonymization; keep the state file protected alongside the source export. An interrupted run may resume across additive live signups only when every previously completed target is still present with the same subscription state; a changed or removed completed target fails closed and requires operator review. Missing current Clerk contacts or unsafe final states also fail the run. Keep the source CSV and state file outside git.
+Historical ownership moves through `web/scripts/migrate-marketing-contacts-to-plunk.mjs`. It is dry-run by default and requires the Resend all-status contact export, live Clerk users, live Resend suppressions, and current Plunk contacts. The candidate set is their normalized union: this captures Clerk users created after Resend contact growth stopped while retaining Resend-only records. Those retained records are not left subscribed indefinitely: the deleted-account unsubscribe gate below unsubscribes any that no longer match a current Clerk account. Clerk is read through a frozen, ascending, count-checked snapshot so live signup growth cannot shift offset pages. Resend unsubscribe, Resend suppression, and existing false Plunk state always beat a subscribed candidate. The apply pass writes false targets first through the secret contacts API, then sends true targets through `/v1/track` without a subscription override, which atomically creates new contacts subscribed while preserving any false state established concurrently. It honors `Retry-After`, stores only email-and-subscription hashes in its required resumable state file, then re-reads Plunk and a fresh frozen Clerk snapshot. Those unsalted hashes avoid placing raw addresses in the file but are private identifiers, not anonymization; keep the state file protected alongside the source export. An interrupted run may resume across additive live signups only when every previously completed target is still present with the same subscription state; a changed or removed completed target fails closed and requires operator review. Missing current Clerk contacts or unsafe final states also fail the run. Keep the source CSV and state file outside git.
 
 ```sh
 # Read-only planning and exact count reconciliation.
@@ -243,6 +253,37 @@ corepack pnpm --dir web exec node scripts/migrate-marketing-contacts-to-plunk.mj
 ```
 
 The command requires `CLERK_SECRET_KEY`, `RESEND_SUPPRESSIONS_API_KEY`, `PLUNK_SECRET_API_KEY`, and `PLUNK_PUBLIC_API_KEY`. The broad Plunk secret belongs in the operator shell for this command only, not in Vercel. Do not apply from an old dry-run: refresh the Clerk and suppression reads, use the same reviewed Resend export, and confirm the printed Clerk-only gap and false-state counts immediately before the write gate. Keep Plunk campaign and workflow sending disabled throughout the import.
+
+### Deleted-account unsubscribe gate
+
+Deleting a Flaim account unsubscribes its address from product-update email before any further Broadcast is sent. Plunk keeps an unsubscribed record rather than deleting the contact, so a later signup with the same address is not re-added as subscribed: the signup sync omits `subscribed` and preserves the existing opt-out.
+
+This is a pre-send gate, not a real-time hook. Only the auth worker receives Clerk's `user.deleted` event, and that event carries no email address. Flaim keeps no first-party email copy (`account_deletions` stores only the Clerk user ID and time). Unsubscribing a Plunk contact by ID needs the broad Plunk secret key, which must never be deployed. Marketing email only goes out when an operator sends a Broadcast by hand, so the gate runs immediately before every audience send (Broadcast workflow step 6).
+
+`web/scripts/unsubscribe-deleted-accounts-from-plunk.mjs` reads three sources: a frozen, ascending, count-checked Clerk snapshot; every `account_deletions.clerk_user_id` through Supabase REST with the service key; and every Plunk contact through cursor pagination. It considers only currently subscribed contacts whose email is not any current Clerk address (primary or secondary). A current Clerk address outranks both rules, so an address that now belongs to a live account is never unsubscribed, even if an older contact record still carries a deleted account's ID:
+
+1. **Account deletion:** the contact's `data.clerkUserId` is in `account_deletions`.
+2. **No current account:** the contact has no `data.clerkUserId` (retained Resend-only records) and was created before the Clerk snapshot.
+
+After the Plunk scan, the script re-reads `account_deletions` and the frozen Clerk snapshot, comparing a SHA-256 fingerprint of every Clerk user ID and normalized address. If the deletion count or the fingerprint changed during the run (a deletion, or an address change even with the same user count), it reports `status: "rerun"` and exits non-zero instead of a clean result. Rerun it.
+
+With `--apply`, immediately before each write the script re-reads the contact from Plunk and re-judges it, then looks up its address in Clerk (`GET /v1/users?email_address=`, which matches primary and secondary addresses). A contact that no longer qualifies under the same rule, or whose address a live Clerk user now owns, is skipped and counted as `skippedNoLongerQualifies`. That covers a signup that lands after the scan or between two writes. Each remaining match gets `PATCH /contacts/:id` with exactly `{"subscribed": false}`. Contact `data` is never sent, so a stale copy from the scan cannot overwrite newer metadata. The script never touches an already-unsubscribed contact and never deletes a contact. It fails closed on a malformed Plunk or Supabase page, a duplicate ID, a Clerk page that is empty or short before its reported total, a Plunk scan that does not end at the reported `total`, a Supabase read that does not match its exact count, an empty Clerk snapshot, or more matches than `--max-matches` (default 200). After writing, it re-reads every Plunk contact and verifies each written contact is now unsubscribed. A failed Plunk re-read or Clerk lookup writes nothing for that contact. Any such failure, a failed write, or an unverified contact exits non-zero.
+
+The report is aggregate counts only: Clerk snapshot size, deleted-account count, contacts scanned, subscribed, already unsubscribed, subscribed without `clerkUserId`, rule 1 and rule 2 matches, contacts each rule left alone because a current Clerk address owns them, rule 2 contacts skipped as newer than the snapshot, any drift, and, after apply, applied, failed, skipped, and verification counts. It never prints an email address, a contact ID, a Clerk user ID, or a key.
+
+```sh
+# Read-only dry run. Required before every audience send.
+corepack pnpm --dir web exec node scripts/unsubscribe-deleted-accounts-from-plunk.mjs
+
+# Separately approved write pass, only when the dry run reports matches.
+corepack pnpm --dir web exec node scripts/unsubscribe-deleted-accounts-from-plunk.mjs --apply
+
+# Final dry run. It must report status "complete" and totalMatches: 0
+# before the audience step.
+corepack pnpm --dir web exec node scripts/unsubscribe-deleted-accounts-from-plunk.mjs
+```
+
+Every run, dry or apply, requires `PLUNK_SECRET_API_KEY`, `CLERK_SECRET_KEY`, `SUPABASE_URL`, and `SUPABASE_SERVICE_KEY`. Load them per command from the password manager without printing them, keep them out of `.env.local` and Vercel, and unset them afterward. A match count above the ceiling means something unexpected changed. Review it before passing a higher `--max-matches`.
 
 The marker bounds webhook retry loops; it is not an exactly-once delivery
 guarantee. In automation mode, the flagged recovery command can conservatively
