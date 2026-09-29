@@ -21,7 +21,7 @@ import {
   POSITION_SLOTS,
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
-import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import { buildPlayoffSeedMap, calculateWinPercentage, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks, rankEspnStandings } from '../../shared/standings';
 import { executeEspnGetDraft } from '../../shared/espn-draft';
 
 const GAME_ID = 'flb'; // ESPN's game ID for fantasy baseball
@@ -367,8 +367,7 @@ async function handleGetStandings(
       const wins = record?.wins || 0;
       const losses = record?.losses || 0;
       const ties = record?.ties || 0;
-      const totalGames = wins + losses + ties;
-      const winPercentage = totalGames > 0 ? wins / totalGames : 0;
+      const winPercentage = calculateWinPercentage(wins, losses, ties);
 
       const outcome = deriveStandingsOutcome({
         teamId: team.id,
@@ -388,7 +387,7 @@ async function handleGetStandings(
         wins,
         losses,
         ties,
-        winPercentage: Math.round(winPercentage * 1000) / 1000,
+        winPercentage,
         pointsFor: record?.pointsFor || 0,
         pointsAgainst: record?.pointsAgainst || 0,
         playoffSeed: team.playoffSeed ?? null,
@@ -396,16 +395,8 @@ async function handleGetStandings(
         currentProjectedRank: team.currentProjectedRank,
         ...outcome,
       };
-    }).sort((a, b) => {
-      // Sort by win percentage descending, then by wins descending
-      if (b.winPercentage !== a.winPercentage) {
-        return b.winPercentage - a.winPercentage;
-      }
-      return b.wins - a.wins;
-    }).map((team, index) => ({
-      ...team,
-      rank: index + 1
-    }));
+    });
+    const rankedStandings = rankEspnStandings(standings);
 
     return {
       success: true,
@@ -414,7 +405,7 @@ async function handleGetStandings(
         seasonYear: season_year,
         seasonPhase,
         seasonComplete,
-        standings
+        standings: rankedStandings
       }
     };
   } catch (error) {

@@ -92,6 +92,41 @@ describe('sleeper-transactions', () => {
     expect(rows[0].players_added).toEqual([{ id: '123', name: 'Josh Allen', position: 'QB', team: 'BUF' }]);
     expect(rows[0].players_dropped).toEqual([{ id: '456', name: undefined, position: undefined, team: undefined }]);
   });
+
+  it('normalizes release-only free-agent transactions as drops while retaining adds and replacements as adds', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse([
+      {
+        transaction_id: 'pure-drop',
+        type: 'free_agent',
+        status: 'complete',
+        status_updated: 300,
+        drops: { dropped: 1 },
+      },
+      {
+        transaction_id: 'add-only',
+        type: 'free_agent',
+        status: 'complete',
+        status_updated: 200,
+        adds: { added: 1 },
+      },
+      {
+        transaction_id: 'replacement',
+        type: 'free_agent',
+        status: 'complete',
+        status_updated: 100,
+        adds: { added: 1 },
+        drops: { dropped: 1 },
+      },
+    ]));
+
+    const rows = await fetchSleeperTransactionsByWeeks('league', [9]);
+
+    expect(rows.map(({ transaction_id, type }) => ({ transaction_id, type }))).toEqual([
+      { transaction_id: 'pure-drop', type: 'drop' },
+      { transaction_id: 'add-only', type: 'add' },
+      { transaction_id: 'replacement', type: 'add' },
+    ]);
+  });
 });
 
 describe('fetchSleeperRosterTeams', () => {
