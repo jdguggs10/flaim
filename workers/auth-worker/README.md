@@ -179,7 +179,7 @@ Three user auth mechanisms, depending on caller:
 - **OAuth access token** — used by authorized AI clients after completing the OAuth 2.1 flow.
 - **Eval API key** — static key for eval/CI/agent use. Bypasses OAuth browser flow entirely.
 
-Public app routes are Clerk-only. Internal helper routes additionally require `X-Flaim-Internal-Token` and can resolve Clerk, OAuth, or eval auth to a user ID.
+Public app routes are Clerk-only. Internal helper routes additionally require `X-Flaim-Internal-Token` and can resolve Clerk, OAuth, or an allowlisted static API key to a user ID.
 
 ### Static API Keys (Eval and Demo)
 
@@ -187,7 +187,8 @@ Static Bearer tokens that each resolve to a fixed Clerk user ID with a per-key s
 
 **Security model:**
 - **Default-deny:** Only routes that explicitly opt in via `{ allowStaticApiKey: true }` accept a static key. New routes reject them by default.
-- **Per-key scope:** The eval key introspects as `mcp:read mcp:write` so the eval harness can exercise the full eleven-tool contract, including the bounded `refresh_leagues` registry rewrite. The demo key is fixed at `mcp:read`; the public demo surface has no write access. The only write the eval scope enables is `POST /auth/internal/leagues/refresh`, which rewrites Flaim's own connected-league registry (never provider platforms) and is rate-limited per user.
+- **Lane-local identity:** Each deployed lane pairs `EVAL_API_KEY` with `EVAL_USER_ID` and `DEMO_API_KEY` with `DEMO_USER_ID`. Production may intentionally map both keys to the same Clerk user. Preview has a separate Clerk user pool and its own lane-local bindings. Do not record concrete IDs or email addresses here.
+- **Per-key scope:** The eval key introspects as `mcp:read mcp:write` so the eval harness can exercise the full eleven-tool contract, including the bounded `refresh_leagues` registry rewrite. The demo key is fixed at `mcp:read`; the public demo surface has no write access. `mcp:write` permits only `POST /auth/internal/leagues/refresh`, which updates Flaim's connected-league registry and discovery metadata. It never writes upstream provider state, rosters, lineups, transactions, trades, or league settings, and is rate-limited per user.
 - **Constant-time comparison:** Uses SHA-256 digest comparison to prevent timing attacks.
 - **Both secrets required:** `EVAL_API_KEY` + `EVAL_USER_ID` (and `DEMO_API_KEY` + `DEMO_USER_ID`) must both be set. If only the key is set, static-key auth is skipped (logged) and falls through to OAuth.
 
@@ -202,8 +203,6 @@ Static Bearer tokens that each resolve to a fixed Clerk user ID with a per-key s
 
 **Write route (eval key only, `mcp:write` scope-gated):**
 - `POST /auth/internal/leagues/refresh` — bounded registry refresh; demo key receives `403 insufficient_scope`.
-
-**Current mapping:** `EVAL_USER_ID` → `user_36UBCM4x2hK1aJYY1F7iV1svNw6` (test email on Clerk prod).
 
 **Setup:**
 ```bash
