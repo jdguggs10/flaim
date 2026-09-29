@@ -147,9 +147,12 @@ export function classifyRefreshResult(payload: unknown): RefreshResultClassifica
         allSuccessesHaveChangeCounts = false;
       }
     });
+    const hasWriteFailures = successes.some((result) => result.partial === true);
 
-    if (failed.length > 0 || explicitlyRequiresReconnect) {
-      const partialMessage = changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
+    if (failed.length > 0 || explicitlyRequiresReconnect || hasWriteFailures) {
+      const partialMessage = hasWriteFailures
+        ? 'Some leagues refreshed, but some league seasons could not be saved.'
+        : changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
       return {
         kind: 'partial',
         message: reconnectRequired
@@ -768,9 +771,12 @@ export function buildUserSessionWidgetHtml(options: UserSessionWidgetOptions): s
           allSuccessesHaveChangeCounts = false;
         }
       });
+      var hasWriteFailures = successes.some(function(result) { return result.partial === true; });
 
-      if (failed.length > 0 || explicitlyRequiresReconnect) {
-        var partialMessage = changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
+      if (failed.length > 0 || explicitlyRequiresReconnect || hasWriteFailures) {
+        var partialMessage = hasWriteFailures
+          ? 'Some leagues refreshed, but some league seasons could not be saved.'
+          : changed ? 'Some leagues refreshed.' : 'Refresh partially complete.';
         var message = reconnectRequired
           ? partialMessage + ' Reconnect a provider.'
           : retryRequired

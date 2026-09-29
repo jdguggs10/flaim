@@ -1500,6 +1500,26 @@ describe('user session widget script', () => {
       expected: { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true },
     },
     {
+      name: 'reports ESPN save failures despite a successful provider status',
+      payload: {
+        success: true,
+        results: {
+          espn: {
+            platform: 'espn',
+            status: 'success',
+            partial: true,
+            writeFailureCount: 1,
+            details: { currentSeason: { added: 0, refreshed: 0 } },
+          },
+        },
+      },
+      expected: {
+        kind: 'partial',
+        message: 'Some leagues refreshed, but some league seasons could not be saved.',
+        reloadSession: true,
+      },
+    },
+    {
       name: 'treats Yahoo success as neutral despite mutation-like fields',
       payload: {
         success: true,

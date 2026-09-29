@@ -539,7 +539,7 @@ describe('get_matchups output schema', () => {
     }));
   });
 
-  it('accepts the Sleeper envelope with a bye (null away side)', () => {
+  it('accepts the Sleeper envelope with an unpaired singleton and schedule evidence', () => {
     expectValid('get_matchups', routed({
       leagueId: 'sleeper-2025',
       week: 15,
@@ -551,6 +551,30 @@ describe('get_matchups output schema', () => {
           winner: undefined,
         },
       ],
+      scheduleShape: {
+        status: 'no_h2h_pairings',
+        h2hPairingsReturned: false,
+        unpairedRosterCount: 1,
+        reason: 'unknown',
+      },
+    }));
+  });
+
+  it('accepts Sleeper schedule evidence when pairing IDs are unavailable', () => {
+    expectValid('get_matchups', routed({
+      leagueId: 'sleeper-2025',
+      week: 15,
+      matchups: [{
+        matchupId: null,
+        home: { rosterId: 7, ownerName: 'Gerry', points: 110.4, starters: ['4034'] },
+        away: null,
+      }],
+      scheduleShape: {
+        status: 'unpublished_or_unavailable',
+        h2hPairingsReturned: false,
+        unpairedRosterCount: 1,
+        reason: 'unknown',
+      },
     }));
   });
 });
@@ -832,6 +856,31 @@ describe('get_free_agents output schema', () => {
 });
 
 describe('get_players output schema', () => {
+  it('accepts ESPN football league-scoring values and nullable bounded-pool misses', () => {
+    expectValid('get_players', routed({
+      platform: 'espn',
+      sport: 'football',
+      query: 'search',
+      count: 2,
+      players: [
+        {
+          id: '1',
+          name: 'Rostered Player',
+          league_status: 'ROSTERED',
+          seasonPoints: 0,
+          pointsPerGame: 0,
+        },
+        {
+          id: '2',
+          name: 'Outside Availability Pool',
+          league_status: 'FREE_AGENT',
+          seasonPoints: null,
+          pointsPerGame: null,
+        },
+      ],
+    }));
+  });
+
   it('accepts ESPN entries with market_percent_owned and league_status null', () => {
     expectValid('get_players', routed({
       platform: 'espn',

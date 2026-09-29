@@ -558,6 +558,8 @@ export interface SyncEnvelopeLog {
   durationMs?: number;
   leagueCount?: number;
   errorCode?: string;
+  writeFailureCount?: number;
+  writeFailureCode?: string;
   retryAfterSeconds?: number;
   correlationId?: string;
   ownerId?: string;
@@ -576,6 +578,8 @@ export function logSyncEnvelope(fields: SyncEnvelopeLog): void {
     ...(fields.durationMs !== undefined ? { duration_ms: fields.durationMs } : {}),
     ...(fields.leagueCount !== undefined ? { league_count: fields.leagueCount } : {}),
     ...(fields.errorCode ? { error_code: fields.errorCode } : {}),
+    ...(fields.writeFailureCount !== undefined ? { write_failure_count: fields.writeFailureCount } : {}),
+    ...(fields.writeFailureCode ? { write_failure_code: fields.writeFailureCode } : {}),
     ...(fields.retryAfterSeconds !== undefined ? { retry_after: fields.retryAfterSeconds } : {}),
     ...(fields.correlationId ? { correlation_id: fields.correlationId } : {}),
     ...(fields.ownerId ? { owner_id: fields.ownerId } : {}),
