@@ -4,6 +4,18 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Synchronous ESPN League Save Warnings (FLA-183)
+
+- **Fixed**: ESPN refresh and extension discovery now report a partial result when league discovery succeeds but Flaim cannot save one or more current or historical league seasons. The additive response keeps the existing success status while including a safe failure count and affected season metadata; `/leagues` and the league widget show the partial outcome alongside any other provider warning. `provider_sync` records only the safe count and `DB_ERROR` code.
+
+### ESPN Football Player Search League Scoring
+
+- **Added**: ESPN football `get_players` results now include `seasonPoints` and `pointsPerGame` from ESPN's actual-season applied values under the selected league's scoring. Rostered results use the existing league `mRoster` fetch; unrostered results share one bounded 100-player ESPN availability-pool lookup, because league player-ID filters are unsupported. Values are never recalculated, a reported `0` is retained, and missing applied values remain `null`. An unrostered player outside that bounded pool also returns `null`; use `get_free_agents` to verify availability and scoring rather than treating that null as a scoring fact. Other sports and platforms are unchanged.
+
+### Sleeper Unpublished Matchup Schedules
+
+- **Changed**: Sleeper `get_matchups` now preserves every provider matchup row when H2H pairing IDs are incomplete or unavailable. A normal two-roster numeric group remains a pairing; each singleton has `away: null`. The additive `scheduleShape` distinguishes published numeric groups with `no_h2h_pairings` from rows with unavailable IDs (`unpublished_or_unavailable`) and reports partial pairings with an unpaired count. Flaim does not label a singleton as a bye or infer the league's format; the reason for an unpaired numeric group is `unknown`.
+
 ### Standings, Sleeper Drops, and ESPN Hockey Mapping Accuracy
 
 - **Fixed**: ESPN `get_standings` now counts a tie as half a win when calculating `winPercentage`. When every returned team has a unique, valid ESPN `playoffSeed`, that provider order now determines `rank`; incomplete or contradictory seed data keeps the existing computed-percentage and wins fallback.

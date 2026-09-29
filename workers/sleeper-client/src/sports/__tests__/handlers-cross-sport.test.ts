@@ -104,6 +104,25 @@ function queueCurrentWeekPoints(rosterId: number, playersPoints: Record<string, 
     ]));
 }
 
+function queueMatchupContext(matchups: Array<Record<string, unknown>>) {
+  const rosterIds = [...new Set(matchups.map((matchup) => matchup.roster_id).filter((id): id is number => typeof id === 'number'))];
+  mockFetch
+    .mockResolvedValueOnce(jsonResponse(matchups))
+    .mockResolvedValueOnce(jsonResponse(rosterIds.map((rosterId) => ({
+      roster_id: rosterId,
+      owner_id: `u${rosterId}`,
+      players: [],
+      starters: [],
+      reserve: [],
+      settings: { wins: 0, losses: 0, ties: 0, fpts: 0 },
+    }))))
+    .mockResolvedValueOnce(jsonResponse(rosterIds.map((rosterId) => ({
+      user_id: `u${rosterId}`,
+      display_name: `Owner ${rosterId}`,
+      avatar: null,
+    }))));
+}
+
 // A real KV cache miss (get resolves null) — used by the player-index
 // failure-degradation tests below, which each queue their own failure
 // response for the GET /players/{sport} network call.
@@ -1631,6 +1650,141 @@ describe('sleeper cross-sport handler characterization tests', () => {
         matchupId: 1,
         winner: 'home',
       });
+    });
+
+    it.each(scenarios)('$label preserves numeric singletons and reports no H2H pairings', async ({ sport, handlers }) => {
+      queueMatchupContext([
+        { matchup_id: 1, roster_id: 1, points: 12, starters: [] },
+        { matchup_id: 2, roster_id: 2, points: 9, starters: [] },
+      ]);
+
+      const result = await handlers.get_matchups(
+        playersCacheEnv(UNUSED_PLAYER),
+        { sport, league_id: '12345', season_year: 2025, week: 2 },
+      );
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        matchups: Array<{ matchupId: number | null; home: { rosterId: number }; away: null }>;
+        scheduleShape: Record<string, unknown>;
+      };
+      expect(data.matchups).toEqual([
+        expect.objectContaining({ matchupId: 1, home: expect.objectContaining({ rosterId: 1 }), away: null }),
+        expect.objectContaining({ matchupId: 2, home: expect.objectContaining({ rosterId: 2 }), away: null }),
+      ]);
+      expect(data.scheduleShape).toEqual({
+        status: 'no_h2h_pairings',
+        h2hPairingsReturned: false,
+        unpairedRosterCount: 2,
+        reason: 'unknown',
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch.mock.calls.map(([url]) => String(url))).toEqual(expect.arrayContaining([
+        expect.stringContaining('/league/12345/matchups/2'),
+        expect.stringContaining('/league/12345/rosters'),
+        expect.stringContaining('/league/12345/users'),
+      ]));
+      expect(mockFetch.mock.calls.map(([url]) => String(url))).not.toContain('https://api.sleeper.app/v1/league/12345');
+    });
+
+    it.each(scenarios)('$label preserves a numeric singleton beside a valid H2H pairing', async ({ sport, handlers }) => {
+      queueMatchupContext([
+        { matchup_id: 1, roster_id: 1, points: 12, starters: [] },
+        { matchup_id: 1, roster_id: 2, points: 9, starters: [] },
+        { matchup_id: 2, roster_id: 3, points: 7, starters: [] },
+      ]);
+
+      const result = await handlers.get_matchups(
+        playersCacheEnv(UNUSED_PLAYER),
+        { sport, league_id: '12345', season_year: 2025, week: 2 },
+      );
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        matchups: Array<{ matchupId: number | null; home: { rosterId: number }; away: { rosterId: number } | null; winner?: string }>;
+        scheduleShape: Record<string, unknown>;
+      };
+      expect(data.matchups).toEqual([
+        expect.objectContaining({
+          matchupId: 1,
+          home: expect.objectContaining({ rosterId: 1 }),
+          away: expect.objectContaining({ rosterId: 2 }),
+          winner: 'home',
+        }),
+        expect.objectContaining({ matchupId: 2, home: expect.objectContaining({ rosterId: 3 }), away: null }),
+      ]);
+      expect(data.scheduleShape).toEqual({
+        status: 'partially_paired',
+        h2hPairingsReturned: true,
+        unpairedRosterCount: 1,
+        reason: 'unknown',
+      });
+    });
+
+    it.each(scenarios)('$label preserves every null, absent, or unusable matchup id as a singleton', async ({ sport, handlers }) => {
+      queueMatchupContext([
+        { matchup_id: null, roster_id: 1, points: 12, starters: [] },
+        { roster_id: 2, points: 9, starters: [] },
+        { matchup_id: 'not-a-number', roster_id: 3, points: 7, starters: [] },
+      ]);
+
+      const result = await handlers.get_matchups(
+        playersCacheEnv(UNUSED_PLAYER),
+        { sport, league_id: '12345', season_year: 2025, week: 2 },
+      );
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        matchups: Array<{ matchupId: number | null; home: { rosterId: number }; away: null }>;
+        scheduleShape: Record<string, unknown>;
+      };
+      expect(data.matchups).toHaveLength(3);
+      expect(data.matchups.map((matchup) => ({
+        matchupId: matchup.matchupId,
+        rosterId: matchup.home.rosterId,
+        away: matchup.away,
+      }))).toEqual([
+        { matchupId: null, rosterId: 1, away: null },
+        { matchupId: null, rosterId: 2, away: null },
+        { matchupId: null, rosterId: 3, away: null },
+      ]);
+      expect(data.scheduleShape).toEqual({
+        status: 'unpublished_or_unavailable',
+        h2hPairingsReturned: false,
+        unpairedRosterCount: 3,
+        reason: 'unknown',
+      });
+    });
+
+    it.each(scenarios)('$label keeps a usable pair separate from an unusable matchup id', async ({ sport, handlers }) => {
+      queueMatchupContext([
+        { matchup_id: 1, roster_id: 1, points: 12, starters: [] },
+        { matchup_id: 1, roster_id: 2, points: 9, starters: [] },
+        { matchup_id: null, roster_id: 3, points: 7, starters: [] },
+      ]);
+
+      const result = await handlers.get_matchups(
+        playersCacheEnv(UNUSED_PLAYER),
+        { sport, league_id: '12345', season_year: 2025, week: 2 },
+      );
+
+      expect(result.success).toBe(true);
+      const data = result.data as {
+        matchups: Array<{ matchupId: number | null; home: { rosterId: number }; away: { rosterId: number } | null }>;
+        scheduleShape: Record<string, unknown>;
+      };
+      expect(data.matchups).toHaveLength(2);
+      expect(data.matchups[0]).toEqual(expect.objectContaining({
+        matchupId: 1,
+        home: expect.objectContaining({ rosterId: 1 }),
+        away: expect.objectContaining({ rosterId: 2 }),
+      }));
+      expect(data.matchups[1]).toEqual(expect.objectContaining({
+        matchupId: null,
+        home: expect.objectContaining({ rosterId: 3 }),
+        away: null,
+      }));
+      expect(data.scheduleShape).toMatchObject({ status: 'partially_paired', unpairedRosterCount: 1 });
     });
 
     it.each(scenarios)('$label enriches starters with name/position/team and adds teamName per side', async ({ sport, handlers }) => {

@@ -185,7 +185,11 @@ export interface SleeperRoster {
 
 export interface SleeperMatchup {
   roster_id: number;
-  matchup_id: number;
+  /**
+   * Normally a numeric H2H grouping ID. Sleeper can omit or null this field
+   * before publishing a schedule, so handlers must not invent a pairing.
+   */
+  matchup_id?: unknown;
   points: number;
   custom_points: number | null;
   players: string[] | null;

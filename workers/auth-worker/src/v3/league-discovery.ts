@@ -289,6 +289,18 @@ export interface SeasonCounts {
 }
 
 /**
+ * A persistence failure safe to return to the signed-in caller. The raw
+ * database error remains in worker logs because it can contain provider or
+ * storage implementation detail.
+ */
+export interface LeagueWriteFailure {
+  leagueId: string;
+  sport: 'football' | 'baseball' | 'basketball' | 'hockey';
+  seasonYear: number;
+  code: 'DB_ERROR';
+}
+
+/**
  * Result from discoverHistoricalSeasons
  */
 interface HistoricalResult {
@@ -296,6 +308,7 @@ interface HistoricalResult {
   added: number;        // Successfully added to DB
   alreadySaved: number; // Already existed in DB
   refreshed: number;    // Existing rows refreshed with latest ESPN metadata
+  writeFailures: LeagueWriteFailure[];
 }
 
 /**
@@ -306,6 +319,7 @@ export interface DiscoverAndSaveResult {
   currentSeason: SeasonCounts;
   pastSeasons: SeasonCounts;
   savedLeagues?: DiscoveredEspnLeague[];
+  writeFailures?: LeagueWriteFailure[];
 }
 
 /**
@@ -317,6 +331,7 @@ export interface DiscoverAndSaveCurrentResult {
   discovered: DiscoveredLeague[];
   currentSeason: SeasonCounts;
   savedLeagues: DiscoveredEspnLeague[];
+  writeFailures?: LeagueWriteFailure[];
 }
 
 class EspnLeagueWriteLeaseLostError extends Error {}
@@ -333,6 +348,7 @@ export async function discoverAndSaveCurrentLeagues(
   const discovered: DiscoveredLeague[] = [];
   const currentSeason: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
   const savedLeagues: DiscoveredEspnLeague[] = [];
+  const writeFailures: LeagueWriteFailure[] = [];
 
   for (const league of leagues) {
     try {
@@ -393,6 +409,12 @@ export async function discoverAndSaveCurrentLeagues(
           if (saved) currentSeason.refreshed++;
         } else {
           console.error(`Failed to add league ${league.leagueId}:`, added.error);
+          writeFailures.push({
+            leagueId: league.leagueId,
+            sport: sport as LeagueWriteFailure['sport'],
+            seasonYear: canonicalSeasonYear,
+            code: 'DB_ERROR',
+          });
         }
       }
 
@@ -414,7 +436,12 @@ export async function discoverAndSaveCurrentLeagues(
     }
   }
 
-  return { discovered, currentSeason, savedLeagues };
+  return {
+    discovered,
+    currentSeason,
+    savedLeagues,
+    ...(writeFailures.length > 0 ? { writeFailures } : {}),
+  };
 }
 
 /**
@@ -434,10 +461,11 @@ export async function discoverAndSaveLeagues(
   storage: EspnSupabaseStorage,
   leaseOwner?: string
 ): Promise<DiscoverAndSaveResult> {
-  const { discovered, currentSeason, savedLeagues } = await discoverAndSaveCurrentLeagues(
+  const { discovered, currentSeason, savedLeagues, writeFailures: currentWriteFailures } = await discoverAndSaveCurrentLeagues(
     userId, swid, s2, storage, leaseOwner
   );
   const pastSeasons: SeasonCounts = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+  const writeFailures = currentWriteFailures ? [...currentWriteFailures] : [];
 
   // 3. Discover historical seasons only after every current season is saved
   for (const league of savedLeagues) {
@@ -454,6 +482,7 @@ export async function discoverAndSaveLeagues(
       pastSeasons.added += histResult.added;
       pastSeasons.alreadySaved += histResult.alreadySaved;
       pastSeasons.refreshed += histResult.refreshed;
+      writeFailures.push(...histResult.writeFailures);
     } catch (error) {
       console.error(`Error discovering history for league ${league.leagueId}:`, error);
       continue;
@@ -465,6 +494,7 @@ export async function discoverAndSaveLeagues(
     currentSeason,
     pastSeasons,
     savedLeagues,
+    ...(writeFailures.length > 0 ? { writeFailures } : {}),
   };
 }
 
@@ -488,7 +518,7 @@ async function discoverHistoricalSeasons(
   storage: EspnSupabaseStorage,
   leaseOwner?: string
 ): Promise<HistoricalResult> {
-  const result: HistoricalResult = { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+  const result: HistoricalResult = { found: 0, added: 0, alreadySaved: 0, refreshed: 0, writeFailures: [] };
   const sport = gameIdToSport(league.gameId);
   if (!sport) return result;
 
@@ -573,6 +603,12 @@ async function discoverHistoricalSeasons(
           result.added++;
         } else if (addResult.code !== 'DUPLICATE') {
           console.error(`Failed to add historical season ${canonicalYear} for league ${league.leagueId}:`, addResult.error);
+          result.writeFailures.push({
+            leagueId: league.leagueId,
+            sport: sport as LeagueWriteFailure['sport'],
+            seasonYear: canonicalYear,
+            code: 'DB_ERROR',
+          });
         }
 
       } catch (seasonError) {

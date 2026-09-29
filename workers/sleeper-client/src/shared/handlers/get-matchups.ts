@@ -62,41 +62,100 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
 
       const { index: playersIndex, warnings } = await playersIndexPromise;
 
+      const formatTeam = (m: SleeperMatchup) => {
+        const owner = rosterOwnerMap.get(m.roster_id);
+        return {
+          rosterId: m.roster_id,
+          ownerName: owner?.ownerName ?? 'Unknown',
+          teamName: owner?.teamName,
+          points: m.points ?? 0,
+          starters: attachSleeperPlayerPoints(
+            resolveSleeperPlayerEntries(m.starters ?? [], playersIndex, { includeTeam: !explicitWeek }),
+            m.players_points,
+          ),
+        };
+      };
+
       const matchupGroups = new Map<number, SleeperMatchup[]>();
+      const unpublishedEntries: SleeperMatchup[] = [];
       for (const m of matchups) {
+        if (typeof m.matchup_id !== 'number' || !Number.isFinite(m.matchup_id)) {
+          unpublishedEntries.push(m);
+          continue;
+        }
         if (!matchupGroups.has(m.matchup_id)) {
           matchupGroups.set(m.matchup_id, []);
         }
         matchupGroups.get(m.matchup_id)!.push(m);
       }
 
-      const pairedMatchups = Array.from(matchupGroups.entries()).map(([matchupId, pair]) => {
-        const formatTeam = (m: SleeperMatchup) => {
-          const owner = rosterOwnerMap.get(m.roster_id);
-          return {
-            rosterId: m.roster_id,
-            ownerName: owner?.ownerName ?? 'Unknown',
-            teamName: owner?.teamName,
-            points: m.points ?? 0,
-            starters: attachSleeperPlayerPoints(
-              resolveSleeperPlayerEntries(m.starters ?? [], playersIndex, { includeTeam: !explicitWeek }),
-              m.players_points,
-            ),
-          };
-        };
+      const pairedMatchups: Array<{
+        matchupId: number | null;
+        home: ReturnType<typeof formatTeam>;
+        away: ReturnType<typeof formatTeam> | null;
+        winner?: 'home' | 'away' | 'tie';
+      }> = [];
+      let unpairedRosterCount = 0;
 
-        const home = pair[0] ? formatTeam(pair[0]) : null;
-        const away = pair[1] ? formatTeam(pair[1]) : null;
+      for (const [matchupId, group] of matchupGroups) {
+        if (group.length !== 2) {
+          // A numeric id alone does not establish an H2H pair. Preserve each
+          // record as a singleton rather than dropping rows or calling it a bye.
+          for (const matchup of group) {
+            pairedMatchups.push({ matchupId, home: formatTeam(matchup), away: null });
+            unpairedRosterCount += 1;
+          }
+          continue;
+        }
 
-        let winner: string | undefined;
-        if (home && away && (home.points > 0 || away.points > 0)) {
+        const home = formatTeam(group[0]!);
+        const away = formatTeam(group[1]!);
+
+        let winner: 'home' | 'away' | 'tie' | undefined;
+        if (home.points > 0 || away.points > 0) {
           if (home.points > away.points) winner = 'home';
           else if (away.points > home.points) winner = 'away';
           else winner = 'tie';
         }
 
-        return { matchupId, home, away, winner };
-      });
+        pairedMatchups.push({ matchupId, home, away, ...(winner ? { winner } : {}) });
+      }
+
+      for (const matchup of unpublishedEntries) {
+        pairedMatchups.push({ matchupId: null, home: formatTeam(matchup), away: null });
+        unpairedRosterCount += 1;
+      }
+
+      const pairedMatchupCount = pairedMatchups.length - unpairedRosterCount;
+      const hasUsableNumericGroups = matchupGroups.size > 0;
+      const scheduleShape = pairedMatchupCount === 0
+        ? hasUsableNumericGroups
+          ? {
+            // Numeric groups were published, but none formed an H2H pair.
+            // Their meaning is still unknown: do not call them byes.
+            status: 'no_h2h_pairings' as const,
+            h2hPairingsReturned: false,
+            unpairedRosterCount,
+            reason: 'unknown' as const,
+          }
+          : {
+            status: 'unpublished_or_unavailable' as const,
+            h2hPairingsReturned: false,
+            unpairedRosterCount,
+            reason: 'unknown' as const,
+          }
+        : unpairedRosterCount > 0
+          ? {
+            status: 'partially_paired' as const,
+            h2hPairingsReturned: true,
+            unpairedRosterCount,
+            reason: 'unknown' as const,
+          }
+          : {
+            status: 'paired' as const,
+            h2hPairingsReturned: true,
+            unpairedRosterCount: 0,
+          };
 
       return {
         success: true,
@@ -104,6 +163,7 @@ export function createGetMatchupsHandler(config: SleeperSportConfig): HandlerFn 
           leagueId: league_id,
           week: matchupWeek,
           matchups: pairedMatchups,
+          scheduleShape,
           ...(explicitWeek ? { limitations: { playerProTeamAvailable: false } } : {}),
           ...(warnings.length ? { warnings } : {}),
         },

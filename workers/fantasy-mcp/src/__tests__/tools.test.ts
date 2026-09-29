@@ -543,6 +543,11 @@ describe('fantasy-mcp tools', () => {
       expected: { kind: 'unchanged', message: 'Leagues already up to date.', reloadSession: true },
     },
     {
+      name: 'successful provider with save failures',
+      payload: { success: true, results: { espn: { platform: 'espn', status: 'success', partial: true, writeFailureCount: 1 } } },
+      expected: { kind: 'partial', message: 'Some leagues refreshed, but some league seasons could not be saved.', reloadSession: true },
+    },
+    {
       name: 'partial success',
       payload: { success: true, results: { espn: { status: 'success' }, yahoo: { status: 'error', httpStatus: 500 } } },
       expected: { kind: 'partial', message: 'Refresh partially complete.', reloadSession: true },
