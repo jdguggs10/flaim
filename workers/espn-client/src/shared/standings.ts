@@ -84,13 +84,16 @@ export function calculateWinPercentage(wins: number, losses: number, ties: numbe
 
 /**
  * ESPN's playoff seed is its authoritative standings order when it provides a
- * valid seed for every team. In incomplete payloads, retain the historical
- * percentage-and-wins fallback rather than inferring missing provider order.
+ * unique, valid seed for every team. In incomplete or contradictory payloads,
+ * retain the historical percentage-and-wins fallback rather than inferring
+ * provider order.
  */
 export function rankEspnStandings<T extends EspnStandingsEntry>(standings: T[]): Array<T & { rank: number }> {
-  const hasCompletePlayoffSeeds = standings.length > 0 && standings.every((team) =>
+  const hasValidPlayoffSeeds = standings.length > 0 && standings.every((team) =>
     team.playoffSeed != null && Number.isFinite(team.playoffSeed) && team.playoffSeed > 0,
   );
+  const hasCompletePlayoffSeeds = hasValidPlayoffSeeds
+    && new Set(standings.map((team) => team.playoffSeed)).size === standings.length;
 
   return [...standings]
     .sort((a, b) => {

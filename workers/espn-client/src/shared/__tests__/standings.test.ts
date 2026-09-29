@@ -44,6 +44,30 @@ describe('ESPN standings ranking', () => {
       { teamId: 1, rank: 2 },
     ]);
   });
+
+  it('falls back to computed percentage when ESPN playoff seeds are duplicated', () => {
+    const standings = rankEspnStandings([
+      { teamId: 1, wins: 9, playoffSeed: 1, winPercentage: 0.75 },
+      { teamId: 2, wins: 10, playoffSeed: 1, winPercentage: 0.8 },
+    ]);
+
+    expect(standings.map(({ teamId, rank }) => ({ teamId, rank }))).toEqual([
+      { teamId: 2, rank: 1 },
+      { teamId: 1, rank: 2 },
+    ]);
+  });
+
+  it('falls back to computed percentage when ESPN playoff seeds are all zero', () => {
+    const standings = rankEspnStandings([
+      { teamId: 1, wins: 9, playoffSeed: 0, winPercentage: 0.75 },
+      { teamId: 2, wins: 10, playoffSeed: 0, winPercentage: 0.8 },
+    ]);
+
+    expect(standings.map(({ teamId, rank }) => ({ teamId, rank }))).toEqual([
+      { teamId: 2, rank: 1 },
+      { teamId: 1, rank: 2 },
+    ]);
+  });
 });
 
 describe('deriveStandingsSeasonPhase', () => {
