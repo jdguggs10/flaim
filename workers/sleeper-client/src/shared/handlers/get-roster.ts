@@ -46,7 +46,10 @@ const SCORING_SEASON_TYPES = new Set(['regular', 'post']);
 /**
  * Current-week `players_points` for a single-team roster. Week resolution
  * matches get_matchups when a scoring season is in progress: `config.statePath`,
- * then a positive finite week, else 1. A failed state fetch does not guess
+ * then a positive finite week, else 1. The week number is only used when
+ * `/state` and this league report the same season. A past-season league would
+ * otherwise receive the live calendar's week (2025 week 4 scores on a final
+ * roster while state is 2026 week 4). A failed state fetch does not guess
  * week 1 — that would attach the wrong week's scores — and a failed matchup
  * fetch is the same degradation. Outside `regular` and `post` (preseason,
  * offseason) there is no scoring week, so this returns quietly with no
@@ -56,6 +59,7 @@ const SCORING_SEASON_TYPES = new Set(['regular', 'post']);
 async function loadCurrentWeekPlayerPoints(
   config: SleeperSportConfig,
   leagueId: string,
+  leagueStatusPromise: Promise<LeagueStatusResult>,
 ): Promise<CurrentWeekPlayerPoints> {
   let week: number | undefined;
   try {
@@ -65,9 +69,19 @@ async function loadCurrentWeekPlayerPoints(
       return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
     }
 
-    const state = await stateRes.json() as { week?: number; season_type?: unknown };
+    const state = await stateRes.json() as { week?: number; season_type?: unknown; season?: unknown };
     if (typeof state.season_type === 'string' && state.season_type.length > 0 && !SCORING_SEASON_TYPES.has(state.season_type)) {
       return { skipped: true };
+    }
+
+    const leagueStatus = await leagueStatusPromise;
+    const stateSeason = seasonToken(state.season);
+    const leagueSeason = leagueStatus.season;
+    if (!stateSeason || !leagueSeason || stateSeason !== leagueSeason) {
+      console.error(
+        `[get-roster] skipping current-week player points; state season ${stateSeason ?? 'unknown'} does not match league season ${leagueSeason ?? 'unknown'}`,
+      );
+      return { warning: PLAYER_POINTS_UNAVAILABLE_WARNING };
     }
 
     const stateWeek = state.week;
@@ -104,7 +118,15 @@ async function loadCurrentWeekPlayerPoints(
 
 interface LeagueStatusResult {
   status?: string;
+  /** League season from `GET /league/{id}`, e.g. "2025". */
+  season?: string;
   warning?: string;
+}
+
+function seasonToken(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return undefined;
 }
 
 /**
@@ -128,11 +150,12 @@ async function loadLeagueStatus(league_id: string): Promise<LeagueStatusResult> 
       return { warning: LEAGUE_STATUS_UNAVAILABLE_WARNING };
     }
     const league: SleeperLeague = await res.json();
+    const season = seasonToken(league?.season);
     if (typeof league?.status === 'string' && league.status.length > 0) {
-      return { status: league.status };
+      return { status: league.status, ...(season ? { season } : {}) };
     }
     console.error(`[get-roster] league response for league ${league_id} had no usable status`);
-    return { warning: LEAGUE_STATUS_UNAVAILABLE_WARNING };
+    return { ...(season ? { season } : {}), warning: LEAGUE_STATUS_UNAVAILABLE_WARNING };
   } catch (error) {
     console.error(`[get-roster] league fetch threw for league ${league_id}:`, error);
     return { warning: LEAGUE_STATUS_UNAVAILABLE_WARNING };
@@ -293,7 +316,7 @@ export function createGetRosterHandler(config: SleeperSportConfig): HandlerFn {
         sleeperFetch(`/league/${league_id}/users`),
       ]);
       const playerPointsPromise = team_id
-        ? loadCurrentWeekPlayerPoints(config, league_id)
+        ? loadCurrentWeekPlayerPoints(config, league_id, leagueStatusPromise)
         : undefined;
       const [rostersRes, usersRes] = await rosterUsersPromise;
 
