@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Sleeper Roster and Matchup Entries Carry Weekly League Points
+
+- **Added**: Sleeper `get_roster` and `get_matchups` player entries now include `points` when that week's matchup `players_points` map has a finite league score for the player. A reported `0` is kept; a missing or non-finite value is omitted, and Sleeper's empty lineup slot never gets `points`. `get_matchups` puts the score on each side's existing starters from the payload it already fetched. A current single-team `get_roster` loads the current week's matchups when the sport is in `regular` or `post` season and `/state` reports the same season as the league (week resolved the same way as `get_matchups`) and puts `points` on starters, bench, reserve, taxi, and keepers; the resolved week is `snapshot.pointsWeek`. A different or unknown season omits `points` with `PLAYER_POINTS_UNAVAILABLE` instead of copying another year's week onto the final roster. A league whose status is `complete` skips points quietly for the same reason. If that state or matchup fetch fails, the optional lookup's response body stalls past 10 seconds, or the roster has no matchup row, the request still succeeds, entries omit `points`, and a `PLAYER_POINTS_UNAVAILABLE` warning is added. Preseason and offseason (`season_type` other than `regular` or `post`) skip the matchup fetch and do not warn. A historical week roster keeps its top-level `playersPoints` map and also puts `points` on each starter and bench entry.
+- **Unchanged**: additive passthrough only. No MCP schema or tool-description change — starter and roster player arrays stay loose, so the extra field needs no contract edit. ESPN and Yahoo are unchanged. Category stat lines are not included; Flaim does not call `/stats` or `/projections` or score players from `scoring_settings`. Bench players are not added to matchup responses.
+
 ### Deleted Accounts Are Unsubscribed From Marketing Email (FLA-431)
 
 - **Changed**: deleting a Flaim account now stops product-update email. This replaces the earlier policy that left the marketing-contact record untouched. The privacy page's "Marketing email" bullet says so, and its last-updated date is now September 29, 2026.
