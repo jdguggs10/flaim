@@ -82,8 +82,8 @@ export default function WaiversHockeyBroadcastEmail({
           ESPN setup is smoother in the latest Chrome extension, with a new{" "}
           <a href={espnGuideUrl} style={styles.inlineLink}>
             setup guide
-          </a>{" "}
-          at flaim.app/docs/espn.
+          </a>
+          .
         </li>
         <li style={styles.updateItem}>
           Don&apos;t want the league card in every reply? There&apos;s now a
