@@ -286,11 +286,12 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong>Marketing email:</strong> When you delete your account,
-                we unsubscribe your address from product-update email before
-                any further product-update email is sent. We keep only an
-                unsubscribed record with our marketing email provider so the
-                address is not re-added. You can also use the unsubscribe link
-                in any marketing email at any time.
+                we unsubscribe your address from product-update email as part
+                of preparing our next send. If you delete your account just as
+                an email is going out, you may still receive that one. We keep
+                only an unsubscribed record with our marketing email provider
+                so the address is not re-added. You can also use the
+                unsubscribe link in any marketing email at any time.
               </li>
               <li>
                 <strong>Signup attribution:</strong> A first-party cookie keeps

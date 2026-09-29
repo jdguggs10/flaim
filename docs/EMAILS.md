@@ -101,8 +101,9 @@ or send a campaign.
    review the counts, get explicit approval, and run `--apply`. Then run a
    final dry run, which must report `status: "complete"` with
    `totalMatches: 0`. A `rerun` status means run it again. Do not continue to the
-   audience step until it does. Repeat the final dry run if the send slips to
-   a later day.
+   audience step until it does. Repeat the final dry run as the last action
+   before the audience send, so the only gap is the minutes between that run
+   and the send. The privacy policy discloses that gap.
 7. Confirm the intended Plunk audience or segment and its current recipient
    count. Send proofs only to the internal test contacts. Verify Gmail, iCloud,
    and Fastmail rendering, the recipient-specific unsubscribe link, reply
