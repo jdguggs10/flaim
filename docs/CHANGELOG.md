@@ -4,6 +4,12 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Standings, Sleeper Drops, and ESPN Hockey Mapping Accuracy
+
+- **Fixed**: ESPN `get_standings` now counts a tie as half a win when calculating `winPercentage`. When every returned team has a valid ESPN `playoffSeed`, that provider order now determines `rank`; incomplete seed data keeps the existing computed-percentage and wins fallback.
+- **Fixed**: Sleeper transactions containing drops and no adds now normalize as `type: "drop"`, so `get_transactions` with `type=drop` can return standalone releases. Add-only and add-plus-drop replacements remain `type: "add"`, matching ESPN and Yahoo transaction semantics while retaining their `players_dropped` details.
+- **Verified**: ESPN hockey position, lineup-slot, pro-team, and stat mappings against live 2026-27 league data, including 2025-26 actual and 2026-27 projected stat payloads available during the preseason. Newly identified stat IDs now use readable labels; basketball mappings remain unverified until a live basketball league is available.
+
 ### Sleeper Roster and Matchup Entries Carry Weekly League Points
 
 - **Added**: Sleeper `get_roster` and `get_matchups` player entries now include `points` when that week's matchup `players_points` map has a finite league score for the player. A reported `0` is kept; a missing or non-finite value is omitted, and Sleeper's empty lineup slot never gets `points`. `get_matchups` puts the score on each side's existing starters from the payload it already fetched. A current single-team `get_roster` loads the current week's matchups when the sport is in `regular` or `post` season and `/state` reports the same season as the league (week resolved the same way as `get_matchups`) and puts `points` on starters, bench, reserve, taxi, and keepers; the resolved week is `snapshot.pointsWeek`. A different or unknown season omits `points` with `PLAYER_POINTS_UNAVAILABLE` instead of copying another year's week onto the final roster. A league whose status is `complete` skips points quietly for the same reason. If that state or matchup fetch fails, the optional lookup's response body stalls past 10 seconds, or the roster has no matchup row, the request still succeeds, entries omit `points`, and a `PLAYER_POINTS_UNAVAILABLE` warning is added. Preseason and offseason (`season_type` other than `regular` or `post`) skip the matchup fetch and do not warn. A historical week roster keeps its top-level `playersPoints` map and also puts `points` on each starter and bench entry.

@@ -1,10 +1,50 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildPlayoffSeedMap,
+  calculateWinPercentage,
   deriveBracketFinal,
   deriveStandingsOutcome,
   deriveStandingsSeasonPhase,
+  rankEspnStandings,
 } from '../standings';
+
+describe('ESPN standings ranking', () => {
+  it('counts ties as half a win when provider seeds are incomplete', () => {
+    const standings = rankEspnStandings([
+      { teamId: 1, wins: 5, playoffSeed: null, winPercentage: calculateWinPercentage(5, 4, 1) },
+      { teamId: 2, wins: 5, playoffSeed: null, winPercentage: calculateWinPercentage(5, 5, 0) },
+    ]);
+
+    expect(standings).toEqual([
+      expect.objectContaining({ teamId: 1, winPercentage: 0.55, rank: 1 }),
+      expect.objectContaining({ teamId: 2, winPercentage: 0.5, rank: 2 }),
+    ]);
+  });
+
+  it('uses complete ESPN playoff seeds as the authoritative standings order', () => {
+    const standings = rankEspnStandings([
+      { teamId: 1, wins: 10, playoffSeed: 2, winPercentage: 0.8 },
+      { teamId: 2, wins: 9, playoffSeed: 1, winPercentage: 0.75 },
+    ]);
+
+    expect(standings.map(({ teamId, rank }) => ({ teamId, rank }))).toEqual([
+      { teamId: 2, rank: 1 },
+      { teamId: 1, rank: 2 },
+    ]);
+  });
+
+  it('falls back to computed percentage when any ESPN playoff seed is missing', () => {
+    const standings = rankEspnStandings([
+      { teamId: 1, wins: 9, playoffSeed: 2, winPercentage: 0.75 },
+      { teamId: 2, wins: 10, playoffSeed: null, winPercentage: 0.8 },
+    ]);
+
+    expect(standings.map(({ teamId, rank }) => ({ teamId, rank }))).toEqual([
+      { teamId: 2, rank: 1 },
+      { teamId: 1, rank: 2 },
+    ]);
+  });
+});
 
 describe('deriveStandingsSeasonPhase', () => {
   it('marks the current season complete when explicit final ranks align with postseason matchup context', () => {

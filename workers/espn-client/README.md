@@ -156,8 +156,8 @@ ESPN Fantasy APIs use internal numeric IDs for positions, teams, roster slots, a
 |-------|------|---------------|
 | Football | `src/sports/football/mappings.ts` | [MAPPINGS.md](./src/sports/football/MAPPINGS.md) |
 | Baseball | `src/sports/baseball/mappings.ts` | [MAPPINGS.md](./src/sports/baseball/MAPPINGS.md) |
-| Basketball | `src/sports/basketball/mappings.ts` | — |
-| Hockey | `src/sports/hockey/mappings.ts` | — |
+| Basketball | `src/sports/basketball/mappings.ts` | Unverified: no attached live league |
+| Hockey | `src/sports/hockey/mappings.ts` | [MAPPINGS.md](./src/sports/hockey/MAPPINGS.md) (live verified 2026-09-29) |
 
 ### Standard mapping structure
 
@@ -211,4 +211,4 @@ corepack pnpm --dir workers/espn-client exec wrangler dev --env dev --port 8789
 
 - [Football MAPPINGS.md](./src/sports/football/MAPPINGS.md) - ESPN Fantasy Football mapping notes
 - [Baseball MAPPINGS.md](./src/sports/baseball/MAPPINGS.md) - ESPN Fantasy Baseball mapping notes
-- Basketball and hockey mappings are in code only (sourced from `cwendt94/espn-api`, unverified pending live credentials)
+- Basketball mappings remain code-only, sourced from `cwendt94/espn-api` and unverified because no live basketball league is attached. Hockey's positions, lineup slots, pro teams, and selected stat IDs were live-verified on 2026-09-29; its current 2026-27 actual-stat payload was preseason-empty, while historical actual and current projection payloads supplied stat coverage. See [Hockey MAPPINGS.md](./src/sports/hockey/MAPPINGS.md).
