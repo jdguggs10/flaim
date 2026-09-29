@@ -11,7 +11,7 @@ import {
 export default definePlunkBroadcast({
   id: "sep-2026-waivers-hockey",
   name: "Late September update",
-  subject: "Hockey is here, plus better waiver help",
+  subject: "The best time of year",
   preview:
     "Waiver priority, FAAB budgets, smarter free agents, and a steadier Yahoo.",
   // The template supplies and validates its own Plunk unsubscribe link. Keep
