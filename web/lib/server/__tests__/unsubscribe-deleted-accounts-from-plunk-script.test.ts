@@ -79,31 +79,49 @@ function matchedIds(plan: Plan) {
  * which fires once, when the last Plunk list page of the first scan is served.
  * Clerk honors `created_at_before`, as the real API does.
  */
+type ProviderState = { clerkUsers: ClerkUser[]; deletedIds: string[]; store: Map<string, Contact> };
+
 function fakeProviders({
+  afterPatch,
   afterScan,
   clerkList,
   clerkUsers = [clerkUser("user_current", ["current@example.com", "secondary@example.com"])],
   contacts,
   deletedIds = ["user_deleted"],
+  lookupStatus = 200,
   pageSize = 2,
   patchStatus = 200,
   plunkPage,
 }: {
-  afterScan?: (state: { clerkUsers: ClerkUser[]; deletedIds: string[]; store: Map<string, Contact> }) => void;
+  afterPatch?: (id: string, state: ProviderState) => void;
+  afterScan?: (state: ProviderState) => void;
   clerkList?: (offset: number) => unknown;
   clerkUsers?: ClerkUser[];
   contacts: Contact[];
   deletedIds?: string[];
+  lookupStatus?: number;
   pageSize?: number;
   patchStatus?: number;
   plunkPage?: (cursor: string | null) => unknown;
 }) {
   const store = new Map(contacts.map((item) => [item.id, structuredClone(item)]));
   const patches: Array<{ body: unknown; id: string }> = [];
+  const lookups: string[] = [];
   let scanned = false;
 
   const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
     const url = new URL(String(input));
+    if (url.host === "api.clerk.com" && url.searchParams.has("email_address")) {
+      // Live per-address lookup: no cutoff, matches primary or secondary.
+      const email = String(url.searchParams.get("email_address"));
+      lookups.push(email);
+      if (lookupStatus !== 200) return json({ errors: [{ message: "nope" }] }, lookupStatus);
+      return json(
+        clerkUsers.filter((user) =>
+          user.email_addresses.some((address) => address.email_address.toLowerCase() === email),
+        ),
+      );
+    }
     if (url.host === "api.clerk.com") {
       const before = Number(url.searchParams.get("created_at_before"));
       const visible = clerkUsers.filter((user) => user.created_at < before);
@@ -132,6 +150,7 @@ function fakeProviders({
         if (patchStatus !== 200) return json({ error: "nope" }, patchStatus);
         const current = store.get(contactId);
         if (current) store.set(contactId, { ...current, subscribed: body.subscribed });
+        afterPatch?.(contactId, { clerkUsers, deletedIds, store });
         return json({ id: contactId, subscribed: body.subscribed });
       }
       if (contactId) {
@@ -159,7 +178,7 @@ function fakeProviders({
     throw new Error(`Unexpected request to ${url.host}`);
   });
 
-  return { fetchImpl, patches, store };
+  return { fetchImpl, lookups, patches, store };
 }
 
 async function runScript(argv: string[], fetchImpl: typeof fetch) {
@@ -377,26 +396,71 @@ describe("unsubscribe deleted accounts from Plunk", () => {
     expect(report).toMatchObject({ applied: 0, failed: 1, status: "incomplete" });
   });
 
+  it("skips a contact whose address a signup claims between two writes", async () => {
+    const { fetchImpl, lookups, patches, store } = fakeProviders({
+      afterPatch: (id, { clerkUsers }) => {
+        if (id === "c1") {
+          clerkUsers.push(clerkUser("user_new", ["second@example.com"], WRITE_PHASE_MS));
+        }
+      },
+      contacts: [contact("c1", "first@example.com"), contact("c2", "second@example.com")],
+    });
+
+    const { exitCode, report } = await runScript(["--apply"], fetchImpl);
+
+    expect(exitCode).toBe(0);
+    expect(lookups).toEqual(["first@example.com", "second@example.com"]);
+    expect(patches).toEqual([{ body: { subscribed: false }, id: "c1" }]);
+    expect(store.get("c2")?.subscribed).toBe(true);
+    expect(report).toMatchObject({
+      applied: 1,
+      failed: 0,
+      skippedNoLongerQualifies: 1,
+      status: "complete",
+      totalMatches: 2,
+    });
+  });
+
+  it("counts a failed Clerk lookup as failed and does not write", async () => {
+    const { fetchImpl, patches } = fakeProviders({
+      contacts: [contact("c1", "resend-only@example.com")],
+      lookupStatus: 500,
+    });
+
+    const { exitCode, report } = await runScript(["--apply"], fetchImpl);
+
+    expect(exitCode).toBe(1);
+    expect(patches).toEqual([]);
+    expect(report).toMatchObject({ applied: 0, failed: 1, status: "incomplete" });
+  });
+
   it.each([
     [
       "an account deletion lands during the scan",
-      ({ deletedIds }: { deletedIds: string[] }) => {
+      ({ deletedIds }: ProviderState) => {
         deletedIds.push("user_deleted_mid_run");
       },
-      { clerkTotalChanged: false, deletedAccountsChanged: true },
+      { clerkSnapshotChanged: false, deletedAccountsChanged: true },
     ],
     [
-      "the frozen Clerk total changes during the scan",
-      ({ clerkUsers }: { clerkUsers: ClerkUser[] }) => {
+      "a Clerk user disappears from the frozen snapshot",
+      ({ clerkUsers }: ProviderState) => {
         clerkUsers.pop();
       },
-      { clerkTotalChanged: true, deletedAccountsChanged: false },
+      { clerkSnapshotChanged: true, deletedAccountsChanged: false },
+    ],
+    [
+      "a Clerk user swaps a secondary address with the count unchanged",
+      ({ clerkUsers }: ProviderState) => {
+        clerkUsers[0].email_addresses[1] = { email_address: "new-secondary@example.com", id: "e_new" };
+      },
+      { clerkSnapshotChanged: true, deletedAccountsChanged: false },
     ],
   ])("reports rerun, not a clean result, when %s", async (_label, afterScan, drift) => {
     const { fetchImpl, patches } = fakeProviders({
       afterScan,
       clerkUsers: [
-        clerkUser("user_current", ["current@example.com"]),
+        clerkUser("user_current", ["current@example.com", "old-secondary@example.com"]),
         clerkUser("user_other", ["other@example.com"]),
       ],
       contacts: [contact("c1", "current@example.com", { data: { clerkUserId: "user_current" } })],
