@@ -1,6 +1,14 @@
 import * as React from "react";
 import { Button, Column, Row, Section } from "react-email";
 import {
+  BroadcastHero,
+  GerryNote,
+  ReportHeader,
+  ReportLink,
+  ReportSection,
+  TryThis,
+} from "./components/BroadcastBlocks";
+import {
   FlaimEmailLayout,
   FlaimFooterLink,
   FlaimText,
@@ -14,6 +22,9 @@ const campaign = "email-sep-2026-waivers-hockey";
 interface WaiversHockeyBroadcastEmailProps {
   chatGptAppUrl?: string;
   claudeConnectorUrl?: string;
+  // No default GIF on purpose: Gerry picks one before sending. Empty renders
+  // no hero image.
+  gifUrl?: string;
   leaguesUrl?: string;
   unsubscribeUrl?: string;
 }
@@ -23,6 +34,7 @@ export default function WaiversHockeyBroadcastEmail({
     "https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
   claudeConnectorUrl =
     "https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754",
+  gifUrl = "",
   leaguesUrl = "https://flaim.app/leagues",
   unsubscribeUrl = previewUnsubscribeUrl,
 }: WaiversHockeyBroadcastEmailProps) {
@@ -40,51 +52,21 @@ export default function WaiversHockeyBroadcastEmail({
           <FlaimFooterLink href={unsubscribeUrl}>Unsubscribe</FlaimFooterLink>.
         </>
       }
-      footerDescription={
-        <>
-          I also clarified the privacy policy and terms.{" "}
-          <FlaimFooterLink href={privacyUrl}>Read the update.</FlaimFooterLink>
-        </>
-      }
       headerUrl={homeUrl}
       preview="Waiver priority, FAAB budgets, smarter free agents, and a steadier Yahoo."
-      title="Waivers, hockey, and a steadier Yahoo"
+      // PLACEHOLDER headline: Gerry rewrites this before sending.
+      title="Hockey's here. Yahoo's steadier. Lots of small stuff."
     >
-      <FlaimText>Hey everyone, a few quick updates:</FlaimText>
-      <ul style={styles.updateList}>
-        <li style={styles.updateItem}>
-          <strong>Hockey is here.</strong> Connect your ESPN and Yahoo hockey
-          leagues just like football. Basketball works too.
-        </li>
-        <li style={styles.updateItem}>
-          <strong>Better waiver help.</strong> Flaim now sees Yahoo and Sleeper
-          waiver priority and FAAB budgets, plus better free-agent detail across
-          all three platforms.
-        </li>
-        <li style={styles.updateItem}>
-          <strong>Yahoo is more reliable.</strong> Missing football leagues,
-          sync errors, and weekly player points got fixes. If you had trouble
-          earlier, give it another try.
-        </li>
-        <li style={styles.updateItem}>
-          <strong>Easier ESPN setup.</strong> The latest Chrome extension and{" "}
-          <a href={espnGuideUrl} style={styles.inlineLink}>
-            setup guide
-          </a>{" "}
-          make connecting simpler.
-        </li>
-        <li style={styles.updateItem}>
-          <strong>A better league card.</strong> Refresh, dark mode, and links
-          work better in Claude. Prefer less clutter? Hide the card from your{" "}
-          <a href={attributedLeaguesUrl} style={styles.inlineLink}>
-            leagues page
-          </a>
-          .
-        </li>
-      </ul>
+      <BroadcastHero gifUrl={gifUrl} />
 
-      <FlaimText>As always, keep the feedback coming. Just reply to this email.</FlaimText>
-      <FlaimText>Gerry</FlaimText>
+      <GerryNote
+        paragraphs={[
+          // PLACEHOLDER note: Gerry writes this in his own voice.
+          "[Gerry writes this: 2-4 sentences, his voice. What's been going on, what he's excited about, honest about what's still rough.]",
+        ]}
+      />
+
+      <TryThis prompt="Who should I bid on this week, and how much FAAB should I spend?" />
 
       <Section style={styles.actionSection}>
         <Button href={attributedLeaguesUrl} style={styles.leaguesButton}>
@@ -105,6 +87,60 @@ export default function WaiversHockeyBroadcastEmail({
           </Column>
         </Row>
       </Section>
+
+      <ReportHeader />
+
+      <ReportSection
+        label="Called up"
+        items={[
+          "Hockey works on ESPN and Yahoo. Basketball's ready for tip-off.",
+          "Winter sports are newer for Flaim. If something looks off, tell me.",
+        ]}
+      />
+      <ReportSection
+        label="Waiver wire"
+        items={[
+          "Standings now show your waiver priority and FAAB left (Yahoo, Sleeper).",
+          "ESPN free agents come with points per game and projections.",
+          "Sleeper free agents are sorted by who's getting added most.",
+          "Yahoo free-agent lists go past 25 now.",
+        ]}
+      />
+      <ReportSection
+        label="Off the injury report"
+        items={[
+          "Yahoo: missing football leagues show up again, errors tell you what to do next, and rosters show weekly points. Upgraded from questionable to probable.",
+        ]}
+      />
+      <ReportSection
+        label="Front office"
+        items={[
+          <>
+            Easier ESPN setup, plus a new{" "}
+            <ReportLink href={espnGuideUrl}>setup guide</ReportLink>.
+          </>,
+          <>
+            Want less clutter? Hide the league card from your{" "}
+            <ReportLink href={attributedLeaguesUrl}>leagues page</ReportLink>.
+          </>,
+          "The league card works better in Claude: refresh, dark mode, links.",
+        ]}
+      />
+      <ReportSection
+        label="Commissioner's desk"
+        tone="normal"
+        items={[
+          <>
+            I updated the privacy policy and terms. They now explain how your
+            league data reaches ChatGPT or Claude, that deleting your account
+            also unsubscribes you from these emails, and that if Flaim were ever
+            sold, the new owner would have to keep these promises.{" "}
+            <ReportLink href={privacyUrl}>Read the update</ReportLink>.
+          </>,
+        ]}
+      />
+
+      <FlaimText>Keep the feedback coming. Just hit reply.</FlaimText>
     </FlaimEmailLayout>
   );
 }
@@ -114,22 +150,12 @@ WaiversHockeyBroadcastEmail.PreviewProps = {
     "https://chatgpt.com/plugins/plugin_asdk_app_69a8f78087e081919e52cacacf00ff36",
   claudeConnectorUrl:
     "https://claude.ai/directory/connectors/f1a5b6a4-1f5b-470c-af23-71fc7ab13754",
+  gifUrl: "",
   leaguesUrl: "https://flaim.app/leagues",
   unsubscribeUrl: previewUnsubscribeUrl,
 } satisfies WaiversHockeyBroadcastEmailProps;
 
 const styles = {
-  updateList: {
-    color: emailBrand.colors.foreground,
-    fontSize: "15px",
-    lineHeight: "24px",
-    margin: "0 0 16px",
-    paddingLeft: "20px",
-  },
-  updateItem: {
-    margin: "0 0 12px",
-    paddingLeft: "4px",
-  },
   actionSection: {
     margin: "8px 0 4px",
     textAlign: "center" as const,
@@ -150,7 +176,7 @@ const styles = {
     textDecoration: "none",
   },
   assistantButtons: {
-    margin: "8px 0 20px",
+    margin: "8px 0 8px",
   },
   assistantColumn: {
     padding: "0 4px 0 0",
@@ -171,9 +197,5 @@ const styles = {
     padding: "12px 8px",
     textAlign: "center" as const,
     textDecoration: "none",
-  },
-  inlineLink: {
-    color: emailBrand.colors.foreground,
-    textDecoration: "underline",
   },
 } as const;

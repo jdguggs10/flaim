@@ -121,6 +121,18 @@ Do not send a real audience email while developing this workflow. The Plunk secr
 
 The prior Resend Segment, Topic, CLI-draft, and dashboard-send workflow is now a rollback lane. Keep its contacts, suppressions, credentials, and DNS intact through the first successful Plunk audience Broadcast and the two-week rollback window. Do not create new Resend Broadcasts in normal operation, and do not retire the rollback lane without a separate reviewed provider and DNS change.
 
+#### Broadcast format
+
+Product-update Broadcasts share one structure, built from the blocks in `web/emails/components/BroadcastBlocks.tsx`:
+
+1. **Hero**: the layout title as a big headline, plus an optional GIF (`BroadcastHero`, no default GIF).
+2. **Note**: a short personal note signed "Gerry" (`GerryNote`). It carries the human voice and always leads.
+3. **Try this**: one prompt the reader can paste into their assistant (`TryThis`).
+4. **Buttons**: manage leagues, plus the ChatGPT and Claude entry points.
+5. **League report**: a divider and lead-in (`ReportHeader`), then `ReportSection` lists grouped under fantasy-style labels, with one-line items in quieter type.
+
+Product details go in the report as one-liners, not in the note. No emojis. Any required legal or privacy notice gets its own `ReportSection` with `tone="normal"`, so it stays readable instead of muted.
+
 The first product templates are:
 
 - `web/emails/welcome.tsx`
