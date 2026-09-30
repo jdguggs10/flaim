@@ -43,7 +43,7 @@ export default function WaiversHockeyBroadcastEmail({
       eyebrow="PRODUCT UPDATES"
       footerDisclosure={
         <>
-          You are receiving this because you signed up for a Flaim account. {" "}
+          You are receiving this because you signed up for a Flaim account.{" "}
           <FlaimFooterLink href={unsubscribeUrl}>Unsubscribe</FlaimFooterLink>.
         </>
       }
@@ -60,7 +60,7 @@ export default function WaiversHockeyBroadcastEmail({
         ]}
       />
 
-      <ReportHeader title="FIXES AND UPDATES" intro="Lots of little things." />
+      <ReportHeader />
 
       <ReportSection
         label="Puck and bball"

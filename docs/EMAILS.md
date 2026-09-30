@@ -92,14 +92,17 @@ or send a campaign.
    the manifest's declared type, either in the dashboard or by a one-off, separately approved
    operator API call (`POST /campaigns`, no `scheduledFor`) using the Plunk
    secret key from the password manager, from the reviewed local `plunk.html`
-   and `campaign.json`. The API accepts only an HTML body, so check the proof
-   for a plain-text part. No agent or command may schedule or send the audience
+   and `campaign.json`. The API accepts only an HTML body; Plunk derives any
+   plain-text part, so read the proof's text view before approving the send. No agent or command may schedule or send the audience
    campaign; the audience send stays a manual dashboard action by Gerry after
    explicit approval. Use `Gerry <updates@news.flaim.app>` with
    `gerry@news.flaim.app` as Reply-To. Do not edit links or unsubscribe markup
    in the dashboard. Use **HEADLESS** for a Flaim custom-HTML Broadcast: it
    still excludes opted-out contacts, preserves the reviewed Flaim footer with
-   `{{unsubscribeUrl}}`, and does not append Plunk's provider footer. Use
+   `{{unsubscribeUrl}}`, and does not append Plunk's provider footer. Plunk
+   adds the one-click `List-Unsubscribe` headers only when that link is present
+   (provider behavior verified on real proof sends in September 2026; re-check
+   the proof headers if Plunk changes). Use
    **MARKETING** only when that provider-owned footer is intended. Paste the
    reviewed export in Plunk's HTML editor and stay in HTML mode; the Visual
    editor rewrites table-based HTML and can strip its inline styling. Ordinary

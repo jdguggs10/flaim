@@ -4,10 +4,11 @@ import { emailBrand } from "../brand";
 import { FlaimText } from "./FlaimEmailLayout";
 
 /**
- * Reusable blocks for product-update Broadcasts. Order: hero, note, try-this,
- * buttons, league report. The human voice leads; product details sit lower in
- * quieter type. The big headline is the layout `title`, which renders above
- * the hero, so the hero itself is only the GIF.
+ * Reusable blocks for product-update Broadcasts. Order: headline (the layout
+ * `title`, with an optional GIF hero), note, fixes-and-updates report, buttons
+ * (optionally with a try-this prompt), then any required notice in a
+ * `FlaimCallout`. The human voice leads; product details sit lower in quieter
+ * type. See "Broadcast format" in docs/EMAILS.md.
  */
 
 export function BroadcastHero({
@@ -50,8 +51,8 @@ export function TryThis({ prompt }: { prompt: string }) {
 
 /** Thin divider plus the lead-in for the quieter details below it. */
 export function ReportHeader({
-  intro = "The details, for those who want them.",
-  title = "THE LEAGUE REPORT",
+  intro = "Lots of little things.",
+  title = "FIXES AND UPDATES",
 }: {
   intro?: string;
   title?: string;
@@ -66,25 +67,20 @@ export function ReportHeader({
 }
 
 /**
- * A labeled list of one-line items. The default tone is quiet (smaller, muted).
- * Use tone="normal" for anything the reader must not skim past, such as a
- * legal or privacy notice.
+ * A labeled list of one-line items in quiet type (smaller, muted). Notices the
+ * reader must not skim past belong in a `FlaimCallout`, not here.
  */
 export function ReportSection({
   items,
   label,
-  tone = "quiet",
 }: {
   items: React.ReactNode[];
   label: string;
-  tone?: "quiet" | "normal";
 }) {
-  const listStyle = tone === "normal" ? styles.listNormal : styles.listQuiet;
-
   return (
     <Section style={styles.reportSection}>
       <Text style={styles.sectionLabel}>{label.toUpperCase()}</Text>
-      <ul style={listStyle}>
+      <ul style={styles.listQuiet}>
         {items.map((item, index) => (
           <li key={index} style={styles.item}>
             {item}
@@ -181,13 +177,6 @@ const styles = {
     color: emailBrand.colors.mutedForeground,
     fontSize: "13px",
     lineHeight: "20px",
-    margin: "0",
-    paddingLeft: "18px",
-  },
-  listNormal: {
-    color: emailBrand.colors.foreground,
-    fontSize: "14px",
-    lineHeight: "22px",
     margin: "0",
     paddingLeft: "18px",
   },

@@ -20,7 +20,7 @@ export default definePlunkBroadcast({
   releaseGate: {
     status: "CLEARED",
     evidence:
-      "No external release dependency; copy reviewed by Gerry in chat 2026-09-29",
+      "No external release dependency; final copy approved before the draft was created (2026-09-29)",
   },
   audience: {
     type: "ALL",
