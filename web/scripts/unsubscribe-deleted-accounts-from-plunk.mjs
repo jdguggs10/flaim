@@ -230,20 +230,27 @@ function validateContact(contact, where) {
   };
 }
 
+function isCount(value) {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
 /**
  * Page through every Plunk contact with the cursor the live API returns
- * (`{ data, total, cursor, hasMore }`). Fails closed on a malformed page, a
- * duplicate id, a shrinking total, or a final count that does not match the
- * last reported total. Live signups may grow the total mid-scan; they are
- * accepted only if the scan still ends with exactly that many contacts.
+ * (`{ data, total, cursor, hasMore }`). Plunk reports the real `total` only on
+ * the first page; pages fetched with a cursor report `total: 0`, so a cursor
+ * page's total is ignored (it may be missing, null, or any count). Fails
+ * closed on a malformed page, a duplicate id, a missing cursor, or a scan
+ * that ends with fewer contacts than the first page reported. Live signups
+ * may add contacts mid-scan, so ending above that total is accepted.
  */
 export async function listAllPlunkContacts({ request }) {
   const contacts = [];
   const ids = new Set();
   let cursor = null;
-  let lastTotal = null;
+  let firstPageTotal = null;
 
   do {
+    const firstPage = firstPageTotal === null;
     const query = new URLSearchParams({ limit: String(PLUNK_PAGE_SIZE) });
     if (cursor) query.set("cursor", cursor);
     const response = await request(`/contacts?${query}`);
@@ -251,16 +258,14 @@ export async function listAllPlunkContacts({ request }) {
     if (
       !isRecord(body) ||
       !Array.isArray(body.data) ||
-      !Number.isSafeInteger(body.total) ||
-      body.total < 0 ||
-      typeof body.hasMore !== "boolean"
+      typeof body.hasMore !== "boolean" ||
+      (firstPage
+        ? !isCount(body.total)
+        : body.total !== undefined && body.total !== null && !isCount(body.total))
     ) {
       throw new Error("Plunk contact list returned a malformed page");
     }
-    if (lastTotal !== null && body.total < lastTotal) {
-      throw new Error("Plunk contact total shrank mid-scan; rerun");
-    }
-    lastTotal = body.total;
+    if (firstPage) firstPageTotal = body.total;
 
     for (const raw of body.data) {
       const contact = validateContact(raw, `Plunk contact at position ${contacts.length + 1}`);
@@ -278,9 +283,9 @@ export async function listAllPlunkContacts({ request }) {
     }
   } while (cursor);
 
-  if (contacts.length !== lastTotal) {
+  if (contacts.length < firstPageTotal) {
     throw new Error(
-      `Plunk contact scan read ${contacts.length} contacts but the API reported ${lastTotal}; rerun`,
+      `Plunk contact scan read ${contacts.length} contacts, fewer than the ${firstPageTotal} the first page reported; rerun`,
     );
   }
   return contacts;
