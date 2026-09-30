@@ -66,7 +66,7 @@ export default function WaiversHockeyBroadcastEmail({
         label="Puck and bball"
         items={[
           "Hockey is confirmed working for ESPN and Yahoo, and basketball should also be ready for tip-off.",
-          "Winter sports are newer for Flaim. If something looks off, tell me.",
+          "These sports are new for Flaim. If something looks off, pls tell me.",
         ]}
       />
       <ReportSection
@@ -81,7 +81,7 @@ export default function WaiversHockeyBroadcastEmail({
       <ReportSection
         label="Misc fixes"
         items={[
-          "Yahoo: missing football leagues show up again, errors tell you what to do next, and rosters show weekly points. Upgraded from questionable to probable.",
+          "Yahoo: missing football leagues show up again, errors tell you what to do next, and rosters show weekly points.",
           "ESPN: standings now match ESPN's order and count ties correctly.",
           "Sleeper: rosters and matchups show each player's points for the week, and drops no longer show up as adds.",
         ]}
@@ -126,7 +126,7 @@ export default function WaiversHockeyBroadcastEmail({
           <strong>Privacy update.</strong> The privacy policy and terms were
           updated. They now explain how your league data reaches ChatGPT or
           Claude, that deleting your account also unsubscribes you from these
-          emails, and what would happen if Flaim were ever sold (the new owner
+          emails, and what would happen if Flaim were ever sold (a new owner
           would have to keep these promises).{" "}
           <ReportLink href={privacyUrl}>Read here</ReportLink>.
         </FlaimCalloutText>
@@ -165,7 +165,7 @@ const styles = {
     textDecoration: "none",
   },
   assistantButtons: {
-    margin: "8px 0 8px",
+    margin: "8px 0 32px",
   },
   assistantColumn: {
     padding: "0 4px 0 0",

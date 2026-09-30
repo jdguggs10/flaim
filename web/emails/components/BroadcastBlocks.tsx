@@ -132,7 +132,6 @@ const styles = {
   signature: {
     color: emailBrand.colors.foreground,
     fontSize: "15px",
-    fontWeight: "600",
     lineHeight: "24px",
     margin: "0 0 20px",
   },
