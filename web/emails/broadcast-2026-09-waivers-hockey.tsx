@@ -6,7 +6,12 @@ import {
   ReportLink,
   ReportSection,
 } from "./components/BroadcastBlocks";
-import { FlaimEmailLayout, FlaimFooterLink } from "./components/FlaimEmailLayout";
+import {
+  FlaimCallout,
+  FlaimCalloutText,
+  FlaimEmailLayout,
+  FlaimFooterLink,
+} from "./components/FlaimEmailLayout";
 import { previewUnsubscribeUrl } from "./broadcast-manifest";
 import { emailBrand } from "./brand";
 import { withEmailRef } from "./link-ref";
@@ -95,20 +100,6 @@ export default function WaiversHockeyBroadcastEmail({
           "The league card works better in Claude: refresh, dark mode, links.",
         ]}
       />
-      <ReportSection
-        label="Privacy"
-        tone="normal"
-        items={[
-          <>
-            Privacy policy and terms were updated. They now explain how your
-            league data reaches ChatGPT or Claude, that deleting your account
-            also unsubscribes you from these emails, and what would happen if
-            Flaim were ever sold (the new owner would have to keep these
-            promises).{" "}
-            <ReportLink href={privacyUrl}>Read here</ReportLink>.
-          </>,
-        ]}
-      />
 
       <Section style={styles.actionSection}>
         <Button href={attributedLeaguesUrl} style={styles.leaguesButton}>
@@ -129,6 +120,17 @@ export default function WaiversHockeyBroadcastEmail({
           </Column>
         </Row>
       </Section>
+
+      <FlaimCallout>
+        <FlaimCalloutText>
+          <strong>Privacy update.</strong> The privacy policy and terms were
+          updated. They now explain how your league data reaches ChatGPT or
+          Claude, that deleting your account also unsubscribes you from these
+          emails, and what would happen if Flaim were ever sold (the new owner
+          would have to keep these promises).{" "}
+          <ReportLink href={privacyUrl}>Read here</ReportLink>.
+        </FlaimCalloutText>
+      </FlaimCallout>
     </FlaimEmailLayout>
   );
 }
