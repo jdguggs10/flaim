@@ -261,3 +261,45 @@ describe('espn cross-sport get_league_info teams array', () => {
     expect(fetchPath).toContain('view=mTeam');
   });
 });
+
+describe('espn cross-sport get_standings ranking', () => {
+  const getCredentialsMock = getCredentials as MockedFunction<typeof getCredentials>;
+  const espnFetchMock = espnFetch as MockedFunction<typeof espnFetch>;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    getCredentialsMock.mockResolvedValue({ s2: 'token', swid: '{swid}' });
+  });
+
+  it.each(scenarios)('$label uses complete provider playoff seeds and tie-aware percentages', async ({ sport, handlers }) => {
+    espnFetchMock.mockResolvedValue(new Response(JSON.stringify({
+      scoringPeriodId: 18,
+      settings: { regularSeasonMatchupPeriods: 14 },
+      teams: [
+        {
+          id: 1,
+          rankFinal: 2,
+          playoffSeed: 2,
+          record: { overall: { wins: 5, losses: 5, ties: 0 } },
+        },
+        {
+          id: 2,
+          rankFinal: 1,
+          playoffSeed: 1,
+          record: { overall: { wins: 4, losses: 5, ties: 1 } },
+        },
+      ],
+    }), { status: 200 }));
+
+    const result = await handlers.get_standings({} as never, makeParams(sport), 'Bearer x', 'cid');
+
+    expect(result.success).toBe(true);
+    const data = result.data as {
+      standings: Array<{ teamId: number; rank: number; winPercentage: number }>;
+    };
+    expect(data.standings).toEqual([
+      expect.objectContaining({ teamId: 2, rank: 1, winPercentage: 0.45 }),
+      expect.objectContaining({ teamId: 1, rank: 2, winPercentage: 0.5 }),
+    ]);
+  });
+});

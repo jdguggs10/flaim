@@ -79,10 +79,16 @@ function normalizeOne(txn: SleeperTransaction, resolvePlayer?: PlayerResolver): 
 
   const added = mapPlayers(Object.keys(txn.adds ?? {}), resolvePlayer);
   const dropped = mapPlayers(Object.keys(txn.drops ?? {}), resolvePlayer);
+  // Sleeper labels standalone free-agent releases `free_agent`, the same
+  // upstream type it uses for adds. Keep replacements as adds (matching ESPN
+  // and Yahoo), but make a release-only row discoverable through type=drop.
+  const normalizedType: TransactionType = type === 'add' && added.length === 0 && dropped.length > 0
+    ? 'drop'
+    : type;
 
   return {
     transaction_id: String(txn.transaction_id ?? `${txn.type || 'unknown'}-${txn.status_updated || txn.created || 0}`),
-    type,
+    type: normalizedType,
     status: mapStatus(txn.status),
     timestamp: Number(txn.status_updated ?? txn.created ?? 0),
     date: new Date(Number(txn.status_updated ?? txn.created ?? 0)).toISOString().slice(0, 10),

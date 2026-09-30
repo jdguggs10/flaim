@@ -43,6 +43,10 @@ export interface ProviderRefreshResult {
   error?: string;
   error_description?: string;
   retryAfter?: string;
+  /** The provider completed but one or more league rows could not be saved. */
+  partial?: true;
+  /** Public-safe count; individual failures live in `details.writeFailures`. */
+  writeFailureCount?: number;
   details?: unknown;
 }
 
@@ -180,16 +184,19 @@ async function refreshEspnLeagues(env: { SUPABASE_URL: string; SUPABASE_SERVICE_
 
   try {
     const result = await discoverAndSaveLeagues(userId, credentials.swid, credentials.s2, storage);
+    const writeFailures = result.writeFailures ?? [];
     return {
       platform: 'espn',
       status: 'success',
       httpStatus: 200,
+      ...(writeFailures.length > 0 ? { partial: true as const, writeFailureCount: writeFailures.length } : {}),
       details: {
         discovered: result.discovered,
         currentSeason: result.currentSeason,
         pastSeasons: result.pastSeasons,
         currentSeasonCount: result.currentSeason.found,
         pastSeasonsCount: result.pastSeasons.found,
+        ...(writeFailures.length > 0 ? { writeFailures } : {}),
       },
     };
   } catch (error) {
@@ -643,6 +650,9 @@ export async function refreshLeaguesForUser(
       durationMs,
       leagueCount,
       errorCode: result.error,
+      ...(result.writeFailureCount
+        ? { writeFailureCount: result.writeFailureCount, writeFailureCode: 'DB_ERROR' }
+        : {}),
       ...(result.retryAfter ? { retryAfterSeconds: Number(result.retryAfter) || undefined } : {}),
       correlationId,
       ownerId,

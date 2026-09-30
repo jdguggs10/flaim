@@ -1491,7 +1491,14 @@ api.post('/extension/discover', async (c) => {
 
   const settleDiscover = async (
     status: 'success' | 'error',
-    fields: { errorCode?: string; errorMessage?: string; leagueCount?: number; httpStatus?: number }
+    fields: {
+      errorCode?: string;
+      errorMessage?: string;
+      leagueCount?: number;
+      httpStatus?: number;
+      writeFailureCount?: number;
+      writeFailureCode?: 'DB_ERROR';
+    }
   ) => {
     const durationMs = Date.now() - startedAt;
     await syncState.settle(userId, 'espn', ownerId, {
@@ -1517,6 +1524,8 @@ api.post('/extension/discover', async (c) => {
       durationMs,
       leagueCount: fields.leagueCount,
       errorCode: fields.errorCode,
+      writeFailureCount: fields.writeFailureCount,
+      writeFailureCode: fields.writeFailureCode,
       ownerId,
     });
   };
@@ -1529,6 +1538,7 @@ api.post('/extension/discover', async (c) => {
 
     const savedLeagues = result.savedLeagues ?? [];
     const pastSeasons = 'pastSeasons' in result ? result.pastSeasons : { found: 0, added: 0, alreadySaved: 0, refreshed: 0 };
+    const writeFailures = result.writeFailures ?? [];
     if (useDurableHistory && savedLeagues.length !== result.currentSeason.found) {
       await settleDiscover('error', { errorCode: 'current_league_save_failed', errorMessage: 'Unable to save current ESPN leagues', httpStatus: 500 });
       return c.json({ error: 'current_league_save_failed', error_description: 'Unable to save current ESPN leagues' }, 500);
@@ -1577,7 +1587,10 @@ api.post('/extension/discover', async (c) => {
       seasonYear: l.seasonYear || 0,
     }));
 
-    await settleDiscover('success', { leagueCount: currentSeasonWithDefault.length });
+    await settleDiscover('success', {
+      leagueCount: currentSeasonWithDefault.length,
+      ...(writeFailures.length > 0 ? { writeFailureCount: writeFailures.length, writeFailureCode: 'DB_ERROR' as const } : {}),
+    });
 
     return c.json({
       discovered: result.discovered,
@@ -1589,6 +1602,11 @@ api.post('/extension/discover', async (c) => {
       refreshed: result.currentSeason.refreshed,
       historical: pastSeasons.added,
       historicalRefreshed: pastSeasons.refreshed,
+      ...(writeFailures.length > 0 ? {
+        partial: true,
+        writeFailureCount: writeFailures.length,
+        details: { writeFailures },
+      } : {}),
       ...(history ? { history } : {}),
     });
 

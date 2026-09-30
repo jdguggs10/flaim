@@ -399,6 +399,88 @@ describe('discoverAndSaveLeagues', () => {
     expect(storage.updateLeague).not.toHaveBeenCalled();
   });
 
+  it('returns a public-safe write failure when a current league cannot be saved', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [{
+          id: 'pref-1',
+          type: { code: 'fantasy' },
+          metaData: {
+            entry: {
+              entryId: 8,
+              gameId: 1,
+              seasonId: 2026,
+              entryMetadata: { teamName: 'Team' },
+              groups: [{ groupId: 12345, groupName: 'League' }],
+            },
+          },
+        }],
+      }),
+    } as Response);
+    const storage = {
+      leagueExists: vi.fn().mockResolvedValue(false),
+      addLeague: vi.fn().mockResolvedValue({
+        success: false,
+        code: 'DB_ERROR',
+        error: 'raw database constraint detail',
+      }),
+      updateLeague: vi.fn(),
+    } as any;
+
+    const result = await discoverAndSaveCurrentLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(result.currentSeason).toEqual({ found: 1, added: 0, alreadySaved: 0, refreshed: 0 });
+    expect(result.writeFailures).toEqual([
+      { leagueId: '12345', sport: 'football', seasonYear: 2026, code: 'DB_ERROR' },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('raw database constraint detail');
+  });
+
+  it('aggregates public-safe write failures from historical league saves', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        preferences: [{
+          id: 'pref-1',
+          type: { code: 'fantasy' },
+          metaData: {
+            entry: {
+              entryId: 8,
+              gameId: 1,
+              seasonId: 2026,
+              entryMetadata: { teamName: 'Current Team' },
+              groups: [{ groupId: 12345, groupName: 'League' }],
+            },
+          },
+        }],
+      }),
+    } as Response);
+    mockGetLeagueInfo
+      .mockResolvedValueOnce({ status: { previousSeasons: [2025] } } as any)
+      .mockResolvedValueOnce({ leagueName: 'Last Year League' } as any);
+    mockGetLeagueTeams.mockResolvedValueOnce([{ teamId: '8', teamName: 'Last Year Team' }]);
+    const storage = {
+      leagueExists: vi.fn().mockResolvedValue(false),
+      addLeague: vi.fn()
+        .mockResolvedValueOnce({ success: true })
+        .mockResolvedValueOnce({ success: false, code: 'DB_ERROR', error: 'raw database constraint detail' }),
+      updateLeague: vi.fn(),
+    } as any;
+
+    const result = await discoverAndSaveLeagues('user_123', '{swid}', 's2token', storage);
+
+    expect(result.pastSeasons).toEqual({ found: 1, added: 0, alreadySaved: 0, refreshed: 0 });
+    expect(result.writeFailures).toEqual([
+      { leagueId: '12345', sport: 'football', seasonYear: 2025, code: 'DB_ERROR' },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('raw database constraint detail');
+  });
+
   it('discovers and persists baseball history through 2011', async () => {
     const previousSeasons = Array.from({ length: 15 }, (_, index) => 2025 - index);
     mockFetch.mockResolvedValueOnce({

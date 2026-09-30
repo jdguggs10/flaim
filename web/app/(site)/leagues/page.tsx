@@ -48,6 +48,7 @@ import {
 import { CHROME_EXTENSION_URL } from '@/config/constants';
 import { shouldProbeEspnHistoryAfterRefreshFailure } from '@/lib/espn-history-refresh';
 import { resolveLeagueSyncNotice } from '@/lib/league-sync-notice';
+import { combineLeagueRefreshNotices, summarizeLeagueRefreshWriteFailures } from '@/lib/league-refresh-write-failures';
 import { StepConnectAI } from '@/components/site/StepConnectAI';
 import { SportIcon } from '@/components/site/sport-icon';
 import { getPreviousSeasonYear } from '@/lib/season-utils';
@@ -110,6 +111,8 @@ interface LeagueRefreshProviderResult {
   error?: string;
   error_description?: string;
   retryAfter?: string;
+  partial?: boolean;
+  writeFailureCount?: number;
   details?: {
     history?: EspnHistoryStatus | null;
     // Yahoo-only: the number of leagues discovery found (all-history merged
@@ -264,6 +267,7 @@ function yahooEmptySyncNotice(data: LeagueRefreshResponse): string | null {
 
 function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
   const results = data.results ? Object.entries(data.results) : [];
+  const writeFailureNotice = summarizeLeagueRefreshWriteFailures(data.results);
   const successful = results.filter(([, result]) => result?.status === 'success').length;
   const skipped = results.filter(([, result]) => result?.status === 'skipped').length;
   const failed = results.filter(([, result]) => result?.status === 'error').length;
@@ -274,6 +278,9 @@ function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
   const retryAfter = failedResult?.retryAfter;
 
   if (successful > 0 && failed === 0) {
+    if (writeFailureNotice) {
+      return writeFailureNotice;
+    }
     const yahooEmpty = yahooEmptySyncNotice(data);
     if (yahooEmpty) {
       return yahooEmpty;
@@ -287,7 +294,8 @@ function summarizeLeagueRefresh(data: LeagueRefreshResponse): string {
     const retryGuidance = retryAfter
       ? `Try Sync all again in ${retryAfter} seconds.`
       : `Use Sync all to retry ${providerName}.`;
-    return `${providerName} could not be synced${errorMessage ? `: ${errorMessage}` : '.'} ${retryGuidance}`;
+    const failedProviderNotice = `${providerName} could not be synced${errorMessage ? `: ${errorMessage}` : '.'} ${retryGuidance}`;
+    return combineLeagueRefreshNotices(writeFailureNotice, failedProviderNotice);
   }
 
   if (skipped > 0 && failed === 0) {
@@ -1086,13 +1094,16 @@ function LeaguesPageContent() {
         // success or not), but an ESPN history failure/partial notice must
         // stay visible too -- resolveLeagueSyncNotice decides which wins (or
         // combines both) instead of one branch unconditionally hiding the other.
-        setLeagueNotice(
-          resolveLeagueSyncNotice(
-            history ? { state: history.state, notice: getEspnHistoryNotice(history) } : null,
-            yahooEmptySyncNotice(data),
-            summarizeLeagueRefresh(data)
-          )
+        const refreshSummary = summarizeLeagueRefresh(data);
+        const resolvedNotice = resolveLeagueSyncNotice(
+          history ? { state: history.state, notice: getEspnHistoryNotice(history) } : null,
+          yahooEmptySyncNotice(data),
+          refreshSummary
         );
+        setLeagueNotice(combineLeagueRefreshNotices(
+          summarizeLeagueRefreshWriteFailures(data.results),
+          resolvedNotice,
+        ));
       }
     } catch (err) {
       if (shouldApply()) {

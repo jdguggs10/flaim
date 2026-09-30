@@ -6,6 +6,7 @@ import {
   SYNC_LEASE_TTL_MS,
   SyncStateStorage,
   UPSTREAM_BACKOFF_COOLDOWN_SECONDS,
+  logSyncEnvelope,
 } from '../sync-state';
 import { allProvidersCooldownRetryAfter, cooldownSecondsForResult } from '../league-refresh';
 
@@ -566,6 +567,35 @@ describe('SyncStateStorage.settle', () => {
       cooldownSeconds: 75,
       syncSource: 'web',
     }, { failOnError: true })).rejects.toThrow('supabase down');
+  });
+});
+
+describe('logSyncEnvelope', () => {
+  it('logs only the safe write-failure count and code', () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    logSyncEnvelope({
+      provider: 'espn',
+      userId: 'user_123456789',
+      syncSource: 'mcp',
+      status: 'success',
+      leagueCount: 2,
+      writeFailureCount: 1,
+      writeFailureCode: 'DB_ERROR',
+    });
+
+    const payload = JSON.parse(logSpy.mock.calls[0][0] as string);
+    expect(payload).toMatchObject({
+      event: 'provider_sync',
+      provider: 'espn',
+      status: 'success',
+      league_count: 2,
+      write_failure_count: 1,
+      write_failure_code: 'DB_ERROR',
+    });
+    expect(payload).not.toHaveProperty('league_id');
+    expect(payload).not.toHaveProperty('error');
+    logSpy.mockRestore();
   });
 });
 

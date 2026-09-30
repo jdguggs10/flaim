@@ -18,6 +18,7 @@ const mockHistoryStorage = vi.hoisted(() => ({
 }));
 
 const mockStartQueuedEspnHistoryJob = vi.hoisted(() => vi.fn());
+const mockLogSyncEnvelope = vi.hoisted(() => vi.fn());
 
 vi.mock('../supabase-storage', () => ({
   EspnSupabaseStorage: {
@@ -99,7 +100,7 @@ vi.mock('../sync-state', () => ({
   SyncStateStorage: {
     fromEnvironment: vi.fn().mockReturnValue(mockSyncState),
   },
-  logSyncEnvelope: vi.fn(),
+  logSyncEnvelope: mockLogSyncEnvelope,
   NORMAL_REFRESH_COOLDOWN_SECONDS: 75,
   UPSTREAM_BACKOFF_COOLDOWN_SECONDS: 300,
   SYNC_COOLDOWN_OWNER_PREFIX: 'cooldown:',
@@ -368,6 +369,7 @@ describe('POST /leagues/refresh', () => {
       discovered: [],
       currentSeason: { found: 2, added: 0, alreadySaved: 0, refreshed: 0 },
       savedLeagues: [{ leagueId: '123' }],
+      writeFailures: [{ leagueId: '456', sport: 'football', seasonYear: 2026, code: 'DB_ERROR' }],
     } as never);
 
     const res = await app.fetch(makeRequest('/auth/leagues/refresh', {
@@ -386,6 +388,7 @@ describe('POST /leagues/refresh', () => {
 
     const body = await res.json() as any;
     expect(body.results.espn).toMatchObject({ status: 'error', httpStatus: 500 });
+    expect(body.results.espn.partial).toBeUndefined();
     expect(mockHistoryStorage.createOrCoalesce).not.toHaveBeenCalled();
     expect(mockSyncState.transferLease).not.toHaveBeenCalled();
     expect(mockSyncState.settle).toHaveBeenCalledOnce();
@@ -701,6 +704,47 @@ describe('refreshLeaguesForUser', () => {
       },
     });
     expect(mockEspnStorage.getCurrentSeasonLeagues).not.toHaveBeenCalled();
+  });
+
+  it('keeps ESPN successful while exposing safe synchronous save-failure details', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    vi.mocked(discoverAndSaveLeagues).mockResolvedValue({
+      discovered: [],
+      currentSeason: { found: 1, added: 0, alreadySaved: 0, refreshed: 0 },
+      pastSeasons: { found: 1, added: 0, alreadySaved: 0, refreshed: 0 },
+      writeFailures: [
+        { leagueId: '123', sport: 'football', seasonYear: 2026, code: 'DB_ERROR' },
+        { leagueId: '123', sport: 'football', seasonYear: 2025, code: 'DB_ERROR' },
+      ],
+    });
+
+    const result = await refreshLeaguesForUser(baseEnv, 'user_write_failure', ['espn'], {}, undefined, 'mcp');
+
+    expect(result).toMatchObject({
+      success: true,
+      results: {
+        espn: {
+          status: 'success',
+          httpStatus: 200,
+          partial: true,
+          writeFailureCount: 2,
+          details: {
+            writeFailures: [
+              { leagueId: '123', sport: 'football', seasonYear: 2026, code: 'DB_ERROR' },
+              { leagueId: '123', sport: 'football', seasonYear: 2025, code: 'DB_ERROR' },
+            ],
+          },
+        },
+      },
+    });
+    expect(mockLogSyncEnvelope).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'espn',
+      status: 'success',
+      leagueCount: 1,
+      writeFailureCount: 2,
+      writeFailureCode: 'DB_ERROR',
+    }));
+    expect(JSON.stringify(mockLogSyncEnvelope.mock.calls)).not.toContain('123');
   });
 
   it('keeps a real ESPN discovery failure as an error result', async () => {
@@ -1020,6 +1064,48 @@ describe('refresh cooldown envelope (FLA-121)', () => {
         cooldownSeconds: 75,
       }),
     );
+  });
+
+  it('reports safe synchronous ESPN save failures from /extension/discover', async () => {
+    mockEspnStorage.getCredentials.mockResolvedValue({ swid: '{SWID}', s2: 'espn_s2' });
+    mockEspnStorage.getCurrentSeasonLeagues.mockResolvedValue([
+      { sport: 'football', leagueId: '1', leagueName: 'L1', teamId: '2', teamName: 'T', seasonYear: 2026 },
+    ]);
+    vi.mocked(discoverAndSaveLeagues).mockResolvedValue({
+      discovered: [],
+      currentSeason: { found: 1, added: 0, alreadySaved: 0, refreshed: 0 },
+      pastSeasons: { found: 1, added: 0, alreadySaved: 0, refreshed: 0 },
+      writeFailures: [
+        { leagueId: '123', sport: 'football', seasonYear: 2026, code: 'DB_ERROR' },
+        { leagueId: '123', sport: 'football', seasonYear: 2025, code: 'DB_ERROR' },
+      ],
+    });
+
+    const token = await signedClerkToken('user_discover_write_failure');
+    const res = await app.fetch(makeRequest('/auth/extension/discover', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    }), baseEnv);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      partial: true,
+      writeFailureCount: 2,
+      details: {
+        writeFailures: [
+          { leagueId: '123', sport: 'football', seasonYear: 2026, code: 'DB_ERROR' },
+          { leagueId: '123', sport: 'football', seasonYear: 2025, code: 'DB_ERROR' },
+        ],
+      },
+    });
+    expect(mockLogSyncEnvelope).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'espn',
+      syncSource: 'extension',
+      status: 'success',
+      writeFailureCount: 2,
+      writeFailureCode: 'DB_ERROR',
+    }));
+    expect(JSON.stringify(mockLogSyncEnvelope.mock.calls)).not.toContain('123');
   });
 
   it('returns a valid empty extension discovery without relabeling saved rows', async () => {

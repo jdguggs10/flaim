@@ -5,7 +5,7 @@
  * Maps ESPN's numeric IDs to human-readable names
  *
  * Source: cwendt94/espn-api constant.py (hockey)
- * Verified: NOT YET -- no live league credentials available
+ * Live verified: 2026-09-29 (positions, roster slots, pro teams, and noted stats)
  */
 
 // Position IDs to position names
@@ -90,12 +90,13 @@ export const POSITION_SLOTS: Record<string, number[]> = {
 
 // STATS_MAP: ESPN stat IDs to readable stat names
 // Source: cwendt94/espn-api constant.py (hockey)
-// UNVERIFIED -- no live league credentials
-// Note: IDs 0-12 are goalie stats, 13+ are skater stats
+// Live verification on 2026-09-29 added the labels documented inline below.
+// IDs 0-12 are goalie stats, IDs 13+ are skater stats except shared ID 30.
 export const SKATER_STATS_MAP: Record<number, string> = {
   13: 'G',      // Goals
   14: 'A',      // Assists
   15: '+/-',    // Plus/Minus
+  16: 'PTS',    // Points (live verified 2026-09-29)
   17: 'PIM',    // Penalty Minutes
   18: 'PPG',    // Power Play Goals
   19: 'PPA',    // Power Play Assists
@@ -104,16 +105,17 @@ export const SKATER_STATS_MAP: Record<number, string> = {
   22: 'GWG',    // Game-Winning Goals
   23: 'FOW',    // Faceoffs Won
   24: 'FOL',    // Faceoffs Lost
-  27: 'ATOI',   // Average Time On Ice
+  25: 'SHFT',   // Shifts (live verified 2026-09-29)
+  26: 'TOI_SECONDS',  // Total time on ice in seconds (live verified 2026-09-29)
+  27: 'ATOI_SECONDS', // Average time on ice in seconds
   28: 'HAT',    // Hat Tricks
   29: 'SOG',    // Shots On Goal
   31: 'HIT',    // Hits
   32: 'BLK',    // Blocked Shots
   33: 'DEF',    // Defenseman Points (?)
-  34: 'GP',     // Games Played
-  35: 'STPG',   // Shorthanded Time Per Game
-  36: 'STPA',   // Shorthanded Time Per Appearance
-  37: 'STP',    // Special Teams Points (?)
+  35: 'STPG',   // Special teams goals (PPG + SHG)
+  36: 'STPA',   // Special teams assists (PPA + SHA)
+  37: 'STP',    // Special teams points
   38: 'PPP',    // Power Play Points
   39: 'SHP',    // Short-Handed Points
 };
@@ -126,9 +128,16 @@ export const GOALIE_STATS_MAP: Record<number, string> = {
   4: 'GA',     // Goals Against
   6: 'SV',     // Saves
   7: 'SO',     // Shutouts
+  8: 'MIN_SECONDS', // Total time played in seconds (live verified 2026-09-29)
   9: 'OTL',    // Overtime Losses
   10: 'GAA',   // Goals Against Average
   11: 'SV%',   // Save Percentage
+  12: 'W%',    // Win percentage (live verified 2026-09-29)
+};
+
+// ESPN emits games played on both skater and goalie rows.
+export const COMMON_STATS_MAP: Record<number, string> = {
+  30: 'GP',    // Games Played (live verified 2026-09-29)
 };
 
 // Track unknown IDs for logging
@@ -172,9 +181,13 @@ export function transformEligiblePositions(slots: number[]): string[] {
 /**
  * Get stat name from ESPN stat ID
  * IDs 0-12: Goalie stats
- * IDs 13+: Skater stats
+ * IDs 13+: Skater stats, except common stats such as GP.
  */
 export function getStatName(statId: number): string {
+  const commonStatName = COMMON_STATS_MAP[statId];
+  if (commonStatName) {
+    return commonStatName;
+  }
   if (statId < 13) {
     return GOALIE_STATS_MAP[statId] || `STAT_${statId}`;
   }

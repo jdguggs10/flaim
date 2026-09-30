@@ -121,6 +121,57 @@ describe('sleeper football get_transactions handler', () => {
     expect(data.transactions[0]?.transaction_id).toBe('w1');
   });
 
+  it('returns release-only rows for type=drop without relabeling add-and-drop replacements', async () => {
+    getPlayersIndexMock.mockResolvedValue(new Map() as never);
+    fetchTransactionsMock.mockResolvedValue([
+      {
+        transaction_id: 'pure-drop',
+        type: 'drop',
+        status: 'complete',
+        timestamp: 3000,
+        week: 9,
+        players_dropped: [{ id: 'dropped' }],
+      },
+      {
+        transaction_id: 'add-only',
+        type: 'add',
+        status: 'complete',
+        timestamp: 2000,
+        week: 9,
+        players_added: [{ id: 'added' }],
+      },
+      {
+        transaction_id: 'replacement',
+        type: 'add',
+        status: 'complete',
+        timestamp: 1000,
+        week: 9,
+        players_added: [{ id: 'added' }],
+        players_dropped: [{ id: 'dropped' }],
+      },
+    ] as never);
+
+    const params: ToolParams = {
+      sport: 'football',
+      league_id: 'league_1',
+      season_year: 2025,
+      week: 9,
+      type: 'drop',
+      count: 25,
+    };
+
+    const result = await footballHandlers.get_transactions({} as never, params);
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    const data = result.data as { count: number; transactions: Array<{ transaction_id: string; type: string }> };
+    // Type filters are exact across providers: a replacement remains an add
+    // and exposes its released player in players_dropped.
+    expect(data.count).toBe(1);
+    expect(data.transactions).toHaveLength(1);
+    expect(data.transactions[0]).toMatchObject({ transaction_id: 'pure-drop', type: 'drop' });
+  });
+
   it('degrades gracefully when player lookup cache fails', async () => {
     getPlayersIndexMock.mockRejectedValue(new Error('cache failure'));
     fetchTransactionsMock.mockResolvedValue([

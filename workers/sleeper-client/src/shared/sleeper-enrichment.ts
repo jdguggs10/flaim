@@ -25,6 +25,13 @@ export interface SleeperPlayerEntry {
   name?: string;
   position?: string;
   team?: string;
+  /**
+   * League fantasy points from that week's `players_points` map. Present only
+   * when Sleeper sent a finite number for this id (including 0). Omitted
+   * otherwise — never invented as 0 or null. The empty-slot sentinel never
+   * carries it.
+   */
+  points?: number;
   /** True for Sleeper's "0" empty-lineup-slot sentinel; no name lookup is attempted for it. */
   empty?: true;
 }
@@ -99,6 +106,35 @@ export function resolveSleeperPlayerEntries(
       position: player.position,
       ...(includeTeam ? { team: player.team } : {}),
     };
+  });
+}
+
+/**
+ * Copies league fantasy points from a matchup's `players_points` map onto
+ * entries already produced by `resolveSleeperPlayerEntries`. Identity fields
+ * are left untouched. A finite number — including 0 — is kept; an absent id
+ * or a non-finite value omits `points` rather than inventing 0 or null.
+ * Sleeper's "0" empty-lineup-slot sentinel never receives points, even when
+ * the map has a "0" key.
+ */
+export function attachSleeperPlayerPoints<T extends { id: string; empty?: true }>(
+  entries: readonly T[],
+  playersPoints: unknown,
+): T[] {
+  if (!playersPoints || typeof playersPoints !== 'object' || Array.isArray(playersPoints)) {
+    return entries.slice();
+  }
+
+  const scores = playersPoints as Record<string, unknown>;
+  return entries.map((entry) => {
+    if (entry.empty || entry.id === SLEEPER_EMPTY_LINEUP_SLOT_ID) {
+      return entry;
+    }
+    const value = scores[entry.id];
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return entry;
+    }
+    return { ...entry, points: value };
   });
 }
 

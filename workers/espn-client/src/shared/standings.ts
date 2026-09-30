@@ -65,6 +65,49 @@ export function buildPlayoffSeedMap(teams: EspnTeam[]): Map<number, number> {
   );
 }
 
+export interface EspnStandingsEntry {
+  wins: number;
+  playoffSeed: number | null;
+  winPercentage: number;
+}
+
+/**
+ * ESPN counts a tied matchup as half a win for standings percentage purposes.
+ */
+export function calculateWinPercentage(wins: number, losses: number, ties: number): number {
+  const totalGames = wins + losses + ties;
+  if (totalGames === 0) {
+    return 0;
+  }
+  return Math.round(((wins + ties / 2) / totalGames) * 1000) / 1000;
+}
+
+/**
+ * ESPN's playoff seed is its authoritative standings order when it provides a
+ * unique, valid seed for every team. In incomplete or contradictory payloads,
+ * retain the historical percentage-and-wins fallback rather than inferring
+ * provider order.
+ */
+export function rankEspnStandings<T extends EspnStandingsEntry>(standings: T[]): Array<T & { rank: number }> {
+  const hasValidPlayoffSeeds = standings.length > 0 && standings.every((team) =>
+    team.playoffSeed != null && Number.isFinite(team.playoffSeed) && team.playoffSeed > 0,
+  );
+  const hasCompletePlayoffSeeds = hasValidPlayoffSeeds
+    && new Set(standings.map((team) => team.playoffSeed)).size === standings.length;
+
+  return [...standings]
+    .sort((a, b) => {
+      if (hasCompletePlayoffSeeds) {
+        return a.playoffSeed! - b.playoffSeed!;
+      }
+      if (b.winPercentage !== a.winPercentage) {
+        return b.winPercentage - a.winPercentage;
+      }
+      return b.wins - a.wins;
+    })
+    .map((team, index) => ({ ...team, rank: index + 1 }));
+}
+
 // Resolves a championship game that ESPN never marked as decided (TIE, or
 // UNDECIDED for a completed season) using the league's playoff tie rule.
 // Callers only supply tie-break context on the season-complete path, so this

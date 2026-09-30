@@ -4,7 +4,7 @@ import { getCredentials } from '../../shared/auth';
 import { espnFetch, handleEspnError, readEspnLeagueJson, requireCredentials } from '../../shared/espn-api';
 import { assertTransactionsSeasonSupported, executeEspnTransactionOperation } from '../../shared/espn-transactions';
 import { getEspnPlayersIndex } from '../../shared/espn-players-cache';
-import { fetchLeagueOwnershipMap, enrichPlayerWithOwnership } from '../../shared/league-ownership';
+import { fetchLeaguePlayerSearchEnrichment, enrichPlayerWithOwnership } from '../../shared/league-ownership';
 import { buildRosterLimitations, currentClubAndInjuryFields, resolveKeeperValueUnit } from '../../shared/roster-entry';
 import { epochMsToIso } from '../../shared/dates';
 import { summarizeFreeAgentScoring } from '../../shared/free-agent-scoring';
@@ -19,7 +19,7 @@ import {
   POSITION_SLOTS,
 } from './mappings';
 import { getCurrentSeasonYear, getSeasonContext, normalizeEspnLeagueStatus } from '../../shared/season';
-import { buildPlayoffSeedMap, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks } from '../../shared/standings';
+import { buildPlayoffSeedMap, calculateWinPercentage, deriveStandingsOutcome, deriveStandingsSeasonPhase, fetchBracketFinal, hasExplicitFinalRanks, rankEspnStandings } from '../../shared/standings';
 import {
   normalizeEspnFootballMatchupPlayerDetail,
   resolveEspnFootballMatchupPeriod,
@@ -235,8 +235,7 @@ async function handleGetStandings(
       const wins = record?.wins || 0;
       const losses = record?.losses || 0;
       const ties = record?.ties || 0;
-      const totalGames = wins + losses + ties;
-      const winPercentage = totalGames > 0 ? wins / totalGames : 0;
+      const winPercentage = calculateWinPercentage(wins, losses, ties);
 
       const outcome = deriveStandingsOutcome({
         teamId: team.id,
@@ -256,7 +255,7 @@ async function handleGetStandings(
         wins,
         losses,
         ties,
-        winPercentage: Math.round(winPercentage * 1000) / 1000,
+        winPercentage,
         pointsFor: record?.pointsFor || 0,
         pointsAgainst: record?.pointsAgainst || 0,
         playoffSeed: team.playoffSeed ?? null,
@@ -264,16 +263,8 @@ async function handleGetStandings(
         currentProjectedRank: team.currentProjectedRank,
         ...outcome,
       };
-    }).sort((a, b) => {
-      // Sort by win percentage descending, then by wins descending
-      if (b.winPercentage !== a.winPercentage) {
-        return b.winPercentage - a.winPercentage;
-      }
-      return b.wins - a.wins;
-    }).map((team, index) => ({
-      ...team,
-      rank: index + 1
-    }));
+    });
+    const rankedStandings = rankEspnStandings(standings);
 
     return {
       success: true,
@@ -282,7 +273,7 @@ async function handleGetStandings(
         seasonYear: season_year,
         seasonPhase,
         seasonComplete,
-        standings
+        standings: rankedStandings
       }
     };
   } catch (error) {
@@ -736,20 +727,42 @@ async function handleSearchPlayers(
       })
       .slice(0, limit);
 
-    // League ownership enrichment (null if no credentials or league_id)
-    const ownerMap = league_id
-      ? await fetchLeagueOwnershipMap(env, GAME_ID, league_id, season_year, authHeader, correlationId)
+    // ESPN's global player index supplies identity only. League mRoster supplies
+    // custom-scoring stats for rostered results, while one bounded availability
+    // pool request may supply them for unrostered results.
+    const leagueEnrichment = league_id
+      ? await fetchLeaguePlayerSearchEnrichment(
+        env,
+        GAME_ID,
+        league_id,
+        season_year,
+        matched.map((player) => player.id),
+        authHeader,
+        correlationId,
+      )
       : null;
+    const ownerMap = leagueEnrichment?.ownerMap ?? null;
 
-    const players = matched.map((p) => ({
-      id: String(p.id),
-      name: p.fullName,
-      position: getPositionName(p.defaultPositionId),
-      team: getProTeamAbbrev(p.proTeamId),
-      market_percent_owned: p.percentOwned ?? null,
-      ownership_scope: 'platform_global' as const,
-      ...enrichPlayerWithOwnership(p.id, ownerMap),
-    }));
+    const players = matched.map((p) => {
+      const rosteredStats = ownerMap?.get(p.id)?.stats;
+      const freeAgentStats = leagueEnrichment?.freeAgentStats.get(p.id);
+      const scoring = summarizeFreeAgentScoring(rosteredStats ?? freeAgentStats, season_year);
+
+      return {
+        id: String(p.id),
+        name: p.fullName,
+        position: getPositionName(p.defaultPositionId),
+        team: getProTeamAbbrev(p.proTeamId),
+        market_percent_owned: p.percentOwned ?? null,
+        ownership_scope: 'platform_global' as const,
+        ...enrichPlayerWithOwnership(p.id, ownerMap),
+        // Applied values are league computed. A null may mean league scoring
+        // was unavailable, ESPN omitted a value, or an unrostered player fell
+        // outside its 100-player pool.
+        seasonPoints: scoring.seasonPoints,
+        pointsPerGame: scoring.pointsPerGame,
+      };
+    });
 
     return {
       success: true,
