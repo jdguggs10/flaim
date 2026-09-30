@@ -73,7 +73,7 @@ export default function WaiversHockeyBroadcastEmail({
         label="Waiver wire improvements"
         items={[
           "Standings now show your waiver priority and FAAB left (Yahoo, Sleeper).",
-          "ESPN free agents come with points per game and projections.",
+          "ESPN free agents come with points per game and projections, and any ESPN player lookup shows season points scored your league's way.",
           "Sleeper free agents are sorted by who's getting added most.",
           "Yahoo free-agent lists go past 25 now.",
         ]}
@@ -83,6 +83,7 @@ export default function WaiversHockeyBroadcastEmail({
         items={[
           "Yahoo: missing football leagues show up again, errors tell you what to do next, and rosters show weekly points.",
           "ESPN: standings now match ESPN's order and count ties correctly.",
+          "ESPN: if a league fails to sync, you now get a warning instead of it quietly going missing.",
           "Sleeper: rosters and matchups show each player's points for the week, and drops no longer show up as adds.",
         ]}
       />
