@@ -13,7 +13,7 @@ export default definePlunkBroadcast({
   name: "Late September update",
   subject: "The best time of year",
   preview:
-    "Waiver priority, FAAB budgets, smarter free agents, and a steadier Yahoo.",
+    "The sports equinox, 100x more of you, and a pile of fixes.",
   // The template supplies and validates its own Plunk unsubscribe link. Keep
   // the reviewed Flaim footer intact instead of adding Plunk's standard one.
   type: "HEADLESS",

@@ -48,7 +48,7 @@ export default function WaiversHockeyBroadcastEmail({
         </>
       }
       headerUrl={homeUrl}
-      preview="Waiver priority, FAAB budgets, smarter free agents, and a steadier Yahoo."
+      preview="The sports equinox, 100x more of you, and a pile of fixes."
       title="The best time of year."
     >
       <GerryNote
@@ -60,7 +60,7 @@ export default function WaiversHockeyBroadcastEmail({
         ]}
       />
 
-      <ReportHeader title="FIXES AND UPDATES" intro="Everything that changed since kickoff." />
+      <ReportHeader title="FIXES AND UPDATES" intro="Lots of little things." />
 
       <ReportSection
         label="Puck and bball"
@@ -88,7 +88,7 @@ export default function WaiversHockeyBroadcastEmail({
         ]}
       />
       <ReportSection
-        label="Hide league card and more"
+        label="Setup and settings"
         items={[
           <>
             Easier ESPN setup, plus a new{" "}
