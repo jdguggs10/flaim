@@ -163,11 +163,12 @@ function fakeProviders({
       const start = cursor ? Number(cursor) : 0;
       const data = all.slice(start, start + pageSize);
       const hasMore = start + pageSize < all.length;
+      // Like the live API: the real total only on the first page, 0 on cursor pages.
       const page = json({
         cursor: hasMore ? String(start + pageSize) : null,
         data,
         hasMore,
-        total: all.length,
+        total: cursor ? 0 : all.length,
       });
       if (!hasMore && !scanned) {
         scanned = true;
@@ -517,12 +518,88 @@ describe("unsubscribe deleted accounts from Plunk", () => {
     );
   });
 
-  it("fails closed when the scanned count does not match the reported total", async () => {
+  it("accepts the live shape: total on the first page, 0 on cursor pages", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json({ cursor: "p2", data: [contact("c1", "a@example.com")], hasMore: true, total: 3 }),
+      )
+      .mockResolvedValueOnce(
+        json({ cursor: "p3", data: [contact("c2", "b@example.com")], hasMore: true, total: 0 }),
+      )
+      .mockResolvedValueOnce(
+        json({ cursor: null, data: [contact("c3", "c@example.com")], hasMore: false, total: 0 }),
+      );
+
+    const contacts = await listAllPlunkContacts({ request });
+
+    expect(contacts.map((item: { id: string }) => item.id)).toEqual(["c1", "c2", "c3"]);
+    expect(request.mock.calls.map(([path]) => path)).toEqual([
+      "/contacts?limit=100",
+      "/contacts?limit=100&cursor=p2",
+      "/contacts?limit=100&cursor=p3",
+    ]);
+  });
+
+  it("accepts signups that grow the scan past the first-page total", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json({ cursor: "p2", data: [contact("c1", "a@example.com")], hasMore: true, total: 1 }),
+      )
+      .mockResolvedValueOnce(json({ data: [contact("c2", "b@example.com")], hasMore: false }));
+
+    await expect(listAllPlunkContacts({ request })).resolves.toHaveLength(2);
+  });
+
+  it("fails closed when the scan ends short of the first-page total", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json({ cursor: "p2", data: [contact("c1", "a@example.com")], hasMore: true, total: 3 }),
+      )
+      .mockResolvedValueOnce(
+        json({ cursor: null, data: [contact("c2", "b@example.com")], hasMore: false, total: 0 }),
+      );
+    await expect(listAllPlunkContacts({ request })).rejects.toThrow(
+      "Plunk contact scan read 2 contacts, fewer than the 3 the first page reported; rerun",
+    );
+  });
+
+  it("fails closed when the first page has no total", async () => {
     const request = vi.fn().mockResolvedValue(
-      json({ data: [contact("c1", "a@example.com")], hasMore: false, total: 2 }),
+      json({ data: [contact("c1", "a@example.com")], hasMore: false }),
     );
     await expect(listAllPlunkContacts({ request })).rejects.toThrow(
-      "Plunk contact scan read 1 contacts but the API reported 2; rerun",
+      "Plunk contact list returned a malformed page",
+    );
+  });
+
+  it("fails closed when a cursor page has a non-numeric total", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json({ cursor: "p2", data: [contact("c1", "a@example.com")], hasMore: true, total: 2 }),
+      )
+      .mockResolvedValueOnce(
+        json({ data: [contact("c2", "b@example.com")], hasMore: false, total: "2" }),
+      );
+    await expect(listAllPlunkContacts({ request })).rejects.toThrow(
+      "Plunk contact list returned a malformed page",
+    );
+  });
+
+  it("fails closed when a cursor page repeats a contact id", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(
+        json({ cursor: "p2", data: [contact("c1", "a@example.com")], hasMore: true, total: 2 }),
+      )
+      .mockResolvedValueOnce(
+        json({ data: [contact("c1", "a@example.com")], hasMore: false, total: 0 }),
+      );
+    await expect(listAllPlunkContacts({ request })).rejects.toThrow(
+      "Plunk contact list returned a duplicate id",
     );
   });
 
