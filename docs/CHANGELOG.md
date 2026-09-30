@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### ESPN Transactions Beyond the Game Calendar
+
+- **Fixed**: daily-sport transaction windows retain ESPN-confirmed scoring periods outside the professional game calendar instead of failing before fetching transactions. Dates that cannot be validated remain `null`, with `date_bounds_kind: "unavailable"` and `exact_date_bounds_unavailable: true`; periods are neither clamped nor assigned extrapolated dates. Historical roster date validation and activity-feed membership checks remain strict.
+
 ### Late September Plunk Broadcast (FLA-289)
 
 - **Added**: the late September product-update Broadcast ("The best time of year") and reusable broadcast blocks in `web/emails/components/BroadcastBlocks.tsx`: a personal note, a quieter "Fixes and updates" report of one-line items under short labels, and a separate privacy callout. It has no external release dependency and is prepared with the existing `email:plunk` command, which still performs no provider call.

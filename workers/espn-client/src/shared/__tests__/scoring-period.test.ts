@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
-import { clearScoringPeriodAnchorCache, resolveScoringPeriodForDate } from '../scoring-period';
+import {
+  clearScoringPeriodAnchorCache,
+  findDateForScoringPeriod,
+  resolveScoringPeriodForDate,
+} from '../scoring-period';
 import { espnFetch } from '../espn-api';
 
 vi.mock('../espn-api', async () => {
@@ -58,6 +62,25 @@ describe('resolveScoringPeriodForDate', () => {
     await expect(resolveScoringPeriodForDate('flb', 2026, '2026-04-04'))
       .rejects.toThrow(/INVALID_ROSTER_SNAPSHOT_SELECTOR/);
   });
+
+  it('returns null only when a valid transaction period is outside the game calendar', async () => {
+    espnFetchMock.mockResolvedValue(calendarResponse(happyCalendar));
+
+    await expect(findDateForScoringPeriod('flb', 2026, 2))
+      .resolves.toBe('2026-03-26');
+    await expect(findDateForScoringPeriod('flb', 2026, 11))
+      .resolves.toBeNull();
+  });
+
+  it.each([-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid transaction scoring period %s',
+    async (scoringPeriodId) => {
+      espnFetchMock.mockResolvedValue(calendarResponse(happyCalendar));
+
+      await expect(findDateForScoringPeriod('flb', 2026, scoringPeriodId))
+        .rejects.toThrow(/ESPN_INVALID_RESPONSE.*scoring period.*invalid/);
+    },
+  );
 
   it('caches the anchor per gameId+season', async () => {
     espnFetchMock.mockResolvedValue(calendarResponse(happyCalendar));
