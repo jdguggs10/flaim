@@ -82,6 +82,40 @@ describe("Plunk broadcast preparation", () => {
     });
   });
 
+  it("prepares a headless campaign with the validated Flaim unsubscribe link", async () => {
+    const prepared = await preparePlunkBroadcast({
+      ...manifest,
+      id: "test-headless",
+      type: "HEADLESS",
+    });
+
+    expect(prepared.manifest.type).toBe("HEADLESS");
+    expect(prepared.html).toContain(`href="${plunkUnsubscribeUrl}"`);
+    expect(prepared.text).toContain(`Unsubscribe ${plunkUnsubscribeUrl}`);
+  });
+
+  it("applies the same unsubscribe and ref checks to a headless campaign", () => {
+    // Headless gets no provider footer, so the body link is the only opt-out.
+    const headless = { ...manifest, id: "test-headless", type: "HEADLESS" as const };
+    const validLinks = [
+      '<a href="https://flaim.app/?ref=email-aug-kickoff">Home</a>',
+      '<a href="https://flaim.app/leagues?ref=email-aug-kickoff">Manage</a>',
+    ].join("");
+
+    expect(() => validatePlunkBroadcastHtml(validLinks, headless)).toThrow(
+      "visible Unsubscribe link",
+    );
+    expect(() =>
+      validatePlunkBroadcastHtml(
+        [
+          '<a href="https://flaim.app/leagues">Manage</a>',
+          `<a href="${plunkUnsubscribeUrl}">Unsubscribe</a>`,
+        ].join(""),
+        headless,
+      ),
+    ).toThrow("missing the expected ref=email-aug-kickoff");
+  });
+
   it("fails closed when a Flaim link loses its campaign ref", () => {
     expect(() =>
       validatePlunkBroadcastHtml(

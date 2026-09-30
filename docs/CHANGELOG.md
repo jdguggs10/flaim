@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Late September Plunk Broadcast (FLA-289)
+
+- **Added**: the late September product-update Broadcast ("The best time of year") and reusable broadcast blocks in `web/emails/components/BroadcastBlocks.tsx`: a personal note, a quieter "Fixes and updates" report of one-line items under short labels, and a separate privacy callout. It has no external release dependency and is prepared with the existing `email:plunk` command, which still performs no provider call.
+- **Changed**: repo-authored Broadcasts use Plunk's HEADLESS type, which keeps the reviewed Flaim footer, still skips unsubscribed contacts, and adds one-click unsubscribe headers when the body carries Plunk's unsubscribe link. The single draft may be created in the dashboard or by a separately approved operator API call; no agent or command schedules or sends the audience campaign.
+
 ### Static Eval and Demo Auth Documentation
 
 - **Changed**: Auth-worker documentation now treats eval and demo credentials as lane-local key/user pairs, permits production to map both keys to one fixed test user, and keeps preview in its own Clerk pool. The public README no longer records a concrete test-user ID or email. It also clarifies that `mcp:write` permits the rate-limited Flaim connected-league registry refresh only; it never writes upstream provider rosters, lineups, transactions, trades, or league settings.

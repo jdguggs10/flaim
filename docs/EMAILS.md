@@ -88,11 +88,25 @@ or send a campaign.
    approval in `evidence`.
    Its statement that OpenAI has approved v3.0 must not be sent or proofed
    before that portal evidence exists.
-5. Once the release gate is met, create exactly one Plunk **MARKETING** campaign
-   draft in the dashboard from the reviewed local `plunk.html` and
-   `campaign.json`. Use `Gerry <updates@news.flaim.app>` with
+5. Once the release gate is met, create exactly one Plunk campaign draft using
+   the manifest's declared type, either in the dashboard or by a one-off, separately approved
+   operator API call (`POST /campaigns`, no `scheduledFor`) using the Plunk
+   secret key from the password manager, from the reviewed local `plunk.html`
+   and `campaign.json`. The API accepts only an HTML body; Plunk derives any
+   plain-text part, so read the proof's text view before approving the send. No agent or command may schedule or send the audience
+   campaign; the audience send stays a manual dashboard action by Gerry after
+   explicit approval. Use `Gerry <updates@news.flaim.app>` with
    `gerry@news.flaim.app` as Reply-To. Do not edit links or unsubscribe markup
-   in the dashboard. Ordinary product updates use all subscribed contacts;
+   in the dashboard. Use **HEADLESS** for a Flaim custom-HTML Broadcast: it
+   still excludes opted-out contacts, preserves the reviewed Flaim footer with
+   `{{unsubscribeUrl}}`, and does not append Plunk's provider footer. Plunk
+   adds the one-click `List-Unsubscribe` headers only when that link is present
+   (provider behavior verified on real proof sends in September 2026; re-check
+   the proof headers if Plunk changes). Use
+   **MARKETING** only when that provider-owned footer is intended. Paste the
+   reviewed export in Plunk's HTML editor and stay in HTML mode; the Visual
+   editor rewrites table-based HTML and can strip its inline styling. Ordinary
+   product updates use all subscribed contacts;
    one-off operational cohorts, such as affected Yahoo users, use a
    campaign-specific segment rather than permanent audience structure.
 6. Run the deleted-account unsubscribe gate (see
@@ -120,6 +134,18 @@ Do not send a real audience email while developing this workflow. The Plunk secr
 
 The prior Resend Segment, Topic, CLI-draft, and dashboard-send workflow is now a rollback lane. Keep its contacts, suppressions, credentials, and DNS intact through the first successful Plunk audience Broadcast and the two-week rollback window. Do not create new Resend Broadcasts in normal operation, and do not retire the rollback lane without a separate reviewed provider and DNS change.
 
+#### Broadcast format
+
+Product-update Broadcasts share one structure, built from the blocks in `web/emails/components/BroadcastBlocks.tsx`:
+
+1. **Headline**: the layout title. An optional GIF (`BroadcastHero`, no default) can sit with it; text-only is fine and gentler on spam filters.
+2. **Note**: a short personal note signed "Gerry" (`GerryNote`). It carries the human voice and always leads.
+3. **Fixes and updates**: a divider and lead-in (`ReportHeader`), then `ReportSection` lists under short labels, with one-line items in quieter type.
+4. **Buttons**: manage leagues, plus the ChatGPT and Claude entry points. An optional `TryThis` prompt can sit above them.
+5. **Notices**: any required legal or privacy notice goes last, in its own `FlaimCallout`, separate from the product updates and in normal-weight text so it stays readable.
+
+Product details go in the report as one-liners, not in the note. No emojis.
+
 The first product templates are:
 
 - `web/emails/welcome.tsx`
@@ -128,6 +154,7 @@ The first product templates are:
 - `web/emails/broadcast-2026-08-yahoo-access.tsx`
 - `web/emails/broadcast-2026-09-update.tsx`
 - `web/emails/broadcast-2026-09-yahoo-back.tsx`
+- `web/emails/broadcast-2026-09-waivers-hockey.tsx`
 - `web/emails/espn-setup-link.tsx`
 
 Template URL samples exist in `PreviewProps` for local preview only. New Plunk
