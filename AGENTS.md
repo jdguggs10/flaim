@@ -77,13 +77,13 @@ Prefer `corepack pnpm ...` from the repo root unless a package README says other
 
 ## Release Lanes (OpenAI Continuous Review)
 
-This repo ships one way: continuous deploy to production on merge to `main`. OpenAI's plugin directory re-scans the live MCP server periodically and updates published tool definitions after automated checks, so tool-level metadata needs no reviewed version. Anthropic's connector directory reads the live server and pins nothing.
+This repo ships one way: continuous deploy to production on merge to `main`. OpenAI's plugin directory scans the live MCP server daily and updates published tool definitions after automated checks, so tool-level metadata needs no reviewed version. New tools also go live after passing checks, with no publish step. Anthropic's connector directory reads the live server and pins nothing.
 
-Two surfaces still require a new OpenAI version and human review: shipped skill text under `.agents/skills/`, and the portal listing fields kept in the private distribution packet. Treat adding a tool the same way until one has been observed passing a scan. These changes get their own Linear issue and bundle with the next reviewed version.
+Two surfaces still require a new OpenAI version and human review: shipped skill text under `.agents/skills/`, and the listing fields kept in the private distribution packet. New versions are submitted as a ZIP plugin package, not portal forms. These changes get their own Linear issue and bundle with the next reviewed version.
 
-Everything else merges normally with `docs/CHANGELOG.md` updated in the same PR, including tool names, `description:` strings, annotations, declared schemas in `workers/fantasy-mcp/src/mcp/tools.ts`, tool and resource `_meta`, widget CSP, and server instructions. After a deploy that touches any of those, confirm on the OpenAI plugin portal that the scan passed with nothing held, and say so in the PR.
+Everything else merges normally with `docs/CHANGELOG.md` updated in the same PR, including tool names, `description:` strings, annotations, declared schemas in `workers/fantasy-mcp/src/mcp/tools.ts`, tool and resource `_meta`, widget CSP, and server instructions. After a deploy that touches any of those, select Rescan on the OpenAI plugin portal (or wait for the daily scan), confirm it passed with nothing held, and say so in the PR.
 
-Three constraints replace the old freeze. Keep input schemas backward compatible. Keep every published widget resource URI serving a compatible body. Keep descriptions and annotations true to real behavior, because a mismatch holds the update and leaves the old definition live. If a deploy breaks the live contract, roll back rather than wait for review.
+Three constraints replace the old freeze. Keep input schemas backward compatible. Keep every published widget resource URI serving a compatible body. Keep descriptions and annotations true to real behavior, because a mismatch holds the update and leaves the old definition live. If a deploy breaks the live contract, roll back rather than wait for review. Removing a tool is the exception to the wait: the scan drops it from ChatGPT as soon as it notices, without checks, so treat a removal as live the day it deploys.
 
 While a version is in OpenAI review, skill text and portal fields stay unchanged until the decision. Nothing else freezes.
 
