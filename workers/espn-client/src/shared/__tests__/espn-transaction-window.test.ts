@@ -10,15 +10,15 @@ import {
   type EspnTransactionWindow,
 } from '../espn-transactions';
 import {
+  findDateForScoringPeriod,
   findScoringPeriodForDate,
-  resolveDateForScoringPeriod,
 } from '../scoring-period';
 
 vi.mock('../scoring-period', async () => {
   const actual = await vi.importActual<typeof import('../scoring-period')>('../scoring-period');
   return {
     ...actual,
-    resolveDateForScoringPeriod: vi.fn(),
+    findDateForScoringPeriod: vi.fn(),
     findScoringPeriodForDate: vi.fn(),
   };
 });
@@ -62,7 +62,7 @@ function dailyWindow(overrides: Partial<EspnTransactionWindow> = {}): EspnTransa
 
 describe('ESPN transaction matchup-window contract', () => {
   const resolveDateMock =
-    resolveDateForScoringPeriod as MockedFunction<typeof resolveDateForScoringPeriod>;
+    findDateForScoringPeriod as MockedFunction<typeof findDateForScoringPeriod>;
   const findPeriodMock =
     findScoringPeriodForDate as MockedFunction<typeof findScoringPeriodForDate>;
 

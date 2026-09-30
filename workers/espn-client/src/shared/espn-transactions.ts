@@ -3,8 +3,8 @@ import { espnFetch, handleEspnError } from './espn-api';
 import { getCurrentSeasonYear } from './season';
 import {
   etDateOf,
+  findDateForScoringPeriod,
   findScoringPeriodForDate,
-  resolveDateForScoringPeriod,
 } from './scoring-period';
 
 export type TransactionType = 'add' | 'drop' | 'trade' | 'waiver' | 'trade_proposal' | 'trade_decline' | 'trade_veto' | 'trade_uphold' | 'failed_bid';
@@ -1087,7 +1087,7 @@ export async function resolveEspnTransactionWindow({
 
   if (DAILY_SPORTS.has(sport) && !scoringPeriodIds.includes(0)) {
     const dateResolutionDeadline = Date.now() + timeout;
-    startDate = await resolveDateForScoringPeriod(
+    startDate = await findDateForScoringPeriod(
       gameId,
       seasonYear,
       firstScoringPeriodId,
@@ -1102,20 +1102,22 @@ export async function resolveEspnTransactionWindow({
           `${ErrorCode.ESPN_TIMEOUT}: ESPN transaction window date resolution exceeded its budget`
         );
       }
-      endDate = await resolveDateForScoringPeriod(
+      endDate = await findDateForScoringPeriod(
         gameId,
         seasonYear,
         lastScoringPeriodId,
         remaining,
       );
     }
-    dateBoundsKind = areContiguous(scoringPeriodIds)
-      ? 'exact_contiguous'
-      : 'envelope_non_contiguous';
+    if (startDate !== null && endDate !== null) {
+      dateBoundsKind = areContiguous(scoringPeriodIds)
+        ? 'exact_contiguous'
+        : 'envelope_non_contiguous';
+    }
   } else if (DAILY_SPORTS.has(sport)) {
     const positivePeriods = scoringPeriodIds.filter((period) => period > 0);
     if (positivePeriods.length > 0) {
-      endDate = await resolveDateForScoringPeriod(
+      endDate = await findDateForScoringPeriod(
         gameId,
         seasonYear,
         positivePeriods[positivePeriods.length - 1],

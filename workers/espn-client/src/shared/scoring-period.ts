@@ -164,26 +164,27 @@ export async function resolveScoringPeriodForDate(
 }
 
 /**
- * Resolve a daily scoring period to its Eastern-time calendar date.
- * Transaction windows use this inverse over the same validated anchor and
- * single-flight cache as historical roster snapshots.
+ * Find a daily scoring period's Eastern-time calendar date. Transaction
+ * periods can legitimately extend beyond the game-bearing season calendar,
+ * so a valid nonnegative period outside the validated bounds returns null.
+ * Calendar fetch and invariant failures still throw rather than guessing.
  */
-export async function resolveDateForScoringPeriod(
+export async function findDateForScoringPeriod(
   gameId: string,
   espnYear: number,
   scoringPeriodId: number,
   timeout = 10000,
-): Promise<string> {
+): Promise<string | null> {
   const anchor = await getAnchor(gameId, espnYear, timeout);
-  if (
-    !Number.isInteger(scoringPeriodId)
-    || scoringPeriodId < anchor.firstScoringPeriod
-    || scoringPeriodId > anchor.lastScoringPeriod
-  ) {
+  if (!Number.isInteger(scoringPeriodId) || scoringPeriodId < 0) {
     throw new Error(
-      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scoring period ${scoringPeriodId} is outside the validated ${gameId} ${espnYear} calendar bounds`
+      `${ErrorCode.ESPN_INVALID_RESPONSE}: ESPN scoring period ${scoringPeriodId} is invalid`
     );
   }
+  if (
+    scoringPeriodId < anchor.firstScoringPeriod
+    || scoringPeriodId > anchor.lastScoringPeriod
+  ) return null;
   return dateOfDayIndex(scoringPeriodId + anchor.epochDayOffset);
 }
 
