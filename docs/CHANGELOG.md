@@ -4,6 +4,11 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Sleeper History Depth (FLA-435)
+
+- **Fixed**: Sleeper league discovery (connect, `refresh_leagues`, and "Sync all" on `/leagues`) now saves every season of a league's `previous_league_id` chain that Sleeper still serves instead of stopping at five, so a league running since 2021 no longer shows 2022 onward with no refresh able to add 2021. The discovery persistence cap and the recurring-id backfill's walk cap are now one exported constant, `MAX_SLEEPER_CHAIN_DEPTH` (15, counting the current season), replacing `MAX_HISTORY_YEARS` (5) and `BACKFILL_MAX_CHAIN_DEPTH` (10). Sleeper has run since 2017, so a ten-season chain is the longest real one today; the headroom means the cap needs no annual bump, and it still stops malformed non-cyclic chains. The deeper walk costs at most one extra rosters fetch per newly reachable season per league (the chain's league fetches are already shared with the recurring-id resolver through `leagueCache`), only on connect and refresh; scheduled reconciliation never walks history. Leagues synced before this change pick up their older seasons on their next refresh.
+- **Changed**: the `get_ancient_history` description states the Sleeper coverage floor plainly (the FLA-293 entry below promised a disclosed floor, but the text carried no number) and notes that a league last synced under the five-season limit needs one refresh before its older seasons appear.
+
 ### ESPN Transactions Beyond the Game Calendar
 
 - **Fixed**: daily-sport transaction windows retain ESPN-confirmed scoring periods outside the professional game calendar instead of failing before fetching transactions. Dates that cannot be validated remain `null`, with `date_bounds_kind: "unavailable"` and `exact_date_bounds_unavailable: true`; periods are neither clamped nor assigned extrapolated dates. Historical roster date validation and activity-feed membership checks remain strict.
