@@ -479,7 +479,6 @@ describe('sleeper-connect-handlers', () => {
     // unbounded for discovery (audit FLA-168 Fix 2), so it reaches the true
     // 1998 root even though only 15 seasons of history get persisted.
     const oldestPersistedYear = currentYear - (MAX_SLEEPER_CHAIN_DEPTH - 1);
-    expect(oldestPersistedYear).toBe(2011);
     expect(body.leagues_found).toBe(MAX_SLEEPER_CHAIN_DEPTH);
     expect(body.seasons_discovered).toBe(MAX_SLEEPER_CHAIN_DEPTH);
     expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(MAX_SLEEPER_CHAIN_DEPTH);
