@@ -1656,8 +1656,11 @@ export function getUnifiedTools(): UnifiedTool[] {
       annotations: REGISTRY_READ_TOOL_ANNOTATIONS,
       outputSchema: GET_ANCIENT_HISTORY_OUTPUT_SCHEMA,
       openaiMeta: { invoking: 'Searching old seasons\u2026', invoked: 'History loaded' },
+      // The Sleeper floor below (15 seasons, 2017 origin) restates
+      // MAX_SLEEPER_CHAIN_DEPTH in workers/auth-worker/src/sleeper-connect-handlers.ts;
+      // the two cannot share a constant across workers, so change them together.
       description:
-        'Use established session context (call get_user_session only if needed), and use this only when the user is clearly asking about a non-current season or an inactive league. This is the historical branch: it returns past seasons and historical leagues outside the current season view. Use for last season, older seasons, inactive leagues, or historical performance. All-time answers are scoped to seasons present in the response; an absent season may be unavailable even if provider history extends further. thresholdYear is display bucketing, not a retrieval floor. Read-only.',
+        'Use established session context (call get_user_session only if needed), and use this only when the user is clearly asking about a non-current season or an inactive league. This is the historical branch: it returns past seasons and historical leagues outside the current season view. Use for last season, older seasons, inactive leagues, or historical performance. All-time answers are scoped to seasons present in the response; an absent season may be unavailable even if provider history extends further. Sleeper coverage floor: Flaim follows the previous_league_id chain of each Sleeper league back at most 15 seasons including the current one and saves every season Sleeper still serves on it; Sleeper has run since 2017, so today that is the entire history of any Sleeper league. Sleeper seasons are discovered on connect and on refresh_leagues, so a league last synced under the earlier five-season limit needs one refresh before its older seasons appear here, and a season still missing after a refresh means Sleeper did not serve it on that walk, not that Flaim capped the history. thresholdYear is display bucketing, not a retrieval floor. Read-only.',
       inputSchema: {
         platform: z
           .enum(['espn', 'yahoo', 'sleeper'])

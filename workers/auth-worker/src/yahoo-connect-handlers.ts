@@ -2234,8 +2234,8 @@ function yahooFootballCurrentSeasonUrl(): string {
 // Cap the renew-chain walk so a malformed/looping pointer set can't fetch
 // unbounded league metas. Yahoo Fantasy Sports has run since ~2001 (~25 NFL
 // seasons), so a real renew chain — one league renewed every year since launch —
-// won't exceed this. The cap only guards against malformed/cyclic pointer data;
-// matches Sleeper's MAX_HISTORY_YEARS intent.
+// won't exceed this. The cap only guards against malformed/cyclic pointer data,
+// the same job Sleeper's MAX_SLEEPER_CHAIN_DEPTH (15) does for its shorter history.
 const MAX_YAHOO_CHAIN_DEPTH = 25;
 // Recovery counts a renew pointer as one hop. The final fetched node may be
 // the terminator at this bound; a further pointer fails closed without fetch.

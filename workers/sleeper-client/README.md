@@ -138,7 +138,7 @@ Every Sleeper tool that can partially degrade (an unavailable player index, unav
 - **No standings endpoint**: Sleeper does not expose a dedicated standings endpoint. Standings are computed from each roster's `settings` (wins, losses, ties, fpts) which Sleeper keeps current.
 - **Matchup pairing**: Matchup results are returned as a flat list; opponents are paired by matching `matchup_id` values.
 - **Username-based onboarding**: Users connect via Sleeper username. The worker resolves the username to a numeric `sleeper_user_id` via `GET /user/{username}`.
-- **Historical season discovery**: Onboarding discovers up to 5 years of past leagues via the Sleeper user leagues endpoint.
+- **Historical season discovery**: Onboarding and refresh follow each league's `previous_league_id` chain and save every past season Sleeper still serves, up to a 15-season cap (`MAX_SLEEPER_CHAIN_DEPTH` in auth-worker). Sleeper has run since 2017, so no real chain reaches the cap yet.
 - **Base URL**: `https://api.sleeper.app/v1`
 
 ## Development
