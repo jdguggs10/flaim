@@ -17,7 +17,10 @@ const SLEEPER_API = 'https://api.sleeper.app/v1';
 // headroom that it needs no annual bump. The cap's only job is to stop
 // malformed non-cyclic chains; nearly all unresolved rows are upstream 404s
 // (Sleeper no longer serves the predecessor records), which no cap can fix.
-// Exported for the unit tests that pin the cap's behavior.
+// Exported for the unit tests that pin the cap's behavior. The
+// get_ancient_history description in workers/fantasy-mcp/src/mcp/tools.ts
+// states this value and the 2017 origin as a published contract; change both
+// together.
 export const MAX_SLEEPER_CHAIN_DEPTH = 15;
 
 export interface SleeperConnectEnv {

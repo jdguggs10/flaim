@@ -504,6 +504,66 @@ describe('sleeper-connect-handlers', () => {
     );
   });
 
+  it('persists a chain of exactly MAX_SLEEPER_CHAIN_DEPTH seasons in full, root included', async () => {
+    const currentYear = 2025;
+    const rootYear = currentYear - (MAX_SLEEPER_CHAIN_DEPTH - 1);
+
+    mockFetch.mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/user/exact_cap')) {
+        return jsonResponse({ user_id: 'sleeper_exact', username: 'exact_cap', display_name: 'Exact Cap' });
+      }
+      if (url.includes('/user/sleeper_exact/leagues/nfl/2025')) {
+        return jsonResponse([
+          { league_id: `exact-${currentYear}`, name: 'Exact', sport: 'nfl', season: String(currentYear), previous_league_id: `exact-${currentYear - 1}` },
+        ]);
+      }
+      if (url.includes('/user/sleeper_exact/leagues/nba/2024')) {
+        return jsonResponse([]);
+      }
+      if (/\/league\/exact-\d{4}\/rosters$/.test(url)) {
+        return jsonResponse([{ roster_id: 3, owner_id: 'sleeper_exact' }]);
+      }
+      const leagueMatch = url.match(/\/league\/exact-(\d{4})$/);
+      if (leagueMatch) {
+        const year = Number(leagueMatch[1]);
+        return jsonResponse({
+          league_id: `exact-${year}`,
+          name: 'Exact',
+          sport: 'nfl',
+          season: String(year),
+          previous_league_id: year > rootYear ? `exact-${year - 1}` : null,
+        });
+      }
+      return new Response(null, { status: 404 });
+    });
+
+    const request = new Request('https://api.flaim.app/connect/sleeper/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'exact_cap' }),
+    });
+
+    const response = await handleSleeperDiscover(request, env, 'user_1', corsHeaders);
+    const body = (await response.json()) as { success: boolean; leagues_found: number; seasons_discovered: number };
+
+    // A chain that fits the cap exactly loses nothing: every season down to
+    // and including the root is saved, each carrying the root as its
+    // recurring identity.
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.leagues_found).toBe(MAX_SLEEPER_CHAIN_DEPTH);
+    expect(body.seasons_discovered).toBe(MAX_SLEEPER_CHAIN_DEPTH);
+    expect(mockStorage.saveSleeperLeague).toHaveBeenCalledTimes(MAX_SLEEPER_CHAIN_DEPTH);
+    expect(mockStorage.saveSleeperLeague).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        leagueId: `exact-${rootYear}`,
+        seasonYear: rootYear,
+        recurringLeagueId: `exact-${rootYear}`,
+      }),
+    );
+  });
+
   it('does not persist a synthetic recurringLeagueId when history lookup fails during discovery', async () => {
     mockFetch.mockImplementation(async (input) => {
       const url = String(input);
