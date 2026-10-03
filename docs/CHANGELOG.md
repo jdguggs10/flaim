@@ -4,6 +4,10 @@ Follow Keep a Changelog; stamp a version when submitting to directories.
 
 ## [Unreleased]
 
+### Clerk Core 3
+
+- **Changed**: the web app moves from `@clerk/nextjs` 6 to 7 and the extension from `@clerk/chrome-extension` 2 to 3 (Clerk Core 3; Clerk's schedule ends long term support for Core 2 in January 2027). `<SignedIn>` and `<SignedOut>` become `<Show when="signed-in">` and `<Show when="signed-out">` in the extension popup, the site page and the site header. The `dark` theme now comes from `@clerk/ui/themes` (`@clerk/themes` is replaced by `@clerk/ui`), and the appearance key `baseTheme` is now `theme`. No change to MCP tools, their descriptions, schemas or widget resources.
+
 ### Sleeper History Depth (FLA-435)
 
 - **Fixed**: Sleeper league discovery (connect, `refresh_leagues`, and "Sync all" on `/leagues`) now saves every season of a league's `previous_league_id` chain that Sleeper still serves instead of stopping at five, so a league running since 2021 no longer shows 2022 onward with no refresh able to add 2021. The discovery persistence cap and the recurring-id backfill's walk cap are now one exported constant, `MAX_SLEEPER_CHAIN_DEPTH` (15, counting the current season), replacing `MAX_HISTORY_YEARS` (5) and `BACKFILL_MAX_CHAIN_DEPTH` (10). Sleeper has run since 2017, so a ten-season chain is the longest real one today; the headroom means the cap needs no annual bump, and it still stops malformed non-cyclic chains. The deeper walk costs at most one extra rosters fetch per newly reachable season per league (the chain's league fetches are already shared with the recurring-id resolver through `leagueCache`), only on connect and refresh; scheduled reconciliation never walks history. Leagues synced before this change pick up their older seasons on their next refresh.

@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import {
-  SignedIn,
-  SignedOut,
+  Show,
   SignInButton,
   SignUpButton,
   UserButton,
@@ -41,7 +40,7 @@ export function SiteHeader() {
         </Link>
 
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <SignedOut>
+          <Show when="signed-out">
             <SignInButton mode="redirect">
               <Button variant="outline" size="sm">
                 Sign In
@@ -50,8 +49,8 @@ export function SiteHeader() {
             <SignUpButton mode="redirect" fallbackRedirectUrl="/leagues">
               <Button size="sm">Get Started</Button>
             </SignUpButton>
-          </SignedOut>
-          <SignedIn>
+          </Show>
+          <Show when="signed-in">
             <nav aria-label="Account navigation">
               <Button asChild variant="ghost" size="sm" className="text-sm">
                 <Link href="/leagues">Your Leagues</Link>
@@ -60,7 +59,7 @@ export function SiteHeader() {
             <div className="flex items-center sm:border-l sm:pl-3">
               <UserButton />
             </div>
-          </SignedIn>
+          </Show>
         </div>
       </div>
     </header>
