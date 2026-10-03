@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
+import { dark } from "@clerk/ui/themes";
 
 const CLERK_LOCALIZATION_OVERRIDE = {
   userProfile: {
@@ -21,7 +21,7 @@ export function ClerkThemeWrapper({ children }: { children: React.ReactNode }) {
       allowedRedirectOrigins={[
         "chrome-extension://mbnokejgglkfgkeeenolgdpcnfakpbkn", // CWS production
       ]}
-      appearance={resolvedTheme === "dark" ? { baseTheme: dark } : undefined}
+      appearance={resolvedTheme === "dark" ? { theme: dark } : undefined}
       localization={CLERK_LOCALIZATION_OVERRIDE}
     >
       {children}

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { Show } from "@clerk/nextjs";
 import { PublicChatExperience } from "@/components/public-demo/public-chat-experience";
 import { HeroChat } from "@/components/site/hero-chat";
 import { HomepageProductProof } from "@/components/site/homepage-product-proof";
@@ -61,16 +61,16 @@ function HomepageCtas({ closing = false }: { closing?: boolean }) {
 
   return (
     <div className={containerClassName}>
-      <SignedOut>
+      <Show when="signed-out">
         <Button asChild size="lg" className={primaryClassName}>
           <Link href="/leagues">{connectLabel}</Link>
         </Button>
-      </SignedOut>
-      <SignedIn>
+      </Show>
+      <Show when="signed-in">
         <Button asChild size="lg" className={primaryClassName}>
           <Link href="/leagues">Your Leagues</Link>
         </Button>
-      </SignedIn>
+      </Show>
       <Button
         asChild
         variant="outline"

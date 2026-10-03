@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth, useClerk, useUser, SignedIn, SignedOut } from '@clerk/chrome-extension';
+import { useAuth, useClerk, useUser, Show } from '@clerk/chrome-extension';
 import {
   getEspnHistoryState,
   setEspnHistoryState,
@@ -807,7 +807,7 @@ export default function Popup() {
       <div className="header">
         <img src="/assets/icons/icon-48.png" alt="" className="header-logo" />
         <h1>Flaim</h1>
-        <SignedIn>
+        <Show when="signed-in">
           <button
             className="icon-button"
             onClick={() => setShowDiagnostics((prev) => !prev)}
@@ -817,11 +817,11 @@ export default function Popup() {
           >
             ⓘ
           </button>
-        </SignedIn>
+        </Show>
       </div>
 
       {/* Signed Out: Prompt to sign in at flaim.app */}
-      <SignedOut>
+      <Show when="signed-out">
         <div className="main">
           <div className="content">
             <div className="message info">
@@ -841,10 +841,10 @@ export default function Popup() {
             ESPN setup help
           </button>
         </div>
-      </SignedOut>
+      </Show>
 
       {/* Signed In: Show state-based content */}
-      <SignedIn>
+      <Show when="signed-in">
         <div className="main">
         <div className="user-row">
           {user?.imageUrl ? (
@@ -1138,7 +1138,7 @@ export default function Popup() {
             </button>
           </div>
         )}
-      </SignedIn>
+      </Show>
     </div>
   );
 }
